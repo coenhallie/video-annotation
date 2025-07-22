@@ -164,7 +164,6 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { SeverityLevel } from '@/types/database';
 import type { UseDrawingCanvas } from '@/composables/useDrawingCanvas';
 
 // Icons are now inline SVG elements to avoid runtime template compilation

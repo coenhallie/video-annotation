@@ -2,11 +2,10 @@
 import {
   ref,
   onMounted,
+  onUnmounted,
   watch,
-  computed,
   defineProps,
   defineEmits,
-  nextTick,
 } from 'vue';
 import { useVideoPlayer } from '../composables/useVideoPlayer.js';
 
@@ -72,6 +71,8 @@ const {
   increaseSpeed,
   decreaseSpeed,
   resetSpeed,
+  startListening,
+  stopListening,
   formatTime,
   formatFrame,
   formatFrameWithFPS,
@@ -89,7 +90,13 @@ const playerContainer = ref(null);
 const isExternalSeeking = ref(false);
 
 onMounted(() => {
-  // Component mounted
+  // Start listening for keyboard shortcuts
+  startListening();
+});
+
+onUnmounted(() => {
+  // Stop listening for keyboard shortcuts to prevent memory leaks
+  stopListening();
 });
 
 // Watch for the video element to become available

@@ -1,5 +1,4 @@
 import { supabase } from '../composables/useSupabase';
-import type { Database } from '../types/database';
 
 export class ShareService {
   // Generate a shareable link for a video

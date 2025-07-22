@@ -1,6 +1,5 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue';
-import VideoPlayer from './components/VideoPlayer.vue';
 import Timeline from './components/Timeline.vue';
 import AnnotationPanel from './components/AnnotationPanel.vue';
 import Login from './components/Login.vue';
@@ -8,7 +7,6 @@ import LoadVideoModal from './components/LoadVideoModal.vue';
 import ShareModal from './components/ShareModal.vue';
 import NotificationToast from './components/NotificationToast.vue';
 import DrawingVideoPlayer from './components/DrawingVideoPlayer.vue';
-import DrawingCanvas from './components/DrawingCanvas.vue';
 import { useAuth } from './composables/useAuth.ts';
 import { useVideoAnnotations } from './composables/useVideoAnnotations.ts';
 import { useRealtimeAnnotations } from './composables/useRealtimeAnnotations.ts';

@@ -138,11 +138,26 @@ export function useVideoPlayer() {
     try {
       // Ensure time is within valid range
       const clampedTime = Math.max(0, Math.min(time, videoDuration));
+
+      // Add diagnostic logging for frame navigation debugging
+      const beforeSeekTime = playerRef.value.currentTime;
+      const beforeSeekFrame = timeToFrame(beforeSeekTime);
+
       playerRef.value.currentTime = clampedTime;
 
       // Immediately update our reactive values to ensure Timeline updates
       currentTime.value = clampedTime;
       updateFrameFromTime();
+
+      // Log the seek operation for debugging
+      console.log('seekTo operation:', {
+        requestedTime: time,
+        clampedTime,
+        beforeSeekTime,
+        beforeSeekFrame,
+        afterSeekFrame: timeToFrame(clampedTime),
+        actualVideoCurrentTime: playerRef.value.currentTime,
+      });
 
       // currentTime and frame will also be updated by timeupdate event
     } catch (err) {
@@ -222,6 +237,61 @@ export function useVideoPlayer() {
     setPlaybackSpeed(1);
   };
 
+  // Frame-by-frame seeking functions
+  const seekToNextFrame = () => {
+    if (!playerRef.value || totalFrames.value === 0) {
+      return;
+    }
+
+    // Pause the video before seeking to prevent auto-play after seek
+    const wasPlaying = isPlaying.value;
+    if (wasPlaying) {
+      pause();
+    }
+
+    const nextFrame = Math.min(currentFrame.value + 1, totalFrames.value - 1);
+    const nextTime = frameToTime(nextFrame);
+
+    // Add diagnostic logging
+    console.log('seekToNextFrame:', {
+      currentFrame: currentFrame.value,
+      nextFrame,
+      nextTime,
+      nextTimeWithOffset: nextTime + 0.00001,
+    });
+
+    // Add small offset to prevent floating-point precision issues
+    const offsetTime = nextTime + 0.00001;
+    seekTo(offsetTime);
+  };
+
+  const seekToPreviousFrame = () => {
+    if (!playerRef.value) {
+      return;
+    }
+
+    // Pause the video before seeking to prevent auto-play after seek
+    const wasPlaying = isPlaying.value;
+    if (wasPlaying) {
+      pause();
+    }
+
+    const previousFrame = Math.max(currentFrame.value - 1, 0);
+    const previousTime = frameToTime(previousFrame);
+
+    // Add diagnostic logging
+    console.log('seekToPreviousFrame:', {
+      currentFrame: currentFrame.value,
+      previousFrame,
+      previousTime,
+      previousTimeWithOffset: previousTime + 0.00001,
+    });
+
+    // Add small offset to prevent floating-point precision issues
+    const offsetTime = previousTime + 0.00001;
+    seekTo(offsetTime);
+  };
+
   // Simplified event handlers - removed unused custom event handlers
   // VideoPlayer component handles native events directly
 
@@ -236,11 +306,13 @@ export function useVideoPlayer() {
         break;
       case 'ArrowLeft':
         event.preventDefault();
-        seekTo(currentTime.value - 10);
+        console.log('ArrowLeft pressed, calling seekToPreviousFrame()');
+        seekToPreviousFrame();
         break;
       case 'ArrowRight':
         event.preventDefault();
-        seekTo(currentTime.value + 10);
+        console.log('ArrowRight pressed, calling seekToNextFrame()');
+        seekToNextFrame();
         break;
       case 'ArrowUp':
         event.preventDefault();
@@ -269,9 +341,20 @@ export function useVideoPlayer() {
     }
   };
 
+  // Event listener management functions
+  const startListening = () => {
+    console.log('Starting keyboard event listener');
+    document.addEventListener('keydown', handleKeydown);
+  };
+
+  const stopListening = () => {
+    console.log('Stopping keyboard event listener');
+    document.removeEventListener('keydown', handleKeydown);
+  };
+
   // Cleanup on unmount - simplified
   onUnmounted(() => {
-    document.removeEventListener('keydown', handleKeydown);
+    stopListening();
   });
 
   // Format time helper
@@ -326,6 +409,8 @@ export function useVideoPlayer() {
     pause,
     togglePlayPause,
     seekTo,
+    seekToNextFrame,
+    seekToPreviousFrame,
     setVolume,
     toggleMute,
     setPlaybackSpeed,
@@ -333,7 +418,9 @@ export function useVideoPlayer() {
     decreaseSpeed,
     resetSpeed,
 
-    // Setup and cleanup removed - handled directly in VideoPlayer component
+    // Event listener management
+    startListening,
+    stopListening,
 
     // Utilities
     formatTime,

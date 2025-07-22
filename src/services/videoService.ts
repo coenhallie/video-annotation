@@ -1,5 +1,5 @@
 import { supabase } from '../composables/useSupabase';
-import type { Database, VideoInsert, VideoUpdate } from '../types/database';
+import type { VideoInsert, VideoUpdate } from '../types/database';
 import { VideoUploadService } from './videoUploadService';
 
 export class VideoService {
