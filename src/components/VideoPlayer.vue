@@ -84,7 +84,7 @@ const playerContainer = ref(null);
 const isExternalSeeking = ref(false);
 
 onMounted(() => {
-  console.log('🎥 [VideoPlayer] Component mounted');
+  // Component mounted
 });
 
 // Watch for the video element to become available
@@ -92,9 +92,6 @@ watch(
   videoElement,
   (video) => {
     if (video) {
-      console.log(
-        '🎥 [VideoPlayer] Video element is available, setting up player and listeners.'
-      );
       playerRef.value = video;
 
       // Add event listeners for native video events
@@ -169,36 +166,13 @@ watch(
 watch(
   () => props.videoUrl,
   (newUrl, oldUrl) => {
-    console.log('🎥 [VideoPlayer] Video URL changed');
-    console.log('🎥 [VideoPlayer] Old URL:', oldUrl);
-    console.log('🎥 [VideoPlayer] New URL:', newUrl);
-
     if (newUrl) {
-      console.log(
-        '🎥 [VideoPlayer] Checking video element after DOM update...'
-      );
-
       if (videoElement.value) {
-        console.log(
-          '🎥 [VideoPlayer] Video element found, setting src and calling load()'
-        );
-
-        // CRITICAL FIX: Update playerRef when video element becomes available
-        console.log('🎥 [VideoPlayer] Setting playerRef to video element');
+        // Update playerRef when video element becomes available
         playerRef.value = videoElement.value;
-        console.log('🎥 [VideoPlayer] playerRef updated:', !!playerRef.value);
-
         videoElement.value.src = newUrl;
         videoElement.value.load();
-        console.log('🎥 [VideoPlayer] Video load() called successfully');
-      } else {
-        console.error('🎥 [VideoPlayer] Video element not found');
-        console.error(
-          '🎥 [VideoPlayer] This might indicate a template rendering issue'
-        );
       }
-    } else {
-      console.log('🎥 [VideoPlayer] New URL is empty, not loading');
     }
   },
   { flush: 'post' } // Run after DOM updates - Vue recommended approach

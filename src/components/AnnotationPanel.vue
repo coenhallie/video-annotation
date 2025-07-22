@@ -232,11 +232,36 @@ const onSeverityChange = () => {
 
 // Drawing-related methods
 const toggleDrawingSection = () => {
+  console.log('🎨 [AnnotationPanel] toggleDrawingSection called');
+  console.log(
+    '🎨 [AnnotationPanel] Current showDrawingSection:',
+    showDrawingSection.value
+  );
+  console.log(
+    '🎨 [AnnotationPanel] Current drawing mode:',
+    props.drawingCanvas.isDrawingMode.value
+  );
+
   showDrawingSection.value = !showDrawingSection.value;
+  console.log(
+    '🎨 [AnnotationPanel] New showDrawingSection:',
+    showDrawingSection.value
+  );
+
   if (showDrawingSection.value) {
+    console.log('🎨 [AnnotationPanel] Enabling drawing mode...');
     props.drawingCanvas.enableDrawingMode();
+    console.log(
+      '🎨 [AnnotationPanel] Drawing mode enabled:',
+      props.drawingCanvas.isDrawingMode.value
+    );
   } else {
+    console.log('🎨 [AnnotationPanel] Disabling drawing mode...');
     props.drawingCanvas.disableDrawingMode();
+    console.log(
+      '🎨 [AnnotationPanel] Drawing mode disabled:',
+      props.drawingCanvas.isDrawingMode.value
+    );
   }
 };
 

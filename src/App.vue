@@ -52,6 +52,7 @@ const selectedAnnotation = ref(null);
 
 // Video player reference
 const videoPlayerRef = ref(null);
+const drawingVideoPlayerRef = ref(null);
 
 // Annotation panel reference
 const annotationPanelRef = ref(null);
@@ -79,19 +80,18 @@ const drawingCanvas = useDrawingCanvas();
 
 // Event handlers for video player events
 const handleTimeUpdate = (data) => {
+  console.log('🎯 [App] handleTimeUpdate received:', {
+    currentTime: data.currentTime,
+    duration: data.duration,
+    previousCurrentTime: currentTime.value,
+    previousDuration: duration.value,
+  });
   currentTime.value = data.currentTime;
   // Also update duration if it's available and not set
   if (data.duration && data.duration > 0 && duration.value !== data.duration) {
-    console.log('Updating duration from timeUpdate:', data.duration);
+    console.log('🎯 [App] Updating duration from timeUpdate:', data.duration);
     duration.value = data.duration;
   }
-
-  // Debug: Log values being passed to Timeline
-  console.log('App.vue Timeline props:', {
-    currentTime: currentTime.value,
-    duration: duration.value,
-    isPlaying: isPlaying.value,
-  });
 };
 
 const handleFrameUpdate = (data) => {
@@ -138,8 +138,9 @@ const handleLoaded = async () => {
   console.log('✅ [App] User:', user.value?.email || 'No user');
 
   // Get video dimensions from the video element
-  if (videoPlayerRef.value?.videoElement) {
-    const videoElement = videoPlayerRef.value.videoElement;
+  if (drawingVideoPlayerRef.value?.videoPlayerRef?.value?.videoElement) {
+    const videoElement =
+      drawingVideoPlayerRef.value.videoPlayerRef.value.videoElement;
     videoDimensions.value = {
       width: videoElement.videoWidth || 1920,
       height: videoElement.videoHeight || 1080,
@@ -176,45 +177,45 @@ const handleLoaded = async () => {
   }
 };
 
-const handleVideoClick = () => {
-  // Don't handle video clicks when drawing mode is active
-  if (drawingCanvas.isDrawingMode.value) {
-    return;
-  }
-
-  // Toggle behavior: if annotation form is visible, hide it and play video
-  // If form is not visible, pause video and show form
-  if (isAnnotationFormVisible.value) {
-    // Hide annotation form and resume playing
-    if (annotationPanelRef.value && annotationPanelRef.value.cancelForm) {
-      annotationPanelRef.value.cancelForm();
-    }
-    isAnnotationFormVisible.value = false;
-    // Resume playing the video
-    if (videoPlayerRef.value && videoPlayerRef.value.play) {
-      videoPlayerRef.value.play();
-    }
-  } else {
-    // The video is already paused by the VideoPlayer component
-    // Now we need to show the annotation form
-    if (
-      annotationPanelRef.value &&
-      annotationPanelRef.value.startAddAnnotation
-    ) {
-      annotationPanelRef.value.startAddAnnotation();
-      isAnnotationFormVisible.value = true;
-    }
-  }
-};
-
 // Timeline event handlers
 const handleSeekToTime = (time) => {
   console.log('handleSeekToTime called with time:', time);
-  if (videoPlayerRef.value) {
-    console.log('Calling videoPlayerRef.seekTo with time:', time);
-    videoPlayerRef.value.seekTo(time);
+  console.log(
+    'DEBUG - drawingVideoPlayerRef.value:',
+    drawingVideoPlayerRef.value
+  );
+  console.log(
+    'DEBUG - drawingVideoPlayerRef.value?.videoPlayerRef:',
+    drawingVideoPlayerRef.value?.videoPlayerRef
+  );
+  console.log(
+    'DEBUG - drawingVideoPlayerRef.value?.videoPlayerRef?.value:',
+    drawingVideoPlayerRef.value?.videoPlayerRef?.value
+  );
+
+  if (drawingVideoPlayerRef.value?.videoPlayerRef) {
+    console.log(
+      'DEBUG - videoPlayerRef type:',
+      typeof drawingVideoPlayerRef.value.videoPlayerRef
+    );
+    console.log(
+      'DEBUG - videoPlayerRef.seekTo:',
+      drawingVideoPlayerRef.value.videoPlayerRef.seekTo
+    );
+
+    if (drawingVideoPlayerRef.value.videoPlayerRef.seekTo) {
+      console.log(
+        'Calling drawingVideoPlayerRef.videoPlayerRef.seekTo with time:',
+        time
+      );
+      drawingVideoPlayerRef.value.videoPlayerRef.seekTo(time);
+    } else {
+      console.warn('seekTo method not found on videoPlayerRef');
+    }
   } else {
-    console.warn('videoPlayerRef.value is null, cannot seek');
+    console.warn(
+      'drawingVideoPlayerRef.value.videoPlayerRef is null, cannot seek'
+    );
   }
 };
 
@@ -226,14 +227,20 @@ const handleAnnotationClick = (annotation) => {
 
 // Timeline play/pause handlers
 const handleTimelinePlay = () => {
-  if (videoPlayerRef.value && videoPlayerRef.value.play) {
-    videoPlayerRef.value.play();
+  if (
+    drawingVideoPlayerRef.value?.videoPlayerRef?.value &&
+    drawingVideoPlayerRef.value.videoPlayerRef.play
+  ) {
+    drawingVideoPlayerRef.value.videoPlayerRef.value.play();
   }
 };
 
 const handleTimelinePause = () => {
-  if (videoPlayerRef.value && videoPlayerRef.value.pause) {
-    videoPlayerRef.value.pause();
+  if (
+    drawingVideoPlayerRef.value?.videoPlayerRef?.value &&
+    drawingVideoPlayerRef.value.videoPlayerRef.pause
+  ) {
+    drawingVideoPlayerRef.value.videoPlayerRef.value.pause();
   }
 };
 
@@ -346,7 +353,10 @@ watch(
 
         // If we have a video URL but no video player yet, we need to wait for it to load
         // The video will be initialized in the handleLoaded event
-        if (videoPlayerRef.value && duration.value > 0) {
+        if (
+          drawingVideoPlayerRef.value?.videoPlayerRef?.value &&
+          duration.value > 0
+        ) {
           console.log(
             '✅ [App] Video already loaded, initializing annotations...'
           );
@@ -735,36 +745,16 @@ const checkForSharedVideo = async () => {
         <section class="flex-1 flex flex-col bg-black min-w-0 overflow-hidden">
           <div class="flex-1 flex items-center justify-center p-6">
             <div class="relative">
-              <VideoPlayer
-                ref="videoPlayerRef"
+              <!-- Drawing Video Player -->
+              <DrawingVideoPlayer
+                ref="drawingVideoPlayerRef"
                 :video-url="videoUrl"
                 :video-id="videoId"
-                :controls="true"
-                :autoplay="false"
-                poster=""
+                :show-debug-panel="false"
                 @time-update="handleTimeUpdate"
                 @frame-update="handleFrameUpdate"
                 @fps-detected="handleFPSDetected"
-                @play="handlePlay"
-                @pause="handlePause"
-                @duration-change="handleDurationChange"
-                @error="handleError"
                 @loaded="handleLoaded"
-                @video-click="handleVideoClick"
-              />
-
-              <!-- Drawing Canvas Overlay -->
-              <DrawingCanvas
-                v-if="videoUrl && duration > 0"
-                ref="drawingCanvasRef"
-                :video-width="videoDimensions.width"
-                :video-height="videoDimensions.height"
-                :current-frame="currentFrame"
-                :is-drawing-mode="drawingCanvas.isDrawingMode.value"
-                :selected-tool="drawingCanvas.currentTool.value.type"
-                :stroke-width="drawingCanvas.currentTool.value.strokeWidth"
-                :severity="drawingCanvas.currentTool.value.severity"
-                :existing-drawings="drawingCanvas.currentFrameDrawings.value"
                 @drawing-created="handleDrawingCreated"
                 @drawing-updated="handleDrawingUpdated"
                 @drawing-deleted="handleDrawingDeleted"

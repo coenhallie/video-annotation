@@ -1,115 +1,33 @@
 <template>
   <div class="drawing-video-player">
-    <div class="flex gap-4">
-      <!-- Video Player with Drawing Canvas Overlay -->
-      <div class="flex-1 flex items-center justify-center p-6 relative">
-        <!-- Video Player -->
-        <VideoPlayer
-          ref="videoPlayerRef"
-          :video-url="videoUrl"
-          :video-id="videoId"
-          :autoplay="false"
-          :controls="true"
-          @time-update="handleTimeUpdate"
-          @frame-update="handleFrameUpdate"
-          @fps-detected="handleFpsDetected"
-          @loaded="handleVideoLoaded"
-        />
+    <!-- Video Player with Drawing Canvas Overlay -->
+    <div class="flex items-center justify-center p-6 relative">
+      <!-- Video Player -->
+      <VideoPlayer
+        ref="videoPlayerRef"
+        :video-url="videoUrl"
+        :video-id="videoId"
+        :autoplay="false"
+        :controls="true"
+        @time-update="handleTimeUpdate"
+        @frame-update="handleFrameUpdate"
+        @fps-detected="handleFpsDetected"
+        @loaded="handleVideoLoaded"
+      />
 
-        <!-- Drawing Canvas Overlay - covers entire container -->
-        <DrawingCanvas
-          v-if="videoLoaded"
-          ref="drawingCanvasRef"
-          :current-frame="currentFrame"
-          :is-drawing-mode="drawingCanvas.isDrawingMode.value"
-          :selected-tool="drawingCanvas.currentTool.value.type"
-          :stroke-width="drawingCanvas.currentTool.value.strokeWidth"
-          :severity="drawingCanvas.currentTool.value.severity"
-          :existing-drawings="drawingCanvas.currentFrameDrawings.value"
-          @drawing-created="handleDrawingCreated"
-          @drawing-updated="handleDrawingUpdated"
-          @drawing-deleted="handleDrawingDeleted"
-        />
-        <!-- Video Info -->
-        <div
-          v-if="videoLoaded"
-          class="absolute bottom-4 left-4 right-4 p-4 bg-gray-50 bg-opacity-90 rounded-lg"
-        >
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-            <div>
-              <span class="font-medium text-gray-700">Current Frame:</span>
-              <span class="ml-2 text-gray-900">{{ currentFrame }}</span>
-            </div>
-            <div>
-              <span class="font-medium text-gray-700">Total Frames:</span>
-              <span class="ml-2 text-gray-900">{{ totalFrames }}</span>
-            </div>
-            <div>
-              <span class="font-medium text-gray-700">FPS:</span>
-              <span class="ml-2 text-gray-900">{{ fps }}</span>
-            </div>
-            <div>
-              <span class="font-medium text-gray-700">Dimensions:</span>
-              <span class="ml-2 text-gray-900"
-                >{{ videoDimensions.width }}x{{ videoDimensions.height }}</span
-              >
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Drawing Tools Panel -->
-      <div class="w-80">
-        <DrawingTools
-          :drawing-canvas="drawingCanvas"
-          :current-frame="currentFrame"
-          @jump-to-frame="handleJumpToFrame"
-        />
-
-        <!-- Drawing Data Debug Panel (for testing) -->
-        <div v-if="showDebugPanel" class="mt-4 p-4 bg-gray-100 rounded-lg">
-          <h4 class="text-sm font-medium text-gray-900 mb-2">Debug Info</h4>
-          <div class="text-xs text-gray-600 space-y-1">
-            <div>
-              Drawing Mode:
-              {{ drawingCanvas.isDrawingMode.value ? 'ON' : 'OFF' }}
-            </div>
-            <div>Current Tool: {{ drawingCanvas.currentTool.value.type }}</div>
-            <div>
-              Stroke Width: {{ drawingCanvas.currentTool.value.strokeWidth }}px
-            </div>
-            <div>Severity: {{ drawingCanvas.currentTool.value.severity }}</div>
-            <div>
-              Drawings on Frame:
-              {{ drawingCanvas.currentFrameDrawings.value.length }}
-            </div>
-            <div>
-              Total Drawings: {{ drawingCanvas.getTotalDrawingsCount.value }}
-            </div>
-            <div>
-              Frames with Drawings:
-              {{ drawingCanvas.getFramesWithDrawings.value.length }}
-            </div>
-          </div>
-
-          <!-- Export/Import Buttons -->
-          <div class="mt-3 space-y-2">
-            <button
-              @click="exportDrawings"
-              :disabled="drawingCanvas.getTotalDrawingsCount.value === 0"
-              class="w-full px-3 py-2 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Export Drawings JSON
-            </button>
-            <button
-              @click="importDrawings"
-              class="w-full px-3 py-2 text-xs bg-green-600 text-white rounded hover:bg-green-700"
-            >
-              Import Drawings JSON
-            </button>
-          </div>
-        </div>
-      </div>
+      <!-- Drawing Canvas Overlay - covers entire container -->
+      <DrawingCanvas
+        ref="drawingCanvasRef"
+        :current-frame="currentFrame"
+        :is-drawing-mode="drawingCanvas.isDrawingMode.value"
+        :selected-tool="drawingCanvas.currentTool.value.type"
+        :stroke-width="drawingCanvas.currentTool.value.strokeWidth"
+        :severity="drawingCanvas.currentTool.value.severity"
+        :existing-drawings="drawingCanvas.currentFrameDrawings.value"
+        @drawing-created="handleDrawingCreated"
+        @drawing-updated="handleDrawingUpdated"
+        @drawing-deleted="handleDrawingDeleted"
+      />
     </div>
   </div>
 </template>
@@ -132,6 +50,13 @@ interface Emits {
   (e: 'drawing-created', drawing: DrawingData): void;
   (e: 'drawing-updated', drawing: DrawingData): void;
   (e: 'drawing-deleted', drawingId: string): void;
+  (e: 'time-update', data: { currentTime: number; duration: number }): void;
+  (
+    e: 'frame-update',
+    data: { currentFrame: number; totalFrames: number; fps: number }
+  ): void;
+  (e: 'fps-detected', data: { fps: number; totalFrames: number }): void;
+  (e: 'loaded'): void;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -164,7 +89,9 @@ const updateCurrentFrame = (frame: number) => {
 
 // Video event handlers
 const handleTimeUpdate = (data: { currentTime: number; duration: number }) => {
-  // Time update handled by frame update
+  console.log('🎬 [DrawingVideoPlayer] handleTimeUpdate:', data);
+  // Forward time update to parent
+  emit('time-update', data);
 };
 
 const handleFrameUpdate = (data: {
@@ -172,18 +99,27 @@ const handleFrameUpdate = (data: {
   totalFrames: number;
   fps: number;
 }) => {
+  console.log('🎬 [DrawingVideoPlayer] handleFrameUpdate:', data);
   updateCurrentFrame(data.currentFrame);
   totalFrames.value = data.totalFrames;
   fps.value = data.fps;
+  // Forward frame update to parent
+  emit('frame-update', data);
 };
 
 const handleFpsDetected = (data: { fps: number; totalFrames: number }) => {
+  console.log('🎬 [DrawingVideoPlayer] handleFpsDetected:', data);
   fps.value = data.fps;
   totalFrames.value = data.totalFrames;
+  // Forward fps detected to parent
+  emit('fps-detected', data);
 };
 
 const handleVideoLoaded = () => {
+  console.log('🎬 [DrawingVideoPlayer] handleVideoLoaded');
   videoLoaded.value = true;
+  // Forward loaded event to parent
+  emit('loaded');
 
   // Get video dimensions
   nextTick(() => {
@@ -282,6 +218,32 @@ const importDrawings = () => {
 // Initialize
 onMounted(() => {
   console.log('DrawingVideoPlayer mounted');
+
+  // Add diagnostic logging
+  nextTick(() => {
+    console.log(
+      'DrawingVideoPlayer - videoPlayerRef.value:',
+      videoPlayerRef.value
+    );
+    console.log(
+      'DrawingVideoPlayer - videoPlayerRef.value type:',
+      typeof videoPlayerRef.value
+    );
+    if (videoPlayerRef.value) {
+      console.log(
+        'DrawingVideoPlayer - videoPlayerRef.value.seekTo:',
+        videoPlayerRef.value.seekTo
+      );
+      console.log(
+        'DrawingVideoPlayer - videoPlayerRef.value.videoElement:',
+        videoPlayerRef.value.videoElement
+      );
+    }
+  });
+});
+
+defineExpose({
+  videoPlayerRef,
 });
 </script>
 

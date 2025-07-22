@@ -43,13 +43,23 @@ const isDragging = ref(false);
 
 // Use time-based progress for consistency with video player
 const progressPercentage = computed(() => {
-  console.log('Timeline progressPercentage computed:', {
+  const percentage = props.duration
+    ? (props.currentTime / props.duration) * 100
+    : 0;
+  console.log('🎯 [Timeline] progressPercentage computed:', {
     currentTime: props.currentTime,
     duration: props.duration,
-    percentage: props.duration ? (props.currentTime / props.duration) * 100 : 0,
+    percentage: percentage,
+    isValidDuration: props.duration > 0,
+    isValidCurrentTime: props.currentTime >= 0,
   });
-  if (!props.duration) return 0;
-  return (props.currentTime / props.duration) * 100;
+  if (!props.duration) {
+    console.warn(
+      '🎯 [Timeline] Duration is 0 or undefined, progress will be 0'
+    );
+    return 0;
+  }
+  return percentage;
 });
 
 // Optimized formatters with memoization-like behavior
