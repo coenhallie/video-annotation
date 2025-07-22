@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, defineProps, defineEmits } from 'vue';
+import { ref, computed, defineProps, defineEmits, onMounted } from 'vue';
 
 const props = defineProps({
   annotations: {
@@ -22,6 +22,10 @@ const props = defineProps({
     type: Number,
     default: 30,
   },
+  drawingCanvas: {
+    type: Object,
+    required: true,
+  },
 });
 
 const emit = defineEmits([
@@ -32,21 +36,25 @@ const emit = defineEmits([
   'form-show',
   'form-hide',
   'pause',
+  'drawing-created',
+  'seek-to-frame',
 ]);
 
 // Form state
 const showAddForm = ref(false);
 const editingAnnotation = ref(null);
-const isRangedFrame = ref(false);
 const newAnnotation = ref({
   content: '',
   severity: 'medium',
   color: '#6b7280',
-  startFrame: 0,
-  endFrame: 0,
-  duration: 2.0,
-  durationFrames: 60, // Default 2 seconds at 30fps
+  frame: 0,
+  annotationType: 'text', // 'text' or 'drawing'
+  drawingData: null,
 });
+
+// Drawing state
+const showDrawingSection = ref(false);
+const hasDrawingData = ref(false);
 
 // Annotation severity levels
 const severityLevels = [
@@ -59,6 +67,13 @@ const severityLevels = [
   },
   { value: 'high', label: 'High', color: '#ef4444', icon: 'alert-circle' },
 ];
+
+// Severity colors mapping (same as drawing canvas)
+const severityColors = {
+  low: '#34d399', // green-400
+  medium: '#fbbf24', // amber-400
+  high: '#ef4444', // red-500
+};
 
 // Computed
 const sortedAnnotations = computed(() => {
@@ -90,15 +105,6 @@ const getSeverityInfo = (severity) => {
   return severityLevels.find((s) => s.value === severity) || severityLevels[1]; // Default to medium
 };
 
-// Check if annotation is ranged
-const isRangedAnnotation = (annotation) => {
-  return (
-    annotation.endFrame !== undefined &&
-    annotation.startFrame !== undefined &&
-    annotation.endFrame !== annotation.startFrame
-  );
-};
-
 // Methods
 const startAddAnnotation = () => {
   emit('pause');
@@ -106,49 +112,77 @@ const startAddAnnotation = () => {
     content: '',
     severity: 'medium',
     color: '#fbbf24',
-    startFrame: props.currentFrame,
-    endFrame: props.currentFrame,
-    duration: 2.0,
-    durationFrames: Math.round(2.0 * props.fps), // 2 seconds in frames
+    frame: props.currentFrame,
+    annotationType: 'text',
+    drawingData: null,
   };
-  isRangedFrame.value = false;
   showAddForm.value = true;
   editingAnnotation.value = null;
+  showDrawingSection.value = false;
+  hasDrawingData.value = false;
+  props.drawingCanvas.disableDrawingMode();
+  props.drawingCanvas.clearCurrentFrameDrawings();
   emit('form-show');
 };
 
 const startEditAnnotation = (annotation) => {
+  // First navigate to the annotation's frame
+  emit('pause');
+
+  // Navigate to the annotation's frame
+  const targetFrame =
+    annotation.frame || Math.round(annotation.timestamp * props.fps);
+  emit('seek-to-frame', targetFrame);
+
   newAnnotation.value = { ...annotation };
-  // Check if annotation has range data
-  isRangedFrame.value =
-    annotation.endFrame !== undefined &&
-    annotation.endFrame !== annotation.startFrame;
   showAddForm.value = true;
   editingAnnotation.value = annotation;
+
+  // Handle drawing data if present
+  if (annotation.drawingData) {
+    hasDrawingData.value = true;
+    showDrawingSection.value = true;
+    // Load the drawing data into the canvas
+    props.drawingCanvas.clearCurrentFrameDrawings();
+    props.drawingCanvas.addDrawing(annotation.drawingData);
+  } else {
+    hasDrawingData.value = false;
+    showDrawingSection.value = false;
+  }
+
+  emit('form-show');
 };
 
 const saveAnnotation = () => {
-  if (!newAnnotation.value.content.trim()) return;
+  // Check if we have either content or drawing data
+  const hasContent = newAnnotation.value.content.trim();
+  const hasDrawing = hasDrawingData.value && newAnnotation.value.drawingData;
+
+  if (!hasContent && !hasDrawing) return;
 
   const severityInfo = getSeverityInfo(newAnnotation.value.severity);
-  const startFrame = newAnnotation.value.startFrame;
-  const endFrame = isRangedFrame.value
-    ? newAnnotation.value.endFrame
-    : startFrame;
+
+  // Generate title based on content type
+  let title = '';
+  if (hasContent && hasDrawing) {
+    title = newAnnotation.value.content.trim().substring(0, 40) + ' + Drawing';
+  } else if (hasContent) {
+    title =
+      newAnnotation.value.content.trim().substring(0, 50) +
+      (newAnnotation.value.content.trim().length > 50 ? '...' : '');
+  } else {
+    title = 'Drawing Annotation';
+  }
 
   const annotationData = {
     ...newAnnotation.value,
     color: severityInfo.color,
-    title:
-      newAnnotation.value.content.trim().substring(0, 50) +
-      (newAnnotation.value.content.trim().length > 50 ? '...' : ''), // Generate title from content
-    content: newAnnotation.value.content.trim(),
-    startFrame: startFrame,
-    endFrame: endFrame,
-    // Calculate timestamp and duration from frames
-    timestamp: startFrame / props.fps,
-    duration: (endFrame - startFrame + 1) / props.fps,
-    durationFrames: endFrame - startFrame + 1,
+    title,
+    content: newAnnotation.value.content.trim() || 'Drawing annotation',
+    frame: newAnnotation.value.frame,
+    timestamp: newAnnotation.value.frame / props.fps,
+    annotationType: hasDrawing ? 'drawing' : 'text',
+    drawingData: hasDrawing ? newAnnotation.value.drawingData : null,
   };
 
   if (editingAnnotation.value) {
@@ -166,15 +200,17 @@ const saveAnnotation = () => {
 const cancelForm = () => {
   showAddForm.value = false;
   editingAnnotation.value = null;
-  isRangedFrame.value = false;
+  showDrawingSection.value = false;
+  hasDrawingData.value = false;
+  props.drawingCanvas.disableDrawingMode();
+  props.drawingCanvas.clearCurrentFrameDrawings();
   newAnnotation.value = {
     content: '',
     severity: 'medium',
     color: '#fbbf24',
-    startFrame: 0,
-    endFrame: 0,
-    duration: 2.0,
-    durationFrames: Math.round(2.0 * props.fps),
+    frame: 0,
+    annotationType: 'text',
+    drawingData: null,
   };
   emit('form-hide');
 };
@@ -190,27 +226,37 @@ const selectAnnotation = (annotation) => {
 const onSeverityChange = () => {
   const severityInfo = getSeverityInfo(newAnnotation.value.severity);
   newAnnotation.value.color = severityInfo.color;
+  // Update drawing canvas severity too
+  props.drawingCanvas.setSeverity(newAnnotation.value.severity);
 };
 
-const onDurationChange = () => {
-  // Update frame duration when time duration changes
-  newAnnotation.value.durationFrames = Math.round(
-    newAnnotation.value.duration * props.fps
-  );
-};
-
-const onFrameDurationChange = () => {
-  // Update time duration when frame duration changes
-  newAnnotation.value.duration = newAnnotation.value.durationFrames / props.fps;
-};
-
-const toggleRangedFrame = () => {
-  isRangedFrame.value = !isRangedFrame.value;
-  if (!isRangedFrame.value) {
-    // Reset to single frame
-    newAnnotation.value.endFrame = newAnnotation.value.startFrame;
+// Drawing-related methods
+const toggleDrawingSection = () => {
+  showDrawingSection.value = !showDrawingSection.value;
+  if (showDrawingSection.value) {
+    props.drawingCanvas.enableDrawingMode();
+  } else {
+    props.drawingCanvas.disableDrawingMode();
   }
 };
+
+const onDrawingCreated = (drawingData) => {
+  newAnnotation.value.drawingData = drawingData;
+  hasDrawingData.value = true;
+  console.log('Drawing created:', drawingData);
+  emit('drawing-created', drawingData);
+};
+
+const clearDrawing = () => {
+  props.drawingCanvas.clearCurrentFrameDrawings();
+  newAnnotation.value.drawingData = null;
+  hasDrawingData.value = false;
+};
+
+// Setup drawing canvas frame
+onMounted(() => {
+  props.drawingCanvas.currentFrame.value = props.currentFrame;
+});
 
 // Expose methods to parent component
 defineExpose({
@@ -220,9 +266,11 @@ defineExpose({
 </script>
 
 <template>
-  <div class="h-full flex flex-col bg-white">
+  <div class="h-full w-full bg-white overflow-y-auto overflow-x-hidden">
     <!-- Header -->
-    <div class="flex justify-end items-center p-2 border-b border-gray-200">
+    <div
+      class="sticky top-0 z-10 flex justify-end items-center p-2 border-b border-gray-200 bg-white"
+    >
       <button
         class="btn btn-primary flex items-center space-x-1"
         @click="startAddAnnotation"
@@ -258,75 +306,57 @@ defineExpose({
             <label class="block text-sm font-medium text-gray-700 mb-1"
               >Severity</label
             >
-            <select
-              v-model="newAnnotation.severity"
-              class="input"
-              @change="onSeverityChange"
-            >
-              <option
+            <div class="grid grid-cols-3 gap-2">
+              <button
                 v-for="severity in severityLevels"
                 :key="severity.value"
-                :value="severity.value"
+                type="button"
+                @click="
+                  newAnnotation.severity = severity.value;
+                  onSeverityChange();
+                "
+                :class="[
+                  'flex items-center justify-center space-x-1 px-3 py-2 rounded-md text-sm font-medium transition-colors border',
+                  newAnnotation.severity === severity.value
+                    ? 'border-gray-400 shadow-sm'
+                    : 'border-gray-200 hover:border-gray-300',
+                ]"
+                :style="{
+                  backgroundColor:
+                    newAnnotation.severity === severity.value
+                      ? severity.color + '20'
+                      : 'white',
+                  color:
+                    newAnnotation.severity === severity.value
+                      ? severity.color
+                      : '#374151',
+                  borderColor:
+                    newAnnotation.severity === severity.value
+                      ? severity.color
+                      : '#d1d5db',
+                }"
               >
-                {{ severity.label }}
-              </option>
-            </select>
+                <div
+                  class="w-3 h-3 rounded-full"
+                  :style="{ backgroundColor: severity.color }"
+                ></div>
+                <span>{{ severity.label }}</span>
+              </button>
+            </div>
           </div>
 
           <div>
-            <div class="flex items-center justify-between mb-1">
-              <label class="block text-sm font-medium text-gray-700"
-                >Frame Position</label
-              >
-              <button
-                type="button"
-                class="text-xs text-blue-600 hover:text-blue-800 underline"
-                @click="toggleRangedFrame"
-              >
-                {{ isRangedFrame ? 'single' : 'ranged' }}
-              </button>
-            </div>
-            <div v-if="!isRangedFrame">
-              <label class="block text-xs text-gray-500 mb-1"
-                >Frame Number</label
-              >
-              <input
-                v-model.number="newAnnotation.startFrame"
-                type="number"
-                min="0"
-                step="1"
-                class="input"
-                placeholder="Enter frame number"
-              />
-            </div>
-            <div v-else class="grid grid-cols-2 gap-2">
-              <div>
-                <label class="block text-xs text-gray-500 mb-1"
-                  >Start Frame</label
-                >
-                <input
-                  v-model.number="newAnnotation.startFrame"
-                  type="number"
-                  min="0"
-                  step="1"
-                  class="input"
-                  placeholder="Start frame"
-                />
-              </div>
-              <div>
-                <label class="block text-xs text-gray-500 mb-1"
-                  >End Frame</label
-                >
-                <input
-                  v-model.number="newAnnotation.endFrame"
-                  type="number"
-                  :min="newAnnotation.startFrame || 0"
-                  step="1"
-                  class="input"
-                  placeholder="End frame"
-                />
-              </div>
-            </div>
+            <label class="block text-sm font-medium text-gray-700 mb-1"
+              >Frame Position</label
+            >
+            <input
+              v-model.number="newAnnotation.frame"
+              type="number"
+              min="0"
+              step="1"
+              class="input"
+              placeholder="Enter frame number"
+            />
             <p class="text-xs text-gray-500 mt-1">@ {{ fps }}fps</p>
           </div>
 
@@ -342,6 +372,153 @@ defineExpose({
             ></textarea>
           </div>
 
+          <!-- Drawing Section -->
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <label class="block text-sm font-medium text-gray-700"
+                >Drawing</label
+              >
+              <button
+                type="button"
+                @click="toggleDrawingSection"
+                :class="[
+                  'px-2 py-1 rounded text-xs font-medium transition-colors',
+                  showDrawingSection
+                    ? 'bg-blue-600 text-white hover:bg-blue-700'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200',
+                ]"
+              >
+                {{ showDrawingSection ? 'Hide' : 'Add Drawing' }}
+              </button>
+            </div>
+
+            <!-- Drawing Tools and Canvas -->
+            <div v-if="showDrawingSection" class="space-y-3">
+              <!-- Drawing Tools -->
+              <div class="bg-gray-50 p-3 rounded-lg space-y-2">
+                <!-- Tool Selection -->
+                <div class="flex space-x-1">
+                  <button
+                    type="button"
+                    @click="drawingCanvas.setTool({ type: 'pen' })"
+                    :class="[
+                      'flex items-center space-x-1 px-2 py-1 rounded text-xs font-medium transition-colors',
+                      drawingCanvas.currentTool.value.type === 'pen'
+                        ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                        : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50',
+                    ]"
+                  >
+                    <svg
+                      class="w-3 h-3"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <path
+                        d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"
+                      />
+                    </svg>
+                    <span>Pen</span>
+                  </button>
+                  <button
+                    type="button"
+                    @click="drawingCanvas.setTool({ type: 'eraser' })"
+                    :class="[
+                      'flex items-center space-x-1 px-2 py-1 rounded text-xs font-medium transition-colors',
+                      drawingCanvas.currentTool.value.type === 'eraser'
+                        ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                        : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50',
+                    ]"
+                  >
+                    <svg
+                      class="w-3 h-3"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <path
+                        d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"
+                      />
+                    </svg>
+                    <span>Eraser</span>
+                  </button>
+                </div>
+
+                <!-- Stroke Width -->
+                <div class="space-y-1">
+                  <label class="text-xs text-gray-600">
+                    Width: {{ drawingCanvas.currentTool.value.strokeWidth }}px
+                  </label>
+                  <input
+                    type="range"
+                    min="1"
+                    max="20"
+                    :value="drawingCanvas.currentTool.value.strokeWidth"
+                    @input="
+                      drawingCanvas.setStrokeWidth(
+                        parseInt($event.target.value)
+                      )
+                    "
+                    class="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                  />
+                </div>
+
+                <!-- Drawing Color Preview -->
+                <div class="flex items-center space-x-2 text-xs text-gray-600">
+                  <span>Drawing color:</span>
+                  <div
+                    class="w-4 h-4 rounded-full border border-gray-300"
+                    :style="{
+                      backgroundColor: severityColors[newAnnotation.severity],
+                    }"
+                  ></div>
+                  <span class="capitalize">{{ newAnnotation.severity }}</span>
+                </div>
+
+                <!-- Clear Drawing Button -->
+                <div class="flex space-x-2">
+                  <button
+                    type="button"
+                    @click="clearDrawing"
+                    :disabled="!hasDrawingData"
+                    class="flex items-center space-x-1 px-2 py-1 rounded text-xs font-medium transition-colors bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <svg
+                      class="w-3 h-3"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <polyline points="3,6 5,6 21,6" />
+                      <path
+                        d="m19,6v14a2,2 0 0,1-2,2H7a2,2 0 0,1-2-2V6m3,0V4a2,2 0 0,1,2-2h4a2,2 0 0,1,2,2v2"
+                      />
+                    </svg>
+                    <span>Clear Drawing</span>
+                  </button>
+                  <div
+                    v-if="hasDrawingData"
+                    class="flex items-center text-xs text-green-600"
+                  >
+                    <svg
+                      class="w-3 h-3 mr-1"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <polyline points="20,6 9,17 4,12" />
+                    </svg>
+                    Drawing added
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div class="flex space-x-2 pt-1">
             <button class="btn btn-primary flex-1" @click="saveAnnotation">
               {{ editingAnnotation ? 'Update' : 'Save' }}
@@ -355,7 +532,7 @@ defineExpose({
     </div>
 
     <!-- Annotations List -->
-    <div class="flex-1 overflow-y-auto p-2">
+    <div class="p-2">
       <div
         v-if="sortedAnnotations.length === 0"
         class="text-center py-8 px-3 text-gray-500"
@@ -433,33 +610,41 @@ defineExpose({
           <div
             class="font-mono text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded flex flex-col items-center"
           >
-            <!-- For ranged annotations, show start and end frames -->
-            <template v-if="isRangedAnnotation(annotation)">
-              <span>{{ formatTime(annotation.timestamp) }}</span>
-              <div class="flex items-center space-x-1 text-xs opacity-75">
-                <span>{{ formatFrame(annotation.startFrame) }}</span>
-                <span>→</span>
-                <span>{{ formatFrame(annotation.endFrame) }}</span>
-              </div>
-            </template>
-            <!-- For non-ranged annotations, show single frame -->
-            <template v-else>
-              <span>{{ formatTime(annotation.timestamp) }}</span>
-              <span class="text-xs opacity-75">{{
-                annotation.startFrame !== undefined
-                  ? formatFrame(annotation.startFrame)
-                  : annotation.frame !== undefined
-                  ? formatFrame(annotation.frame)
-                  : formatFrame(timeToFrame(annotation.timestamp))
-              }}</span>
-            </template>
+            <!-- Show timestamp and frame for single-point annotations -->
+            <span>{{ formatTime(annotation.timestamp) }}</span>
+            <span class="text-xs opacity-75">{{
+              annotation.frame !== undefined
+                ? formatFrame(annotation.frame)
+                : formatFrame(timeToFrame(annotation.timestamp))
+            }}</span>
           </div>
         </div>
 
         <div>
-          <h4 class="text-sm font-medium text-gray-900 mb-0.5 leading-tight">
-            {{ annotation.title }}
-          </h4>
+          <div class="flex items-center space-x-1 mb-0.5">
+            <h4 class="text-sm font-medium text-gray-900 leading-tight">
+              {{ annotation.title }}
+            </h4>
+            <!-- Drawing indicator -->
+            <div
+              v-if="
+                annotation.annotationType === 'drawing' ||
+                annotation.drawingData
+              "
+              class="flex items-center space-x-1 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs"
+            >
+              <svg
+                class="w-3 h-3"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+              </svg>
+              <span>Drawing</span>
+            </div>
+          </div>
           <p
             v-if="annotation.content"
             class="text-xs text-gray-600 mb-1 leading-snug"

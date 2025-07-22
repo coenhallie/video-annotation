@@ -173,10 +173,7 @@ export function useVideoAnnotations(videoUrl, videoId) {
         severity: updates.severity,
         color: updates.color,
         timestamp: updates.timestamp,
-        start_frame: updates.startFrame,
-        end_frame: updates.endFrame,
-        duration: updates.duration,
-        duration_frames: updates.durationFrames,
+        frame: updates.frame,
       };
 
       const updatedAnnotation = await AnnotationService.updateAnnotation(
@@ -219,7 +216,7 @@ export function useVideoAnnotations(videoUrl, videoId) {
     );
     annotations.value = existingAnnotations.map((ann) => {
       // If it's already in app format, use as-is, otherwise transform
-      if (ann.startFrame !== undefined) {
+      if (ann.frame !== undefined) {
         return ann; // Already in app format
       } else {
         return transformDatabaseAnnotationToApp(ann); // Transform from DB format

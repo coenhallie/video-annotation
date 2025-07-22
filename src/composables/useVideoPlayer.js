@@ -154,13 +154,50 @@ export function useVideoPlayer() {
   };
 
   const seekTo = (time) => {
-    if (!playerRef.value || !duration.value) return;
+    console.log('seekTo called with time:', time);
+    console.log('playerRef.value:', !!playerRef.value);
+    console.log('duration.value:', duration.value);
+
+    if (!playerRef.value) {
+      console.warn('seekTo aborted: missing playerRef');
+      return;
+    }
+
+    // Always use the video element's duration as the source of truth
+    const videoDuration = playerRef.value.duration;
+    console.log('videoDuration from element:', videoDuration);
+
+    // Update our composable duration if it's not set but video element has duration
+    if (
+      videoDuration &&
+      videoDuration > 0 &&
+      duration.value !== videoDuration
+    ) {
+      console.log(
+        'Updating composable duration from video element:',
+        videoDuration
+      );
+      duration.value = videoDuration;
+    }
+
+    if (!videoDuration || videoDuration === 0) {
+      console.warn('seekTo aborted: video duration is 0 or undefined');
+      return;
+    }
 
     try {
       // Ensure time is within valid range
-      const clampedTime = Math.max(0, Math.min(time, duration.value));
+      const clampedTime = Math.max(0, Math.min(time, videoDuration));
+      console.log('Setting currentTime to:', clampedTime);
       playerRef.value.currentTime = clampedTime;
+      console.log('currentTime set successfully');
+
+      // Immediately update our reactive values to ensure Timeline updates
       currentTime.value = clampedTime;
+      updateFrameFromTime();
+      console.log('Reactive currentTime updated to:', currentTime.value);
+
+      // currentTime and frame will also be updated by timeupdate event
     } catch (err) {
       error.value = `Failed to seek: ${err.message}`;
       console.error('Seek error:', err);
@@ -203,76 +240,8 @@ export function useVideoPlayer() {
     }
   };
 
-  // Event handlers
-  const handleTimeUpdate = (event) => {
-    if (event.detail && typeof event.detail.currentTime === 'number') {
-      currentTime.value = event.detail.currentTime;
-    } else if (playerRef.value) {
-      currentTime.value = playerRef.value.currentTime || 0;
-    }
-    updateFrameFromTime();
-  };
-
-  const handleDurationChange = (event) => {
-    if (event.detail && typeof event.detail.duration === 'number') {
-      duration.value = event.detail.duration;
-    } else if (playerRef.value) {
-      duration.value = playerRef.value.duration || 0;
-    }
-    // Update total frames when duration changes
-    if (duration.value > 0) {
-      totalFrames.value = Math.round(duration.value * fps.value);
-    }
-  };
-
-  const handlePlay = () => {
-    isPlaying.value = true;
-    error.value = null;
-  };
-
-  const handlePause = () => {
-    isPlaying.value = false;
-  };
-
-  const handleLoadStart = () => {
-    console.log('🎬 [useVideoPlayer] handleLoadStart - video loading started');
-    isLoading.value = true;
-    error.value = null;
-  };
-
-  const handleLoadedData = () => {
-    console.log('🎬 [useVideoPlayer] handleLoadedData - video data loaded');
-    isLoading.value = false;
-    if (playerRef.value) {
-      duration.value = playerRef.value.duration || 0;
-      console.log('🎬 [useVideoPlayer] Video duration set to:', duration.value);
-      // Detect FPS and calculate total frames when video is loaded
-      detectFPS();
-    } else {
-      console.warn(
-        '🎬 [useVideoPlayer] No playerRef found in handleLoadedData'
-      );
-    }
-  };
-
-  const handleError = (event) => {
-    console.error('🚨 [useVideoPlayer] handleError - video error occurred');
-    console.error('🚨 [useVideoPlayer] Error event:', event);
-    console.error('🚨 [useVideoPlayer] Error detail:', event.detail);
-
-    isLoading.value = false;
-    const errorMessage =
-      event.detail?.message || 'An error occurred while loading the video';
-    error.value = errorMessage;
-    console.error('🚨 [useVideoPlayer] Final error message:', errorMessage);
-  };
-
-  const handleVolumeChange = (event) => {
-    if (playerRef.value) {
-      volume.value = playerRef.value.volume || 0;
-      isMuted.value = playerRef.value.muted || false;
-    }
-  };
+  // Simplified event handlers - removed unused custom event handlers
+  // VideoPlayer component handles native events directly
 
   // Keyboard shortcuts
   const handleKeydown = (event) => {
@@ -306,47 +275,10 @@ export function useVideoPlayer() {
     }
   };
 
-  // Setup player with event listeners
-  const setupPlayer = (player) => {
-    if (!player) return;
-
-    playerRef.value = player;
-
-    // Add event listeners
-    player.addEventListener('time-update', handleTimeUpdate);
-    player.addEventListener('duration-change', handleDurationChange);
-    player.addEventListener('play', handlePlay);
-    player.addEventListener('pause', handlePause);
-    player.addEventListener('load-start', handleLoadStart);
-    player.addEventListener('loaded-data', handleLoadedData);
-    player.addEventListener('error', handleError);
-    player.addEventListener('volume-change', handleVolumeChange);
-
-    // Add keyboard event listener to document
-    document.addEventListener('keydown', handleKeydown);
-  };
-
-  // Cleanup function
-  const cleanup = () => {
-    if (playerRef.value) {
-      playerRef.value.removeEventListener('time-update', handleTimeUpdate);
-      playerRef.value.removeEventListener(
-        'duration-change',
-        handleDurationChange
-      );
-      playerRef.value.removeEventListener('play', handlePlay);
-      playerRef.value.removeEventListener('pause', handlePause);
-      playerRef.value.removeEventListener('load-start', handleLoadStart);
-      playerRef.value.removeEventListener('loaded-data', handleLoadedData);
-      playerRef.value.removeEventListener('error', handleError);
-      playerRef.value.removeEventListener('volume-change', handleVolumeChange);
-    }
-
+  // Cleanup on unmount - simplified
+  onUnmounted(() => {
     document.removeEventListener('keydown', handleKeydown);
-  };
-
-  // Cleanup on unmount
-  onUnmounted(cleanup);
+  });
 
   // Format time helper
   const formatTime = (seconds) => {
@@ -402,9 +334,7 @@ export function useVideoPlayer() {
     setVolume,
     toggleMute,
 
-    // Setup and cleanup
-    setupPlayer,
-    cleanup,
+    // Setup and cleanup removed - handled directly in VideoPlayer component
 
     // Utilities
     formatTime,

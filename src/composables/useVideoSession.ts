@@ -12,14 +12,45 @@ export function useVideoSession(videoId) {
   let heartbeatInterval = null;
 
   const startSession = async () => {
-    if (!toValue(user) || !toValue(videoId)) return;
+    const currentVideoId = toValue(videoId);
+    const currentUser = toValue(user);
+
+    if (!currentUser || !currentVideoId) {
+      console.warn(
+        '🎬 [useVideoSession] Cannot start session: missing video ID or user'
+      );
+      return;
+    }
 
     try {
-      // Update session activity
-      await supabase.rpc('update_session_activity', {
-        p_video_id: toValue(videoId),
-        p_user_id: toValue(user).id,
+      console.log('🎬 [useVideoSession] Starting session for:', {
+        video_id: currentVideoId,
+        user_id: currentUser.id,
       });
+
+      // Only call RPC for valid UUID video IDs
+      if (isValidUUID(currentVideoId)) {
+        // Update session activity
+        const { data, error } = await supabase.rpc('update_session_activity', {
+          p_video_id: currentVideoId,
+          p_user_id: currentUser.id,
+        });
+
+        if (error) {
+          console.error(
+            '🎬 [useVideoSession] Failed to start session - RPC error:',
+            error
+          );
+          // Continue without session tracking if RPC fails
+        } else {
+          console.log('🎬 [useVideoSession] Session started successfully');
+        }
+      } else {
+        console.log(
+          '🎬 [useVideoSession] Skipping RPC for non-UUID video ID:',
+          currentVideoId
+        );
+      }
 
       isSessionActive.value = true;
       lastActivity.value = new Date();
@@ -28,7 +59,12 @@ export function useVideoSession(videoId) {
       setupActivityTracking();
       setupHeartbeat();
     } catch (error) {
-      console.error('Failed to start session:', error);
+      console.error('🎬 [useVideoSession] Failed to start session:', error);
+      // Continue without session tracking if it fails
+      isSessionActive.value = true;
+      lastActivity.value = new Date();
+      setupActivityTracking();
+      setupHeartbeat();
     }
   };
 
@@ -51,23 +87,63 @@ export function useVideoSession(videoId) {
     }
   };
 
+  const isValidUUID = (str: string) => {
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(str);
+  };
+
   const updateActivity = async () => {
     if (!isSessionActive.value) return;
 
-    try {
-      await supabase.rpc('update_session_activity', {
-        p_video_id: toValue(videoId),
-        p_user_id: toValue(user).id,
-      });
+    const currentVideoId = toValue(videoId);
+    const currentUser = toValue(user);
+
+    if (!currentVideoId || !currentUser?.id) {
+      console.warn(
+        '🎬 [useVideoSession] Cannot update activity: missing video ID or user ID'
+      );
+      return;
+    }
+
+    // Skip session activity for non-UUID video IDs (like upload IDs)
+    if (!isValidUUID(currentVideoId)) {
+      console.log(
+        '🎬 [useVideoSession] Skipping session activity for non-UUID video ID:',
+        currentVideoId
+      );
       lastActivity.value = new Date();
+      return;
+    }
+
+    try {
+      console.log('🎬 [useVideoSession] Updating session activity for:', {
+        video_id: currentVideoId,
+        user_id: currentUser.id,
+      });
+
+      const { data, error } = await supabase.rpc('update_session_activity', {
+        p_video_id: currentVideoId,
+        p_user_id: currentUser.id,
+      });
+
+      if (error) {
+        console.error('🎬 [useVideoSession] RPC error:', error);
+        // Don't throw error to prevent disrupting the app
+        return;
+      }
+
+      lastActivity.value = new Date();
+      console.log('🎬 [useVideoSession] Activity updated successfully');
     } catch (error) {
-      console.error('Failed to update activity:', error);
+      console.error('🎬 [useVideoSession] Failed to update activity:', error);
+      // Don't throw error to prevent disrupting the app
     }
   };
 
   const setupActivityTracking = () => {
-    // Track user interactions
-    const events = ['click', 'keydown', 'mousemove', 'scroll'];
+    // Track user interactions (removed mousemove to prevent conflicts with drawing)
+    const events = ['click', 'keydown', 'scroll'];
 
     const handleActivity = () => {
       lastActivity.value = new Date();

@@ -3,6 +3,27 @@
 export type SeverityLevel = 'low' | 'medium' | 'high';
 export type PermissionLevel = 'view' | 'comment' | 'edit';
 export type ActionType = 'created' | 'updated' | 'deleted' | 'shared';
+export type AnnotationType = 'text' | 'drawing';
+
+// Drawing-specific types
+export interface DrawingPoint {
+  x: number;
+  y: number;
+}
+
+export interface DrawingPath {
+  points: DrawingPoint[];
+  strokeWidth: number;
+  color: string;
+  timestamp: number;
+}
+
+export interface DrawingData {
+  paths: DrawingPath[];
+  canvasWidth: number;
+  canvasHeight: number;
+  frame: number;
+}
 
 // Base interfaces
 export interface DatabaseUser {
@@ -27,6 +48,10 @@ export interface DatabaseVideo {
   thumbnail_url?: string;
   metadata?: Record<string, any>;
   is_public: boolean;
+  video_type: 'url' | 'upload';
+  file_path?: string;
+  file_size?: number;
+  original_filename?: string;
   created_at: string;
   updated_at: string;
 }
@@ -40,11 +65,11 @@ export interface DatabaseAnnotation {
   severity: SeverityLevel;
   color: string;
   timestamp: number;
-  start_frame: number;
-  end_frame?: number;
-  duration: number;
-  duration_frames: number;
-  frame?: number; // Legacy field for backward compatibility
+  frame: number;
+  start_frame: number; // For point-in-time annotations, same as frame
+  end_frame?: number; // Optional for ranged annotations
+  annotation_type: AnnotationType;
+  drawing_data?: DrawingData;
   metadata?: Record<string, any>;
   created_at: string;
   updated_at: string;
@@ -107,11 +132,9 @@ export interface Annotation {
   severity: SeverityLevel;
   color: string;
   timestamp: number;
-  startFrame: number;
-  endFrame?: number;
-  duration: number;
-  durationFrames: number;
-  frame?: number; // Legacy field
+  frame: number;
+  annotationType: AnnotationType;
+  drawingData?: DrawingData;
   user_id?: string;
   created_at?: string;
   updated_at?: string;
@@ -128,6 +151,10 @@ export interface Video {
   thumbnail_url?: string;
   is_public: boolean;
   owner_id: string;
+  video_type: 'url' | 'upload';
+  file_path?: string;
+  file_size?: number;
+  original_filename?: string;
   created_at: string;
   updated_at: string;
 }
@@ -201,25 +228,6 @@ export interface Database {
       };
     };
     Functions: {
-      get_annotations_in_range: {
-        Args: {
-          p_video_id: string;
-          p_start_time: number;
-          p_end_time: number;
-        };
-        Returns: Array<{
-          id: string;
-          content: string;
-          title: string;
-          severity: SeverityLevel;
-          color: string;
-          timestamp: number;
-          start_frame: number;
-          end_frame?: number;
-          duration: number;
-          user_id: string;
-        }>;
-      };
       get_annotations_at_frame: {
         Args: {
           p_video_id: string;
@@ -231,8 +239,7 @@ export interface Database {
           title: string;
           severity: SeverityLevel;
           color: string;
-          start_frame: number;
-          end_frame?: number;
+          frame: number;
         }>;
       };
       update_session_activity: {
@@ -265,11 +272,9 @@ export function transformDatabaseAnnotationToApp(
     severity: dbAnnotation.severity,
     color: dbAnnotation.color,
     timestamp: dbAnnotation.timestamp,
-    startFrame: dbAnnotation.start_frame,
-    endFrame: dbAnnotation.end_frame,
-    duration: dbAnnotation.duration,
-    durationFrames: dbAnnotation.duration_frames,
     frame: dbAnnotation.frame,
+    annotationType: dbAnnotation.annotation_type,
+    drawingData: dbAnnotation.drawing_data,
     user_id: dbAnnotation.user_id,
     created_at: dbAnnotation.created_at,
     updated_at: dbAnnotation.updated_at,
@@ -289,11 +294,11 @@ export function transformAppAnnotationToDatabase(
     severity: appAnnotation.severity,
     color: appAnnotation.color,
     timestamp: appAnnotation.timestamp,
-    start_frame: appAnnotation.startFrame,
-    end_frame: appAnnotation.endFrame,
-    duration: appAnnotation.duration,
-    duration_frames: appAnnotation.durationFrames,
     frame: appAnnotation.frame,
+    start_frame: appAnnotation.frame, // For point-in-time annotations, start_frame equals frame
+    end_frame: appAnnotation.frame, // For point-in-time annotations, end_frame equals frame
+    annotation_type: appAnnotation.annotationType,
+    drawing_data: appAnnotation.drawingData,
   };
 }
 
@@ -309,6 +314,10 @@ export function transformDatabaseVideoToApp(dbVideo: DatabaseVideo): Video {
     thumbnail_url: dbVideo.thumbnail_url,
     is_public: dbVideo.is_public,
     owner_id: dbVideo.owner_id,
+    video_type: dbVideo.video_type,
+    file_path: dbVideo.file_path,
+    file_size: dbVideo.file_size,
+    original_filename: dbVideo.original_filename,
     created_at: dbVideo.created_at,
     updated_at: dbVideo.updated_at,
   };

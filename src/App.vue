@@ -7,10 +7,14 @@ import Login from './components/Login.vue';
 import LoadVideoModal from './components/LoadVideoModal.vue';
 import ShareModal from './components/ShareModal.vue';
 import NotificationToast from './components/NotificationToast.vue';
+import DrawingVideoPlayer from './components/DrawingVideoPlayer.vue';
+import DrawingDemo from './components/DrawingDemo.vue';
+import DrawingCanvas from './components/DrawingCanvas.vue';
 import { useAuth } from './composables/useAuth.ts';
 import { useVideoAnnotations } from './composables/useVideoAnnotations.ts';
 import { useRealtimeAnnotations } from './composables/useRealtimeAnnotations.ts';
 import { useVideoSession } from './composables/useVideoSession.ts';
+import { useDrawingCanvas } from './composables/useDrawingCanvas.ts';
 import { VideoService } from './services/videoService.ts';
 import { ShareService } from './services/shareService.ts';
 
@@ -26,6 +30,7 @@ const urlInput = ref('');
 const currentTime = ref(0);
 const duration = ref(0);
 const isPlaying = ref(false);
+const videoDimensions = ref({ width: 1920, height: 1080 });
 
 // Frame-based state
 const currentFrame = ref(0);
@@ -61,20 +66,41 @@ const isLoadModalVisible = ref(false);
 const isShareModalVisible = ref(false);
 const currentVideoId = ref(null);
 
+// Demo mode state
+const isDemoMode = ref(false);
+
 // Real-time features
 const { isConnected, activeUsers, setupPresenceTracking } =
   useRealtimeAnnotations(videoId, annotations);
 const { startSession, endSession, isSessionActive } = useVideoSession(videoId);
 
+// Drawing functionality
+const drawingCanvas = useDrawingCanvas();
+
 // Event handlers for video player events
 const handleTimeUpdate = (data) => {
   currentTime.value = data.currentTime;
+  // Also update duration if it's available and not set
+  if (data.duration && data.duration > 0 && duration.value !== data.duration) {
+    console.log('Updating duration from timeUpdate:', data.duration);
+    duration.value = data.duration;
+  }
+
+  // Debug: Log values being passed to Timeline
+  console.log('App.vue Timeline props:', {
+    currentTime: currentTime.value,
+    duration: duration.value,
+    isPlaying: isPlaying.value,
+  });
 };
 
 const handleFrameUpdate = (data) => {
   currentFrame.value = data.currentFrame;
   totalFrames.value = data.totalFrames;
   fps.value = data.fps;
+
+  // Update drawing canvas current frame
+  drawingCanvas.currentFrame.value = data.currentFrame;
 };
 
 const handleFPSDetected = (data) => {
@@ -92,7 +118,9 @@ const handlePause = () => {
 };
 
 const handleDurationChange = (newDuration) => {
+  console.log('handleDurationChange called with:', newDuration);
   duration.value = newDuration;
+  console.log('Duration updated to:', duration.value);
 };
 
 const handleError = (error) => {
@@ -108,6 +136,22 @@ const handleLoaded = async () => {
   console.log('✅ [App] Duration:', duration.value);
   console.log('✅ [App] Total frames:', totalFrames.value);
   console.log('✅ [App] User:', user.value?.email || 'No user');
+
+  // Get video dimensions from the video element
+  if (videoPlayerRef.value?.videoElement) {
+    const videoElement = videoPlayerRef.value.videoElement;
+    videoDimensions.value = {
+      width: videoElement.videoWidth || 1920,
+      height: videoElement.videoHeight || 1080,
+    };
+    console.log('✅ [App] Video dimensions:', videoDimensions.value);
+
+    // Update drawing canvas with video dimensions
+    drawingCanvas.setVideoSize(
+      videoDimensions.value.width,
+      videoDimensions.value.height
+    );
+  }
 
   if (user.value) {
     console.log('✅ [App] Initializing video with metadata...');
@@ -133,6 +177,11 @@ const handleLoaded = async () => {
 };
 
 const handleVideoClick = () => {
+  // Don't handle video clicks when drawing mode is active
+  if (drawingCanvas.isDrawingMode.value) {
+    return;
+  }
+
   // Toggle behavior: if annotation form is visible, hide it and play video
   // If form is not visible, pause video and show form
   if (isAnnotationFormVisible.value) {
@@ -160,25 +209,13 @@ const handleVideoClick = () => {
 
 // Timeline event handlers
 const handleSeekToTime = (time) => {
-  // Seek the video player to the specified time
-  if (videoPlayerRef.value && videoPlayerRef.value.seekTo) {
+  console.log('handleSeekToTime called with time:', time);
+  if (videoPlayerRef.value) {
+    console.log('Calling videoPlayerRef.seekTo with time:', time);
     videoPlayerRef.value.seekTo(time);
-  } else if (
-    videoPlayerRef.value &&
-    videoPlayerRef.value.$refs &&
-    videoPlayerRef.value.$refs.videoElement
-  ) {
-    // Direct access to video element if needed
-    videoPlayerRef.value.$refs.videoElement.currentTime = time;
+  } else {
+    console.warn('videoPlayerRef.value is null, cannot seek');
   }
-  currentTime.value = time;
-};
-
-const handleSeekToFrame = (frameNumber) => {
-  // Convert frame to time and seek
-  const time = frameNumber / fps.value;
-  handleSeekToTime(time);
-  currentFrame.value = frameNumber;
 };
 
 const handleAnnotationClick = (annotation) => {
@@ -476,6 +513,43 @@ const closeShareModal = () => {
   isShareModalVisible.value = false;
 };
 
+// Demo mode handlers
+const toggleDemoMode = () => {
+  isDemoMode.value = !isDemoMode.value;
+};
+
+// Drawing event handlers
+const handleDrawingCreated = (drawing) => {
+  console.log('Drawing created:', drawing);
+  drawingCanvas.addDrawing(drawing);
+
+  // If this drawing was created from the annotation panel, don't auto-create an annotation
+  // The annotation panel will handle creating the annotation with both text and drawing data
+  if (!isAnnotationFormVisible.value) {
+    // Convert drawing to annotation and save it (only when drawing outside annotation form)
+    const annotation = drawingCanvas.convertDrawingToAnnotation(
+      drawing,
+      videoId.value,
+      user.value?.id || 'anonymous',
+      'Drawing Annotation',
+      `Drawing on frame ${drawing.frame}`
+    );
+
+    // Add to annotations
+    addAnnotation(annotation);
+  }
+};
+
+const handleDrawingUpdated = (drawing) => {
+  console.log('Drawing updated:', drawing);
+  // Handle drawing updates if needed
+};
+
+const handleDrawingDeleted = (drawingId) => {
+  console.log('Drawing deleted:', drawingId);
+  // Handle drawing deletion if needed
+};
+
 // Check for shared video on load
 const checkForSharedVideo = async () => {
   const sharedVideoId = ShareService.parseShareUrl();
@@ -568,6 +642,27 @@ const checkForSharedVideo = async () => {
               </svg>
             </button>
 
+            <!-- Drawing Demo Toggle Button -->
+            <button
+              @click="toggleDemoMode"
+              class="p-2 text-gray-600 hover:text-blue-600 hover:bg-gray-50 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              :title="isDemoMode ? 'Exit Drawing Demo' : 'Try Drawing Demo'"
+            >
+              <svg
+                class="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                ></path>
+              </svg>
+            </button>
+
             <div class="relative flex-1">
               <input
                 v-model="urlInput"
@@ -629,66 +724,96 @@ const checkForSharedVideo = async () => {
 
     <!-- Main Content -->
     <main class="flex-1 flex overflow-hidden">
-      <!-- Video Section -->
-      <section class="flex-1 flex flex-col bg-black">
-        <div class="flex-1 flex items-center justify-center p-6">
-          <VideoPlayer
-            ref="videoPlayerRef"
-            :video-url="videoUrl"
-            :video-id="videoId"
-            :controls="true"
-            :autoplay="false"
-            poster=""
-            @time-update="handleTimeUpdate"
-            @frame-update="handleFrameUpdate"
-            @fps-detected="handleFPSDetected"
-            @play="handlePlay"
-            @pause="handlePause"
-            @duration-change="handleDurationChange"
-            @error="handleError"
-            @loaded="handleLoaded"
-            @video-click="handleVideoClick"
-          />
-        </div>
+      <!-- Drawing Demo Mode -->
+      <div v-if="isDemoMode" class="flex-1">
+        <DrawingDemo />
+      </div>
 
-        <!-- Timeline -->
-        <div class="bg-gray-900 p-4 border-t border-gray-800">
-          <Timeline
-            :current-time="currentTime"
-            :duration="duration"
-            :current-frame="currentFrame"
-            :total-frames="totalFrames"
-            :fps="fps"
+      <!-- Normal App Mode -->
+      <template v-else>
+        <!-- Video Section -->
+        <section class="flex-1 flex flex-col bg-black min-w-0 overflow-hidden">
+          <div class="flex-1 flex items-center justify-center p-6">
+            <div class="relative">
+              <VideoPlayer
+                ref="videoPlayerRef"
+                :video-url="videoUrl"
+                :video-id="videoId"
+                :controls="true"
+                :autoplay="false"
+                poster=""
+                @time-update="handleTimeUpdate"
+                @frame-update="handleFrameUpdate"
+                @fps-detected="handleFPSDetected"
+                @play="handlePlay"
+                @pause="handlePause"
+                @duration-change="handleDurationChange"
+                @error="handleError"
+                @loaded="handleLoaded"
+                @video-click="handleVideoClick"
+              />
+
+              <!-- Drawing Canvas Overlay -->
+              <DrawingCanvas
+                v-if="videoUrl && duration > 0"
+                ref="drawingCanvasRef"
+                :video-width="videoDimensions.width"
+                :video-height="videoDimensions.height"
+                :current-frame="currentFrame"
+                :is-drawing-mode="drawingCanvas.isDrawingMode.value"
+                :selected-tool="drawingCanvas.currentTool.value.type"
+                :stroke-width="drawingCanvas.currentTool.value.strokeWidth"
+                :severity="drawingCanvas.currentTool.value.severity"
+                :existing-drawings="drawingCanvas.currentFrameDrawings.value"
+                @drawing-created="handleDrawingCreated"
+                @drawing-updated="handleDrawingUpdated"
+                @drawing-deleted="handleDrawingDeleted"
+              />
+            </div>
+          </div>
+
+          <!-- Timeline -->
+          <div class="bg-gray-900 p-4 border-t border-gray-800">
+            <Timeline
+              :current-time="currentTime"
+              :duration="duration"
+              :current-frame="currentFrame"
+              :total-frames="totalFrames"
+              :fps="fps"
+              :annotations="annotations"
+              :selected-annotation="selectedAnnotation"
+              :is-playing="isPlaying"
+              @seek-to-time="handleSeekToTime"
+              @annotation-click="handleAnnotationClick"
+              @play="handleTimelinePlay"
+              @pause="handleTimelinePause"
+            />
+          </div>
+        </section>
+
+        <!-- Annotation Panel -->
+        <aside
+          class="w-96 min-w-96 max-w-96 flex-shrink-0 bg-white border-l border-gray-200 flex flex-col overflow-hidden"
+        >
+          <AnnotationPanel
+            ref="annotationPanelRef"
             :annotations="annotations"
             :selected-annotation="selectedAnnotation"
-            :is-playing="isPlaying"
-            @seek-to-time="handleSeekToTime"
-            @seek-to-frame="handleSeekToFrame"
-            @annotation-click="handleAnnotationClick"
-            @play="handleTimelinePlay"
+            :current-time="currentTime"
+            :current-frame="currentFrame"
+            :fps="fps"
+            :drawing-canvas="drawingCanvas"
+            @add-annotation="addAnnotation"
+            @update-annotation="updateAnnotation"
+            @delete-annotation="deleteAnnotation"
+            @select-annotation="handleAnnotationClick"
+            @form-show="handleFormShow"
+            @form-hide="handleFormHide"
             @pause="handleTimelinePause"
+            @drawing-created="handleDrawingCreated"
           />
-        </div>
-      </section>
-
-      <!-- Annotation Panel -->
-      <aside class="w-96 bg-white border-l border-gray-200 flex flex-col">
-        <AnnotationPanel
-          ref="annotationPanelRef"
-          :annotations="annotations"
-          :selected-annotation="selectedAnnotation"
-          :current-time="currentTime"
-          :current-frame="currentFrame"
-          :fps="fps"
-          @add-annotation="addAnnotation"
-          @update-annotation="updateAnnotation"
-          @delete-annotation="deleteAnnotation"
-          @select-annotation="handleAnnotationClick"
-          @form-show="handleFormShow"
-          @form-hide="handleFormHide"
-          @pause="handleTimelinePause"
-        />
-      </aside>
+        </aside>
+      </template>
     </main>
 
     <!-- Load Video Modal -->

@@ -70,21 +70,6 @@ export class AnnotationService {
     if (error) throw error;
   }
 
-  static async getAnnotationsInRange(
-    videoId: string,
-    startTime: number,
-    endTime: number
-  ) {
-    const { data, error } = await supabase.rpc('get_annotations_in_range', {
-      p_video_id: videoId,
-      p_start_time: startTime,
-      p_end_time: endTime,
-    });
-
-    if (error) throw error;
-    return data;
-  }
-
   static async getAnnotationsAtFrame(videoId: string, frame: number) {
     const { data, error } = await supabase.rpc('get_annotations_at_frame', {
       p_video_id: videoId,

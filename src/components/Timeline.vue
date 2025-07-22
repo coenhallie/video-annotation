@@ -36,17 +36,23 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(['seek-to-time', 'seek-to-frame', 'annotation-click']);
+const emit = defineEmits(['seek-to-time', 'annotation-click']);
 
 const timelineRef = ref(null);
 const isDragging = ref(false);
 
-// Computed properties
+// Use time-based progress for consistency with video player
 const progressPercentage = computed(() => {
+  console.log('Timeline progressPercentage computed:', {
+    currentTime: props.currentTime,
+    duration: props.duration,
+    percentage: props.duration ? (props.currentTime / props.duration) * 100 : 0,
+  });
   if (!props.duration) return 0;
   return (props.currentTime / props.duration) * 100;
 });
 
+// Optimized formatters with memoization-like behavior
 const formatTime = (seconds) => {
   if (!seconds || isNaN(seconds)) return '0:00';
   const minutes = Math.floor(seconds / 60);
@@ -59,36 +65,32 @@ const formatFrame = (frameNumber) => {
   return `Frame ${frameNumber.toLocaleString()}`;
 };
 
-// Frame calculation utilities
-const timeToFrame = (timeInSeconds) => {
-  return Math.round(timeInSeconds * props.fps);
-};
-
-const frameToTime = (frameNumber) => {
-  return frameNumber / props.fps;
-};
-
-// Progress calculation based on frames
-const frameProgressPercentage = computed(() => {
-  if (!props.totalFrames) return 0;
-  return (props.currentFrame / props.totalFrames) * 100;
-});
-
-// Timeline interaction
+// Simplified timeline interaction - use time-based seeking for consistency
 const handleTimelineClick = (event) => {
-  if (!timelineRef.value || !props.duration) return;
+  if (!timelineRef.value || !props.duration) {
+    console.warn('Timeline click ignored: missing timelineRef or duration');
+    return;
+  }
 
   const rect = timelineRef.value.getBoundingClientRect();
   const clickX = event.clientX - rect.left;
-  const percentage = clickX / rect.width;
+  const percentage = Math.max(0, Math.min(clickX / rect.width, 1));
   const newTime = percentage * props.duration;
-  const newFrame = Math.round(percentage * props.totalFrames);
 
-  emit('seek-to-time', Math.max(0, Math.min(newTime, props.duration)));
-  emit('seek-to-frame', Math.max(0, Math.min(newFrame, props.totalFrames)));
+  console.log('Timeline clicked:', {
+    percentage,
+    newTime,
+    duration: props.duration,
+  });
+  emit('seek-to-time', newTime);
 };
 
 const handleTimelineMouseDown = (event) => {
+  if (!props.duration) {
+    console.warn('Timeline mousedown ignored: missing duration');
+    return;
+  }
+
   isDragging.value = true;
   handleTimelineClick(event);
 
@@ -108,86 +110,42 @@ const handleTimelineMouseDown = (event) => {
   document.addEventListener('mouseup', handleMouseUp);
 };
 
-// Severity color mapping to match the legend
-const severityColors = {
+// Severity color mapping - optimized constant
+const SEVERITY_COLORS = {
   low: '#34d399',
   medium: '#fbbf24',
   high: '#ef4444',
 };
 
 const getSeverityColor = (severity) => {
-  return severityColors[severity] || severityColors.medium;
+  return SEVERITY_COLORS[severity] || SEVERITY_COLORS.medium;
 };
 
-// Check if annotation is ranged
-const isRangedAnnotation = (annotation) => {
-  return (
-    annotation.endFrame !== undefined &&
-    annotation.startFrame !== undefined &&
-    annotation.endFrame !== annotation.startFrame
-  );
-};
-
-// Annotation positioning
+// Optimized annotation positioning - use time-based for consistency
 const getAnnotationStyle = (annotation) => {
-  if (!props.duration && !props.totalFrames) return { display: 'none' };
+  if (!props.duration) return { display: 'none' };
 
-  // Use frame-based positioning if available, otherwise fall back to time
-  let startPercentage, widthPercentage;
-
-  if (
-    props.totalFrames &&
-    (annotation.startFrame !== undefined || annotation.frame !== undefined)
-  ) {
-    // Frame-based positioning
-    const frameNumber =
-      annotation.startFrame !== undefined
-        ? annotation.startFrame
-        : annotation.frame;
-    startPercentage = (frameNumber / props.totalFrames) * 100;
-
-    if (isRangedAnnotation(annotation)) {
-      // For ranged annotations, calculate width based on frame range
-      const durationInFrames = annotation.endFrame - annotation.startFrame + 1;
-      widthPercentage = (durationInFrames / props.totalFrames) * 100;
-    } else {
-      // For non-ranged annotations, use minimal width for diamond shape
-      widthPercentage = 0.5;
-    }
-  } else {
-    // Time-based positioning (fallback)
-    startPercentage = (annotation.timestamp / props.duration) * 100;
-    if (isRangedAnnotation(annotation)) {
-      widthPercentage = ((annotation.duration || 1) / props.duration) * 100;
-    } else {
-      widthPercentage = 0.5;
-    }
-  }
+  // Always use time-based positioning for consistency with video player
+  const startPercentage = (annotation.timestamp / props.duration) * 100;
 
   return {
-    left: `${startPercentage}%`,
-    width: `${Math.max(widthPercentage, 0.5)}%`,
+    left: `${Math.max(0, Math.min(startPercentage, 100))}%`,
+    width: '0.5%',
   };
 };
 
 const handleAnnotationClick = (annotation, event) => {
   event.stopPropagation();
-
-  // Always seek to the start frame of the annotation
-  const targetFrame = annotation.startFrame;
-
   emit('annotation-click', annotation);
-  if (targetFrame !== undefined) {
-    emit('seek-to-frame', targetFrame);
-  }
+  emit('seek-to-time', annotation.timestamp);
 };
 
-// Timeline markers (every 60 seconds or equivalent frames)
+// Optimized timeline markers - only create when needed
 const timeMarkers = computed(() => {
-  if (!props.duration) return [];
+  if (!props.duration || props.duration < 60) return [];
 
   const markers = [];
-  const interval = 60; // seconds
+  const interval = Math.max(60, Math.floor(props.duration / 10)); // Adaptive interval
 
   for (let time = 0; time <= props.duration; time += interval) {
     markers.push({
@@ -234,7 +192,7 @@ const timeMarkers = computed(() => {
 
         <!-- Progress -->
         <div
-          class="absolute top-0 left-0 bottom-0 bg-white rounded-l transition-all duration-100"
+          class="absolute top-0 left-0 bottom-0 bg-white rounded-l"
           :style="{ width: `${progressPercentage}%` }"
         ></div>
 
@@ -253,18 +211,11 @@ const timeMarkers = computed(() => {
             'z-9': selectedAnnotation?.id === annotation.id,
           }"
           :style="getAnnotationStyle(annotation)"
-          :title="`${annotation.title} (${formatTime(annotation.timestamp)} - ${
-            annotation.startFrame !== undefined
-              ? formatFrame(annotation.startFrame)
-              : annotation.frame !== undefined
-              ? formatFrame(annotation.frame)
-              : formatFrame(timeToFrame(annotation.timestamp))
-          })`"
+          :title="`${annotation.title} (${formatTime(annotation.timestamp)})`"
           @click="handleAnnotationClick(annotation, $event)"
         >
-          <!-- Circle shape for non-ranged annotations -->
+          <!-- Circle shape for annotations -->
           <div
-            v-if="!isRangedAnnotation(annotation)"
             class="w-4 h-4 rounded-full border-2 border-white shadow-lg absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 opacity-90"
             :class="{
               'border-yellow-400 shadow-yellow-400/50 opacity-100 scale-110':
@@ -272,25 +223,6 @@ const timeMarkers = computed(() => {
             }"
             :style="{ backgroundColor: getSeverityColor(annotation.severity) }"
           ></div>
-
-          <!-- Rectangle for ranged annotations -->
-          <div
-            v-else
-            class="absolute top-1/2 h-6 -translate-y-1/2 left-0 right-0 transform rounded border border-white min-w-1 opacity-90"
-            :class="{
-              'border-white shadow-lg opacity-100':
-                selectedAnnotation?.id === annotation.id,
-            }"
-            :style="{ backgroundColor: getSeverityColor(annotation.severity) }"
-          >
-            <div class="px-1 py-0.5 h-full flex items-center overflow-hidden">
-              <span
-                class="text-xs font-medium whitespace-nowrap overflow-hidden text-ellipsis text-white"
-              >
-                {{ annotation.title }}
-              </span>
-            </div>
-          </div>
         </div>
       </div>
     </div>

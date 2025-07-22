@@ -80,107 +80,90 @@ const {
 const videoElement = ref(null);
 const playerContainer = ref(null);
 
-// Progress bar interaction
-const progressBar = ref(null);
-const isDragging = ref(false);
+// Remove redundant progress bar - Timeline handles scrubbing
+const isExternalSeeking = ref(false);
 
-// Initialize player
-onMounted(async () => {
+onMounted(() => {
   console.log('🎥 [VideoPlayer] Component mounted');
-  console.log('🎥 [VideoPlayer] Initial video URL:', props.videoUrl);
-  console.log('🎥 [VideoPlayer] Video ID:', props.videoId);
+});
 
-  if (videoElement.value) {
-    console.log('🎥 [VideoPlayer] Video element found, setting up player');
-    // Set up the video element as our player reference
-    playerRef.value = videoElement.value;
+// Watch for the video element to become available
+watch(
+  videoElement,
+  (video) => {
+    if (video) {
+      console.log(
+        '🎥 [VideoPlayer] Video element is available, setting up player and listeners.'
+      );
+      playerRef.value = video;
 
-    // Add event listeners for native video events
-    const video = videoElement.value;
-    console.log('🎥 [VideoPlayer] Adding event listeners to video element');
-
-    video.addEventListener('timeupdate', () => {
-      if (!isDragging.value) {
+      // Add event listeners for native video events
+      video.addEventListener('timeupdate', () => {
         currentTime.value = video.currentTime;
         updateFrameFromTime();
         emit('time-update', {
           currentTime: video.currentTime,
-          duration: video.duration,
+          duration: video.duration || duration.value,
         });
         emit('frame-update', {
           currentFrame: currentFrame.value,
           totalFrames: totalFrames.value,
           fps: fps.value,
         });
-      }
-    });
-
-    video.addEventListener('durationchange', () => {
-      duration.value = video.duration;
-      emit('duration-change', video.duration);
-      // Detect FPS when duration is available
-      detectFPS();
-      emit('fps-detected', {
-        fps: fps.value,
-        totalFrames: totalFrames.value,
       });
-    });
 
-    video.addEventListener('play', () => {
-      isPlaying.value = true;
-      emit('play');
-    });
+      video.addEventListener('durationchange', () => {
+        duration.value = video.duration;
+        emit('duration-change', video.duration);
+        detectFPS();
+        emit('fps-detected', {
+          fps: fps.value,
+          totalFrames: totalFrames.value,
+        });
+      });
 
-    video.addEventListener('pause', () => {
-      isPlaying.value = false;
-      emit('pause');
-    });
+      video.addEventListener('play', () => {
+        isPlaying.value = true;
+        emit('play');
+      });
 
-    video.addEventListener('loadstart', () => {
-      console.log('🎥 [VideoPlayer] loadstart event - video loading started');
-      console.log('🎥 [VideoPlayer] Video src:', video.src);
-      isLoading.value = true;
-    });
+      video.addEventListener('pause', () => {
+        isPlaying.value = false;
+        emit('pause');
+      });
 
-    video.addEventListener('loadeddata', () => {
-      console.log('🎥 [VideoPlayer] loadeddata event - video data loaded');
-      console.log('🎥 [VideoPlayer] Video duration:', video.duration);
-      console.log(
-        '🎥 [VideoPlayer] Video dimensions:',
-        video.videoWidth,
-        'x',
-        video.videoHeight
-      );
-      isLoading.value = false;
-      emit('loaded');
-    });
+      video.addEventListener('loadstart', () => {
+        isLoading.value = true;
+      });
 
-    video.addEventListener('error', (e) => {
-      console.error('🚨 [VideoPlayer] error event - video failed to load');
-      console.error('🚨 [VideoPlayer] Error details:', e);
-      console.error('🚨 [VideoPlayer] Video src:', video.src);
-      console.error('🚨 [VideoPlayer] Video error code:', video.error?.code);
-      console.error(
-        '🚨 [VideoPlayer] Video error message:',
-        video.error?.message
-      );
+      video.addEventListener('loadeddata', () => {
+        duration.value = video.duration;
+        if (video.duration > 0) {
+          emit('duration-change', video.duration);
+        }
+        isLoading.value = false;
+        emit('loaded');
+      });
 
-      const errorMsg = `Error loading video: ${
-        video.error?.message || 'Unknown error'
-      }`;
-      error.value = errorMsg;
-      emit('error', errorMsg);
-    });
+      video.addEventListener('error', (e) => {
+        const errorMsg = `Error loading video: ${
+          video.error?.message || 'Unknown error'
+        }`;
+        error.value = errorMsg;
+        emit('error', errorMsg);
+      });
 
-    video.addEventListener('volumechange', () => {
-      volume.value = video.volume;
-      isMuted.value = video.muted;
-    });
+      video.addEventListener('volumechange', () => {
+        volume.value = video.volume;
+        isMuted.value = video.muted;
+      });
 
-    // Set initial volume
-    video.volume = volume.value;
-  }
-});
+      // Set initial volume
+      video.volume = volume.value;
+    }
+  },
+  { flush: 'post' }
+);
 
 // Watch for video URL changes - using post-flush to ensure DOM is updated
 watch(
@@ -221,37 +204,7 @@ watch(
   { flush: 'post' } // Run after DOM updates - Vue recommended approach
 );
 
-// Progress bar handlers
-const handleProgressClick = (event) => {
-  if (!progressBar.value || !duration.value) return;
-
-  const rect = progressBar.value.getBoundingClientRect();
-  const clickX = event.clientX - rect.left;
-  const percentage = clickX / rect.width;
-  const newTime = percentage * duration.value;
-
-  seekTo(newTime);
-};
-
-const handleProgressMouseDown = (event) => {
-  isDragging.value = true;
-  handleProgressClick(event);
-
-  const handleMouseMove = (e) => {
-    if (isDragging.value) {
-      handleProgressClick(e);
-    }
-  };
-
-  const handleMouseUp = () => {
-    isDragging.value = false;
-    document.removeEventListener('mousemove', handleMouseMove);
-    document.removeEventListener('mouseup', handleMouseUp);
-  };
-
-  document.addEventListener('mousemove', handleMouseMove);
-  document.addEventListener('mouseup', handleMouseUp);
-};
+// Progress bar handlers removed - Timeline component handles scrubbing
 
 // Volume control
 const handleVolumeChange = (event) => {
@@ -292,11 +245,7 @@ const handleKeyDown = (event) => {
   }
 };
 
-// Calculate progress percentage
-const progressPercentage = computed(() => {
-  if (!duration.value) return 0;
-  return (currentTime.value / duration.value) * 100;
-});
+// Progress percentage removed - Timeline handles progress display
 
 // Handle video click
 const handleVideoClick = () => {
@@ -312,6 +261,7 @@ defineExpose({
   play,
   pause,
   togglePlayPause,
+  videoElement,
 });
 </script>
 
@@ -355,10 +305,10 @@ defineExpose({
     <!-- Placeholder when no video URL -->
     <div
       v-if="!videoUrl"
-      class="flex flex-col items-center justify-center h-96 bg-gray-100 text-gray-600"
+      class="flex flex-col items-center justify-center h-96"
     >
       <svg
-        class="w-16 h-16 mb-4 text-gray-400"
+        class="w-16 h-16 mb-4 text-gray-600"
         fill="none"
         stroke="currentColor"
         viewBox="0 0 24 24"
@@ -370,8 +320,8 @@ defineExpose({
           d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
         />
       </svg>
-      <h3 class="text-lg font-medium mb-2">No Video Loaded</h3>
-      <p class="text-sm text-center max-w-md">
+      <h3 class="text-lg font-medium mb-2 text-gray-300">No Video Loaded</h3>
+      <p class="text-sm text-center max-w-md text-gray-500">
         Please load a video using the URL input field in the header above to
         start annotating.
       </p>
@@ -395,25 +345,9 @@ defineExpose({
     <div
       v-if="controls && videoUrl"
       class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent text-white p-4 transition-opacity duration-300"
+      style="z-index: 30"
     >
-      <!-- Progress bar -->
-      <div class="mb-3">
-        <div
-          ref="progressBar"
-          class="relative h-1 bg-white/20 rounded-full cursor-pointer transition-all duration-200 hover:h-1.5"
-          @click="handleProgressClick"
-          @mousedown="handleProgressMouseDown"
-        >
-          <div
-            class="h-full bg-white rounded-full transition-all duration-100"
-            :style="{ width: `${progressPercentage}%` }"
-          ></div>
-          <div
-            class="absolute top-1/2 w-2.5 h-2.5 bg-white rounded-full transform -translate-x-1/2 -translate-y-1/2 opacity-0 transition-opacity duration-200 hover:opacity-100"
-            :style="{ left: `${progressPercentage}%` }"
-          ></div>
-        </div>
-      </div>
+      <!-- Progress bar removed - Timeline component handles scrubbing -->
 
       <!-- Control buttons and info -->
       <div class="flex items-center justify-between">

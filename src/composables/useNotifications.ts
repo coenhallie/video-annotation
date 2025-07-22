@@ -15,8 +15,8 @@ export function useNotifications() {
     const id = Date.now().toString();
     const newNotification: Notification = {
       id,
-      duration: 5000, // Default 5 seconds
       ...notification,
+      duration: notification.duration ?? 3000, // Default 3 seconds if not specified
     };
 
     notifications.value.push(newNotification);

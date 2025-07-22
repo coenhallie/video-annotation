@@ -236,7 +236,7 @@ const props = defineProps({
   },
   videoId: {
     type: String,
-    required: true,
+    default: '',
   },
 });
 
