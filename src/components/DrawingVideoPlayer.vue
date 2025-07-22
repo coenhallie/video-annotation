@@ -19,11 +19,12 @@
       <DrawingCanvas
         ref="drawingCanvasRef"
         :current-frame="currentFrame"
-        :is-drawing-mode="drawingCanvas.isDrawingMode.value"
-        :selected-tool="drawingCanvas.currentTool.value.type"
-        :stroke-width="drawingCanvas.currentTool.value.strokeWidth"
-        :severity="drawingCanvas.currentTool.value.severity"
-        :existing-drawings="drawingCanvas.currentFrameDrawings.value"
+        :is-drawing-mode="isDrawingMode"
+        :selected-tool="currentTool.type"
+        :stroke-width="currentTool.strokeWidth"
+        :severity="currentTool.severity"
+        :existing-drawings="currentFrameDrawings"
+        :is-loading-drawings="drawingCanvas.isLoadingDrawings.value"
         @drawing-created="handleDrawingCreated"
         @drawing-updated="handleDrawingUpdated"
         @drawing-deleted="handleDrawingDeleted"
@@ -33,7 +34,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, nextTick } from 'vue';
+import { ref, onMounted, computed, nextTick, watch } from 'vue';
 import VideoPlayer from './VideoPlayer.vue';
 import DrawingCanvas from './DrawingCanvas.vue';
 import DrawingTools from './DrawingTools.vue';
@@ -44,6 +45,7 @@ interface Props {
   videoUrl?: string;
   videoId?: string;
   showDebugPanel?: boolean;
+  drawingCanvas?: any;
 }
 
 interface Emits {
@@ -71,8 +73,8 @@ const emit = defineEmits<Emits>();
 const videoPlayerRef = ref();
 const drawingCanvasRef = ref();
 
-// Drawing canvas composable
-const drawingCanvas = useDrawingCanvas();
+// Drawing canvas composable - receive from parent instead of creating new instance
+const drawingCanvas = props.drawingCanvas || useDrawingCanvas();
 
 // Video state
 const videoLoaded = ref(false);
@@ -80,6 +82,33 @@ const currentFrame = ref(0);
 const totalFrames = ref(0);
 const fps = ref(30);
 const videoDimensions = ref({ width: 0, height: 0 });
+
+// Use the reactive properties directly from the composable
+const { isDrawingMode, currentTool, currentFrameDrawings } = drawingCanvas;
+
+// DIAGNOSTIC: Watch for drawing mode changes to debug reactivity
+watch(
+  isDrawingMode,
+  (newValue) => {
+    console.log(
+      '🎬 [DrawingVideoPlayer] DIAGNOSTIC: Drawing mode changed to:',
+      newValue
+    );
+  },
+  { immediate: true }
+);
+
+// DIAGNOSTIC: Also watch the raw state
+watch(
+  () => drawingCanvas.state.isDrawingMode,
+  (newValue) => {
+    console.log(
+      '🎬 [DrawingVideoPlayer] DIAGNOSTIC: Raw state drawing mode changed to:',
+      newValue
+    );
+  },
+  { immediate: true }
+);
 
 // Update drawing canvas current frame
 const updateCurrentFrame = (frame: number) => {
@@ -244,6 +273,7 @@ onMounted(() => {
 
 defineExpose({
   videoPlayerRef,
+  drawingCanvas,
 });
 </script>
 

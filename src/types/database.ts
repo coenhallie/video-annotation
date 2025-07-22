@@ -265,7 +265,7 @@ export type VideoUpdate = Database['public']['Tables']['videos']['Update'];
 export function transformDatabaseAnnotationToApp(
   dbAnnotation: DatabaseAnnotation
 ): Annotation {
-  return {
+  const result = {
     id: dbAnnotation.id,
     content: dbAnnotation.content,
     title: dbAnnotation.title,
@@ -279,6 +279,8 @@ export function transformDatabaseAnnotationToApp(
     created_at: dbAnnotation.created_at,
     updated_at: dbAnnotation.updated_at,
   };
+
+  return result;
 }
 
 export function transformAppAnnotationToDatabase(
@@ -286,7 +288,7 @@ export function transformAppAnnotationToDatabase(
   video_id: string,
   user_id: string
 ): AnnotationInsert {
-  return {
+  const result = {
     video_id,
     user_id,
     content: appAnnotation.content,
@@ -300,6 +302,8 @@ export function transformAppAnnotationToDatabase(
     annotation_type: appAnnotation.annotationType,
     drawing_data: appAnnotation.drawingData,
   };
+
+  return result;
 }
 
 export function transformDatabaseVideoToApp(dbVideo: DatabaseVideo): Video {

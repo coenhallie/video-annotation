@@ -5,6 +5,22 @@
     :class="{ 'drawing-mode': isDrawingMode }"
   >
     <canvas ref="fabricCanvas" class="drawing-canvas" />
+
+    <!-- Loading indicator for drawings -->
+    <div
+      v-if="isLoadingDrawings"
+      class="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+    >
+      <div
+        class="bg-white rounded-lg px-4 py-3 flex items-center space-x-3 shadow-lg"
+      >
+        <div
+          class="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"
+        ></div>
+        <span class="text-gray-700 font-medium">Loading drawings...</span>
+      </div>
+    </div>
+
     <!-- Debug overlay when drawing mode is active -->
     <div
       v-if="isDrawingMode"
@@ -23,10 +39,11 @@ import type { DrawingData, DrawingPath, SeverityLevel } from '@/types/database';
 interface Props {
   currentFrame: number;
   isDrawingMode: boolean;
-  selectedTool: 'pen' | 'eraser';
+  selectedTool: 'pen';
   strokeWidth: number;
   severity: SeverityLevel;
   existingDrawings?: DrawingData[];
+  isLoadingDrawings?: boolean;
 }
 
 interface Emits {
@@ -42,6 +59,7 @@ const props = withDefaults(defineProps<Props>(), {
   strokeWidth: 3,
   severity: 'medium',
   existingDrawings: () => [],
+  isLoadingDrawings: false,
 });
 
 const emit = defineEmits<Emits>();
@@ -56,6 +74,11 @@ const canvasWidth = ref(0);
 const canvasHeight = ref(0);
 const isDrawing = ref(false);
 const resizeObserver = ref<ResizeObserver>();
+
+// Drawing session state
+const currentDrawingSession = ref<DrawingData | null>(null);
+const isInDrawingSession = ref(false);
+const sessionTimer = ref<NodeJS.Timeout | null>(null);
 
 // Severity colors mapping
 const severityColors = {
@@ -82,12 +105,13 @@ const initCanvas = () => {
     brush.color = severityColors[props.severity];
     canvas.value.freeDrawingBrush = brush;
 
+    // DIAGNOSTIC: Check initial cursor state
+    const canvasElement = canvas.value.getElement();
+
     setupCanvasEvents();
     updateCanvasSize(); // Initial size update
     loadDrawingsForFrame();
-  } catch (error) {
-    console.error('Error initializing canvas:', error);
-  }
+  } catch (error) {}
 };
 
 // Setup canvas event listeners
@@ -105,24 +129,61 @@ const handlePathCreated = (event: { path: fabric.FabricObject }) => {
   if (!path) {
     return;
   }
-  const drawingData = createDrawingDataFromPath(path);
-  emit('drawing-created', drawingData);
+
+  // Create drawing path from the fabric path
+  const drawingPath = createDrawingPathFromFabricPath(path);
+
+  // Clear any existing timer
+  if (sessionTimer.value) {
+    clearTimeout(sessionTimer.value);
+  }
+
+  // Add to current drawing session or create new one
+  if (!currentDrawingSession.value) {
+    // Start new drawing session
+    currentDrawingSession.value = {
+      paths: [drawingPath],
+      canvasWidth: canvasWidth.value,
+      canvasHeight: canvasHeight.value,
+      frame: props.currentFrame,
+    };
+    isInDrawingSession.value = true;
+    console.log('🎨 [DrawingCanvas] Started new drawing session');
+  } else {
+    // Add to existing drawing session
+    currentDrawingSession.value.paths.push(drawingPath);
+    console.log(
+      '🎨 [DrawingCanvas] Added path to session, total paths:',
+      currentDrawingSession.value.paths.length
+    );
+  }
+
+  // Set timer to finish session after delay
+  sessionTimer.value = setTimeout(() => {
+    finishDrawingSession();
+  }, 1500); // 1.5 second delay to allow for multiple strokes
+
   if (canvas.value) {
     canvas.value.renderAll();
   }
 };
 
-// Convert fabric path to DrawingData
-const createDrawingDataFromPath = (path: fabric.Path): DrawingData => {
+// Convert fabric path to DrawingPath (single path)
+const createDrawingPathFromFabricPath = (path: fabric.Path): DrawingPath => {
   const pathData = path.path || [];
   const points = extractPointsFromPath(pathData);
 
-  const drawingPath: DrawingPath = {
+  return {
     points,
     strokeWidth: props.strokeWidth,
     color: severityColors[props.severity],
     timestamp: Date.now(),
   };
+};
+
+// Convert fabric path to DrawingData (legacy function, kept for compatibility)
+const createDrawingDataFromPath = (path: fabric.Path): DrawingData => {
+  const drawingPath = createDrawingPathFromFabricPath(path);
 
   return {
     paths: [drawingPath],
@@ -143,6 +204,7 @@ const extractPointsFromPath = (pathData: any[]): { x: number; y: number }[] => {
       points.push({ x, y });
     }
   }
+
   return points;
 };
 
@@ -164,17 +226,40 @@ const handleMouseUp = (event: fabric.TEvent) => {
   if (event.e) event.e.stopPropagation();
 };
 
+// Finish the current drawing session and emit the complete drawing
+const finishDrawingSession = () => {
+  if (currentDrawingSession.value && isInDrawingSession.value) {
+    console.log(
+      '🎨 [DrawingCanvas] Finishing drawing session with',
+      currentDrawingSession.value.paths.length,
+      'paths'
+    );
+    emit('drawing-created', currentDrawingSession.value);
+    currentDrawingSession.value = null;
+    isInDrawingSession.value = false;
+  }
+};
+
 // Update canvas size to fill the container
 const updateCanvasSize = () => {
-  if (!canvasContainer.value || !canvas.value) return;
+  if (!canvasContainer.value || !canvas.value) {
+    return;
+  }
   const { width, height } = canvasContainer.value.getBoundingClientRect();
 
-  if (width > 0 && height > 0) {
-    canvasWidth.value = width;
-    canvasHeight.value = height;
-    canvas.value.setDimensions({ width, height });
+  // Use fallback dimensions if container has no size (e.g., when video fails to load)
+  const fallbackWidth = 800;
+  const fallbackHeight = 450;
+  const finalWidth = width > 0 ? width : fallbackWidth;
+  const finalHeight = height > 0 ? height : fallbackHeight;
+
+  if (finalWidth > 0 && finalHeight > 0) {
+    canvasWidth.value = finalWidth;
+    canvasHeight.value = finalHeight;
+    canvas.value.setDimensions({ width: finalWidth, height: finalHeight });
     canvas.value.renderAll();
     loadDrawingsForFrame(); // Reload drawings with new dimensions
+  } else {
   }
 };
 
@@ -187,8 +272,8 @@ const loadDrawingsForFrame = () => {
       (drawing) => drawing.frame === props.currentFrame
     ) || [];
 
-  frameDrawings.forEach((drawing) => {
-    drawing.paths.forEach((path) => {
+  frameDrawings.forEach((drawing, drawingIndex) => {
+    drawing.paths.forEach((path, pathIndex) => {
       renderDrawingPath(path);
     });
   });
@@ -196,11 +281,32 @@ const loadDrawingsForFrame = () => {
 
 // Render a drawing path on canvas
 const renderDrawingPath = (drawingPath: DrawingPath) => {
+  console.log(
+    '🎨 [DrawingCanvas.renderDrawingPath] Incoming path data:',
+    drawingPath
+  );
+  console.log(
+    '🎨 [DrawingCanvas.renderDrawingPath] Normalized points from path:',
+    drawingPath.points
+  );
+  console.log(
+    '🎨 [DrawingCanvas.renderDrawingPath] Current canvas dimensions for denormalization:',
+    {
+      canvasWidth: canvasWidth.value,
+      canvasHeight: canvasHeight.value,
+    }
+  );
+
   if (!canvas.value) return;
   const points = drawingPath.points.map((point) => ({
     x: point.x * canvasWidth.value,
     y: point.y * canvasHeight.value,
   }));
+
+  console.log(
+    '🎨 [DrawingCanvas.renderDrawingPath] Calculated pixel coordinates:',
+    points
+  );
 
   if (points.length < 2) return;
 
@@ -232,6 +338,55 @@ watch(
   (newValue) => {
     if (canvas.value) {
       canvas.value.isDrawingMode = newValue;
+
+      // DIAGNOSTIC: Check cursor configuration
+      const canvasElement = canvas.value.getElement();
+      console.log(
+        '🎨 [DrawingCanvas] Fabric canvas drawing mode set to:',
+        canvas.value.isDrawingMode
+      );
+
+      console.log(
+        '🎨 [DrawingCanvas] Canvas element computed style cursor:',
+        window.getComputedStyle(canvasElement).cursor
+      );
+      console.log(
+        '🎨 [DrawingCanvas] Canvas element style.cursor:',
+        canvasElement.style.cursor
+      );
+      console.log('🎨 [DrawingCanvas] Canvas dimensions:', {
+        width: canvas.value.getWidth(),
+        height: canvas.value.getHeight(),
+      });
+
+      // DIAGNOSTIC: Force cursor update
+      if (newValue) {
+        console.log(
+          '🎨 [DrawingCanvas] DIAGNOSTIC: Forcing cursor to crosshair'
+        );
+        canvasElement.style.cursor = 'crosshair';
+        // Also try setting it on the container
+        if (canvasContainer.value) {
+          canvasContainer.value.style.cursor = 'crosshair';
+          console.log(
+            '🎨 [DrawingCanvas] DIAGNOSTIC: Set cursor on container too'
+          );
+        }
+      } else {
+        console.log(
+          '🎨 [DrawingCanvas] DIAGNOSTIC: Resetting cursor to default'
+        );
+        canvasElement.style.cursor = 'default';
+        if (canvasContainer.value) {
+          canvasContainer.value.style.cursor = 'default';
+        }
+        // Finish any active drawing session when exiting drawing mode
+        finishDrawingSession();
+      }
+    } else {
+      console.warn(
+        '🎨 [DrawingCanvas] Canvas not available when trying to set drawing mode'
+      );
     }
   }
 );
@@ -257,12 +412,28 @@ watch(
 watch(
   () => props.currentFrame,
   () => {
+    // Finish any active drawing session when frame changes
+    finishDrawingSession();
     loadDrawingsForFrame();
   }
 );
 
+// Watch for changes to existing drawings and reload them
+watch(
+  () => props.existingDrawings,
+  () => {
+    loadDrawingsForFrame();
+  },
+  { deep: true }
+);
+
 // Lifecycle hooks
 onMounted(() => {
+  console.log('🎨 [DrawingCanvas] MOUNTED - Initial props:', {
+    isDrawingMode: props.isDrawingMode,
+    currentFrame: props.currentFrame,
+    selectedTool: props.selectedTool,
+  });
   nextTick(() => {
     initCanvas();
     if (canvasContainer.value) {
@@ -278,6 +449,9 @@ onUnmounted(() => {
   }
   if (canvas.value) {
     canvas.value.dispose();
+  }
+  if (sessionTimer.value) {
+    clearTimeout(sessionTimer.value);
   }
 });
 
@@ -297,9 +471,22 @@ defineExpose({
 .canvas-container.drawing-mode {
   pointer-events: auto;
   z-index: 100;
-  border: 2px solid rgba(59, 130, 246, 0.5);
-  background-color: rgba(59, 130, 246, 0.05);
+  border: 3px solid rgba(59, 130, 246, 0.8);
+  background-color: rgba(59, 130, 246, 0.1);
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
 }
+
+/* Always show a subtle overlay when canvas exists, even if not in drawing mode */
+.canvas-container {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 40;
+  background-color: rgba(255, 255, 255, 0.02);
+  min-width: 800px;
+  min-height: 450px;
+}
+
 .drawing-canvas {
   position: absolute;
   top: 0;

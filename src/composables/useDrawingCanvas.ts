@@ -7,7 +7,7 @@ import type {
 } from '@/types/database';
 
 export interface DrawingTool {
-  type: 'pen' | 'eraser';
+  type: 'pen';
   strokeWidth: number;
   severity: SeverityLevel;
 }
@@ -19,6 +19,7 @@ export interface DrawingState {
   activeDrawing: DrawingData | null;
   canvasSize: { width: number; height: number };
   videoSize: { width: number; height: number };
+  isLoadingDrawings: boolean;
 }
 
 export function useDrawingCanvas() {
@@ -34,6 +35,7 @@ export function useDrawingCanvas() {
     activeDrawing: null,
     canvasSize: { width: 0, height: 0 },
     videoSize: { width: 1920, height: 1080 },
+    isLoadingDrawings: false,
   });
 
   // Severity colors mapping
@@ -165,21 +167,52 @@ export function useDrawingCanvas() {
 
   // Load drawings from annotations
   const loadDrawingsFromAnnotations = (annotations: Annotation[]) => {
+    console.log(
+      '🎨 [useDrawingCanvas] Loading drawings from annotations:',
+      annotations.length
+    );
+
+    // Set loading state
+    state.value.isLoadingDrawings = true;
+
+    // Clear existing drawings
     state.value.drawings.clear();
 
-    annotations
-      .filter(
-        (annotation) =>
-          annotation.annotationType === 'drawing' && annotation.drawingData
-      )
-      .forEach((annotation) => {
+    const drawingAnnotations = annotations.filter(
+      (annotation) =>
+        annotation.annotationType === 'drawing' && annotation.drawingData
+    );
+
+    console.log(
+      '🎨 [useDrawingCanvas] Found drawing annotations:',
+      drawingAnnotations.length
+    );
+
+    // Simulate async loading for better UX (drawings load instantly but this gives visual feedback)
+    setTimeout(() => {
+      drawingAnnotations.forEach((annotation) => {
         if (annotation.drawingData) {
           const frame = annotation.frame;
           const frameDrawings = state.value.drawings.get(frame) || [];
           frameDrawings.push(annotation.drawingData);
           state.value.drawings.set(frame, frameDrawings);
+          console.log(
+            '🎨 [useDrawingCanvas] Loaded drawing for frame:',
+            frame,
+            'Total drawings for frame:',
+            frameDrawings.length
+          );
         }
       });
+
+      console.log(
+        '🎨 [useDrawingCanvas] Total frames with drawings:',
+        state.value.drawings.size
+      );
+
+      // Clear loading state
+      state.value.isLoadingDrawings = false;
+    }, 300); // Small delay to show loading indicator
   };
 
   // Serialize drawings for storage
@@ -273,6 +306,7 @@ export function useDrawingCanvas() {
     currentFrame,
     currentFrameDrawings,
     severityColors,
+    isLoadingDrawings: computed(() => state.value.isLoadingDrawings),
 
     // Actions
     toggleDrawingMode,

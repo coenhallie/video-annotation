@@ -18,61 +18,6 @@
 
     <!-- Tool Selection -->
     <div v-if="isDrawingMode" class="space-y-3">
-      <!-- Pen/Eraser Selection -->
-      <div class="space-y-2">
-        <div class="flex space-x-1">
-          <button
-            @click="setTool({ type: 'pen' })"
-            :class="[
-              'flex items-center space-x-1 px-2 py-1.5 rounded text-xs font-medium transition-colors',
-              currentTool.type === 'pen'
-                ? 'bg-blue-100 text-blue-700 border border-blue-300'
-                : 'bg-gray-50 text-gray-700 border border-gray-200 hover:bg-gray-100',
-            ]"
-          >
-            <svg
-              class="w-3 h-3"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-              <path d="m15 5 4 4" />
-            </svg>
-            <span>Pen</span>
-          </button>
-          <button
-            @click="setTool({ type: 'eraser' })"
-            :class="[
-              'flex items-center space-x-1 px-2 py-1.5 rounded text-xs font-medium transition-colors',
-              currentTool.type === 'eraser'
-                ? 'bg-blue-100 text-blue-700 border border-blue-300'
-                : 'bg-gray-50 text-gray-700 border border-gray-200 hover:bg-gray-100',
-            ]"
-          >
-            <svg
-              class="w-3 h-3"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path
-                d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"
-              />
-              <path d="M22 21H7" />
-              <path d="m5 11 9 9" />
-            </svg>
-            <span>Eraser</span>
-          </button>
-        </div>
-      </div>
-
       <!-- Stroke Width -->
       <div class="space-y-1">
         <label class="text-xs text-gray-600">

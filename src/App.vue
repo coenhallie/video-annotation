@@ -44,6 +44,7 @@ const {
   updateAnnotation,
   deleteAnnotation,
   initializeVideo,
+  loadAnnotations,
   loadExistingAnnotations,
 } = useVideoAnnotations(videoUrl, videoId);
 
@@ -77,6 +78,27 @@ const { startSession, endSession, isSessionActive } = useVideoSession(videoId);
 
 // Drawing functionality
 const drawingCanvas = useDrawingCanvas();
+
+watch(
+  annotations,
+  (newAnnotations) => {
+    console.log(
+      '🎯 [App] Annotations changed, total annotations:',
+      newAnnotations?.length || 0
+    );
+    if (newAnnotations) {
+      const drawingAnnotations = newAnnotations.filter(
+        (ann) => ann.annotationType === 'drawing'
+      );
+      console.log(
+        '🎯 [App] Drawing annotations found:',
+        drawingAnnotations.length
+      );
+      drawingCanvas.loadDrawingsFromAnnotations(newAnnotations);
+    }
+  },
+  { immediate: true, deep: true }
+);
 
 // Event handlers for video player events
 const handleTimeUpdate = (data) => {
@@ -220,8 +242,12 @@ const handleSeekToTime = (time) => {
 };
 
 const handleAnnotationClick = (annotation) => {
+  console.log('🎨 [App] handleAnnotationClick called with:', annotation);
+
   selectedAnnotation.value = annotation;
-  // Seek to annotation timestamp
+
+  // Seek to annotation timestamp.
+  // The drawing canvas will automatically update based on the new currentFrame.
   handleSeekToTime(annotation.timestamp);
 };
 
@@ -529,24 +555,45 @@ const toggleDemoMode = () => {
 };
 
 // Drawing event handlers
-const handleDrawingCreated = (drawing) => {
-  console.log('Drawing created:', drawing);
+const handleDrawingCreated = async (drawing) => {
+  console.log('🎨 [App] Drawing created:', drawing);
+
+  // Always add to local drawing canvas first
   drawingCanvas.addDrawing(drawing);
 
-  // If this drawing was created from the annotation panel, don't auto-create an annotation
-  // The annotation panel will handle creating the annotation with both text and drawing data
-  if (!isAnnotationFormVisible.value) {
-    // Convert drawing to annotation and save it (only when drawing outside annotation form)
-    const annotation = drawingCanvas.convertDrawingToAnnotation(
-      drawing,
-      videoId.value,
-      user.value?.id || 'anonymous',
-      'Drawing Annotation',
-      `Drawing on frame ${drawing.frame}`
-    );
+  // If this drawing was created from the annotation panel, forward it to the annotation panel
+  if (isAnnotationFormVisible.value && annotationPanelRef.value) {
+    console.log('🎨 [App] Forwarding drawing to annotation panel');
+    // Forward the drawing to the annotation panel
+    if (annotationPanelRef.value.onDrawingCreated) {
+      annotationPanelRef.value.onDrawingCreated(drawing);
+    }
+  } else {
+    // Convert drawing to annotation and save it to Supabase (only when drawing outside annotation form)
+    console.log('🎨 [App] Auto-creating annotation for drawing outside form');
+    try {
+      const annotation = drawingCanvas.convertDrawingToAnnotation(
+        drawing,
+        videoId.value,
+        user.value?.id || 'anonymous',
+        'Drawing Annotation',
+        `Drawing on frame ${drawing.frame}`
+      );
 
-    // Add to annotations
-    addAnnotation(annotation);
+      // Save to Supabase via addAnnotation
+      await addAnnotation(annotation);
+      console.log('🎨 [App] Drawing annotation saved to Supabase successfully');
+
+      // Reload annotations to ensure the UI shows the latest data from Supabase
+      console.log('🎨 [App] Reloading annotations to refresh UI');
+      await loadAnnotations();
+      console.log('🎨 [App] Annotations reloaded successfully');
+    } catch (error) {
+      console.error(
+        '🎨 [App] Error saving drawing annotation to Supabase:',
+        error
+      );
+    }
   }
 };
 
@@ -751,6 +798,7 @@ const checkForSharedVideo = async () => {
                 :video-url="videoUrl"
                 :video-id="videoId"
                 :show-debug-panel="false"
+                :drawing-canvas="drawingCanvas"
                 @time-update="handleTimeUpdate"
                 @frame-update="handleFrameUpdate"
                 @fps-detected="handleFPSDetected"

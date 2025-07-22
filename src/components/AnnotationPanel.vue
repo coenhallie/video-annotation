@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, defineProps, defineEmits, onMounted } from 'vue';
+import { ref, computed, defineProps, defineEmits, onMounted, watch } from 'vue';
 
 const props = defineProps({
   annotations: {
@@ -76,6 +76,12 @@ const severityColors = {
 };
 
 // Computed
+const isSaveDisabled = computed(() => {
+  const hasContent = newAnnotation.value.content.trim();
+  const hasDrawing = hasDrawingData.value && newAnnotation.value.drawingData;
+  return !hasContent && !hasDrawing;
+});
+
 const sortedAnnotations = computed(() => {
   return [...props.annotations].sort((a, b) => a.timestamp - b.timestamp);
 });
@@ -138,10 +144,10 @@ const startEditAnnotation = (annotation) => {
   showAddForm.value = true;
   editingAnnotation.value = annotation;
 
-  // Handle drawing data if present
+  // Handle drawing data if present, but keep drawing section closed by default
   if (annotation.drawingData) {
     hasDrawingData.value = true;
-    showDrawingSection.value = true;
+    showDrawingSection.value = false; // Always keep closed by default
     // Load the drawing data into the canvas
     props.drawingCanvas.clearCurrentFrameDrawings();
     props.drawingCanvas.addDrawing(annotation.drawingData);
@@ -154,9 +160,23 @@ const startEditAnnotation = (annotation) => {
 };
 
 const saveAnnotation = () => {
+  console.log('🎨 [AnnotationPanel] saveAnnotation called');
+  console.log('🎨 [AnnotationPanel] newAnnotation.value:', newAnnotation.value);
+  console.log(
+    '🎨 [AnnotationPanel] hasDrawingData.value:',
+    hasDrawingData.value
+  );
+
   // Check if we have either content or drawing data
   const hasContent = newAnnotation.value.content.trim();
   const hasDrawing = hasDrawingData.value && newAnnotation.value.drawingData;
+
+  console.log('🎨 [AnnotationPanel] hasContent:', hasContent);
+  console.log('🎨 [AnnotationPanel] hasDrawing:', hasDrawing);
+  console.log(
+    '🎨 [AnnotationPanel] newAnnotation.value.drawingData:',
+    newAnnotation.value.drawingData
+  );
 
   if (!hasContent && !hasDrawing) return;
 
@@ -164,9 +184,7 @@ const saveAnnotation = () => {
 
   // Generate title based on content type
   let title = '';
-  if (hasContent && hasDrawing) {
-    title = newAnnotation.value.content.trim().substring(0, 40) + ' + Drawing';
-  } else if (hasContent) {
+  if (hasContent) {
     title =
       newAnnotation.value.content.trim().substring(0, 50) +
       (newAnnotation.value.content.trim().length > 50 ? '...' : '');
@@ -185,15 +203,28 @@ const saveAnnotation = () => {
     drawingData: hasDrawing ? newAnnotation.value.drawingData : null,
   };
 
+  console.log(
+    '🎨 [AnnotationPanel] Final annotationData being emitted:',
+    annotationData
+  );
+  console.log(
+    '🎨 [AnnotationPanel] annotationData.drawingData:',
+    annotationData.drawingData
+  );
+
   if (editingAnnotation.value) {
+    console.log('🎨 [AnnotationPanel] Emitting update-annotation');
     emit('update-annotation', {
       ...annotationData,
       id: editingAnnotation.value.id,
     });
   } else {
+    console.log('🎨 [AnnotationPanel] Emitting add-annotation');
     emit('add-annotation', annotationData);
   }
 
+  // Always close the drawing section when saving/updating
+  showDrawingSection.value = false;
   cancelForm();
 };
 
@@ -255,6 +286,17 @@ const toggleDrawingSection = () => {
       '🎨 [AnnotationPanel] Drawing mode enabled:',
       props.drawingCanvas.isDrawingMode.value
     );
+
+    // DIAGNOSTIC: Check if drawing mode propagated correctly
+    setTimeout(() => {
+      console.log(
+        '🎨 [AnnotationPanel] DIAGNOSTIC: Drawing mode check after 100ms:',
+        {
+          drawingCanvasMode: props.drawingCanvas.isDrawingMode.value,
+          currentTool: props.drawingCanvas.currentTool.value,
+        }
+      );
+    }, 100);
   } else {
     console.log('🎨 [AnnotationPanel] Disabling drawing mode...');
     props.drawingCanvas.disableDrawingMode();
@@ -266,10 +308,47 @@ const toggleDrawingSection = () => {
 };
 
 const onDrawingCreated = (drawingData) => {
-  newAnnotation.value.drawingData = drawingData;
+  console.log(
+    '🎨 [AnnotationPanel] onDrawingCreated called with:',
+    drawingData
+  );
+
+  // If we're editing an existing annotation and it already has drawing data,
+  // we need to merge the new drawing with the existing one
+  if (editingAnnotation.value && newAnnotation.value.drawingData) {
+    console.log(
+      '🎨 [AnnotationPanel] Merging new drawing with existing drawing data'
+    );
+
+    // Merge the paths from both drawings
+    const existingDrawing = newAnnotation.value.drawingData;
+    const mergedDrawing = {
+      ...existingDrawing,
+      paths: [...existingDrawing.paths, ...drawingData.paths],
+      // Update canvas dimensions to current size
+      canvasWidth: drawingData.canvasWidth,
+      canvasHeight: drawingData.canvasHeight,
+    };
+
+    newAnnotation.value.drawingData = mergedDrawing;
+    console.log('🎨 [AnnotationPanel] Merged drawing data:', mergedDrawing);
+  } else {
+    // For new annotations or when no existing drawing data, just use the new data
+    newAnnotation.value.drawingData = drawingData;
+    console.log('🎨 [AnnotationPanel] Set new drawing data:', drawingData);
+  }
+
   hasDrawingData.value = true;
-  console.log('Drawing created:', drawingData);
-  emit('drawing-created', drawingData);
+  console.log(
+    '🎨 [AnnotationPanel] Final newAnnotation.drawingData:',
+    newAnnotation.value.drawingData
+  );
+  console.log(
+    '🎨 [AnnotationPanel] hasDrawingData set to:',
+    hasDrawingData.value
+  );
+  // Removed emit('drawing-created', drawingData) to prevent infinite loop
+  // The AnnotationPanel should only receive drawing events, not emit them
 };
 
 const clearDrawing = () => {
@@ -283,10 +362,22 @@ onMounted(() => {
   props.drawingCanvas.currentFrame.value = props.currentFrame;
 });
 
+// Watch for currentFrame changes and update the annotation form if it's open
+watch(
+  () => props.currentFrame,
+  (newFrame) => {
+    // Only update the frame in the form if the form is open and we're not editing an existing annotation
+    if (showAddForm.value && !editingAnnotation.value) {
+      newAnnotation.value.frame = newFrame;
+    }
+  }
+);
+
 // Expose methods to parent component
 defineExpose({
   startAddAnnotation,
   cancelForm,
+  onDrawingCreated,
 });
 </script>
 
@@ -387,7 +478,7 @@ defineExpose({
 
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1"
-              >Content</label
+              >Content <span class="text-red-500">*</span></label
             >
             <textarea
               v-model="newAnnotation.content"
@@ -421,56 +512,6 @@ defineExpose({
             <div v-if="showDrawingSection" class="space-y-3">
               <!-- Drawing Tools -->
               <div class="bg-gray-50 p-3 rounded-lg space-y-2">
-                <!-- Tool Selection -->
-                <div class="flex space-x-1">
-                  <button
-                    type="button"
-                    @click="drawingCanvas.setTool({ type: 'pen' })"
-                    :class="[
-                      'flex items-center space-x-1 px-2 py-1 rounded text-xs font-medium transition-colors',
-                      drawingCanvas.currentTool.value.type === 'pen'
-                        ? 'bg-blue-100 text-blue-700 border border-blue-300'
-                        : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50',
-                    ]"
-                  >
-                    <svg
-                      class="w-3 h-3"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                    >
-                      <path
-                        d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"
-                      />
-                    </svg>
-                    <span>Pen</span>
-                  </button>
-                  <button
-                    type="button"
-                    @click="drawingCanvas.setTool({ type: 'eraser' })"
-                    :class="[
-                      'flex items-center space-x-1 px-2 py-1 rounded text-xs font-medium transition-colors',
-                      drawingCanvas.currentTool.value.type === 'eraser'
-                        ? 'bg-blue-100 text-blue-700 border border-blue-300'
-                        : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50',
-                    ]"
-                  >
-                    <svg
-                      class="w-3 h-3"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                    >
-                      <path
-                        d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"
-                      />
-                    </svg>
-                    <span>Eraser</span>
-                  </button>
-                </div>
-
                 <!-- Stroke Width -->
                 <div class="space-y-1">
                   <label class="text-xs text-gray-600">
@@ -545,7 +586,11 @@ defineExpose({
           </div>
 
           <div class="flex space-x-2 pt-1">
-            <button class="btn btn-primary flex-1" @click="saveAnnotation">
+            <button
+              class="btn btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+              @click="saveAnnotation"
+              :disabled="isSaveDisabled"
+            >
               {{ editingAnnotation ? 'Update' : 'Save' }}
             </button>
             <button class="btn btn-secondary flex-1" @click="cancelForm">

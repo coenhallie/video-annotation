@@ -10,6 +10,7 @@ export function useVideoPlayer() {
   const error = ref(null);
   const volume = ref(1);
   const isMuted = ref(false);
+  const playbackSpeed = ref(1); // Default playback speed (1x)
 
   // Frame-based state
   const fps = ref(30); // Default FPS, will be detected
@@ -25,6 +26,7 @@ export function useVideoPlayer() {
     error,
     volume,
     isMuted,
+    playbackSpeed,
     fps,
     currentFrame,
     totalFrames,
@@ -240,6 +242,42 @@ export function useVideoPlayer() {
     }
   };
 
+  // Playback speed controls
+  const setPlaybackSpeed = (speed) => {
+    if (!playerRef.value) return;
+
+    try {
+      // Common playback speeds: 0.25x, 0.5x, 1x, 1.25x, 1.5x, 2x
+      const clampedSpeed = Math.max(0.25, Math.min(speed, 2));
+      playerRef.value.playbackRate = clampedSpeed;
+      playbackSpeed.value = clampedSpeed;
+      console.log('🎬 [useVideoPlayer] Playback speed set to:', clampedSpeed);
+    } catch (err) {
+      error.value = `Failed to set playback speed: ${err.message}`;
+      console.error('Playback speed error:', err);
+    }
+  };
+
+  const increaseSpeed = () => {
+    const speeds = [0.25, 0.5, 1, 1.25, 1.5, 2];
+    const currentIndex = speeds.indexOf(playbackSpeed.value);
+    if (currentIndex < speeds.length - 1) {
+      setPlaybackSpeed(speeds[currentIndex + 1]);
+    }
+  };
+
+  const decreaseSpeed = () => {
+    const speeds = [0.25, 0.5, 1, 1.25, 1.5, 2];
+    const currentIndex = speeds.indexOf(playbackSpeed.value);
+    if (currentIndex > 0) {
+      setPlaybackSpeed(speeds[currentIndex - 1]);
+    }
+  };
+
+  const resetSpeed = () => {
+    setPlaybackSpeed(1);
+  };
+
   // Simplified event handlers - removed unused custom event handlers
   // VideoPlayer component handles native events directly
 
@@ -271,6 +309,18 @@ export function useVideoPlayer() {
       case 'KeyM':
         event.preventDefault();
         toggleMute();
+        break;
+      case 'Period': // > key for increase speed
+        event.preventDefault();
+        increaseSpeed();
+        break;
+      case 'Comma': // < key for decrease speed
+        event.preventDefault();
+        decreaseSpeed();
+        break;
+      case 'Digit1': // 1 key to reset to normal speed
+        event.preventDefault();
+        resetSpeed();
         break;
     }
   };
@@ -320,6 +370,7 @@ export function useVideoPlayer() {
     error,
     volume,
     isMuted,
+    playbackSpeed,
 
     // Frame-based state
     fps,
@@ -333,6 +384,10 @@ export function useVideoPlayer() {
     seekTo,
     setVolume,
     toggleMute,
+    setPlaybackSpeed,
+    increaseSpeed,
+    decreaseSpeed,
+    resetSpeed,
 
     // Setup and cleanup removed - handled directly in VideoPlayer component
 

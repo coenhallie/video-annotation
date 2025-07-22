@@ -19,9 +19,6 @@ export function useVideoAnnotations(videoUrl, videoId) {
   // Watch for user changes and reload annotations if we have a current video
   watch(user, async (newUser, oldUser) => {
     if (newUser && currentVideo.value && newUser.id !== oldUser?.id) {
-      console.log(
-        '🔄 [useVideoAnnotations] User changed, reloading annotations'
-      );
       await loadAnnotations();
     } else if (!newUser) {
       // Clear annotations when user logs out
@@ -43,6 +40,7 @@ export function useVideoAnnotations(videoUrl, videoId) {
         title: `Video ${new Date().toLocaleDateString()}`,
         url: toValue(videoUrl),
         video_id: toValue(videoId),
+        video_type: 'url',
         fps: videoData.fps || 30,
         duration: videoData.duration || 0,
         total_frames: videoData.totalFrames || 0,
@@ -55,7 +53,6 @@ export function useVideoAnnotations(videoUrl, videoId) {
       await loadAnnotations();
     } catch (err) {
       error.value = err.message;
-      console.error('Failed to initialize video:', err);
     } finally {
       isLoading.value = false;
     }
@@ -63,102 +60,48 @@ export function useVideoAnnotations(videoUrl, videoId) {
 
   const loadAnnotations = async () => {
     if (!currentVideo.value) {
-      console.log(
-        '🔍 [useVideoAnnotations] No current video, skipping annotation load'
-      );
       return;
     }
 
     if (!toValue(user)) {
-      console.log('🔍 [useVideoAnnotations] No user, skipping annotation load');
       return;
     }
 
     try {
-      console.log(
-        '🔍 [useVideoAnnotations] Loading annotations for video:',
-        currentVideo.value.id
-      );
       const dbAnnotations = await AnnotationService.getVideoAnnotations(
         currentVideo.value.id
       );
+
       annotations.value = dbAnnotations.map(transformDatabaseAnnotationToApp);
-      console.log(
-        '✅ [useVideoAnnotations] Loaded',
-        annotations.value.length,
-        'annotations'
-      );
     } catch (err) {
       error.value = err.message;
-      console.error(
-        '❌ [useVideoAnnotations] Failed to load annotations:',
-        err
-      );
     }
   };
 
   const addAnnotation = async (annotationData) => {
     if (!currentVideo.value || !toValue(user)) {
-      console.error(
-        '❌ [useVideoAnnotations] Cannot add annotation: missing video or user'
-      );
-      console.error(
-        '❌ [useVideoAnnotations] currentVideo:',
-        currentVideo.value
-      );
-      console.error('❌ [useVideoAnnotations] user:', toValue(user));
       return;
     }
 
     try {
-      console.log(
-        '🔍 [useVideoAnnotations] Adding annotation:',
-        annotationData
-      );
-      console.log(
-        '🔍 [useVideoAnnotations] Current video:',
-        currentVideo.value
-      );
-      console.log('🔍 [useVideoAnnotations] Current user:', toValue(user));
-
       const dbAnnotation = transformAppAnnotationToDatabase(
         annotationData,
         currentVideo.value.id,
         toValue(user).id
       );
 
-      console.log(
-        '🔍 [useVideoAnnotations] Transformed annotation for DB:',
-        dbAnnotation
-      );
-
       const newAnnotation = await AnnotationService.createAnnotation(
         dbAnnotation
       );
+
       const appAnnotation = transformDatabaseAnnotationToApp(newAnnotation);
 
       annotations.value.push(appAnnotation);
       annotations.value.sort((a, b) => a.timestamp - b.timestamp);
 
-      console.log(
-        '✅ [useVideoAnnotations] Successfully added annotation:',
-        appAnnotation
-      );
-      console.log(
-        '✅ [useVideoAnnotations] Total annotations now:',
-        annotations.value.length
-      );
-
       return appAnnotation;
     } catch (err) {
       error.value = err.message;
-      console.error('❌ [useVideoAnnotations] Failed to add annotation:', err);
-      console.error('❌ [useVideoAnnotations] Error details:', {
-        message: err.message,
-        details: err.details,
-        hint: err.hint,
-        code: err.code,
-      });
       throw err;
     }
   };
@@ -167,22 +110,49 @@ export function useVideoAnnotations(videoUrl, videoId) {
     if (!currentVideo.value) return;
 
     try {
+      // Handle both calling patterns: (id, updates) or (annotationObject)
+      let actualAnnotationId;
+      let actualUpdates;
+
+      if (
+        typeof annotationId === 'object' &&
+        annotationId !== null &&
+        'id' in annotationId
+      ) {
+        // Called with a single object containing id and updates
+        actualAnnotationId = annotationId.id;
+        actualUpdates = annotationId;
+      } else {
+        // Called with separate parameters
+        actualAnnotationId = annotationId;
+        actualUpdates = updates;
+      }
+      // Ensure actualUpdates exists and has required properties
+      if (!actualUpdates) {
+        throw new Error('Updates object is required');
+      }
+
       const dbUpdates = {
-        content: updates.content,
-        title: updates.title,
-        severity: updates.severity,
-        color: updates.color,
-        timestamp: updates.timestamp,
-        frame: updates.frame,
+        content: actualUpdates.content || '',
+        title: actualUpdates.title || '',
+        severity: actualUpdates.severity || 'medium',
+        color: actualUpdates.color || '#6b7280',
+        timestamp: actualUpdates.timestamp || 0,
+        frame: actualUpdates.frame || 0,
+        annotation_type: actualUpdates.annotationType || 'text',
+        drawing_data: actualUpdates.drawingData || null,
       };
 
       const updatedAnnotation = await AnnotationService.updateAnnotation(
-        annotationId,
+        actualAnnotationId,
         dbUpdates
       );
+
       const appAnnotation = transformDatabaseAnnotationToApp(updatedAnnotation);
 
-      const index = annotations.value.findIndex((a) => a.id === annotationId);
+      const index = annotations.value.findIndex(
+        (a) => a.id === actualAnnotationId
+      );
       if (index !== -1) {
         annotations.value[index] = appAnnotation;
       }
@@ -190,7 +160,6 @@ export function useVideoAnnotations(videoUrl, videoId) {
       return appAnnotation;
     } catch (err) {
       error.value = err.message;
-      console.error('Failed to update annotation:', err);
       throw err;
     }
   };
@@ -203,17 +172,12 @@ export function useVideoAnnotations(videoUrl, videoId) {
       );
     } catch (err) {
       error.value = err.message;
-      console.error('Failed to delete annotation:', err);
       throw err;
     }
   };
 
   // Method to load pre-existing annotations (for loading saved videos)
   const loadExistingAnnotations = (existingAnnotations) => {
-    console.log(
-      '🔍 [useVideoAnnotations] Loading existing annotations:',
-      existingAnnotations.length
-    );
     annotations.value = existingAnnotations.map((ann) => {
       // If it's already in app format, use as-is, otherwise transform
       if (ann.frame !== undefined) {
@@ -222,10 +186,6 @@ export function useVideoAnnotations(videoUrl, videoId) {
         return transformDatabaseAnnotationToApp(ann); // Transform from DB format
       }
     });
-    console.log(
-      '✅ [useVideoAnnotations] Loaded existing annotations:',
-      annotations.value.length
-    );
   };
 
   return {
