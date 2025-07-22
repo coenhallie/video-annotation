@@ -71,6 +71,10 @@ const currentVideoId = ref(null);
 // Demo mode state
 const isDemoMode = ref(false);
 
+// Shared video state
+const isSharedVideo = ref(false);
+const sharedVideoData = ref(null);
+
 // Real-time features
 const { isConnected, activeUsers, setupPresenceTracking } =
   useRealtimeAnnotations(videoId, annotations);
@@ -86,7 +90,16 @@ watch(
       '🎯 [App] Annotations changed, total annotations:',
       newAnnotations?.length || 0
     );
+    console.log('🎯 [App] Full newAnnotations array:', newAnnotations);
+
     if (newAnnotations) {
+      // Log each annotation's type for debugging
+      newAnnotations.forEach((ann, index) => {
+        console.log(
+          `🎯 [App] Annotation ${index}: type="${ann.annotationType}", id=${ann.id}`
+        );
+      });
+
       const drawingAnnotations = newAnnotations.filter(
         (ann) => ann.annotationType === 'drawing'
       );
@@ -94,6 +107,8 @@ watch(
         '🎯 [App] Drawing annotations found:',
         drawingAnnotations.length
       );
+      console.log('🎯 [App] Drawing annotations details:', drawingAnnotations);
+
       drawingCanvas.loadDrawingsFromAnnotations(newAnnotations);
     }
   },
@@ -536,6 +551,36 @@ const handleVideoSelected = async (data) => {
   }
 };
 
+// Handle shared video selection (for unauthenticated users)
+const handleSharedVideoSelected = async (data) => {
+  const { video, annotations: loadedAnnotations } = data;
+
+  console.log('🔗 [App] Loading shared video:', video.title);
+  console.log('🔗 [App] With annotations:', loadedAnnotations.length);
+
+  try {
+    // Set shared video state
+    isSharedVideo.value = true;
+    sharedVideoData.value = data;
+
+    // Update video state
+    videoUrl.value = video.url;
+    videoId.value = video.video_id;
+
+    // Update video metadata
+    fps.value = video.fps;
+    duration.value = video.duration;
+    totalFrames.value = video.total_frames;
+
+    // Load annotations directly without authentication
+    loadExistingAnnotations(loadedAnnotations);
+
+    console.log('✅ [App] Successfully loaded shared video');
+  } catch (error) {
+    console.error('❌ [App] Error loading shared video:', error);
+  }
+};
+
 // Share modal handlers
 const openShareModal = () => {
   if (currentVideoId.value) {
@@ -614,7 +659,7 @@ const checkForSharedVideo = async () => {
     console.log('🔗 [App] Loading shared video:', sharedVideoId);
     try {
       const sharedData = await ShareService.getSharedVideo(sharedVideoId);
-      await handleVideoSelected(sharedData);
+      await handleSharedVideoSelected(sharedData);
 
       // Clear the share parameter from URL without reloading
       const url = new URL(window.location);
@@ -644,8 +689,11 @@ const checkForSharedVideo = async () => {
     </div>
   </div>
 
-  <!-- Main app when user is authenticated -->
-  <div v-else-if="user" class="min-h-screen bg-white flex flex-col">
+  <!-- Main app when user is authenticated OR when viewing shared video -->
+  <div
+    v-else-if="user || isSharedVideo"
+    class="min-h-screen bg-white flex flex-col"
+  >
     <!-- Header -->
     <header class="bg-white border-b border-gray-200 px-6 py-4">
       <div class="flex items-center justify-between">
@@ -653,8 +701,11 @@ const checkForSharedVideo = async () => {
           Accio Video Annotation
         </h1>
 
-        <!-- URL Input Section -->
-        <div class="flex items-center space-x-3 max-w-2xl">
+        <!-- URL Input Section (only for authenticated users) -->
+        <div
+          v-if="user && !isSharedVideo"
+          class="flex items-center space-x-3 max-w-2xl"
+        >
           <div class="flex items-center space-x-4">
             <!-- Load Previous Videos Button -->
             <button
@@ -751,8 +802,29 @@ const checkForSharedVideo = async () => {
           </div>
         </div>
 
-        <!-- User Info and Sign Out -->
-        <div class="flex items-center space-x-4">
+        <!-- Shared Video Info -->
+        <div
+          v-if="isSharedVideo"
+          class="flex items-center space-x-2 text-sm text-gray-600"
+        >
+          <svg
+            class="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z"
+            ></path>
+          </svg>
+          <span class="font-medium">Shared Video (View Only)</span>
+        </div>
+
+        <!-- User Info and Sign Out (for authenticated users) -->
+        <div v-else-if="user" class="flex items-center space-x-4">
           <div class="flex items-center space-x-2 text-sm text-gray-600">
             <svg
               class="w-4 h-4"
@@ -841,6 +913,7 @@ const checkForSharedVideo = async () => {
             :current-frame="currentFrame"
             :fps="fps"
             :drawing-canvas="drawingCanvas"
+            :read-only="isSharedVideo"
             @add-annotation="addAnnotation"
             @update-annotation="updateAnnotation"
             @delete-annotation="deleteAnnotation"

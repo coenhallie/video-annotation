@@ -63,7 +63,8 @@ export function useVideoAnnotations(videoUrl, videoId) {
       return;
     }
 
-    if (!toValue(user)) {
+    // Allow loading annotations if user is authenticated OR if video is public
+    if (!toValue(user) && !currentVideo.value.is_public) {
       return;
     }
 

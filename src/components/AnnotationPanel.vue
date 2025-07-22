@@ -26,6 +26,10 @@ const props = defineProps({
     type: Object,
     required: true,
   },
+  readOnly: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 const emit = defineEmits([
@@ -385,9 +389,14 @@ defineExpose({
   <div class="h-full w-full bg-white overflow-y-auto overflow-x-hidden">
     <!-- Header -->
     <div
-      class="sticky top-0 z-10 flex justify-end items-center p-2 border-b border-gray-200 bg-white"
+      class="sticky top-0 z-10 flex justify-between items-center p-2 border-b border-gray-200 bg-white"
     >
+      <h3 v-if="readOnly" class="text-sm font-medium text-gray-600">
+        Annotations (View Only)
+      </h3>
+      <div v-else class="flex-1"></div>
       <button
+        v-if="!readOnly"
         class="btn btn-primary flex items-center space-x-1"
         @click="startAddAnnotation"
         title="Add new annotation"
@@ -401,7 +410,10 @@ defineExpose({
     </div>
 
     <!-- Add/Edit Form -->
-    <div v-if="showAddForm" class="border-b border-gray-200 bg-gray-50">
+    <div
+      v-if="showAddForm && !readOnly"
+      class="border-b border-gray-200 bg-gray-50"
+    >
       <div
         class="flex justify-between items-center p-2 border-b border-gray-200"
       >
@@ -724,6 +736,7 @@ defineExpose({
         </div>
 
         <div
+          v-if="!readOnly"
           class="flex justify-end mt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
         >
           <div class="flex space-x-1">

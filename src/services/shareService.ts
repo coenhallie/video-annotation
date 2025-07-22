@@ -63,15 +63,23 @@ export class ShareService {
         throw annotationsError;
       }
 
+      // Map database field names to application field names
+      const mappedAnnotations =
+        annotations?.map((annotation) => ({
+          ...annotation,
+          annotationType: annotation.annotation_type,
+          drawingData: annotation.drawing_data,
+        })) || [];
+
       console.log(
         '✅ [ShareService] Loaded shared video with',
-        annotations?.length || 0,
+        mappedAnnotations.length,
         'annotations'
       );
 
       return {
         video,
-        annotations: annotations || [],
+        annotations: mappedAnnotations,
       };
     } catch (error) {
       console.error('❌ [ShareService] Error getting shared video:', error);

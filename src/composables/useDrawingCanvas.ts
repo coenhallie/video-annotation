@@ -171,12 +171,25 @@ export function useDrawingCanvas() {
       '🎨 [useDrawingCanvas] Loading drawings from annotations:',
       annotations.length
     );
+    console.log(
+      '🎨 [useDrawingCanvas] Full annotations parameter:',
+      annotations
+    );
 
     // Set loading state
     state.value.isLoadingDrawings = true;
 
     // Clear existing drawings
     state.value.drawings.clear();
+
+    // Log each annotation's type for debugging
+    annotations.forEach((ann, index) => {
+      console.log(
+        `🎨 [useDrawingCanvas] Annotation ${index}: type="${
+          ann.annotationType
+        }", hasDrawingData=${!!ann.drawingData}`
+      );
+    });
 
     const drawingAnnotations = annotations.filter(
       (annotation) =>
@@ -186,6 +199,10 @@ export function useDrawingCanvas() {
     console.log(
       '🎨 [useDrawingCanvas] Found drawing annotations:',
       drawingAnnotations.length
+    );
+    console.log(
+      '🎨 [useDrawingCanvas] Filtered drawingAnnotations array:',
+      drawingAnnotations
     );
 
     // Simulate async loading for better UX (drawings load instantly but this gives visual feedback)
