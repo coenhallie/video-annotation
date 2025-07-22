@@ -118,7 +118,6 @@ const updateCurrentFrame = (frame: number) => {
 
 // Video event handlers
 const handleTimeUpdate = (data: { currentTime: number; duration: number }) => {
-  console.log('🎬 [DrawingVideoPlayer] handleTimeUpdate:', data);
   // Forward time update to parent
   emit('time-update', data);
 };
@@ -128,7 +127,6 @@ const handleFrameUpdate = (data: {
   totalFrames: number;
   fps: number;
 }) => {
-  console.log('🎬 [DrawingVideoPlayer] handleFrameUpdate:', data);
   updateCurrentFrame(data.currentFrame);
   totalFrames.value = data.totalFrames;
   fps.value = data.fps;
@@ -137,7 +135,6 @@ const handleFrameUpdate = (data: {
 };
 
 const handleFpsDetected = (data: { fps: number; totalFrames: number }) => {
-  console.log('🎬 [DrawingVideoPlayer] handleFpsDetected:', data);
   fps.value = data.fps;
   totalFrames.value = data.totalFrames;
   // Forward fps detected to parent
@@ -145,7 +142,6 @@ const handleFpsDetected = (data: { fps: number; totalFrames: number }) => {
 };
 
 const handleVideoLoaded = () => {
-  console.log('🎬 [DrawingVideoPlayer] handleVideoLoaded');
   videoLoaded.value = true;
   // Forward loaded event to parent
   emit('loaded');
@@ -179,18 +175,15 @@ const handleVideoLoaded = () => {
 
 // Drawing event handlers
 const handleDrawingCreated = (drawing: DrawingData) => {
-  console.log('Drawing created:', drawing);
   drawingCanvas.addDrawing(drawing);
   emit('drawing-created', drawing);
 };
 
 const handleDrawingUpdated = (drawing: DrawingData) => {
-  console.log('Drawing updated:', drawing);
   emit('drawing-updated', drawing);
 };
 
 const handleDrawingDeleted = (drawingId: string) => {
-  console.log('Drawing deleted:', drawingId);
   emit('drawing-deleted', drawingId);
 };
 
@@ -232,7 +225,6 @@ const importDrawings = () => {
       try {
         const drawings = JSON.parse(e.target?.result as string);
         drawingCanvas.deserializeDrawings(drawings);
-        console.log('Drawings imported successfully');
       } catch (error) {
         console.error('Error importing drawings:', error);
         alert('Error importing drawings. Please check the file format.');
@@ -246,8 +238,6 @@ const importDrawings = () => {
 
 // Initialize
 onMounted(() => {
-  console.log('DrawingVideoPlayer mounted');
-
   // Add diagnostic logging
   nextTick(() => {
     console.log(

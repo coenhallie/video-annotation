@@ -181,20 +181,13 @@ export class VideoUploadService {
     onProgress?: (progress: UploadProgress) => void
   ): Promise<any> {
     try {
-      console.log('🎬 [VideoUploadService] Starting video upload:', file.name);
-
       // Step 1: Extract metadata
-      console.log('🎬 [VideoUploadService] Extracting metadata...');
       const metadata = await this.extractVideoMetadata(file);
-      console.log('🎬 [VideoUploadService] Metadata extracted:', metadata);
 
       // Step 2: Upload file
-      console.log('🎬 [VideoUploadService] Uploading file...');
       const { path, url } = await this.uploadVideo(file, userId, onProgress);
-      console.log('🎬 [VideoUploadService] File uploaded:', { path, url });
 
       // Step 3: Create database record
-      console.log('🎬 [VideoUploadService] Creating database record...');
       const videoRecord = await this.createUploadedVideoRecord(
         file,
         path,
@@ -202,11 +195,10 @@ export class VideoUploadService {
         userId,
         metadata
       );
-      console.log('🎬 [VideoUploadService] Video record created:', videoRecord);
 
       return videoRecord;
     } catch (error) {
-      console.error('🚨 [VideoUploadService] Upload failed:', error);
+      console.error('Video upload failed:', error);
       throw error;
     }
   }

@@ -164,23 +164,9 @@ const startEditAnnotation = (annotation) => {
 };
 
 const saveAnnotation = () => {
-  console.log('🎨 [AnnotationPanel] saveAnnotation called');
-  console.log('🎨 [AnnotationPanel] newAnnotation.value:', newAnnotation.value);
-  console.log(
-    '🎨 [AnnotationPanel] hasDrawingData.value:',
-    hasDrawingData.value
-  );
-
   // Check if we have either content or drawing data
   const hasContent = newAnnotation.value.content.trim();
   const hasDrawing = hasDrawingData.value && newAnnotation.value.drawingData;
-
-  console.log('🎨 [AnnotationPanel] hasContent:', hasContent);
-  console.log('🎨 [AnnotationPanel] hasDrawing:', hasDrawing);
-  console.log(
-    '🎨 [AnnotationPanel] newAnnotation.value.drawingData:',
-    newAnnotation.value.drawingData
-  );
 
   if (!hasContent && !hasDrawing) return;
 
@@ -207,23 +193,12 @@ const saveAnnotation = () => {
     drawingData: hasDrawing ? newAnnotation.value.drawingData : null,
   };
 
-  console.log(
-    '🎨 [AnnotationPanel] Final annotationData being emitted:',
-    annotationData
-  );
-  console.log(
-    '🎨 [AnnotationPanel] annotationData.drawingData:',
-    annotationData.drawingData
-  );
-
   if (editingAnnotation.value) {
-    console.log('🎨 [AnnotationPanel] Emitting update-annotation');
     emit('update-annotation', {
       ...annotationData,
       id: editingAnnotation.value.id,
     });
   } else {
-    console.log('🎨 [AnnotationPanel] Emitting add-annotation');
     emit('add-annotation', annotationData);
   }
 
@@ -267,63 +242,19 @@ const onSeverityChange = () => {
 
 // Drawing-related methods
 const toggleDrawingSection = () => {
-  console.log('🎨 [AnnotationPanel] toggleDrawingSection called');
-  console.log(
-    '🎨 [AnnotationPanel] Current showDrawingSection:',
-    showDrawingSection.value
-  );
-  console.log(
-    '🎨 [AnnotationPanel] Current drawing mode:',
-    props.drawingCanvas.isDrawingMode.value
-  );
-
   showDrawingSection.value = !showDrawingSection.value;
-  console.log(
-    '🎨 [AnnotationPanel] New showDrawingSection:',
-    showDrawingSection.value
-  );
 
   if (showDrawingSection.value) {
-    console.log('🎨 [AnnotationPanel] Enabling drawing mode...');
     props.drawingCanvas.enableDrawingMode();
-    console.log(
-      '🎨 [AnnotationPanel] Drawing mode enabled:',
-      props.drawingCanvas.isDrawingMode.value
-    );
-
-    // DIAGNOSTIC: Check if drawing mode propagated correctly
-    setTimeout(() => {
-      console.log(
-        '🎨 [AnnotationPanel] DIAGNOSTIC: Drawing mode check after 100ms:',
-        {
-          drawingCanvasMode: props.drawingCanvas.isDrawingMode.value,
-          currentTool: props.drawingCanvas.currentTool.value,
-        }
-      );
-    }, 100);
   } else {
-    console.log('🎨 [AnnotationPanel] Disabling drawing mode...');
     props.drawingCanvas.disableDrawingMode();
-    console.log(
-      '🎨 [AnnotationPanel] Drawing mode disabled:',
-      props.drawingCanvas.isDrawingMode.value
-    );
   }
 };
 
 const onDrawingCreated = (drawingData) => {
-  console.log(
-    '🎨 [AnnotationPanel] onDrawingCreated called with:',
-    drawingData
-  );
-
   // If we're editing an existing annotation and it already has drawing data,
   // we need to merge the new drawing with the existing one
   if (editingAnnotation.value && newAnnotation.value.drawingData) {
-    console.log(
-      '🎨 [AnnotationPanel] Merging new drawing with existing drawing data'
-    );
-
     // Merge the paths from both drawings
     const existingDrawing = newAnnotation.value.drawingData;
     const mergedDrawing = {
@@ -335,22 +266,12 @@ const onDrawingCreated = (drawingData) => {
     };
 
     newAnnotation.value.drawingData = mergedDrawing;
-    console.log('🎨 [AnnotationPanel] Merged drawing data:', mergedDrawing);
   } else {
     // For new annotations or when no existing drawing data, just use the new data
     newAnnotation.value.drawingData = drawingData;
-    console.log('🎨 [AnnotationPanel] Set new drawing data:', drawingData);
   }
 
   hasDrawingData.value = true;
-  console.log(
-    '🎨 [AnnotationPanel] Final newAnnotation.drawingData:',
-    newAnnotation.value.drawingData
-  );
-  console.log(
-    '🎨 [AnnotationPanel] hasDrawingData set to:',
-    hasDrawingData.value
-  );
   // Removed emit('drawing-created', drawingData) to prevent infinite loop
   // The AnnotationPanel should only receive drawing events, not emit them
 };

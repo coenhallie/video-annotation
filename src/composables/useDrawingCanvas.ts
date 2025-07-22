@@ -167,42 +167,15 @@ export function useDrawingCanvas() {
 
   // Load drawings from annotations
   const loadDrawingsFromAnnotations = (annotations: Annotation[]) => {
-    console.log(
-      '🎨 [useDrawingCanvas] Loading drawings from annotations:',
-      annotations.length
-    );
-    console.log(
-      '🎨 [useDrawingCanvas] Full annotations parameter:',
-      annotations
-    );
-
     // Set loading state
     state.value.isLoadingDrawings = true;
 
     // Clear existing drawings
     state.value.drawings.clear();
 
-    // Log each annotation's type for debugging
-    annotations.forEach((ann, index) => {
-      console.log(
-        `🎨 [useDrawingCanvas] Annotation ${index}: type="${
-          ann.annotationType
-        }", hasDrawingData=${!!ann.drawingData}`
-      );
-    });
-
     const drawingAnnotations = annotations.filter(
       (annotation) =>
         annotation.annotationType === 'drawing' && annotation.drawingData
-    );
-
-    console.log(
-      '🎨 [useDrawingCanvas] Found drawing annotations:',
-      drawingAnnotations.length
-    );
-    console.log(
-      '🎨 [useDrawingCanvas] Filtered drawingAnnotations array:',
-      drawingAnnotations
     );
 
     // Simulate async loading for better UX (drawings load instantly but this gives visual feedback)
@@ -213,19 +186,8 @@ export function useDrawingCanvas() {
           const frameDrawings = state.value.drawings.get(frame) || [];
           frameDrawings.push(annotation.drawingData);
           state.value.drawings.set(frame, frameDrawings);
-          console.log(
-            '🎨 [useDrawingCanvas] Loaded drawing for frame:',
-            frame,
-            'Total drawings for frame:',
-            frameDrawings.length
-          );
         }
       });
-
-      console.log(
-        '🎨 [useDrawingCanvas] Total frames with drawings:',
-        state.value.drawings.size
-      );
 
       // Clear loading state
       state.value.isLoadingDrawings = false;

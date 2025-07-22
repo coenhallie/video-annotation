@@ -46,13 +46,6 @@ const progressPercentage = computed(() => {
   const percentage = props.duration
     ? (props.currentTime / props.duration) * 100
     : 0;
-  console.log('🎯 [Timeline] progressPercentage computed:', {
-    currentTime: props.currentTime,
-    duration: props.duration,
-    percentage: percentage,
-    isValidDuration: props.duration > 0,
-    isValidCurrentTime: props.currentTime >= 0,
-  });
   if (!props.duration) {
     console.warn(
       '🎯 [Timeline] Duration is 0 or undefined, progress will be 0'
@@ -87,11 +80,6 @@ const handleTimelineClick = (event) => {
   const percentage = Math.max(0, Math.min(clickX / rect.width, 1));
   const newTime = percentage * props.duration;
 
-  console.log('Timeline clicked:', {
-    percentage,
-    newTime,
-    duration: props.duration,
-  });
   emit('seek-to-time', newTime);
 };
 

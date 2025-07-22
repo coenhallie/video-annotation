@@ -42,27 +42,13 @@ export function useVideoPlayer() {
   };
 
   const detectFPS = async () => {
-    console.log('🎬 [useVideoPlayer] detectFPS() called');
     if (!playerRef.value) {
-      console.warn(
-        '🎬 [useVideoPlayer] No playerRef available for FPS detection'
-      );
       return;
     }
 
     try {
       // Try to get FPS from video metadata if available
       const video = playerRef.value;
-      console.log(
-        '🎬 [useVideoPlayer] Video dimensions:',
-        video.videoWidth,
-        'x',
-        video.videoHeight
-      );
-      console.log(
-        '🎬 [useVideoPlayer] Video duration for FPS calc:',
-        duration.value
-      );
 
       // For most web videos, we'll use a common detection method
       // This is a simplified approach - in production you might want more sophisticated detection
@@ -73,30 +59,13 @@ export function useVideoPlayer() {
         // Default to 30 FPS for web videos, but this could be enhanced
         // to actually detect the real FPS using frame sampling
         fps.value = 30;
-        console.log('🎬 [useVideoPlayer] FPS set to:', fps.value);
 
         // Calculate total frames based on duration and FPS
         if (duration.value > 0) {
           totalFrames.value = Math.round(duration.value * fps.value);
-          console.log(
-            '🎬 [useVideoPlayer] Total frames calculated:',
-            totalFrames.value
-          );
-        } else {
-          console.warn(
-            '🎬 [useVideoPlayer] Duration is 0, cannot calculate total frames'
-          );
         }
-      } else {
-        console.warn(
-          '🎬 [useVideoPlayer] Video dimensions not available, cannot detect FPS'
-        );
       }
     } catch (err) {
-      console.warn(
-        '🚨 [useVideoPlayer] Could not detect FPS, using default 30 FPS:',
-        err
-      );
       fps.value = 30;
     }
   };
@@ -107,43 +76,33 @@ export function useVideoPlayer() {
 
   // Player controls
   const play = async () => {
-    console.log('🎬 [useVideoPlayer] play() called');
     if (!playerRef.value) {
-      console.error('🚨 [useVideoPlayer] No playerRef available for play()');
       return;
     }
 
     try {
-      console.log('🎬 [useVideoPlayer] Calling playerRef.play()');
       await playerRef.value.play();
       isPlaying.value = true;
       error.value = null;
-      console.log('✅ [useVideoPlayer] Video play successful');
     } catch (err) {
       const errorMsg = `Failed to play video: ${err.message}`;
       error.value = errorMsg;
-      console.error('🚨 [useVideoPlayer] Play error:', err);
-      console.error('🚨 [useVideoPlayer] Error message:', errorMsg);
+      console.error('Play error:', err);
     }
   };
 
   const pause = () => {
-    console.log('🎬 [useVideoPlayer] pause() called');
     if (!playerRef.value) {
-      console.error('🚨 [useVideoPlayer] No playerRef available for pause()');
       return;
     }
 
     try {
-      console.log('🎬 [useVideoPlayer] Calling playerRef.pause()');
       playerRef.value.pause();
       isPlaying.value = false;
-      console.log('✅ [useVideoPlayer] Video pause successful');
     } catch (err) {
       const errorMsg = `Failed to pause video: ${err.message}`;
       error.value = errorMsg;
-      console.error('🚨 [useVideoPlayer] Pause error:', err);
-      console.error('🚨 [useVideoPlayer] Error message:', errorMsg);
+      console.error('Pause error:', err);
     }
   };
 
@@ -156,18 +115,12 @@ export function useVideoPlayer() {
   };
 
   const seekTo = (time) => {
-    console.log('seekTo called with time:', time);
-    console.log('playerRef.value:', !!playerRef.value);
-    console.log('duration.value:', duration.value);
-
     if (!playerRef.value) {
-      console.warn('seekTo aborted: missing playerRef');
       return;
     }
 
     // Always use the video element's duration as the source of truth
     const videoDuration = playerRef.value.duration;
-    console.log('videoDuration from element:', videoDuration);
 
     // Update our composable duration if it's not set but video element has duration
     if (
@@ -175,29 +128,21 @@ export function useVideoPlayer() {
       videoDuration > 0 &&
       duration.value !== videoDuration
     ) {
-      console.log(
-        'Updating composable duration from video element:',
-        videoDuration
-      );
       duration.value = videoDuration;
     }
 
     if (!videoDuration || videoDuration === 0) {
-      console.warn('seekTo aborted: video duration is 0 or undefined');
       return;
     }
 
     try {
       // Ensure time is within valid range
       const clampedTime = Math.max(0, Math.min(time, videoDuration));
-      console.log('Setting currentTime to:', clampedTime);
       playerRef.value.currentTime = clampedTime;
-      console.log('currentTime set successfully');
 
       // Immediately update our reactive values to ensure Timeline updates
       currentTime.value = clampedTime;
       updateFrameFromTime();
-      console.log('Reactive currentTime updated to:', currentTime.value);
 
       // currentTime and frame will also be updated by timeupdate event
     } catch (err) {
@@ -251,7 +196,6 @@ export function useVideoPlayer() {
       const clampedSpeed = Math.max(0.25, Math.min(speed, 2));
       playerRef.value.playbackRate = clampedSpeed;
       playbackSpeed.value = clampedSpeed;
-      console.log('🎬 [useVideoPlayer] Playback speed set to:', clampedSpeed);
     } catch (err) {
       error.value = `Failed to set playback speed: ${err.message}`;
       console.error('Playback speed error:', err);

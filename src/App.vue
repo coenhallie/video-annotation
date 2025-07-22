@@ -8,7 +8,6 @@ import LoadVideoModal from './components/LoadVideoModal.vue';
 import ShareModal from './components/ShareModal.vue';
 import NotificationToast from './components/NotificationToast.vue';
 import DrawingVideoPlayer from './components/DrawingVideoPlayer.vue';
-import DrawingDemo from './components/DrawingDemo.vue';
 import DrawingCanvas from './components/DrawingCanvas.vue';
 import { useAuth } from './composables/useAuth.ts';
 import { useVideoAnnotations } from './composables/useVideoAnnotations.ts';
@@ -67,9 +66,6 @@ const isLoadModalVisible = ref(false);
 // Share modal state
 const isShareModalVisible = ref(false);
 const currentVideoId = ref(null);
-
-// Demo mode state
-const isDemoMode = ref(false);
 
 // Shared video state
 const isSharedVideo = ref(false);
@@ -594,11 +590,6 @@ const closeShareModal = () => {
   isShareModalVisible.value = false;
 };
 
-// Demo mode handlers
-const toggleDemoMode = () => {
-  isDemoMode.value = !isDemoMode.value;
-};
-
 // Drawing event handlers
 const handleDrawingCreated = async (drawing) => {
   console.log('🎨 [App] Drawing created:', drawing);
@@ -750,27 +741,6 @@ const checkForSharedVideo = async () => {
               </svg>
             </button>
 
-            <!-- Drawing Demo Toggle Button -->
-            <button
-              @click="toggleDemoMode"
-              class="p-2 text-gray-600 hover:text-blue-600 hover:bg-gray-50 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-              :title="isDemoMode ? 'Exit Drawing Demo' : 'Try Drawing Demo'"
-            >
-              <svg
-                class="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                ></path>
-              </svg>
-            </button>
-
             <div class="relative flex-1">
               <input
                 v-model="urlInput"
@@ -853,78 +823,71 @@ const checkForSharedVideo = async () => {
 
     <!-- Main Content -->
     <main class="flex-1 flex overflow-hidden">
-      <!-- Drawing Demo Mode -->
-      <div v-if="isDemoMode" class="flex-1">
-        <DrawingDemo />
-      </div>
-
-      <!-- Normal App Mode -->
-      <template v-else>
-        <!-- Video Section -->
-        <section class="flex-1 flex flex-col bg-black min-w-0 overflow-hidden">
-          <div class="flex-1 flex items-center justify-center p-6">
-            <div class="relative">
-              <!-- Drawing Video Player -->
-              <DrawingVideoPlayer
-                ref="drawingVideoPlayerRef"
-                :video-url="videoUrl"
-                :video-id="videoId"
-                :show-debug-panel="false"
-                :drawing-canvas="drawingCanvas"
-                @time-update="handleTimeUpdate"
-                @frame-update="handleFrameUpdate"
-                @fps-detected="handleFPSDetected"
-                @loaded="handleLoaded"
-                @drawing-created="handleDrawingCreated"
-                @drawing-updated="handleDrawingUpdated"
-                @drawing-deleted="handleDrawingDeleted"
-              />
-            </div>
-          </div>
-
-          <!-- Timeline -->
-          <div class="bg-gray-900 p-4 border-t border-gray-800">
-            <Timeline
-              :current-time="currentTime"
-              :duration="duration"
-              :current-frame="currentFrame"
-              :total-frames="totalFrames"
-              :fps="fps"
-              :annotations="annotations"
-              :selected-annotation="selectedAnnotation"
-              :is-playing="isPlaying"
-              @seek-to-time="handleSeekToTime"
-              @annotation-click="handleAnnotationClick"
-              @play="handleTimelinePlay"
-              @pause="handleTimelinePause"
+      <!-- Main App Content -->
+      <!-- Video Section -->
+      <section class="flex-1 flex flex-col bg-black min-w-0 overflow-hidden">
+        <div class="flex-1 flex items-center justify-center p-6">
+          <div class="relative">
+            <!-- Drawing Video Player -->
+            <DrawingVideoPlayer
+              ref="drawingVideoPlayerRef"
+              :video-url="videoUrl"
+              :video-id="videoId"
+              :show-debug-panel="false"
+              :drawing-canvas="drawingCanvas"
+              @time-update="handleTimeUpdate"
+              @frame-update="handleFrameUpdate"
+              @fps-detected="handleFPSDetected"
+              @loaded="handleLoaded"
+              @drawing-created="handleDrawingCreated"
+              @drawing-updated="handleDrawingUpdated"
+              @drawing-deleted="handleDrawingDeleted"
             />
           </div>
-        </section>
+        </div>
 
-        <!-- Annotation Panel -->
-        <aside
-          class="w-96 min-w-96 max-w-96 flex-shrink-0 bg-white border-l border-gray-200 flex flex-col overflow-hidden"
-        >
-          <AnnotationPanel
-            ref="annotationPanelRef"
+        <!-- Timeline -->
+        <div class="bg-gray-900 p-4 border-t border-gray-800">
+          <Timeline
+            :current-time="currentTime"
+            :duration="duration"
+            :current-frame="currentFrame"
+            :total-frames="totalFrames"
+            :fps="fps"
             :annotations="annotations"
             :selected-annotation="selectedAnnotation"
-            :current-time="currentTime"
-            :current-frame="currentFrame"
-            :fps="fps"
-            :drawing-canvas="drawingCanvas"
-            :read-only="isSharedVideo"
-            @add-annotation="addAnnotation"
-            @update-annotation="updateAnnotation"
-            @delete-annotation="deleteAnnotation"
-            @select-annotation="handleAnnotationClick"
-            @form-show="handleFormShow"
-            @form-hide="handleFormHide"
+            :is-playing="isPlaying"
+            @seek-to-time="handleSeekToTime"
+            @annotation-click="handleAnnotationClick"
+            @play="handleTimelinePlay"
             @pause="handleTimelinePause"
-            @drawing-created="handleDrawingCreated"
           />
-        </aside>
-      </template>
+        </div>
+      </section>
+
+      <!-- Annotation Panel -->
+      <aside
+        class="w-96 min-w-96 max-w-96 flex-shrink-0 bg-white border-l border-gray-200 flex flex-col overflow-hidden"
+      >
+        <AnnotationPanel
+          ref="annotationPanelRef"
+          :annotations="annotations"
+          :selected-annotation="selectedAnnotation"
+          :current-time="currentTime"
+          :current-frame="currentFrame"
+          :fps="fps"
+          :drawing-canvas="drawingCanvas"
+          :read-only="isSharedVideo"
+          @add-annotation="addAnnotation"
+          @update-annotation="updateAnnotation"
+          @delete-annotation="deleteAnnotation"
+          @select-annotation="handleAnnotationClick"
+          @form-show="handleFormShow"
+          @form-hide="handleFormHide"
+          @pause="handleTimelinePause"
+          @drawing-created="handleDrawingCreated"
+        />
+      </aside>
     </main>
 
     <!-- Load Video Modal -->

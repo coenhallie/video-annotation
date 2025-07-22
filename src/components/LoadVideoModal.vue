@@ -309,8 +309,6 @@ const loadVideos = async () => {
       }
     }
     annotationCounts.value = counts;
-
-    console.log('✅ [LoadVideoModal] Loaded videos:', videos.value.length);
   } catch (err) {
     console.error('❌ [LoadVideoModal] Error loading videos:', err);
     error.value = 'Failed to load videos. Please try again.';
@@ -354,8 +352,6 @@ const removeVideo = async (video, event) => {
   }
 
   try {
-    console.log('🗑️ [LoadVideoModal] Removing video:', video.title);
-
     // Remove video from Supabase
     await VideoService.deleteVideo(video.id);
 
@@ -367,8 +363,6 @@ const removeVideo = async (video, event) => {
 
     // Emit removal event
     emit('video-removed', video);
-
-    console.log('✅ [LoadVideoModal] Video removed successfully');
   } catch (err) {
     console.error('❌ [LoadVideoModal] Error removing video:', err);
     error.value = 'Failed to remove video. Please try again.';
@@ -410,8 +404,6 @@ const formatFileSize = (bytes) => {
 
 // Upload handlers
 const handleUploadSuccess = async (videoRecord) => {
-  console.log('🎬 [LoadVideoModal] Upload successful:', videoRecord);
-
   try {
     // Load annotations for the uploaded video (should be empty)
     const annotations = await AnnotationService.getVideoAnnotations(

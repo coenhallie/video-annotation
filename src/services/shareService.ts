@@ -15,7 +15,6 @@ export class ShareService {
       const baseUrl = window.location.origin;
       const shareUrl = `${baseUrl}?share=${videoId}`;
 
-      console.log('✅ [ShareService] Created shareable link:', shareUrl);
       return shareUrl;
     } catch (error) {
       console.error('❌ [ShareService] Error creating shareable link:', error);
@@ -26,8 +25,6 @@ export class ShareService {
   // Get shared video data (public videos only)
   static async getSharedVideo(videoId: string) {
     try {
-      console.log('🔍 [ShareService] Loading shared video:', videoId);
-
       // Get the video (must be public)
       const { data: video, error: videoError } = await supabase
         .from('videos')
@@ -71,12 +68,6 @@ export class ShareService {
           drawingData: annotation.drawing_data,
         })) || [];
 
-      console.log(
-        '✅ [ShareService] Loaded shared video with',
-        mappedAnnotations.length,
-        'annotations'
-      );
-
       return {
         video,
         annotations: mappedAnnotations,
@@ -94,8 +85,6 @@ export class ShareService {
         .from('videos')
         .update({ is_public: false })
         .eq('id', videoId);
-
-      console.log('✅ [ShareService] Made video private:', videoId);
     } catch (error) {
       console.error('❌ [ShareService] Error making video private:', error);
       throw error;
@@ -120,7 +109,6 @@ export class ShareService {
         document.execCommand('copy');
         textArea.remove();
       }
-      console.log('✅ [ShareService] Copied to clipboard:', text);
     } catch (error) {
       console.error('❌ [ShareService] Error copying to clipboard:', error);
       throw error;

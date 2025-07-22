@@ -148,14 +148,9 @@ const handlePathCreated = (event: { path: fabric.FabricObject }) => {
       frame: props.currentFrame,
     };
     isInDrawingSession.value = true;
-    console.log('🎨 [DrawingCanvas] Started new drawing session');
   } else {
     // Add to existing drawing session
     currentDrawingSession.value.paths.push(drawingPath);
-    console.log(
-      '🎨 [DrawingCanvas] Added path to session, total paths:',
-      currentDrawingSession.value.paths.length
-    );
   }
 
   // Set timer to finish session after delay
@@ -229,11 +224,6 @@ const handleMouseUp = (event: fabric.TEvent) => {
 // Finish the current drawing session and emit the complete drawing
 const finishDrawingSession = () => {
   if (currentDrawingSession.value && isInDrawingSession.value) {
-    console.log(
-      '🎨 [DrawingCanvas] Finishing drawing session with',
-      currentDrawingSession.value.paths.length,
-      'paths'
-    );
     emit('drawing-created', currentDrawingSession.value);
     currentDrawingSession.value = null;
     isInDrawingSession.value = false;
@@ -281,32 +271,11 @@ const loadDrawingsForFrame = () => {
 
 // Render a drawing path on canvas
 const renderDrawingPath = (drawingPath: DrawingPath) => {
-  console.log(
-    '🎨 [DrawingCanvas.renderDrawingPath] Incoming path data:',
-    drawingPath
-  );
-  console.log(
-    '🎨 [DrawingCanvas.renderDrawingPath] Normalized points from path:',
-    drawingPath.points
-  );
-  console.log(
-    '🎨 [DrawingCanvas.renderDrawingPath] Current canvas dimensions for denormalization:',
-    {
-      canvasWidth: canvasWidth.value,
-      canvasHeight: canvasHeight.value,
-    }
-  );
-
   if (!canvas.value) return;
   const points = drawingPath.points.map((point) => ({
     x: point.x * canvasWidth.value,
     y: point.y * canvasHeight.value,
   }));
-
-  console.log(
-    '🎨 [DrawingCanvas.renderDrawingPath] Calculated pixel coordinates:',
-    points
-  );
 
   if (points.length < 2) return;
 
@@ -339,43 +308,16 @@ watch(
     if (canvas.value) {
       canvas.value.isDrawingMode = newValue;
 
-      // DIAGNOSTIC: Check cursor configuration
       const canvasElement = canvas.value.getElement();
-      console.log(
-        '🎨 [DrawingCanvas] Fabric canvas drawing mode set to:',
-        canvas.value.isDrawingMode
-      );
 
-      console.log(
-        '🎨 [DrawingCanvas] Canvas element computed style cursor:',
-        window.getComputedStyle(canvasElement).cursor
-      );
-      console.log(
-        '🎨 [DrawingCanvas] Canvas element style.cursor:',
-        canvasElement.style.cursor
-      );
-      console.log('🎨 [DrawingCanvas] Canvas dimensions:', {
-        width: canvas.value.getWidth(),
-        height: canvas.value.getHeight(),
-      });
-
-      // DIAGNOSTIC: Force cursor update
+      // Force cursor update
       if (newValue) {
-        console.log(
-          '🎨 [DrawingCanvas] DIAGNOSTIC: Forcing cursor to crosshair'
-        );
         canvasElement.style.cursor = 'crosshair';
         // Also try setting it on the container
         if (canvasContainer.value) {
           canvasContainer.value.style.cursor = 'crosshair';
-          console.log(
-            '🎨 [DrawingCanvas] DIAGNOSTIC: Set cursor on container too'
-          );
         }
       } else {
-        console.log(
-          '🎨 [DrawingCanvas] DIAGNOSTIC: Resetting cursor to default'
-        );
         canvasElement.style.cursor = 'default';
         if (canvasContainer.value) {
           canvasContainer.value.style.cursor = 'default';
@@ -429,11 +371,6 @@ watch(
 
 // Lifecycle hooks
 onMounted(() => {
-  console.log('🎨 [DrawingCanvas] MOUNTED - Initial props:', {
-    isDrawingMode: props.isDrawingMode,
-    currentFrame: props.currentFrame,
-    selectedTool: props.selectedTool,
-  });
   nextTick(() => {
     initCanvas();
     if (canvasContainer.value) {
