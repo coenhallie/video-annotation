@@ -5,7 +5,7 @@
     @click="closeModal"
   >
     <div
-      class="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[80vh] overflow-hidden"
+      class="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden"
       @click.stop
     >
       <!-- Modal Header -->
@@ -75,7 +75,7 @@
       </div>
 
       <!-- Modal Content -->
-      <div class="p-6 overflow-y-auto max-h-[60vh]">
+      <div class="p-6 overflow-y-auto max-h-[70vh]">
         <!-- Previous Videos Tab -->
         <div v-if="activeTab === 'previous'">
           <!-- Loading State -->
@@ -138,77 +138,141 @@
           <!-- Videos List -->
           <div v-else class="space-y-4">
             <div
-              v-for="video in videos"
-              :key="video.id"
+              v-for="entity in videoEntities"
+              :key="getEntityKey(entity)"
               class="border border-gray-200 rounded-lg p-4 hover:border-blue-300 hover:shadow-md transition-all cursor-pointer"
-              @click="selectVideo(video)"
+              @click="selectVideoEntity(entity)"
             >
               <div class="flex items-start justify-between">
                 <div class="flex-1">
-                  <div class="flex items-center gap-2 mb-2">
-                    <h3 class="font-medium text-gray-900">
-                      {{ video.title }}
-                    </h3>
-                    <span
-                      v-if="video.video_type === 'upload'"
-                      class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800"
-                    >
-                      Uploaded
-                    </span>
-                    <span
-                      v-else
-                      class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
-                    >
-                      URL
-                    </span>
-                  </div>
-                  <div class="text-sm text-gray-600 space-y-1">
-                    <p class="truncate">
-                      <span class="font-medium">
-                        {{ video.video_type === 'upload' ? 'File:' : 'URL:' }}
-                      </span>
-                      {{
-                        video.video_type === 'upload'
-                          ? video.original_filename
-                          : video.url
-                      }}
-                    </p>
-                    <div class="flex items-center space-x-4">
-                      <span>
-                        <span class="font-medium">Duration:</span>
-                        {{ formatDuration(video.duration) }}
-                      </span>
-                      <span>
-                        <span class="font-medium">FPS:</span> {{ video.fps }}
-                      </span>
-                      <span>
-                        <span class="font-medium">Frames:</span>
-                        {{ video.total_frames.toLocaleString() }}
-                      </span>
-                    </div>
-                    <div class="flex items-center space-x-4">
-                      <span>
-                        <span class="font-medium">Annotations:</span>
-                        {{ getAnnotationCount(video.id) }}
-                      </span>
-                      <span>
-                        <span class="font-medium">Created:</span>
-                        {{ formatDate(video.created_at) }}
+                  <!-- Individual Video Display -->
+                  <div v-if="isIndividualVideo(entity)">
+                    <div class="flex items-center gap-2 mb-2">
+                      <h3 class="font-medium text-gray-900">
+                        {{ entity.title }}
+                      </h3>
+                      <span
+                        v-if="entity.video_type === 'upload'"
+                        class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800"
+                      >
+                        Uploaded
                       </span>
                       <span
-                        v-if="video.video_type === 'upload' && video.file_size"
+                        v-else
+                        class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
                       >
-                        <span class="font-medium">Size:</span>
-                        {{ formatFileSize(video.file_size) }}
+                        URL
                       </span>
+                    </div>
+                    <div class="text-sm text-gray-600 space-y-1">
+                      <p class="truncate">
+                        <span class="font-medium">
+                          {{
+                            entity.video_type === 'upload' ? 'File:' : 'URL:'
+                          }}
+                        </span>
+                        {{
+                          entity.video_type === 'upload'
+                            ? entity.original_filename
+                            : entity.url
+                        }}
+                      </p>
+                      <div class="flex items-center space-x-4">
+                        <span>
+                          <span class="font-medium">Duration:</span>
+                          {{ formatDuration(entity.duration) }}
+                        </span>
+                        <span>
+                          <span class="font-medium">FPS:</span> {{ entity.fps }}
+                        </span>
+                        <span>
+                          <span class="font-medium">Frames:</span>
+                          {{ entity.total_frames.toLocaleString() }}
+                        </span>
+                      </div>
+                      <div class="flex items-center space-x-4">
+                        <span>
+                          <span class="font-medium">Annotations:</span>
+                          {{ getAnnotationCount(entity.id) }}
+                        </span>
+                        <span>
+                          <span class="font-medium">Created:</span>
+                          {{ formatDate(entity.created_at) }}
+                        </span>
+                        <span
+                          v-if="
+                            entity.video_type === 'upload' && entity.file_size
+                          "
+                        >
+                          <span class="font-medium">Size:</span>
+                          {{ formatFileSize(entity.file_size) }}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Comparison Video Display -->
+                  <div v-else>
+                    <div class="flex items-center gap-2 mb-2">
+                      <h3 class="font-medium text-gray-900">
+                        {{ entity.title }}
+                      </h3>
+                      <span
+                        class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800"
+                      >
+                        <svg
+                          class="w-3 h-3 mr-1"
+                          fill="currentColor"
+                          viewBox="0 0 20 20"
+                        >
+                          <path
+                            d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z"
+                          />
+                        </svg>
+                        Comparison
+                      </span>
+                    </div>
+                    <div class="text-sm text-gray-600 space-y-2">
+                      <div class="grid grid-cols-2 gap-4">
+                        <div class="space-y-1">
+                          <p class="font-medium text-gray-700">Video A:</p>
+                          <p class="truncate">{{ entity.video_a.title }}</p>
+                          <p class="text-xs text-gray-500">
+                            {{ formatDuration(entity.video_a.duration) }} •
+                            {{ entity.video_a.fps }} FPS
+                          </p>
+                        </div>
+                        <div class="space-y-1">
+                          <p class="font-medium text-gray-700">Video B:</p>
+                          <p class="truncate">{{ entity.video_b.title }}</p>
+                          <p class="text-xs text-gray-500">
+                            {{ formatDuration(entity.video_b.duration) }} •
+                            {{ entity.video_b.fps }} FPS
+                          </p>
+                        </div>
+                      </div>
+                      <div class="flex items-center space-x-4 pt-1">
+                        <span>
+                          <span class="font-medium">Annotations:</span>
+                          {{ getComparisonAnnotationCount(entity.id) }}
+                        </span>
+                        <span>
+                          <span class="font-medium">Created:</span>
+                          {{ formatDate(entity.created_at) }}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
                 <div class="ml-4 flex-shrink-0">
                   <button
-                    @click="removeVideo(video, $event)"
+                    @click="removeVideoEntity(entity, $event)"
                     class="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-all duration-200 group"
-                    title="Remove video"
+                    :title="
+                      isIndividualVideo(entity)
+                        ? 'Remove video'
+                        : 'Remove comparison'
+                    "
                   >
                     <svg
                       class="w-4 h-4"
@@ -491,7 +555,9 @@
 import { ref, computed, watch } from 'vue';
 import { VideoService } from '../services/videoService.ts';
 import { AnnotationService } from '../services/annotationService.ts';
+import { ComparisonVideoService } from '../services/comparisonVideoService.ts';
 import { useAuth } from '../composables/useAuth.ts';
+import { isComparisonVideo, isIndividualVideo } from '../types/database.ts';
 import VideoUpload from './VideoUpload.vue';
 
 // Props
@@ -508,24 +574,70 @@ const emit = defineEmits([
   'video-selected',
   'video-removed',
   'dual-videos-selected',
+  'comparison-video-selected',
 ]);
 
 // Composables
 const { user } = useAuth();
 
 // State
-const videos = ref([]);
+const videoEntities = ref([]); // Mixed array of videos and comparison videos
 const annotationCounts = ref({});
+const comparisonAnnotationCounts = ref({});
 const isLoading = ref(false);
 const error = ref(null);
 const activeTab = ref('previous');
 const selectedVideoA = ref(null);
 const selectedVideoB = ref(null);
+const comparisonTitle = ref('');
+const comparisonDescription = ref('');
+
+// Legacy support - computed property for backward compatibility
+const videos = computed(() =>
+  videoEntities.value.filter(VideoService.isIndividualVideo)
+);
 
 // Computed
 const getAnnotationCount = computed(() => {
-  return (videoId) => annotationCounts.value[videoId] || 0;
+  return (entityId) => annotationCounts.value[entityId] || 0;
 });
+
+const getComparisonAnnotationCount = computed(() => {
+  return (comparisonVideoId) =>
+    comparisonAnnotationCounts.value[comparisonVideoId] || 0;
+});
+
+const getIndividualAnnotationCount = computed(() => {
+  return (entity) => {
+    if (VideoService.isComparisonVideo(entity)) {
+      // For comparison videos, return combined count of individual video annotations
+      return getAnnotationCount.value(entity.id);
+    }
+    return getAnnotationCount.value(entity.id);
+  };
+});
+
+const canProceed = computed(() => {
+  return (
+    selectedVideoA.value &&
+    selectedVideoB.value &&
+    selectedVideoA.value.id !== selectedVideoB.value.id
+  );
+});
+
+const defaultTitle = computed(() => {
+  if (!selectedVideoA.value || !selectedVideoB.value) return '';
+  return `${selectedVideoA.value.title} vs ${selectedVideoB.value.title}`;
+});
+
+// Helper function to get unique key for video entities
+const getEntityKey = (entity) => {
+  // Use a prefix to distinguish between individual videos and comparison videos
+  if (VideoService.isComparisonVideo(entity)) {
+    return `comparison-${entity.id}`;
+  }
+  return `video-${entity.id}`;
+};
 
 // Methods
 const closeModal = () => {
@@ -543,44 +655,61 @@ const loadVideos = async () => {
 
   try {
     console.log(
-      '🎬 [LoadVideoModal] Loading videos for user:',
+      '🎬 [LoadVideoModal] Loading video entities for user:',
       user.value.email
     );
 
-    // Clear videos array before loading new ones
-    videos.value = [];
+    // Clear arrays before loading new ones
+    videoEntities.value = [];
     annotationCounts.value = {};
+    comparisonAnnotationCounts.value = {};
 
-    const userVideos = await VideoService.getUserVideos(user.value.id);
+    // Use the new unified VideoService method
+    const allEntities = await VideoService.getUserVideoEntities(user.value.id);
+    videoEntities.value = allEntities;
 
-    // Add deduplication logic to prevent duplicate videos
-    const uniqueVideos =
-      userVideos?.filter(
-        (video, index, arr) => arr.findIndex((v) => v.id === video.id) === index
-      ) || [];
-
-    videos.value = uniqueVideos;
-
-    // Load annotation counts for each video
-    const counts = {};
-    for (const video of videos.value) {
-      try {
-        const annotations = await AnnotationService.getVideoAnnotations(
-          video.id
-        );
-        counts[video.id] = annotations?.length || 0;
-      } catch (err) {
-        console.warn(`Failed to load annotations for video ${video.id}:`, err);
-        counts[video.id] = 0;
-      }
-    }
-    annotationCounts.value = counts;
+    // Load annotation counts for all entities
+    await loadAnnotationCounts();
   } catch (err) {
-    console.error('❌ [LoadVideoModal] Error loading videos:', err);
+    console.error('❌ [LoadVideoModal] Error loading video entities:', err);
     error.value = 'Failed to load videos. Please try again.';
   } finally {
     isLoading.value = false;
   }
+};
+
+// Load annotation counts for mixed entities
+const loadAnnotationCounts = async () => {
+  const counts = {};
+  const comparisonCounts = {};
+
+  for (const entity of videoEntities.value) {
+    try {
+      if (VideoService.isComparisonVideo(entity)) {
+        // Load comparison-specific annotations
+        const comparisonAnnotations =
+          await AnnotationService.getComparisonVideoAnnotations(entity.id);
+        comparisonCounts[entity.id] = comparisonAnnotations?.length || 0;
+
+        // Load individual video annotations for display (already loaded by service)
+        counts[entity.id] = entity.annotation_count || 0;
+      } else {
+        const annotations = await AnnotationService.getVideoAnnotations(
+          entity.id
+        );
+        counts[entity.id] = annotations?.length || 0;
+      }
+    } catch (err) {
+      console.warn(`Failed to load annotations for entity ${entity.id}:`, err);
+      counts[entity.id] = 0;
+      if (VideoService.isComparisonVideo(entity)) {
+        comparisonCounts[entity.id] = 0;
+      }
+    }
+  }
+
+  annotationCounts.value = counts;
+  comparisonAnnotationCounts.value = comparisonCounts;
 };
 
 const selectVideo = async (video) => {
@@ -730,6 +859,104 @@ const selectVideoB = (video) => {
   selectedVideoB.value = video;
 };
 
+// Mixed entity selection methods
+const selectVideoEntity = async (entity) => {
+  try {
+    // Use the new unified VideoService method
+    const result = await VideoService.loadVideoEntityWithAnnotations(entity);
+
+    if (result.type === 'comparison') {
+      emit('comparison-video-selected', {
+        comparisonVideo: result.comparisonVideo,
+        videoA: result.videoA,
+        videoB: result.videoB,
+        annotationsA: result.annotationsA,
+        annotationsB: result.annotationsB,
+        comparisonAnnotations: result.comparisonAnnotations,
+      });
+    } else {
+      emit('video-selected', {
+        video: result.video,
+        annotations: result.annotations,
+        videoMetadata: result.videoMetadata,
+      });
+    }
+
+    closeModal();
+  } catch (err) {
+    console.error('❌ [LoadVideoModal] Error loading video entity:', err);
+    error.value = 'Failed to load video. Please try again.';
+  }
+};
+
+// Save comparison video and enter comparison mode
+const saveAndCompareVideos = async () => {
+  if (!canProceed.value) {
+    error.value = 'Invalid video selection';
+    return;
+  }
+
+  try {
+    // Create comparison video
+    const comparisonVideo = await ComparisonVideoService.createComparisonVideo({
+      title: comparisonTitle.value || defaultTitle.value,
+      description: comparisonDescription.value,
+      video_a_id: selectedVideoA.value.id,
+      video_b_id: selectedVideoB.value.id,
+      video_a: selectedVideoA.value,
+      video_b: selectedVideoB.value,
+    });
+
+    // Load the comparison video (this will trigger dual video mode)
+    await selectVideoEntity(comparisonVideo);
+  } catch (err) {
+    console.error('❌ [LoadVideoModal] Failed to save comparison:', err);
+    error.value = 'Failed to save comparison. Please try again.';
+  }
+};
+
+// Remove video entity (individual or comparison)
+const removeVideoEntity = async (entity, event) => {
+  event.stopPropagation();
+
+  const entityType = VideoService.isComparisonVideo(entity)
+    ? 'comparison'
+    : 'video';
+  const confirmMessage = `Are you sure you want to remove "${entity.title}"? This action cannot be undone.`;
+
+  if (!confirm(confirmMessage)) {
+    return;
+  }
+
+  try {
+    // Use the new unified VideoService method
+    await VideoService.deleteVideoEntity(entity);
+
+    // Remove from local list
+    videoEntities.value = videoEntities.value.filter((e) => e.id !== entity.id);
+
+    // Remove from annotation counts
+    delete annotationCounts.value[entity.id];
+    if (VideoService.isComparisonVideo(entity)) {
+      delete comparisonAnnotationCounts.value[entity.id];
+    }
+
+    // Emit removal event
+    emit('video-removed', entity);
+  } catch (err) {
+    console.error(`❌ [LoadVideoModal] Error removing ${entityType}:`, err);
+    error.value = `Failed to remove ${entityType}. Please try again.`;
+  }
+};
+
+// Reset comparison video selection
+const resetComparisonSelection = () => {
+  selectedVideoA.value = null;
+  selectedVideoB.value = null;
+  comparisonTitle.value = '';
+  comparisonDescription.value = '';
+};
+
 const confirmDualVideoSelection = async () => {
   if (!selectedVideoA.value || !selectedVideoB.value) {
     return;
@@ -796,13 +1023,14 @@ watch(
   (newValue) => {
     if (newValue && user.value) {
       // Only load videos if the array is empty or if it's the first time opening
-      if (videos.value.length === 0) {
+      if (videoEntities.value.length === 0) {
         loadVideos();
       }
       // Reset to previous videos tab when modal opens
       activeTab.value = 'previous';
-      // Reset dual video selection
+      // Reset dual video selection and comparison selection
       resetDualVideoSelection();
+      resetComparisonSelection();
     }
   },
   { immediate: true }

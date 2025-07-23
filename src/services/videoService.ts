@@ -1,5 +1,12 @@
 import { supabase } from '../composables/useSupabase';
-import type { VideoInsert, VideoUpdate } from '../types/database';
+import type {
+  VideoInsert,
+  VideoUpdate,
+  Video,
+  ComparisonVideo,
+  VideoEntity,
+} from '../types/database';
+import { isComparisonVideo, isIndividualVideo } from '../types/database';
 import { VideoUploadService } from './videoUploadService';
 
 export class VideoService {
@@ -196,4 +203,217 @@ export class VideoService {
       if (error) throw error;
     }
   }
+
+  // Enhanced methods for unified video entity management
+
+  /**
+   * Get all video entities (individual videos + comparison videos) for a user
+   * Returns a unified list sorted by creation date
+   */
+  static async getUserVideoEntities(userId: string): Promise<VideoEntity[]> {
+    try {
+      console.log('🎬 [VideoService] Loading video entities for user:', userId);
+
+      // Load individual videos first
+      const individualVideos = await this.getUserVideos(userId);
+      console.log(
+        '🎬 [VideoService] Loaded individual videos:',
+        individualVideos?.length || 0
+      );
+
+      // Load comparison videos using direct Supabase query to avoid circular dependency
+      const { data: comparisonData, error: comparisonError } = await supabase
+        .from('comparison_videos')
+        .select(
+          `
+          *,
+          video_a:videos!comparison_videos_video_a_id_fkey(*),
+          video_b:videos!comparison_videos_video_b_id_fkey(*)
+        `
+        )
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (comparisonError) {
+        console.error(
+          '❌ [VideoService] Error loading comparison videos:',
+          comparisonError
+        );
+        // Don't throw, just continue with individual videos only
+      }
+
+      console.log(
+        '🎬 [VideoService] Loaded comparison videos:',
+        comparisonData?.length || 0
+      );
+
+      // Transform comparison videos to app format
+      const { transformDatabaseComparisonVideoToApp } = await import(
+        '../types/database'
+      );
+      const comparisonVideos =
+        comparisonData?.map((item) =>
+          transformDatabaseComparisonVideoToApp(
+            item,
+            item.video_a,
+            item.video_b
+          )
+        ) || [];
+
+      // Deduplicate individual videos (in case of duplicates)
+      const uniqueIndividualVideos =
+        individualVideos?.filter(
+          (video, index, arr) =>
+            arr.findIndex((v) => v.id === video.id) === index
+        ) || [];
+
+      // Merge and sort by creation date (newest first)
+      const allEntities: VideoEntity[] = [
+        ...uniqueIndividualVideos,
+        ...comparisonVideos,
+      ].sort(
+        (a, b) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+
+      console.log(
+        '🎬 [VideoService] Total entities loaded:',
+        allEntities.length
+      );
+      return allEntities;
+    } catch (error) {
+      console.error('❌ [VideoService] Error loading video entities:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get video entity by ID (works for both individual videos and comparison videos)
+   */
+  static async getVideoEntityById(
+    entityId: string
+  ): Promise<VideoEntity | null> {
+    try {
+      // First try to get as individual video
+      try {
+        const video = await this.getVideoById(entityId);
+        return video;
+      } catch (individualError) {
+        // If not found as individual video, try as comparison video
+        const { ComparisonVideoService } = await import(
+          './comparisonVideoService'
+        );
+        try {
+          const comparisonVideo =
+            await ComparisonVideoService.getComparisonVideoById(entityId);
+          return comparisonVideo;
+        } catch (comparisonError) {
+          console.warn(
+            `❌ [VideoService] Entity ${entityId} not found as individual or comparison video`
+          );
+          return null;
+        }
+      }
+    } catch (error) {
+      console.error('❌ [VideoService] Error loading video entity:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete video entity (works for both individual videos and comparison videos)
+   */
+  static async deleteVideoEntity(entity: VideoEntity): Promise<void> {
+    try {
+      if (isComparisonVideo(entity)) {
+        const { ComparisonVideoService } = await import(
+          './comparisonVideoService'
+        );
+        await ComparisonVideoService.deleteComparisonVideo(entity.id);
+      } else {
+        await this.deleteVideo(entity.id);
+      }
+    } catch (error) {
+      console.error('❌ [VideoService] Error deleting video entity:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Load video entity with annotations (handles both individual and comparison videos)
+   */
+  static async loadVideoEntityWithAnnotations(entity: VideoEntity) {
+    try {
+      const { AnnotationService } = await import('./annotationService');
+
+      if (isComparisonVideo(entity)) {
+        // Load comparison video with all related annotations
+        const [annotationsA, annotationsB, comparisonAnnotations] =
+          await Promise.all([
+            AnnotationService.getVideoAnnotations(entity.video_a_id),
+            AnnotationService.getVideoAnnotations(entity.video_b_id),
+            AnnotationService.getComparisonVideoAnnotations(entity.id),
+          ]);
+
+        return {
+          type: 'comparison' as const,
+          comparisonVideo: entity,
+          videoA: entity.video_a,
+          videoB: entity.video_b,
+          annotationsA: annotationsA || [],
+          annotationsB: annotationsB || [],
+          comparisonAnnotations: comparisonAnnotations || [],
+        };
+      } else {
+        // Load individual video with annotations
+        const annotations = await AnnotationService.getVideoAnnotations(
+          entity.id
+        );
+
+        return {
+          type: 'individual' as const,
+          video: entity,
+          annotations: annotations || [],
+          videoMetadata: {
+            existingVideo: entity,
+            videoType: entity.video_type,
+            title: entity.title,
+            fps: entity.fps,
+            duration: entity.duration,
+            totalFrames: entity.total_frames,
+          },
+        };
+      }
+    } catch (error) {
+      console.error(
+        '❌ [VideoService] Error loading video entity with annotations:',
+        error
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Get the most recent video entity (individual or comparison) for a user
+   */
+  static async getMostRecentVideoEntity(
+    userId: string
+  ): Promise<VideoEntity | null> {
+    try {
+      const entities = await this.getUserVideoEntities(userId);
+      return entities.length > 0 ? entities[0] : null;
+    } catch (error) {
+      console.error(
+        '❌ [VideoService] Error getting most recent video entity:',
+        error
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Type guard helper methods (re-exported for convenience)
+   */
+  static isComparisonVideo = isComparisonVideo;
+  static isIndividualVideo = isIndividualVideo;
 }

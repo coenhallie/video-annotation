@@ -14,6 +14,7 @@ import { useRealtimeAnnotations } from './composables/useRealtimeAnnotations.ts'
 import { useVideoSession } from './composables/useVideoSession.ts';
 import { useDrawingCanvas } from './composables/useDrawingCanvas.ts';
 import { useDualVideoPlayer } from './composables/useDualVideoPlayer.js';
+import { useComparisonVideoWorkflow } from './composables/useComparisonVideoWorkflow.ts';
 import { VideoService } from './services/videoService.ts';
 import { ShareService } from './services/shareService.ts';
 
@@ -86,6 +87,9 @@ const { startSession, endSession, isSessionActive } = useVideoSession(videoId);
 
 // Drawing functionality
 const drawingCanvas = useDrawingCanvas();
+
+// Comparison video workflow
+const comparisonWorkflow = useComparisonVideoWorkflow();
 
 watch(
   annotations,
@@ -354,6 +358,9 @@ const clearVideoState = () => {
   // Reset player mode to single
   playerMode.value = 'single';
   dualVideoPlayer = null;
+
+  // Reset comparison workflow
+  comparisonWorkflow.resetWorkflow();
 
   videoUrl.value = '';
   videoId.value = 'sample-video-1';
@@ -782,6 +789,125 @@ const handleDualVideosSelected = async (data) => {
   }
 };
 
+// Handle comparison video selection
+const handleComparisonVideoSelected = async (data) => {
+  const {
+    comparisonVideo,
+    videoA,
+    videoB,
+    annotationsA,
+    annotationsB,
+    comparisonAnnotations,
+  } = data;
+
+  console.log(
+    '🔄 [App] Loading comparison video:',
+    comparisonVideo.title,
+    'with videos:',
+    videoA.title,
+    'and',
+    videoB.title
+  );
+
+  try {
+    // Load the comparison video using the workflow
+    await comparisonWorkflow.loadComparisonVideo(comparisonVideo);
+
+    // Switch to dual mode
+    playerMode.value = 'dual';
+
+    // Initialize dual video player composable
+    dualVideoPlayer = useDualVideoPlayer();
+
+    // Set video URLs
+    dualVideoPlayer.videoAUrl.value = videoA.url;
+    dualVideoPlayer.videoBUrl.value = videoB.url;
+
+    // Set current video in session to represent comparison session
+    videoId.value = `comparison-${comparisonVideo.id}`;
+
+    // Use the longer duration for the timeline
+    const maxDuration = Math.max(videoA.duration, videoB.duration);
+    duration.value = maxDuration;
+    dualVideoPlayer.duration.value = maxDuration;
+
+    // Use the higher FPS for synchronization
+    const maxFps = Math.max(videoA.fps, videoB.fps);
+    fps.value = maxFps;
+    dualVideoPlayer.fps.value = maxFps;
+
+    // Calculate total frames based on max duration and FPS
+    totalFrames.value = Math.floor(maxDuration * maxFps);
+    dualVideoPlayer.totalFrames.value = totalFrames.value;
+
+    // Setup watchers to sync dual video player state with main App state
+    watch(dualVideoPlayer.currentTime, (newTime) => {
+      currentTime.value = newTime;
+    });
+
+    watch(dualVideoPlayer.currentFrame, (newFrame) => {
+      currentFrame.value = newFrame;
+    });
+
+    watch(dualVideoPlayer.isPlaying, (newIsPlaying) => {
+      isPlaying.value = newIsPlaying;
+    });
+
+    watch(dualVideoPlayer.duration, (newDuration) => {
+      if (newDuration > duration.value) {
+        duration.value = newDuration;
+      }
+    });
+
+    watch(dualVideoPlayer.totalFrames, (newTotalFrames) => {
+      totalFrames.value = newTotalFrames;
+    });
+
+    watch(dualVideoPlayer.fps, (newFps) => {
+      fps.value = newFps;
+    });
+
+    // Initialize video session for comparison mode
+    if (user.value) {
+      const video = await initializeVideo({
+        fps: maxFps,
+        duration: maxDuration,
+        totalFrames: totalFrames.value,
+      });
+
+      // Track the current video ID for sharing
+      if (video && video.id) {
+        currentVideoId.value = video.id;
+      }
+
+      await startSession();
+      setupPresenceTracking(user.value.id, user.value.email);
+    }
+
+    // Load all annotations from the comparison
+    // Note: The comparison workflow has already loaded the annotations,
+    // but we need to merge them for the main annotation system
+    const allAnnotations = [
+      ...annotationsA.map((ann) => ({ ...ann, videoContext: 'video_a' })),
+      ...annotationsB.map((ann) => ({ ...ann, videoContext: 'video_b' })),
+      ...comparisonAnnotations.map((ann) => ({
+        ...ann,
+        videoContext: 'comparison',
+      })),
+    ];
+
+    // Load the merged annotations
+    loadExistingAnnotations(allAnnotations);
+
+    // Close the modal
+    closeLoadModal();
+
+    console.log('✅ [App] Successfully loaded comparison video');
+  } catch (error) {
+    console.error('❌ [App] Error loading comparison video:', error);
+  }
+};
+
 // Share modal handlers
 const openShareModal = () => {
   if (currentVideoId.value) {
@@ -1188,6 +1314,7 @@ const checkForSharedVideo = async () => {
       @close="closeLoadModal"
       @video-selected="handleVideoSelected"
       @dual-videos-selected="handleDualVideosSelected"
+      @comparison-video-selected="handleComparisonVideoSelected"
     />
 
     <!-- Share Video Modal -->
