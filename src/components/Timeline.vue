@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, defineProps, defineEmits } from 'vue';
+import { ref, computed } from 'vue';
 
 const props = defineProps({
   currentTime: {
@@ -34,9 +34,13 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  playerMode: {
+    type: String,
+    default: 'single',
+  },
 });
 
-const emit = defineEmits(['seek-to-time', 'annotation-click']);
+const emit = defineEmits(['seek-to-time', 'annotation-click', 'play', 'pause']);
 
 const timelineRef = ref(null);
 const isDragging = ref(false);
@@ -138,6 +142,15 @@ const handleAnnotationClick = (annotation, event) => {
   emit('seek-to-time', annotation.timestamp);
 };
 
+// Play/pause button handlers
+const handlePlayPause = () => {
+  if (props.isPlaying) {
+    emit('pause');
+  } else {
+    emit('play');
+  }
+};
+
 // Optimized timeline markers - only create when needed
 const timeMarkers = computed(() => {
   if (!props.duration || props.duration < 60) return [];
@@ -159,6 +172,37 @@ const timeMarkers = computed(() => {
 
 <template>
   <div class="bg-gray-900 text-white p-6">
+    <!-- Play/Pause Controls (only show in dual mode) -->
+    <div
+      v-if="playerMode === 'dual'"
+      class="flex items-center justify-center mb-4"
+    >
+      <button
+        @click="handlePlayPause"
+        class="flex items-center justify-center w-12 h-12 bg-gray-800 hover:bg-gray-700 border border-gray-600 rounded-full transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-lg"
+        :title="isPlaying ? 'Pause' : 'Play'"
+      >
+        <!-- Play Icon -->
+        <svg
+          v-if="!isPlaying"
+          class="w-5 h-5 text-white ml-0.5"
+          fill="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path d="M8 5v14l11-7z" />
+        </svg>
+        <!-- Pause Icon -->
+        <svg
+          v-else
+          class="w-5 h-5 text-white"
+          fill="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+        </svg>
+      </button>
+    </div>
+
     <!-- Timeline Container (moved to top for priority) -->
     <div class="relative mb-4">
       <!-- Time Markers -->

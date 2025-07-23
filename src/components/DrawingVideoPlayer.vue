@@ -8,7 +8,7 @@
         :video-url="videoUrl"
         :video-id="videoId"
         :autoplay="false"
-        :controls="true"
+        :controls="controls"
         @time-update="handleTimeUpdate"
         @frame-update="handleFrameUpdate"
         @fps-detected="handleFpsDetected"
@@ -46,6 +46,7 @@ interface Props {
   videoId?: string;
   showDebugPanel?: boolean;
   drawingCanvas?: any;
+  controls?: boolean;
 }
 
 interface Emits {
@@ -65,6 +66,7 @@ const props = withDefaults(defineProps<Props>(), {
   videoUrl: '',
   videoId: 'test-video',
   showDebugPanel: true,
+  controls: true,
 });
 
 const emit = defineEmits<Emits>();
@@ -239,26 +241,68 @@ const importDrawings = () => {
 // Initialize
 onMounted(() => {
   // Add diagnostic logging
+  console.log('🎬 DrawingVideoPlayer mounted with props:', {
+    videoUrl: props.videoUrl,
+    videoId: props.videoId,
+    controls: props.controls,
+  });
+
   nextTick(() => {
     console.log(
-      'DrawingVideoPlayer - videoPlayerRef.value:',
+      '🎬 DrawingVideoPlayer nextTick - videoPlayerRef.value:',
       videoPlayerRef.value
     );
     console.log(
-      'DrawingVideoPlayer - videoPlayerRef.value type:',
+      '🎬 DrawingVideoPlayer nextTick - videoPlayerRef.value type:',
       typeof videoPlayerRef.value
     );
+
     if (videoPlayerRef.value) {
       console.log(
-        'DrawingVideoPlayer - videoPlayerRef.value.seekTo:',
+        '🎬 DrawingVideoPlayer - videoPlayerRef.value.seekTo:',
         videoPlayerRef.value.seekTo
       );
       console.log(
-        'DrawingVideoPlayer - videoPlayerRef.value.videoElement:',
+        '🎬 DrawingVideoPlayer - videoPlayerRef.value.videoElement:',
         videoPlayerRef.value.videoElement
+      );
+      console.log(
+        '🎬 DrawingVideoPlayer - videoPlayerRef.value.videoElement type:',
+        typeof videoPlayerRef.value.videoElement
+      );
+    } else {
+      console.warn(
+        '🎬 DrawingVideoPlayer - videoPlayerRef.value is null/undefined in nextTick'
       );
     }
   });
+
+  // Also check after longer delays to see when it becomes available
+  setTimeout(() => {
+    console.log(
+      '🎬 DrawingVideoPlayer 100ms delay - videoPlayerRef.value:',
+      videoPlayerRef.value
+    );
+    if (videoPlayerRef.value) {
+      console.log(
+        '🎬 DrawingVideoPlayer 100ms - videoElement:',
+        videoPlayerRef.value.videoElement
+      );
+    }
+  }, 100);
+
+  setTimeout(() => {
+    console.log(
+      '🎬 DrawingVideoPlayer 500ms delay - videoPlayerRef.value:',
+      videoPlayerRef.value
+    );
+    if (videoPlayerRef.value) {
+      console.log(
+        '🎬 DrawingVideoPlayer 500ms - videoElement:',
+        videoPlayerRef.value.videoElement
+      );
+    }
+  }, 500);
 });
 
 defineExpose({

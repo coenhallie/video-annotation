@@ -7,27 +7,37 @@ import LoadVideoModal from './components/LoadVideoModal.vue';
 import ShareModal from './components/ShareModal.vue';
 import NotificationToast from './components/NotificationToast.vue';
 import DrawingVideoPlayer from './components/DrawingVideoPlayer.vue';
+import DualVideoPlayer from './components/DualVideoPlayer.vue';
 import { useAuth } from './composables/useAuth.ts';
 import { useVideoAnnotations } from './composables/useVideoAnnotations.ts';
 import { useRealtimeAnnotations } from './composables/useRealtimeAnnotations.ts';
 import { useVideoSession } from './composables/useVideoSession.ts';
 import { useDrawingCanvas } from './composables/useDrawingCanvas.ts';
+import { useDualVideoPlayer } from './composables/useDualVideoPlayer.js';
 import { VideoService } from './services/videoService.ts';
 import { ShareService } from './services/shareService.ts';
 
 // Auth
 const { user, initAuth, signOut, isLoading } = useAuth();
 
-// Video URL management
+// Player mode management
+const playerMode = ref('single'); // 'single' or 'dual'
+
+// Single video state (existing)
 const videoUrl = ref('');
 const videoId = ref('sample-video-1');
 const urlInput = ref('');
+
+// Dual video player state
+let dualVideoPlayer = null;
+const dualVideoPlayerRef = ref(null);
 
 // Video state
 const currentTime = ref(0);
 const duration = ref(0);
 const isPlaying = ref(false);
 const videoDimensions = ref({ width: 1920, height: 1080 });
+const currentVideoType = ref(null); // Track the current video type for proper deduplication
 
 // Frame-based state
 const currentFrame = ref(0);
@@ -191,6 +201,7 @@ const handleLoaded = async () => {
       fps: fps.value,
       duration: duration.value,
       totalFrames: totalFrames.value,
+      videoType: currentVideoType.value, // Preserve video type for proper deduplication
     });
 
     // Track the current video ID for sharing
@@ -211,42 +222,48 @@ const handleLoaded = async () => {
 // Timeline event handlers
 const handleSeekToTime = (time) => {
   console.log('handleSeekToTime called with time:', time);
-  console.log(
-    'DEBUG - drawingVideoPlayerRef.value:',
-    drawingVideoPlayerRef.value
-  );
-  console.log(
-    'DEBUG - drawingVideoPlayerRef.value?.videoPlayerRef:',
-    drawingVideoPlayerRef.value?.videoPlayerRef
-  );
-  console.log(
-    'DEBUG - drawingVideoPlayerRef.value?.videoPlayerRef?.value:',
-    drawingVideoPlayerRef.value?.videoPlayerRef?.value
-  );
 
-  if (drawingVideoPlayerRef.value?.videoPlayerRef) {
-    console.log(
-      'DEBUG - videoPlayerRef type:',
-      typeof drawingVideoPlayerRef.value.videoPlayerRef
-    );
-    console.log(
-      'DEBUG - videoPlayerRef.seekTo:',
-      drawingVideoPlayerRef.value.videoPlayerRef.seekTo
-    );
-
-    if (drawingVideoPlayerRef.value.videoPlayerRef.seekTo) {
-      console.log(
-        'Calling drawingVideoPlayerRef.videoPlayerRef.seekTo with time:',
-        time
-      );
-      drawingVideoPlayerRef.value.videoPlayerRef.seekTo(time);
-    } else {
-      console.warn('seekTo method not found on videoPlayerRef');
-    }
+  if (playerMode.value === 'dual' && dualVideoPlayer) {
+    console.log('Seeking in dual mode');
+    dualVideoPlayer.syncSeek(time);
   } else {
-    console.warn(
-      'drawingVideoPlayerRef.value.videoPlayerRef is null, cannot seek'
+    console.log(
+      'DEBUG - drawingVideoPlayerRef.value:',
+      drawingVideoPlayerRef.value
     );
+    console.log(
+      'DEBUG - drawingVideoPlayerRef.value?.videoPlayerRef:',
+      drawingVideoPlayerRef.value?.videoPlayerRef
+    );
+    console.log(
+      'DEBUG - drawingVideoPlayerRef.value?.videoPlayerRef?.value:',
+      drawingVideoPlayerRef.value?.videoPlayerRef?.value
+    );
+
+    if (drawingVideoPlayerRef.value?.videoPlayerRef) {
+      console.log(
+        'DEBUG - videoPlayerRef type:',
+        typeof drawingVideoPlayerRef.value.videoPlayerRef
+      );
+      console.log(
+        'DEBUG - videoPlayerRef.seekTo:',
+        drawingVideoPlayerRef.value.videoPlayerRef.seekTo
+      );
+
+      if (drawingVideoPlayerRef.value.videoPlayerRef.seekTo) {
+        console.log(
+          'Calling drawingVideoPlayerRef.videoPlayerRef.seekTo with time:',
+          time
+        );
+        drawingVideoPlayerRef.value.videoPlayerRef.seekTo(time);
+      } else {
+        console.warn('seekTo method not found on videoPlayerRef');
+      }
+    } else {
+      console.warn(
+        'drawingVideoPlayerRef.value.videoPlayerRef is null, cannot seek'
+      );
+    }
   }
 };
 
@@ -262,20 +279,30 @@ const handleAnnotationClick = (annotation) => {
 
 // Timeline play/pause handlers
 const handleTimelinePlay = () => {
-  if (
-    drawingVideoPlayerRef.value?.videoPlayerRef?.value &&
-    drawingVideoPlayerRef.value.videoPlayerRef.play
-  ) {
-    drawingVideoPlayerRef.value.videoPlayerRef.value.play();
+  if (playerMode.value === 'dual' && dualVideoPlayer) {
+    console.log('Playing in dual mode');
+    dualVideoPlayer.syncPlay();
+  } else {
+    if (
+      drawingVideoPlayerRef.value?.videoPlayerRef?.value &&
+      drawingVideoPlayerRef.value.videoPlayerRef.play
+    ) {
+      drawingVideoPlayerRef.value.videoPlayerRef.value.play();
+    }
   }
 };
 
 const handleTimelinePause = () => {
-  if (
-    drawingVideoPlayerRef.value?.videoPlayerRef?.value &&
-    drawingVideoPlayerRef.value.videoPlayerRef.pause
-  ) {
-    drawingVideoPlayerRef.value.videoPlayerRef.value.pause();
+  if (playerMode.value === 'dual' && dualVideoPlayer) {
+    console.log('Pausing in dual mode');
+    dualVideoPlayer.syncPause();
+  } else {
+    if (
+      drawingVideoPlayerRef.value?.videoPlayerRef?.value &&
+      drawingVideoPlayerRef.value.videoPlayerRef.pause
+    ) {
+      drawingVideoPlayerRef.value.videoPlayerRef.value.pause();
+    }
   }
 };
 
@@ -323,6 +350,11 @@ onMounted(async () => {
 // Clear video state function
 const clearVideoState = () => {
   console.log('🧹 [App] Clearing video state for clean user separation');
+
+  // Reset player mode to single
+  playerMode.value = 'single';
+  dualVideoPlayer = null;
+
   videoUrl.value = '';
   videoId.value = 'sample-video-1';
   urlInput.value = '';
@@ -474,6 +506,10 @@ const loadVideoFromUrl = () => {
     console.log('🎬 [App] Setting new video URL:', newUrl);
     console.log('🎬 [App] Previous video URL:', videoUrl.value);
 
+    // Ensure we're in single mode
+    playerMode.value = 'single';
+    dualVideoPlayer = null;
+
     videoUrl.value = newUrl;
     // Extract video ID from URL for better identification
     const urlParts = newUrl.split('/');
@@ -505,13 +541,40 @@ const closeLoadModal = () => {
 };
 
 const handleVideoSelected = async (data) => {
-  const { video, annotations: loadedAnnotations } = data;
+  const { video, annotations: loadedAnnotations, videoMetadata } = data;
 
   console.log('🎬 [App] Loading selected video:', video.title);
   console.log('🎬 [App] With annotations:', loadedAnnotations.length);
+  console.log('🐛 [DEBUG] Selected video object:', {
+    id: video.id,
+    title: video.title,
+    url: video.url,
+    video_id: video.video_id,
+    video_type: video.video_type,
+    file_path: video.file_path,
+    original_filename: video.original_filename,
+  });
+  console.log('🐛 [DEBUG] Video metadata:', videoMetadata);
 
   try {
+    // Ensure we're in single mode
+    playerMode.value = 'single';
+    dualVideoPlayer = null;
+
     // Update video state
+    console.log(
+      '🐛 [DEBUG] Setting videoUrl from:',
+      videoUrl.value,
+      'to:',
+      video.url
+    );
+    console.log(
+      '🐛 [DEBUG] Setting videoId from:',
+      videoId.value,
+      'to:',
+      video.video_id
+    );
+
     videoUrl.value = video.url;
     urlInput.value = video.url;
     videoId.value = video.video_id;
@@ -521,12 +584,34 @@ const handleVideoSelected = async (data) => {
     duration.value = video.duration;
     totalFrames.value = video.total_frames;
 
-    // Initialize video with loaded data
+    // Store the video type for use in handleLoaded
+    currentVideoType.value = videoMetadata?.videoType || video.video_type;
+
+    console.log(
+      '🐛 [DEBUG] About to call initializeVideo with videoUrl:',
+      videoUrl.value,
+      'videoId:',
+      videoId.value,
+      'videoMetadata:',
+      videoMetadata,
+      'currentVideoType:',
+      currentVideoType.value
+    );
+
+    // Initialize video with loaded data and metadata
     if (user.value) {
       const videoRecord = await initializeVideo({
         fps: video.fps,
         duration: video.duration,
         totalFrames: video.total_frames,
+        // Pass the video metadata to preserve type and existing record
+        ...videoMetadata,
+      });
+
+      console.log('🐛 [DEBUG] initializeVideo returned:', {
+        id: videoRecord?.id,
+        url: videoRecord?.url,
+        video_type: videoRecord?.video_type,
       });
 
       // Track the current video ID for sharing
@@ -575,6 +660,128 @@ const handleSharedVideoSelected = async (data) => {
   }
 };
 
+// Handle dual video selection
+const handleDualVideosSelected = async (data) => {
+  const { videoA, videoB } = data;
+
+  console.log(
+    '🎬🎬 [App] Loading dual videos:',
+    videoA.title,
+    'and',
+    videoB.title
+  );
+
+  // 🐛 DEBUG: Log video objects to trace URL assignment
+  console.log('🐛 [DEBUG] VideoA object:', {
+    id: videoA.id,
+    title: videoA.title,
+    url: videoA.url,
+    video_type: videoA.video_type,
+    file_path: videoA.file_path,
+    original_filename: videoA.original_filename,
+  });
+  console.log('🐛 [DEBUG] VideoB object:', {
+    id: videoB.id,
+    title: videoB.title,
+    url: videoB.url,
+    video_type: videoB.video_type,
+    file_path: videoB.file_path,
+    original_filename: videoB.original_filename,
+  });
+
+  try {
+    // Switch to dual mode
+    playerMode.value = 'dual';
+
+    // Initialize dual video player composable
+    dualVideoPlayer = useDualVideoPlayer();
+
+    // Set video URLs
+    console.log('🐛 [DEBUG] Setting videoA URL:', videoA.url);
+    console.log('🐛 [DEBUG] Setting videoB URL:', videoB.url);
+    dualVideoPlayer.videoAUrl.value = videoA.url;
+    dualVideoPlayer.videoBUrl.value = videoB.url;
+
+    // 🐛 DEBUG: Verify URLs were set correctly
+    console.log(
+      '🐛 [DEBUG] VideoA URL after assignment:',
+      dualVideoPlayer.videoAUrl.value
+    );
+    console.log(
+      '🐛 [DEBUG] VideoB URL after assignment:',
+      dualVideoPlayer.videoBUrl.value
+    );
+
+    // Set current video in session to represent dual session
+    videoId.value = `dual-${videoA.video_id}-${videoB.video_id}`;
+
+    // Use the longer duration for the timeline
+    const maxDuration = Math.max(videoA.duration, videoB.duration);
+    duration.value = maxDuration;
+    dualVideoPlayer.duration.value = maxDuration;
+
+    // Use the higher FPS for synchronization
+    const maxFps = Math.max(videoA.fps, videoB.fps);
+    fps.value = maxFps;
+    dualVideoPlayer.fps.value = maxFps;
+
+    // Calculate total frames based on max duration and FPS
+    totalFrames.value = Math.floor(maxDuration * maxFps);
+    dualVideoPlayer.totalFrames.value = totalFrames.value;
+
+    // Setup watchers to sync dual video player state with main App state
+    watch(dualVideoPlayer.currentTime, (newTime) => {
+      currentTime.value = newTime;
+    });
+
+    watch(dualVideoPlayer.currentFrame, (newFrame) => {
+      currentFrame.value = newFrame;
+    });
+
+    watch(dualVideoPlayer.isPlaying, (newIsPlaying) => {
+      isPlaying.value = newIsPlaying;
+    });
+
+    watch(dualVideoPlayer.duration, (newDuration) => {
+      if (newDuration > duration.value) {
+        duration.value = newDuration;
+      }
+    });
+
+    watch(dualVideoPlayer.totalFrames, (newTotalFrames) => {
+      totalFrames.value = newTotalFrames;
+    });
+
+    watch(dualVideoPlayer.fps, (newFps) => {
+      fps.value = newFps;
+    });
+
+    // Initialize video session for dual mode
+    if (user.value) {
+      const video = await initializeVideo({
+        fps: maxFps,
+        duration: maxDuration,
+        totalFrames: totalFrames.value,
+      });
+
+      // Track the current video ID for sharing
+      if (video && video.id) {
+        currentVideoId.value = video.id;
+      }
+
+      await startSession();
+      setupPresenceTracking(user.value.id, user.value.email);
+    }
+
+    // Close the modal
+    closeLoadModal();
+
+    console.log('✅ [App] Successfully loaded dual videos');
+  } catch (error) {
+    console.error('❌ [App] Error loading dual videos:', error);
+  }
+};
+
 // Share modal handlers
 const openShareModal = () => {
   if (currentVideoId.value) {
@@ -596,12 +803,17 @@ const handleDrawingCreated = async (drawing) => {
   drawingCanvas.addDrawing(drawing);
 
   // If this drawing was created from the annotation panel, forward it to the annotation panel
+  // and DO NOT create a separate annotation - let the annotation panel handle it
   if (isAnnotationFormVisible.value && annotationPanelRef.value) {
-    console.log('🎨 [App] Forwarding drawing to annotation panel');
+    console.log(
+      '🎨 [App] Forwarding drawing to annotation panel - no auto-save'
+    );
     // Forward the drawing to the annotation panel
     if (annotationPanelRef.value.onDrawingCreated) {
       annotationPanelRef.value.onDrawingCreated(drawing);
     }
+    // Return early to prevent duplicate annotation creation
+    return;
   } else {
     // Convert drawing to annotation and save it to Supabase (only when drawing outside annotation form)
     console.log('🎨 [App] Auto-creating annotation for drawing outside form');
@@ -639,6 +851,20 @@ const handleDrawingUpdated = (drawing) => {
 const handleDrawingDeleted = (drawingId) => {
   console.log('Drawing deleted:', drawingId);
   // Handle drawing deletion if needed
+};
+
+// Video swap handler for dual mode
+const handleSwapVideos = () => {
+  if (playerMode.value === 'dual' && dualVideoPlayer) {
+    console.log('🔄 [App] Swapping videos in dual mode');
+    dualVideoPlayer.swapVideos();
+  }
+};
+
+// Handle dual video loaded events
+const handleDualVideoLoaded = () => {
+  console.log('✅ [App] Dual video loaded');
+  // Additional logic if needed when dual videos are loaded
 };
 
 // Check for shared video on load
@@ -739,6 +965,28 @@ const checkForSharedVideo = async () => {
               </svg>
             </button>
 
+            <!-- Swap Videos Button (only visible in dual mode) -->
+            <button
+              v-if="playerMode === 'dual'"
+              @click="handleSwapVideos"
+              class="p-2 text-gray-600 hover:text-blue-600 hover:bg-gray-50 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              title="Swap videos"
+            >
+              <svg
+                class="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+                ></path>
+              </svg>
+            </button>
+
             <div class="relative flex-1">
               <input
                 v-model="urlInput"
@@ -826,8 +1074,9 @@ const checkForSharedVideo = async () => {
       <section class="flex-1 flex flex-col bg-black min-w-0 overflow-hidden">
         <div class="flex-1 flex items-center justify-center p-6">
           <div class="relative">
-            <!-- Drawing Video Player -->
+            <!-- Single Video Player -->
             <DrawingVideoPlayer
+              v-if="playerMode === 'single'"
               ref="drawingVideoPlayerRef"
               :video-url="videoUrl"
               :video-id="videoId"
@@ -841,20 +1090,65 @@ const checkForSharedVideo = async () => {
               @drawing-updated="handleDrawingUpdated"
               @drawing-deleted="handleDrawingDeleted"
             />
+
+            <!-- Dual Video Player -->
+            <DualVideoPlayer
+              v-else-if="playerMode === 'dual'"
+              ref="dualVideoPlayerRef"
+              :video-a-url="dualVideoPlayer?.videoAUrl.value"
+              :video-a-id="dualVideoPlayer?.videoAUrl.value ? 'video-a' : ''"
+              :video-b-url="dualVideoPlayer?.videoBUrl.value"
+              :video-b-id="dualVideoPlayer?.videoBUrl.value ? 'video-b' : ''"
+              :drawing-canvas-a="drawingCanvas"
+              :drawing-canvas-b="drawingCanvas"
+              :video-a-state="dualVideoPlayer?.videoAState"
+              :video-b-state="dualVideoPlayer?.videoBState"
+              :dual-video-player="dualVideoPlayer"
+              @time-update="handleTimeUpdate"
+              @frame-update="handleFrameUpdate"
+              @fps-detected="handleFPSDetected"
+              @video-a-loaded="handleDualVideoLoaded"
+              @video-b-loaded="handleDualVideoLoaded"
+            />
           </div>
         </div>
 
         <!-- Timeline -->
         <div class="bg-gray-900 p-4 border-t border-gray-800">
           <Timeline
-            :current-time="currentTime"
-            :duration="duration"
-            :current-frame="currentFrame"
-            :total-frames="totalFrames"
-            :fps="fps"
+            :current-time="
+              playerMode === 'dual' && dualVideoPlayer
+                ? dualVideoPlayer.currentTime.value
+                : currentTime
+            "
+            :duration="
+              playerMode === 'dual' && dualVideoPlayer
+                ? dualVideoPlayer.duration.value
+                : duration
+            "
+            :current-frame="
+              playerMode === 'dual' && dualVideoPlayer
+                ? dualVideoPlayer.currentFrame.value
+                : currentFrame
+            "
+            :total-frames="
+              playerMode === 'dual' && dualVideoPlayer
+                ? dualVideoPlayer.totalFrames.value
+                : totalFrames
+            "
+            :fps="
+              playerMode === 'dual' && dualVideoPlayer
+                ? dualVideoPlayer.fps.value
+                : fps
+            "
             :annotations="annotations"
             :selected-annotation="selectedAnnotation"
-            :is-playing="isPlaying"
+            :is-playing="
+              playerMode === 'dual' && dualVideoPlayer
+                ? dualVideoPlayer.isPlaying.value
+                : isPlaying
+            "
+            :player-mode="playerMode"
             @seek-to-time="handleSeekToTime"
             @annotation-click="handleAnnotationClick"
             @play="handleTimelinePlay"
@@ -893,6 +1187,7 @@ const checkForSharedVideo = async () => {
       :is-visible="isLoadModalVisible"
       @close="closeLoadModal"
       @video-selected="handleVideoSelected"
+      @dual-videos-selected="handleDualVideosSelected"
     />
 
     <!-- Share Video Modal -->

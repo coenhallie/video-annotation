@@ -9,6 +9,14 @@ export class VideoService {
       videoData
     );
 
+    console.log('🐛 [DEBUG] VideoService.createVideo called with:', {
+      url: videoData.url,
+      video_id: videoData.video_id,
+      video_type: videoData.video_type,
+      owner_id: videoData.owner_id,
+      title: videoData.title,
+    });
+
     // For uploaded videos, always create new records (no deduplication)
     if (videoData.video_type === 'upload') {
       console.log('🔍 [VideoService] Creating new uploaded video record');
@@ -33,6 +41,12 @@ export class VideoService {
     }
 
     // For URL videos, check for existing videos by URL and owner
+    console.log('🐛 [DEBUG] Checking for existing URL video with:', {
+      url: videoData.url,
+      owner_id: videoData.owner_id,
+      video_type: 'url',
+    });
+
     const { data: existingVideo } = await supabase
       .from('videos')
       .select('*')
@@ -41,11 +55,20 @@ export class VideoService {
       .eq('video_type', 'url')
       .single();
 
+    console.log('🐛 [DEBUG] Existing video query result:', existingVideo);
+
     if (existingVideo) {
       console.log(
         '🔍 [VideoService] Found existing URL video, updating:',
         existingVideo.id
       );
+      console.log('🐛 [DEBUG] Existing video details:', {
+        id: existingVideo.id,
+        url: existingVideo.url,
+        video_id: existingVideo.video_id,
+        video_type: existingVideo.video_type,
+      });
+
       // Update existing video with new data
       const { data, error } = await supabase
         .from('videos')
@@ -65,6 +88,12 @@ export class VideoService {
         throw error;
       }
       console.log('✅ [VideoService] Successfully updated video:', data);
+      console.log('🐛 [DEBUG] Updated video details:', {
+        id: data.id,
+        url: data.url,
+        video_id: data.video_id,
+        video_type: data.video_type,
+      });
       return data;
     }
 
@@ -89,6 +118,12 @@ export class VideoService {
       throw error;
     }
     console.log('✅ [VideoService] Successfully created video:', data);
+    console.log('🐛 [DEBUG] New video details:', {
+      id: data.id,
+      url: data.url,
+      video_id: data.video_id,
+      video_type: data.video_type,
+    });
     return data;
   }
 

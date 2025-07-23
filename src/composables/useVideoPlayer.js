@@ -299,6 +299,16 @@ export function useVideoPlayer() {
   const handleKeydown = (event) => {
     if (!playerRef.value) return;
 
+    // Only handle keyboard shortcuts if no input/textarea is focused
+    const activeElement = document.activeElement;
+    if (
+      activeElement?.tagName === 'INPUT' ||
+      activeElement?.tagName === 'TEXTAREA' ||
+      activeElement?.contentEditable === 'true'
+    ) {
+      return;
+    }
+
     switch (event.code) {
       case 'Space':
         event.preventDefault();

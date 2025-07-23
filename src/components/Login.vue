@@ -32,6 +32,12 @@ const handleAuth = async () => {
 <template>
   <div class="flex items-center justify-center min-h-screen bg-gray-100">
     <div class="w-full max-w-md p-8 space-y-6 bg-white rounded-lg shadow-md">
+      <div class="text-center space-y-2">
+        <h1 class="text-3xl font-bold text-gray-800">Video Annotation</h1>
+        <p class="text-sm text-gray-600">
+          Collaborative video analysis platform
+        </p>
+      </div>
       <h2 class="text-2xl font-bold text-center">
         {{ isSigningUp ? 'Sign Up' : 'Sign In' }}
       </h2>

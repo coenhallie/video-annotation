@@ -4,6 +4,7 @@ import {
   onMounted,
   onUnmounted,
   watch,
+  nextTick,
   defineProps,
   defineEmits,
 } from 'vue';
@@ -92,6 +93,40 @@ const isExternalSeeking = ref(false);
 onMounted(() => {
   // Start listening for keyboard shortcuts
   startListening();
+
+  // DIAGNOSTIC: Log VideoPlayer mounting
+  console.log('📹 VideoPlayer mounted with props:', {
+    videoUrl: props.videoUrl,
+    videoId: props.videoId,
+    autoplay: props.autoplay,
+    controls: props.controls,
+  });
+
+  nextTick(() => {
+    console.log(
+      '📹 VideoPlayer nextTick - videoElement.value:',
+      videoElement.value
+    );
+    console.log(
+      '📹 VideoPlayer nextTick - videoElement.value type:',
+      typeof videoElement.value
+    );
+  });
+
+  // Check after delays
+  setTimeout(() => {
+    console.log(
+      '📹 VideoPlayer 100ms - videoElement.value:',
+      videoElement.value
+    );
+  }, 100);
+
+  setTimeout(() => {
+    console.log(
+      '📹 VideoPlayer 500ms - videoElement.value:',
+      videoElement.value
+    );
+  }, 500);
 });
 
 onUnmounted(() => {
@@ -103,8 +138,13 @@ onUnmounted(() => {
 watch(
   videoElement,
   (video) => {
+    console.log('📹 VideoPlayer watch - videoElement changed:', video);
+    console.log('📹 VideoPlayer watch - video type:', typeof video);
+    console.log('📹 VideoPlayer watch - video tagName:', video?.tagName);
+
     if (video) {
       playerRef.value = video;
+      console.log('📹 VideoPlayer - playerRef.value set to:', playerRef.value);
 
       // Add event listeners for native video events
       video.addEventListener('timeupdate', () => {
@@ -201,7 +241,13 @@ const handleVolumeChange = (event) => {
 // Keyboard shortcuts
 const handleKeyDown = (event) => {
   // Only handle if the player container is focused or if no input is focused
-  if (document.activeElement?.tagName === 'INPUT') return;
+  const activeElement = document.activeElement;
+  if (
+    activeElement?.tagName === 'INPUT' ||
+    activeElement?.tagName === 'TEXTAREA' ||
+    activeElement?.contentEditable === 'true'
+  )
+    return;
 
   switch (event.code) {
     case 'Space':
@@ -401,23 +447,6 @@ defineExpose({
 
           <!-- Speed controls -->
           <div class="flex items-center space-x-2 md:flex hidden">
-            <button
-              @click="decreaseSpeed"
-              class="p-2 rounded-md hover:bg-white/10 transition-colors duration-200"
-              :aria-label="'Decrease speed'"
-              :disabled="playbackSpeed <= 0.25"
-            >
-              <svg
-                class="icon"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-              >
-                <polygon points="11,19 2,12 11,5 11,19"></polygon>
-                <polygon points="22,19 13,12 22,5 22,19"></polygon>
-              </svg>
-            </button>
-
             <div class="relative">
               <select
                 :value="playbackSpeed"
@@ -425,6 +454,7 @@ defineExpose({
                 class="bg-white/10 text-white text-sm px-2 py-1 rounded border-none outline-none cursor-pointer hover:bg-white/20 transition-colors duration-200"
                 :aria-label="'Playback speed: ' + playbackSpeed + 'x'"
               >
+                <option value="0.1" class="bg-gray-800 text-white">0.1x</option>
                 <option value="0.25" class="bg-gray-800 text-white">
                   0.25x
                 </option>
@@ -437,23 +467,6 @@ defineExpose({
                 <option value="2" class="bg-gray-800 text-white">2x</option>
               </select>
             </div>
-
-            <button
-              @click="increaseSpeed"
-              class="p-2 rounded-md hover:bg-white/10 transition-colors duration-200"
-              :aria-label="'Increase speed'"
-              :disabled="playbackSpeed >= 2"
-            >
-              <svg
-                class="icon"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-              >
-                <polygon points="13,19 22,12 13,5 13,19"></polygon>
-                <polygon points="2,19 11,12 2,5 2,19"></polygon>
-              </svg>
-            </button>
           </div>
         </div>
       </div>

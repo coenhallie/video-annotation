@@ -2,6 +2,7 @@ import { ref, readonly, toValue, watch } from 'vue';
 import { VideoService } from '../services/videoService';
 import { AnnotationService } from '../services/annotationService';
 import { useAuth } from './useAuth';
+import { supabase } from './useSupabase';
 import {
   transformDatabaseAnnotationToApp,
   transformAppAnnotationToDatabase,
@@ -34,17 +35,77 @@ export function useVideoAnnotations(videoUrl, videoId) {
     try {
       isLoading.value = true;
 
+      console.log(
+        '🐛 [DEBUG] useVideoAnnotations.initializeVideo called with:',
+        {
+          videoUrl: toValue(videoUrl),
+          videoId: toValue(videoId),
+          videoData,
+          currentUser: toValue(user)?.email,
+        }
+      );
+
+      // If we have an existing video record (for uploaded videos), use it directly
+      if (videoData.existingVideo) {
+        console.log(
+          '🐛 [DEBUG] Using existing video record:',
+          videoData.existingVideo.id
+        );
+        currentVideo.value = videoData.existingVideo;
+        await loadAnnotations();
+        return videoData.existingVideo;
+      }
+
+      // For uploaded videos, check if a video with this URL already exists as an upload
+      if (videoData.videoType === 'upload') {
+        console.log(
+          '🐛 [DEBUG] Checking for existing uploaded video with URL:',
+          toValue(videoUrl)
+        );
+
+        // Use VideoService to check for existing uploaded video
+        const { data: existingUploadedVideo } = await supabase
+          .from('videos')
+          .select('*')
+          .eq('url', toValue(videoUrl))
+          .eq('owner_id', toValue(user).id)
+          .eq('video_type', 'upload')
+          .single();
+
+        if (existingUploadedVideo) {
+          console.log(
+            '🐛 [DEBUG] Found existing uploaded video, using it:',
+            existingUploadedVideo.id
+          );
+          currentVideo.value = existingUploadedVideo;
+          await loadAnnotations();
+          return existingUploadedVideo;
+        }
+      }
+
+      // Only create new video record if no existing video was found
+      console.log(
+        '🐛 [DEBUG] No existing video found, creating new video record'
+      );
+
       // Create or update video record (handles duplicates automatically)
       const video = await VideoService.createVideo({
         owner_id: toValue(user).id,
-        title: `Video ${new Date().toLocaleDateString()}`,
+        title: videoData.title || `Video ${new Date().toLocaleDateString()}`,
         url: toValue(videoUrl),
         video_id: toValue(videoId),
-        video_type: 'url',
+        video_type: videoData.videoType || 'url',
         fps: videoData.fps || 30,
         duration: videoData.duration || 0,
         total_frames: videoData.totalFrames || 0,
         is_public: false,
+      });
+
+      console.log('🐛 [DEBUG] VideoService.createVideo returned:', {
+        videoId: video.id,
+        videoUrl: video.url,
+        videoType: video.video_type,
+        title: video.title,
       });
 
       currentVideo.value = video;
@@ -52,6 +113,7 @@ export function useVideoAnnotations(videoUrl, videoId) {
       // Load annotations for this video
       await loadAnnotations();
     } catch (err) {
+      console.error('🐛 [DEBUG] Error in initializeVideo:', err);
       error.value = err.message;
     } finally {
       isLoading.value = false;

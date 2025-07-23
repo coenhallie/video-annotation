@@ -60,6 +60,17 @@
           >
             Upload New Video
           </button>
+          <button
+            @click="activeTab = 'compare'"
+            :class="[
+              'py-4 px-1 border-b-2 font-medium text-sm transition-colors',
+              activeTab === 'compare'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300',
+            ]"
+          >
+            Compare Videos
+          </button>
         </nav>
       </div>
 
@@ -226,12 +237,245 @@
             @upload-error="handleUploadError"
           />
         </div>
+
+        <!-- Compare Videos Tab -->
+        <div v-else-if="activeTab === 'compare'">
+          <!-- Loading State -->
+          <div v-if="isLoading" class="flex items-center justify-center py-12">
+            <div
+              class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"
+            ></div>
+            <span class="ml-3 text-gray-600">Loading your videos...</span>
+          </div>
+
+          <!-- Error State -->
+          <div v-else-if="error" class="text-center py-12">
+            <div class="text-red-600 mb-2">
+              <svg
+                class="w-12 h-12 mx-auto"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"
+                ></path>
+              </svg>
+            </div>
+            <p class="text-gray-600">{{ error }}</p>
+            <button
+              @click="loadVideos"
+              class="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            >
+              Try Again
+            </button>
+          </div>
+
+          <!-- Empty State -->
+          <div v-else-if="videos.length === 0" class="text-center py-12">
+            <div class="text-gray-400 mb-4">
+              <svg
+                class="w-16 h-16 mx-auto"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                ></path>
+              </svg>
+            </div>
+            <h3 class="text-lg font-medium text-gray-900 mb-2">
+              No videos found
+            </h3>
+            <p class="text-gray-600">You need at least 2 videos to compare.</p>
+          </div>
+
+          <!-- Dual Video Selection -->
+          <div v-else-if="videos.length < 2" class="text-center py-12">
+            <div class="text-yellow-500 mb-4">
+              <svg
+                class="w-16 h-16 mx-auto"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"
+                ></path>
+              </svg>
+            </div>
+            <h3 class="text-lg font-medium text-gray-900 mb-2">
+              Not enough videos
+            </h3>
+            <p class="text-gray-600">
+              You need at least 2 videos to compare. Upload more videos first.
+            </p>
+          </div>
+
+          <!-- Video Selection Interface -->
+          <div v-else class="space-y-6">
+            <div class="text-center mb-6">
+              <h3 class="text-lg font-medium text-gray-900 mb-2">
+                Select Two Videos to Compare
+              </h3>
+              <p class="text-gray-600">
+                Choose videos to view side-by-side for comparison.
+              </p>
+            </div>
+
+            <!-- Video A Selection -->
+            <div class="space-y-3">
+              <label class="block text-sm font-medium text-gray-700">
+                Video A (Left Side)
+              </label>
+              <div
+                class="grid grid-cols-1 gap-3 max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-3"
+              >
+                <div
+                  v-for="video in videos"
+                  :key="`a-${video.id}`"
+                  class="border border-gray-200 rounded-lg p-3 cursor-pointer transition-all"
+                  :class="[
+                    selectedVideoA?.id === video.id
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'hover:border-blue-300 hover:shadow-sm',
+                    selectedVideoB?.id === video.id
+                      ? 'opacity-50 cursor-not-allowed'
+                      : '',
+                  ]"
+                  @click="selectVideoA(video)"
+                >
+                  <div class="flex items-center justify-between">
+                    <div class="flex-1">
+                      <div class="flex items-center gap-2 mb-1">
+                        <h4 class="font-medium text-gray-900 text-sm">
+                          {{ video.title }}
+                        </h4>
+                        <span
+                          v-if="video.video_type === 'upload'"
+                          class="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"
+                        >
+                          Uploaded
+                        </span>
+                        <span
+                          v-else
+                          class="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                        >
+                          URL
+                        </span>
+                      </div>
+                      <div class="text-xs text-gray-600">
+                        {{ formatDuration(video.duration) }} •
+                        {{ video.fps }} FPS
+                      </div>
+                    </div>
+                    <div v-if="selectedVideoA?.id === video.id" class="ml-2">
+                      <svg
+                        class="w-5 h-5 text-blue-600"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path
+                          fill-rule="evenodd"
+                          d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                          clip-rule="evenodd"
+                        ></path>
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Video B Selection -->
+            <div class="space-y-3">
+              <label class="block text-sm font-medium text-gray-700">
+                Video B (Right Side)
+              </label>
+              <div
+                class="grid grid-cols-1 gap-3 max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-3"
+              >
+                <div
+                  v-for="video in videos"
+                  :key="`b-${video.id}`"
+                  class="border border-gray-200 rounded-lg p-3 cursor-pointer transition-all"
+                  :class="[
+                    selectedVideoB?.id === video.id
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'hover:border-blue-300 hover:shadow-sm',
+                    selectedVideoA?.id === video.id
+                      ? 'opacity-50 cursor-not-allowed'
+                      : '',
+                  ]"
+                  @click="selectVideoB(video)"
+                >
+                  <div class="flex items-center justify-between">
+                    <div class="flex-1">
+                      <div class="flex items-center gap-2 mb-1">
+                        <h4 class="font-medium text-gray-900 text-sm">
+                          {{ video.title }}
+                        </h4>
+                        <span
+                          v-if="video.video_type === 'upload'"
+                          class="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"
+                        >
+                          Uploaded
+                        </span>
+                        <span
+                          v-else
+                          class="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                        >
+                          URL
+                        </span>
+                      </div>
+                      <div class="text-xs text-gray-600">
+                        {{ formatDuration(video.duration) }} •
+                        {{ video.fps }} FPS
+                      </div>
+                    </div>
+                    <div v-if="selectedVideoB?.id === video.id" class="ml-2">
+                      <svg
+                        class="w-5 h-5 text-blue-600"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path
+                          fill-rule="evenodd"
+                          d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                          clip-rule="evenodd"
+                        ></path>
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Modal Footer -->
       <div
         class="flex items-center justify-end space-x-3 p-6 border-t border-gray-200 bg-gray-50"
       >
+        <!-- Compare Button (only shown in compare tab when both videos are selected) -->
+        <button
+          v-if="activeTab === 'compare' && selectedVideoA && selectedVideoB"
+          @click="confirmDualVideoSelection"
+          class="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+        >
+          Compare Selected Videos
+        </button>
         <button
           @click="closeModal"
           class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
@@ -259,7 +503,12 @@ const props = defineProps({
 });
 
 // Emits
-const emit = defineEmits(['close', 'video-selected', 'video-removed']);
+const emit = defineEmits([
+  'close',
+  'video-selected',
+  'video-removed',
+  'dual-videos-selected',
+]);
 
 // Composables
 const { user } = useAuth();
@@ -270,6 +519,8 @@ const annotationCounts = ref({});
 const isLoading = ref(false);
 const error = ref(null);
 const activeTab = ref('previous');
+const selectedVideoA = ref(null);
+const selectedVideoB = ref(null);
 
 // Computed
 const getAnnotationCount = computed(() => {
@@ -284,6 +535,9 @@ const closeModal = () => {
 const loadVideos = async () => {
   if (!user.value) return;
 
+  // Prevent multiple simultaneous loads
+  if (isLoading.value) return;
+
   isLoading.value = true;
   error.value = null;
 
@@ -292,8 +546,20 @@ const loadVideos = async () => {
       '🎬 [LoadVideoModal] Loading videos for user:',
       user.value.email
     );
+
+    // Clear videos array before loading new ones
+    videos.value = [];
+    annotationCounts.value = {};
+
     const userVideos = await VideoService.getUserVideos(user.value.id);
-    videos.value = userVideos || [];
+
+    // Add deduplication logic to prevent duplicate videos
+    const uniqueVideos =
+      userVideos?.filter(
+        (video, index, arr) => arr.findIndex((v) => v.id === video.id) === index
+      ) || [];
+
+    videos.value = uniqueVideos;
 
     // Load annotation counts for each video
     const counts = {};
@@ -327,10 +593,19 @@ const selectVideo = async (video) => {
     // Load annotations for the selected video
     const annotations = await AnnotationService.getVideoAnnotations(video.id);
 
-    // Emit the selected video and its annotations
+    // Emit the selected video and its annotations with complete metadata
     emit('video-selected', {
       video,
       annotations: annotations || [],
+      // Pass additional metadata for the annotation system
+      videoMetadata: {
+        existingVideo: video, // Pass the complete existing video record
+        videoType: video.video_type, // Preserve the original video type
+        title: video.title,
+        fps: video.fps,
+        duration: video.duration,
+        totalFrames: video.total_frames,
+      },
     });
 
     closeModal();
@@ -410,10 +685,19 @@ const handleUploadSuccess = async (videoRecord) => {
       videoRecord.id
     );
 
-    // Emit the uploaded video and its annotations
+    // Emit the uploaded video and its annotations with complete metadata
     emit('video-selected', {
       video: videoRecord,
       annotations: annotations || [],
+      // Pass additional metadata for the annotation system
+      videoMetadata: {
+        existingVideo: videoRecord, // Pass the complete existing video record
+        videoType: videoRecord.video_type, // Preserve the original video type (should be 'upload')
+        title: videoRecord.title,
+        fps: videoRecord.fps,
+        duration: videoRecord.duration,
+        totalFrames: videoRecord.total_frames,
+      },
     });
 
     closeModal();
@@ -431,14 +715,94 @@ const handleUploadError = (uploadError) => {
   error.value = uploadError.message || 'Upload failed. Please try again.';
 };
 
+// Dual video selection methods
+const selectVideoA = (video) => {
+  if (selectedVideoB.value?.id === video.id) {
+    return; // Can't select the same video for both A and B
+  }
+  selectedVideoA.value = video;
+};
+
+const selectVideoB = (video) => {
+  if (selectedVideoA.value?.id === video.id) {
+    return; // Can't select the same video for both A and B
+  }
+  selectedVideoB.value = video;
+};
+
+const confirmDualVideoSelection = async () => {
+  if (!selectedVideoA.value || !selectedVideoB.value) {
+    return;
+  }
+
+  try {
+    console.log(
+      '🎬 [LoadVideoModal] Loading dual videos and annotations:',
+      selectedVideoA.value.title,
+      'and',
+      selectedVideoB.value.title
+    );
+
+    // 🐛 DEBUG: Log selected video objects before emitting
+    console.log('🐛 [DEBUG] Selected VideoA:', {
+      id: selectedVideoA.value.id,
+      title: selectedVideoA.value.title,
+      url: selectedVideoA.value.url,
+      video_type: selectedVideoA.value.video_type,
+      file_path: selectedVideoA.value.file_path,
+      original_filename: selectedVideoA.value.original_filename,
+    });
+    console.log('🐛 [DEBUG] Selected VideoB:', {
+      id: selectedVideoB.value.id,
+      title: selectedVideoB.value.title,
+      url: selectedVideoB.value.url,
+      video_type: selectedVideoB.value.video_type,
+      file_path: selectedVideoB.value.file_path,
+      original_filename: selectedVideoB.value.original_filename,
+    });
+
+    // Load annotations for both selected videos
+    const [annotationsA, annotationsB] = await Promise.all([
+      AnnotationService.getVideoAnnotations(selectedVideoA.value.id),
+      AnnotationService.getVideoAnnotations(selectedVideoB.value.id),
+    ]);
+
+    // Emit the dual video selection event
+    emit('dual-videos-selected', {
+      videoA: selectedVideoA.value,
+      videoB: selectedVideoB.value,
+      annotationsA: annotationsA || [],
+      annotationsB: annotationsB || [],
+    });
+
+    closeModal();
+  } catch (err) {
+    console.error(
+      '❌ [LoadVideoModal] Error loading dual video annotations:',
+      err
+    );
+    error.value = 'Failed to load video annotations. Please try again.';
+  }
+};
+
+const resetDualVideoSelection = () => {
+  selectedVideoA.value = null;
+  selectedVideoB.value = null;
+};
+
 // Watch for modal visibility changes
 watch(
   () => props.isVisible,
   (newValue) => {
     if (newValue && user.value) {
-      loadVideos();
+      // Only load videos if the array is empty or if it's the first time opening
+      if (videos.value.length === 0) {
+        loadVideos();
+      }
       // Reset to previous videos tab when modal opens
       activeTab.value = 'previous';
+      // Reset dual video selection
+      resetDualVideoSelection();
     }
   },
   { immediate: true }
