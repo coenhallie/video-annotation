@@ -9,6 +9,7 @@
         :video-id="videoId"
         :autoplay="false"
         :controls="controls"
+        :show-loading-indicator="showLoadingIndicator"
         @time-update="handleTimeUpdate"
         @frame-update="handleFrameUpdate"
         @fps-detected="handleFpsDetected"
@@ -47,6 +48,7 @@ interface Props {
   showDebugPanel?: boolean;
   drawingCanvas?: any;
   controls?: boolean;
+  showLoadingIndicator?: boolean;
 }
 
 interface Emits {
@@ -67,6 +69,7 @@ const props = withDefaults(defineProps<Props>(), {
   videoId: 'test-video',
   showDebugPanel: true,
   controls: true,
+  showLoadingIndicator: true,
 });
 
 const emit = defineEmits<Emits>();

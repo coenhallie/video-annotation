@@ -8,7 +8,12 @@ import {
   transformAppAnnotationToDatabase,
 } from '../types/database';
 
-export function useVideoAnnotations(videoUrl, videoId) {
+export function useVideoAnnotations(
+  videoUrl,
+  videoId,
+  projectId,
+  comparisonVideoId
+) {
   const { user } = useAuth();
 
   // State
@@ -16,6 +21,7 @@ export function useVideoAnnotations(videoUrl, videoId) {
   const annotations = ref([]);
   const isLoading = ref(false);
   const error = ref(null);
+  const isComparisonContext = ref(false);
 
   // Watch for user changes and reload annotations if we have a current video
   watch(user, async (newUser, oldUser) => {
@@ -35,6 +41,9 @@ export function useVideoAnnotations(videoUrl, videoId) {
     try {
       isLoading.value = true;
 
+      // Check if we're in a comparison context
+      isComparisonContext.value = !!toValue(comparisonVideoId);
+
       console.log(
         '🐛 [DEBUG] useVideoAnnotations.initializeVideo called with:',
         {
@@ -42,6 +51,8 @@ export function useVideoAnnotations(videoUrl, videoId) {
           videoId: toValue(videoId),
           videoData,
           currentUser: toValue(user)?.email,
+          comparisonVideoId: toValue(comparisonVideoId),
+          isComparisonContext: isComparisonContext.value,
         }
       );
 
@@ -108,7 +119,12 @@ export function useVideoAnnotations(videoUrl, videoId) {
         title: video.title,
       });
 
+      console.log('🐛 [DEBUG] Setting currentVideo.value to:', video);
       currentVideo.value = video;
+      console.log(
+        '🐛 [DEBUG] currentVideo.value after setting:',
+        currentVideo.value
+      );
 
       // Load annotations for this video
       await loadAnnotations();
@@ -131,11 +147,31 @@ export function useVideoAnnotations(videoUrl, videoId) {
     }
 
     try {
-      const dbAnnotations = await AnnotationService.getVideoAnnotations(
-        currentVideo.value.id
-      );
+      let dbAnnotations;
 
-      annotations.value = dbAnnotations.map(transformDatabaseAnnotationToApp);
+      if (isComparisonContext.value && toValue(comparisonVideoId)) {
+        // In comparison context, load only comparison-specific annotations
+        console.log(
+          '🔍 [DEBUG] Loading comparison-specific annotations for:',
+          toValue(comparisonVideoId)
+        );
+        dbAnnotations = await AnnotationService.getComparisonVideoAnnotations(
+          toValue(comparisonVideoId)
+        );
+        // These are already transformed by the service
+        annotations.value = dbAnnotations;
+      } else {
+        // In individual video context, load individual video annotations
+        console.log(
+          '🔍 [DEBUG] Loading individual video annotations for:',
+          currentVideo.value.id
+        );
+        dbAnnotations = await AnnotationService.getVideoAnnotations(
+          currentVideo.value.id,
+          toValue(projectId)
+        );
+        annotations.value = dbAnnotations.map(transformDatabaseAnnotationToApp);
+      }
     } catch (err) {
       error.value = err.message;
     }
@@ -147,22 +183,57 @@ export function useVideoAnnotations(videoUrl, videoId) {
     }
 
     try {
-      const dbAnnotation = transformAppAnnotationToDatabase(
-        annotationData,
-        currentVideo.value.id,
-        toValue(user).id
+      console.log(
+        '🐛 [DEBUG] addAnnotation - currentVideo.value:',
+        currentVideo.value
+      );
+      console.log(
+        '🐛 [DEBUG] addAnnotation - isComparisonContext:',
+        isComparisonContext.value
       );
 
-      const newAnnotation = await AnnotationService.createAnnotation(
-        dbAnnotation
-      );
+      let newAnnotation;
 
-      const appAnnotation = transformDatabaseAnnotationToApp(newAnnotation);
+      if (isComparisonContext.value && toValue(comparisonVideoId)) {
+        // In comparison context, create comparison-specific annotation
+        console.log(
+          '🐛 [DEBUG] addAnnotation - creating comparison annotation for:',
+          toValue(comparisonVideoId)
+        );
 
-      annotations.value.push(appAnnotation);
+        newAnnotation = await AnnotationService.createComparisonAnnotation(
+          toValue(comparisonVideoId),
+          annotationData,
+          toValue(user).id,
+          'comparison',
+          undefined, // synchronizedFrame
+          toValue(projectId)
+        );
+      } else {
+        // In individual video context, create individual video annotation
+        console.log(
+          '🐛 [DEBUG] addAnnotation - creating individual annotation for:',
+          currentVideo.value.id
+        );
+
+        const dbAnnotation = transformAppAnnotationToDatabase(
+          annotationData,
+          currentVideo.value.id,
+          toValue(user).id,
+          toValue(projectId)
+        );
+
+        const createdAnnotation = await AnnotationService.createAnnotation(
+          dbAnnotation
+        );
+
+        newAnnotation = transformDatabaseAnnotationToApp(createdAnnotation);
+      }
+
+      annotations.value.push(newAnnotation);
       annotations.value.sort((a, b) => a.timestamp - b.timestamp);
 
-      return appAnnotation;
+      return newAnnotation;
     } catch (err) {
       error.value = err.message;
       throw err;
@@ -256,6 +327,7 @@ export function useVideoAnnotations(videoUrl, videoId) {
     annotations: readonly(annotations),
     isLoading: readonly(isLoading),
     error: readonly(error),
+    isComparisonContext: readonly(isComparisonContext),
     initializeVideo,
     loadAnnotations,
     loadExistingAnnotations,

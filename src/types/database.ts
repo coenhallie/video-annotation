@@ -65,72 +65,22 @@ export interface DatabaseAnnotation {
   id: string;
   video_id: string;
   user_id: string;
+  // project_id?: string; // Removed: column doesn't exist in database
   content: string;
   title: string;
   severity: SeverityLevel;
   color: string;
   timestamp: number;
-  frame: number;
-  start_frame: number; // For point-in-time annotations, same as frame
-  end_frame?: number; // Optional for ranged annotations
+  frame?: number;
+  start_frame: number;
+  end_frame?: number;
+  duration: number;
+  duration_frames: number;
   annotation_type: AnnotationType;
   drawing_data?: DrawingData;
   metadata?: Record<string, any>;
-  // Comparison video support
-  comparison_video_id?: string;
-  video_context?: VideoContext;
-  synchronized_frame?: number;
   created_at: string;
   updated_at: string;
-}
-
-export interface DatabaseVideoSession {
-  id: string;
-  video_id: string;
-  user_id: string;
-  session_name?: string;
-  is_active: boolean;
-  last_accessed: string;
-  created_at: string;
-}
-
-export interface DatabaseVideoShare {
-  id: string;
-  video_id: string;
-  shared_by_user_id: string;
-  shared_with_user_id: string;
-  permission_level: PermissionLevel;
-  is_active: boolean;
-  expires_at?: string;
-  created_at: string;
-}
-
-export interface DatabaseAnnotationComment {
-  id: string;
-  annotation_id: string;
-  user_id: string;
-  content: string;
-  parent_comment_id?: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface DatabaseUserPreferences {
-  id: string;
-  user_id: string;
-  preferences: Record<string, any>;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface DatabaseAnnotationHistory {
-  id: string;
-  annotation_id: string;
-  user_id: string;
-  action_type: ActionType;
-  old_data?: Record<string, any>;
-  new_data?: Record<string, any>;
-  created_at: string;
 }
 
 export interface DatabaseComparisonVideo {
@@ -144,8 +94,6 @@ export interface DatabaseComparisonVideo {
   fps?: number;
   total_frames?: number;
   thumbnail_url?: string;
-  thumbnail_a_url?: string;
-  thumbnail_b_url?: string;
   thumbnail_layout?: string;
   created_at: string;
   updated_at: string;
@@ -186,15 +134,6 @@ export interface Video {
   updated_at: string;
 }
 
-export interface VideoSession {
-  id: string;
-  video_id: string;
-  user_id: string;
-  session_name?: string;
-  is_active: boolean;
-  last_accessed: string;
-}
-
 // Application interface for comparison videos
 export interface ComparisonVideo {
   id: string;
@@ -207,8 +146,6 @@ export interface ComparisonVideo {
   fps?: number;
   total_frames?: number;
   thumbnail_url?: string;
-  thumbnail_a_url?: string;
-  thumbnail_b_url?: string;
   thumbnail_layout?: string;
   created_at: string;
   updated_at: string;
@@ -220,13 +157,6 @@ export interface ComparisonVideo {
   // Computed properties
   annotation_count?: number;
   comparison_annotation_count?: number;
-}
-
-// Extended annotation interface for comparison videos
-export interface ComparisonAnnotation extends Annotation {
-  comparison_video_id?: string;
-  video_context?: VideoContext;
-  synchronized_frame?: number;
 }
 
 // Union type for mixed video lists (individual + comparison)
@@ -254,41 +184,6 @@ export interface Database {
         Update: Partial<
           Omit<DatabaseAnnotation, 'id' | 'created_at' | 'updated_at'>
         >;
-      };
-      video_sessions: {
-        Row: DatabaseVideoSession;
-        Insert: Omit<DatabaseVideoSession, 'id' | 'created_at'>;
-        Update: Partial<Omit<DatabaseVideoSession, 'id' | 'created_at'>>;
-      };
-      video_shares: {
-        Row: DatabaseVideoShare;
-        Insert: Omit<DatabaseVideoShare, 'id' | 'created_at'>;
-        Update: Partial<Omit<DatabaseVideoShare, 'id' | 'created_at'>>;
-      };
-      annotation_comments: {
-        Row: DatabaseAnnotationComment;
-        Insert: Omit<
-          DatabaseAnnotationComment,
-          'id' | 'created_at' | 'updated_at'
-        >;
-        Update: Partial<
-          Omit<DatabaseAnnotationComment, 'id' | 'created_at' | 'updated_at'>
-        >;
-      };
-      user_preferences: {
-        Row: DatabaseUserPreferences;
-        Insert: Omit<
-          DatabaseUserPreferences,
-          'id' | 'created_at' | 'updated_at'
-        >;
-        Update: Partial<
-          Omit<DatabaseUserPreferences, 'id' | 'created_at' | 'updated_at'>
-        >;
-      };
-      annotation_history: {
-        Row: DatabaseAnnotationHistory;
-        Insert: Omit<DatabaseAnnotationHistory, 'id' | 'created_at'>;
-        Update: never; // History records should not be updated
       };
       comparison_videos: {
         Row: DatabaseComparisonVideo;
@@ -381,11 +276,13 @@ export function transformDatabaseAnnotationToApp(
 export function transformAppAnnotationToDatabase(
   appAnnotation: Annotation,
   video_id: string,
-  user_id: string
+  user_id: string,
+  project_id?: string
 ): AnnotationInsert {
   const result = {
     video_id,
     user_id,
+    // project_id, // Removed: column doesn't exist in database
     content: appAnnotation.content,
     title: appAnnotation.title,
     severity: appAnnotation.severity,
@@ -394,6 +291,8 @@ export function transformAppAnnotationToDatabase(
     frame: appAnnotation.frame,
     start_frame: appAnnotation.frame, // For point-in-time annotations, start_frame equals frame
     end_frame: appAnnotation.frame, // For point-in-time annotations, end_frame equals frame
+    duration: 0, // Default duration for point-in-time annotations
+    duration_frames: 1, // Default duration_frames for point-in-time annotations
     annotation_type: appAnnotation.annotationType,
     drawing_data: appAnnotation.drawingData,
   };
@@ -439,6 +338,17 @@ export function transformDatabaseComparisonVideoToApp(
   videoA?: Video,
   videoB?: Video
 ): ComparisonVideo {
+  // Calculate duration and fps from videos if not available in comparison
+  const duration =
+    dbComparisonVideo.duration ||
+    (videoA && videoB ? Math.max(videoA.duration, videoB.duration) : undefined);
+  const fps = dbComparisonVideo.fps || (videoA ? videoA.fps : undefined);
+  const total_frames =
+    dbComparisonVideo.total_frames ||
+    (videoA && videoB
+      ? Math.max(videoA.total_frames, videoB.total_frames)
+      : undefined);
+
   return {
     id: dbComparisonVideo.id,
     user_id: dbComparisonVideo.user_id,
@@ -446,12 +356,10 @@ export function transformDatabaseComparisonVideoToApp(
     description: dbComparisonVideo.description,
     video_a_id: dbComparisonVideo.video_a_id,
     video_b_id: dbComparisonVideo.video_b_id,
-    duration: dbComparisonVideo.duration,
-    fps: dbComparisonVideo.fps,
-    total_frames: dbComparisonVideo.total_frames,
+    duration,
+    fps,
+    total_frames,
     thumbnail_url: dbComparisonVideo.thumbnail_url,
-    thumbnail_a_url: dbComparisonVideo.thumbnail_a_url,
-    thumbnail_b_url: dbComparisonVideo.thumbnail_b_url,
     thumbnail_layout: dbComparisonVideo.thumbnail_layout,
     created_at: dbComparisonVideo.created_at,
     updated_at: dbComparisonVideo.updated_at,
@@ -474,8 +382,6 @@ export function transformAppComparisonVideoToDatabase(
     fps: appComparisonVideo.fps,
     total_frames: appComparisonVideo.total_frames,
     thumbnail_url: appComparisonVideo.thumbnail_url,
-    thumbnail_a_url: appComparisonVideo.thumbnail_a_url,
-    thumbnail_b_url: appComparisonVideo.thumbnail_b_url,
     thumbnail_layout: appComparisonVideo.thumbnail_layout || 'side-by-side',
   };
 }
@@ -487,11 +393,13 @@ export function transformAppAnnotationToComparisonDatabase(
   user_id: string,
   comparison_video_id?: string,
   video_context: VideoContext = 'individual',
-  synchronized_frame?: number
+  synchronized_frame?: number,
+  project_id?: string
 ): AnnotationInsert {
   const result = {
     video_id,
     user_id,
+    // project_id, // Removed: column doesn't exist in database
     content: appAnnotation.content,
     title: appAnnotation.title,
     severity: appAnnotation.severity,
@@ -500,11 +408,11 @@ export function transformAppAnnotationToComparisonDatabase(
     frame: appAnnotation.frame,
     start_frame: appAnnotation.frame,
     end_frame: appAnnotation.frame,
+    duration: 0, // Default duration for point-in-time annotations
+    duration_frames: 1, // Default duration_frames for point-in-time annotations
     annotation_type: appAnnotation.annotationType,
     drawing_data: appAnnotation.drawingData,
-    comparison_video_id,
-    video_context,
-    synchronized_frame,
+    // Note: comparison_video_id, video_context, synchronized_frame are not supported in current database schema
   };
 
   return result;

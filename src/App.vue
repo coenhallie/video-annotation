@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, watch, computed } from 'vue';
 import Timeline from './components/Timeline.vue';
 import AnnotationPanel from './components/AnnotationPanel.vue';
 import Login from './components/Login.vue';
@@ -16,7 +16,28 @@ import { useDrawingCanvas } from './composables/useDrawingCanvas.ts';
 import { useDualVideoPlayer } from './composables/useDualVideoPlayer.js';
 import { useComparisonVideoWorkflow } from './composables/useComparisonVideoWorkflow.ts';
 import { VideoService } from './services/videoService.ts';
+import { AnnotationService } from './services/annotationService.ts';
 import { ShareService } from './services/shareService.ts';
+import { supabase } from './composables/useSupabase';
+
+// Helper function to get the correct video URL
+const getVideoUrl = (video) => {
+  // If the video has a URL, use it
+  if (video.url && video.url.trim() !== '') {
+    return video.url;
+  }
+
+  // If it's an uploaded video with a file_path, generate the public URL
+  if (video.video_type === 'upload' && video.file_path) {
+    const { data } = supabase.storage
+      .from('videos')
+      .getPublicUrl(video.file_path);
+    return data.publicUrl;
+  }
+
+  // Fallback to empty string
+  return '';
+};
 
 // Auth
 const { user, initAuth, signOut, isLoading } = useAuth();
@@ -54,7 +75,17 @@ const {
   initializeVideo,
   loadAnnotations,
   loadExistingAnnotations,
-} = useVideoAnnotations(videoUrl, videoId);
+  isComparisonContext,
+} = useVideoAnnotations(
+  videoUrl,
+  videoId,
+  null,
+  computed(
+    () =>
+      playerMode.value === 'dual' &&
+      comparisonWorkflow.currentComparison.value?.id
+  )
+);
 
 // Selected annotation
 const selectedAnnotation = ref(null);
@@ -83,7 +114,8 @@ const sharedVideoData = ref(null);
 // Real-time features
 const { isConnected, activeUsers, setupPresenceTracking } =
   useRealtimeAnnotations(videoId, annotations);
-const { startSession, endSession, isSessionActive } = useVideoSession(videoId);
+const { startSession, endSession, isSessionActive } =
+  useVideoSession(currentVideoId);
 
 // Drawing functionality
 const drawingCanvas = useDrawingCanvas();
@@ -547,6 +579,89 @@ const closeLoadModal = () => {
   isLoadModalVisible.value = false;
 };
 
+// Handle project selection (unified handler for single and dual video projects)
+const handleProjectSelected = async (project) => {
+  console.log(
+    '🎬 [App] Project selected:',
+    project.title,
+    'Type:',
+    project.project_type
+  );
+
+  try {
+    if (project.project_type === 'single') {
+      // Handle single video project
+      const video = project.video;
+
+      // Load annotations for the video
+      const annotations = await AnnotationService.getVideoAnnotations(video.id);
+
+      // Create the data structure expected by handleVideoSelected
+      const videoData = {
+        video,
+        annotations: annotations || [],
+        videoMetadata: {
+          existingVideo: video,
+          videoType: video.video_type,
+          title: video.title,
+          fps: video.fps,
+          duration: video.duration,
+          totalFrames: video.total_frames,
+        },
+      };
+
+      // Call the existing single video handler
+      await handleVideoSelected(videoData);
+    } else if (project.project_type === 'dual') {
+      // Handle dual video project
+      const videoA = project.video_a;
+      const videoB = project.video_b;
+
+      // DEBUG: Log the project structure and video objects
+      console.log('🐛 [DEBUG] Dual project selected:', {
+        id: project.id,
+        title: project.title,
+        project_type: project.project_type,
+      });
+      console.log('🐛 [DEBUG] project.video_a:', {
+        id: videoA?.id,
+        title: videoA?.title,
+        url: videoA?.url,
+        video_type: videoA?.video_type,
+        file_path: videoA?.file_path,
+      });
+      console.log('🐛 [DEBUG] project.video_b:', {
+        id: videoB?.id,
+        title: videoB?.title,
+        url: videoB?.url,
+        video_type: videoB?.video_type,
+        file_path: videoB?.file_path,
+      });
+
+      // Load annotations for both videos
+      const [annotationsA, annotationsB] = await Promise.all([
+        AnnotationService.getVideoAnnotations(videoA.id),
+        AnnotationService.getVideoAnnotations(videoB.id),
+      ]);
+
+      // Create the data structure expected by handleComparisonVideoSelected
+      const comparisonData = {
+        comparisonVideo: project.comparison_video,
+        videoA,
+        videoB,
+        annotationsA: annotationsA || [],
+        annotationsB: annotationsB || [],
+        comparisonAnnotations: [], // Will be loaded by the handler
+      };
+
+      // Call the existing comparison video handler
+      await handleComparisonVideoSelected(comparisonData);
+    }
+  } catch (err) {
+    console.error('❌ [App] Error handling project selection:', err);
+  }
+};
+
 const handleVideoSelected = async (data) => {
   const { video, annotations: loadedAnnotations, videoMetadata } = data;
 
@@ -819,9 +934,13 @@ const handleComparisonVideoSelected = async (data) => {
     // Initialize dual video player composable
     dualVideoPlayer = useDualVideoPlayer();
 
+    // Get the correct URLs using the helper function
+    const videoAUrl = getVideoUrl(videoA);
+    const videoBUrl = getVideoUrl(videoB);
+
     // Set video URLs
-    dualVideoPlayer.videoAUrl.value = videoA.url;
-    dualVideoPlayer.videoBUrl.value = videoB.url;
+    dualVideoPlayer.videoAUrl.value = videoAUrl;
+    dualVideoPlayer.videoBUrl.value = videoBUrl;
 
     // Set current video in session to represent comparison session
     videoId.value = `comparison-${comparisonVideo.id}`;
@@ -884,20 +1003,12 @@ const handleComparisonVideoSelected = async (data) => {
       setupPresenceTracking(user.value.id, user.value.email);
     }
 
-    // Load all annotations from the comparison
-    // Note: The comparison workflow has already loaded the annotations,
-    // but we need to merge them for the main annotation system
-    const allAnnotations = [
-      ...annotationsA.map((ann) => ({ ...ann, videoContext: 'video_a' })),
-      ...annotationsB.map((ann) => ({ ...ann, videoContext: 'video_b' })),
-      ...comparisonAnnotations.map((ann) => ({
-        ...ann,
-        videoContext: 'comparison',
-      })),
-    ];
-
-    // Load the merged annotations
-    loadExistingAnnotations(allAnnotations);
+    // In comparison mode, annotations are handled by the comparison workflow
+    // The useVideoAnnotations composable will automatically load comparison-specific annotations
+    // when isComparisonContext is true, so we don't need to manually load them here
+    console.log(
+      '🔍 [App] Comparison context detected, annotations will be loaded by useVideoAnnotations'
+    );
 
     // Close the modal
     closeLoadModal();
@@ -1042,106 +1153,72 @@ const checkForSharedVideo = async () => {
           Accio Video Annotation
         </h1>
 
-        <!-- URL Input Section (only for authenticated users) -->
-        <div
-          v-if="user && !isSharedVideo"
-          class="flex items-center space-x-3 max-w-2xl"
-        >
-          <div class="flex items-center space-x-4">
-            <!-- Load Previous Videos Button -->
-            <button
-              @click="openLoadModal"
-              class="p-2 text-gray-600 hover:text-green-600 hover:bg-gray-50 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-              title="Load previous video"
+        <!-- Action Buttons (only for authenticated users) -->
+        <div v-if="user && !isSharedVideo" class="flex items-center space-x-4">
+          <!-- Load Previous Videos Button -->
+          <button
+            @click="openLoadModal"
+            class="p-2 text-gray-600 hover:text-green-600 hover:bg-gray-50 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+            title="Load video"
+          >
+            <svg
+              class="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
             >
-              <svg
-                class="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
-                ></path>
-              </svg>
-            </button>
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+              ></path>
+            </svg>
+          </button>
 
-            <!-- Share Video Button -->
-            <button
-              @click="openShareModal"
-              :disabled="!currentVideoId"
-              class="p-2 text-gray-600 hover:text-purple-600 hover:bg-gray-50 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:text-gray-300 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-              title="Share current video"
+          <!-- Share Video Button -->
+          <button
+            @click="openShareModal"
+            :disabled="!currentVideoId"
+            class="p-2 text-gray-600 hover:text-purple-600 hover:bg-gray-50 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:text-gray-300 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+            title="Share current video"
+          >
+            <svg
+              class="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
             >
-              <svg
-                class="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z"
-                ></path>
-              </svg>
-            </button>
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z"
+              ></path>
+            </svg>
+          </button>
 
-            <!-- Swap Videos Button (only visible in dual mode) -->
-            <button
-              v-if="playerMode === 'dual'"
-              @click="handleSwapVideos"
-              class="p-2 text-gray-600 hover:text-blue-600 hover:bg-gray-50 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-              title="Swap videos"
+          <!-- Swap Videos Button (only visible in dual mode) -->
+          <button
+            v-if="playerMode === 'dual'"
+            @click="handleSwapVideos"
+            class="p-2 text-gray-600 hover:text-blue-600 hover:bg-gray-50 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            title="Swap videos"
+          >
+            <svg
+              class="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
             >
-              <svg
-                class="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
-                ></path>
-              </svg>
-            </button>
-
-            <div class="relative flex-1">
-              <input
-                v-model="urlInput"
-                type="url"
-                placeholder="Enter video URL..."
-                class="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm min-w-96"
-                @keypress="handleUrlKeyPress"
-              />
-              <button
-                @click="loadVideoFromUrl"
-                class="absolute right-2 top-1/2 transform -translate-y-1/2 p-1 text-gray-400 hover:text-blue-600 transition-colors"
-                title="Load video"
-              >
-                <svg
-                  class="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h1m4 0h1m6-10V4a2 2 0 00-2-2H5a2 2 0 00-2 2v16l4-2 4 2 4-2 4 2V4z"
-                  ></path>
-                </svg>
-              </button>
-            </div>
-          </div>
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+              ></path>
+            </svg>
+          </button>
         </div>
 
         <!-- Shared Video Info -->
@@ -1312,9 +1389,7 @@ const checkForSharedVideo = async () => {
     <LoadVideoModal
       :is-visible="isLoadModalVisible"
       @close="closeLoadModal"
-      @video-selected="handleVideoSelected"
-      @dual-videos-selected="handleDualVideosSelected"
-      @comparison-video-selected="handleComparisonVideoSelected"
+      @project-selected="handleProjectSelected"
     />
 
     <!-- Share Video Modal -->

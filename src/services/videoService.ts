@@ -24,6 +24,28 @@ export class VideoService {
       title: videoData.title,
     });
 
+    // Validate video data before proceeding
+    if (
+      videoData.video_type === 'url' &&
+      (!videoData.url || videoData.url.trim() === '')
+    ) {
+      const error = new Error('URL is required for URL-type videos');
+      console.error('❌ [VideoService] Validation failed:', error.message);
+      throw error;
+    }
+
+    if (
+      videoData.video_type === 'upload' &&
+      (!videoData.url || videoData.url.trim() === '') &&
+      (!videoData.file_path || videoData.file_path.trim() === '')
+    ) {
+      const error = new Error(
+        'Either URL or file_path is required for upload-type videos'
+      );
+      console.error('❌ [VideoService] Validation failed:', error.message);
+      throw error;
+    }
+
     // For uploaded videos, always create new records (no deduplication)
     if (videoData.video_type === 'upload') {
       console.log('🔍 [VideoService] Creating new uploaded video record');
@@ -54,14 +76,17 @@ export class VideoService {
       video_type: 'url',
     });
 
-    const { data: existingVideo } = await supabase
+    const { data: existingVideo, error: queryError } = await supabase
       .from('videos')
       .select('*')
       .eq('url', videoData.url)
       .eq('owner_id', videoData.owner_id)
       .eq('video_type', 'url')
-      .single();
+      .maybeSingle();
 
+    if (queryError) {
+      console.error('🐛 [DEBUG] Query error:', queryError);
+    }
     console.log('🐛 [DEBUG] Existing video query result:', existingVideo);
 
     if (existingVideo) {

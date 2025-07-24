@@ -32,6 +32,10 @@ const props = defineProps({
     type: String,
     default: '',
   },
+  showLoadingIndicator: {
+    type: Boolean,
+    default: true,
+  },
 });
 
 // Emits
@@ -318,7 +322,7 @@ defineExpose({
   >
     <!-- Loading indicator -->
     <div
-      v-if="isLoading"
+      v-if="isLoading && showLoadingIndicator"
       class="absolute inset-0 flex flex-col items-center justify-center bg-black/90 text-white z-10"
     >
       <div

@@ -15,9 +15,14 @@ export function useVideoSession(videoId) {
     const currentVideoId = toValue(videoId);
     const currentUser = toValue(user);
 
-    if (!currentUser || !currentVideoId) {
+    if (!currentUser) {
+      console.warn('🎬 [useVideoSession] Cannot start session: missing user');
+      return;
+    }
+
+    if (!currentVideoId) {
       console.warn(
-        '🎬 [useVideoSession] Cannot start session: missing video ID or user'
+        '🎬 [useVideoSession] Cannot start session: missing video ID'
       );
       return;
     }

@@ -67,14 +67,23 @@ export function useDualVideoPlayer() {
         videoState.duration = videoElement.duration;
         videoState.isLoaded = true;
 
-        // Update shared duration to the longer of the two videos
-        const maxDuration = Math.max(
-          videoAState.duration,
-          videoBState.duration
-        );
-        if (maxDuration > duration.value) {
-          duration.value = maxDuration;
-          totalFrames.value = Math.round(maxDuration * fps.value);
+        // Update shared duration to the shorter of the two videos to keep them in sync
+        // Only update if both videos have loaded their metadata
+        if (videoAState.duration > 0 && videoBState.duration > 0) {
+          const minDuration = Math.min(
+            videoAState.duration,
+            videoBState.duration
+          );
+          duration.value = minDuration;
+          totalFrames.value = Math.round(minDuration * fps.value);
+        } else if (videoAState.duration > 0 && videoBState.duration === 0) {
+          // Only video A has loaded, use its duration temporarily
+          duration.value = videoAState.duration;
+          totalFrames.value = Math.round(videoAState.duration * fps.value);
+        } else if (videoBState.duration > 0 && videoAState.duration === 0) {
+          // Only video B has loaded, use its duration temporarily
+          duration.value = videoBState.duration;
+          totalFrames.value = Math.round(videoBState.duration * fps.value);
         }
 
         console.log(`Video ${videoId} loaded:`, {
@@ -156,9 +165,9 @@ export function useDualVideoPlayer() {
         return;
       }
 
-      // Clamp time to valid range
-      const maxDuration = Math.max(videoAState.duration, videoBState.duration);
-      const clampedTime = Math.max(0, Math.min(time, maxDuration));
+      // Clamp time to valid range - use the shorter duration to keep videos in sync
+      const minDuration = Math.min(videoAState.duration, videoBState.duration);
+      const clampedTime = Math.max(0, Math.min(time, minDuration));
 
       // Seek both videos
       if (videoARef.value && videoAState.isLoaded) {
