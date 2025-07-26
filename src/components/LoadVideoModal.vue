@@ -255,6 +255,27 @@
                       </svg>
                       Dual Video
                     </span>
+                    <!-- Comment Count Indicator -->
+                    <span
+                      v-if="commentCounts[project.id] !== undefined"
+                      class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700"
+                      :title="`${commentCounts[project.id]} comment${
+                        commentCounts[project.id] !== 1 ? 's' : ''
+                      }`"
+                    >
+                      <svg
+                        class="w-3 h-3 mr-1"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path
+                          fill-rule="evenodd"
+                          d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z"
+                          clip-rule="evenodd"
+                        />
+                      </svg>
+                      {{ commentCounts[project.id] || 0 }}
+                    </span>
                   </div>
 
                   <!-- Single Video Project Details -->
@@ -763,6 +784,7 @@ import { ProjectService } from '../services/projectService.ts';
 import { VideoService } from '../services/videoService.ts';
 import { AnnotationService } from '../services/annotationService.ts';
 import { ComparisonVideoService } from '../services/comparisonVideoService.ts';
+import { CommentService } from '../services/commentService.ts';
 import { useAuth } from '../composables/useAuth.ts';
 import VideoUpload from './VideoUpload.vue';
 
@@ -784,6 +806,7 @@ const { user } = useAuth();
 const projects = ref([]);
 const isLoading = ref(false);
 const error = ref(null);
+const commentCounts = ref({});
 
 // Tab management
 const activeTab = ref('load');
@@ -839,14 +862,23 @@ const loadProjects = async () => {
       user.value.email
     );
 
-    // Clear projects before loading new ones
+    // Clear projects and comment counts before loading new ones
     projects.value = [];
+    commentCounts.value = {};
 
     // Use ProjectService to get all projects
     const userProjects = await ProjectService.getUserProjects(user.value.id);
     projects.value = userProjects;
 
     console.log('🎬 [LoadVideoModal] Loaded projects:', projects.value.length);
+
+    // Load comment counts for all projects
+    if (userProjects.length > 0) {
+      console.log('🎬 [LoadVideoModal] Loading comment counts...');
+      const counts = await CommentService.getProjectCommentCounts(userProjects);
+      commentCounts.value = counts;
+      console.log('🎬 [LoadVideoModal] Loaded comment counts:', counts);
+    }
   } catch (err) {
     console.error('❌ [LoadVideoModal] Error loading projects:', err);
     error.value = 'Failed to load projects. Please try again.';

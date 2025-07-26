@@ -1,5 +1,10 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch, onUnmounted } from 'vue';
+import CommentSection from './CommentSection.vue';
+import CommentItem from './CommentItem.vue';
+import CommentForm from './CommentForm.vue';
+import { useAuth } from '../composables/useAuth';
+import { useGlobalComments } from '../composables/useGlobalComments';
 
 const props = defineProps({
   annotations: {
@@ -30,6 +35,23 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  videoId: {
+    type: String,
+    default: null,
+  },
+  // Dual video mode props
+  isDualMode: {
+    type: Boolean,
+    default: false,
+  },
+  drawingCanvasA: {
+    type: Object,
+    default: null,
+  },
+  drawingCanvasB: {
+    type: Object,
+    default: null,
+  },
 });
 
 const emit = defineEmits([
@@ -42,7 +64,35 @@ const emit = defineEmits([
   'pause',
   'drawing-created',
   'seek-to-frame',
+  'video-context-changed',
+  'annotation-edit',
+  'comment-added',
+  'comment-updated',
+  'comment-deleted',
 ]);
+
+// Authentication
+const { user, isAuthenticated } = useAuth();
+
+// Global comment tracking
+const {
+  setupGlobalCommentSubscription,
+  markCommentsAsViewed,
+  hasNewComments,
+  getNewCommentCount,
+  getTotalCommentCount,
+  initializeCommentCounts,
+  cleanup: cleanupGlobalComments,
+  onNewComment,
+} = useGlobalComments();
+
+// Get the primary drawing canvas (for single mode or primary canvas in dual mode)
+const primaryDrawingCanvas = computed(() => {
+  if (props.isDualMode && props.drawingCanvasA) {
+    return props.drawingCanvasA;
+  }
+  return props.drawingCanvas;
+});
 
 // Form state
 const showAddForm = ref(false);
@@ -59,6 +109,10 @@ const newAnnotation = ref({
 // Drawing state
 const showDrawingSection = ref(false);
 const hasDrawingData = ref(false);
+
+// Comment state
+const expandedComments = ref(new Set());
+const commentCounts = ref(new Map());
 
 // Annotation severity levels
 const severityLevels = [
@@ -130,8 +184,16 @@ const startAddAnnotation = () => {
   editingAnnotation.value = null;
   showDrawingSection.value = false;
   hasDrawingData.value = false;
-  props.drawingCanvas.disableDrawingMode();
-  props.drawingCanvas.clearCurrentFrameDrawings();
+  if (props.isDualMode) {
+    // In dual mode, disable drawing on both canvases
+    if (props.drawingCanvasA) props.drawingCanvasA.disableDrawingMode();
+    if (props.drawingCanvasB) props.drawingCanvasB.disableDrawingMode();
+    if (props.drawingCanvasA) props.drawingCanvasA.clearCurrentFrameDrawings();
+    if (props.drawingCanvasB) props.drawingCanvasB.clearCurrentFrameDrawings();
+  } else {
+    primaryDrawingCanvas.value.disableDrawingMode();
+    primaryDrawingCanvas.value.clearCurrentFrameDrawings();
+  }
   emit('form-show');
 };
 
@@ -144,6 +206,9 @@ const startEditAnnotation = (annotation) => {
     annotation.frame || Math.round(annotation.timestamp * props.fps);
   emit('seek-to-frame', targetFrame);
 
+  // Emit annotation edit event to set context in dual video player
+  emit('annotation-edit', annotation);
+
   newAnnotation.value = { ...annotation };
   showAddForm.value = true;
   editingAnnotation.value = annotation;
@@ -153,8 +218,24 @@ const startEditAnnotation = (annotation) => {
     hasDrawingData.value = true;
     showDrawingSection.value = false; // Always keep closed by default
     // Load the drawing data into the canvas
-    props.drawingCanvas.clearCurrentFrameDrawings();
-    props.drawingCanvas.addDrawing(annotation.drawingData);
+    if (props.isDualMode) {
+      // In dual mode, load drawing data to both canvases if it exists
+      if (props.drawingCanvasA) {
+        props.drawingCanvasA.clearCurrentFrameDrawings();
+        if (annotation.drawingData?.drawingA) {
+          props.drawingCanvasA.addDrawing(annotation.drawingData.drawingA);
+        }
+      }
+      if (props.drawingCanvasB) {
+        props.drawingCanvasB.clearCurrentFrameDrawings();
+        if (annotation.drawingData?.drawingB) {
+          props.drawingCanvasB.addDrawing(annotation.drawingData.drawingB);
+        }
+      }
+    } else {
+      primaryDrawingCanvas.value.clearCurrentFrameDrawings();
+      primaryDrawingCanvas.value.addDrawing(annotation.drawingData);
+    }
   } else {
     hasDrawingData.value = false;
     showDrawingSection.value = false;
@@ -164,11 +245,18 @@ const startEditAnnotation = (annotation) => {
 };
 
 const saveAnnotation = () => {
+  console.log('🔍 [AnnotationPanel] saveAnnotation called');
+  console.log('🔍 [AnnotationPanel] isDualMode:', props.isDualMode);
+  console.log('🔍 [AnnotationPanel] newAnnotation.value:', newAnnotation.value);
+
   // Check if we have either content or drawing data
   const hasContent = newAnnotation.value.content.trim();
   const hasDrawing = hasDrawingData.value && newAnnotation.value.drawingData;
 
-  if (!hasContent && !hasDrawing) return;
+  if (!hasContent && !hasDrawing) {
+    console.log('❌ [AnnotationPanel] No content or drawing data, returning');
+    return;
+  }
 
   const severityInfo = getSeverityInfo(newAnnotation.value.severity);
 
@@ -193,18 +281,53 @@ const saveAnnotation = () => {
     drawingData: hasDrawing ? newAnnotation.value.drawingData : null,
   };
 
+  console.log('🔍 [AnnotationPanel] Prepared annotationData:', annotationData);
+
   if (editingAnnotation.value) {
+    console.log('🔍 [AnnotationPanel] Emitting update-annotation');
     emit('update-annotation', {
       ...annotationData,
       id: editingAnnotation.value.id,
     });
   } else {
+    console.log('🔍 [AnnotationPanel] Emitting add-annotation');
     emit('add-annotation', annotationData);
   }
 
   // Always close the drawing section when saving/updating
   showDrawingSection.value = false;
-  cancelForm();
+
+  // Don't clear context immediately if we have drawing data and are editing
+  // The context will be cleared after drawing processing is complete
+  if (editingAnnotation.value && hasDrawingData.value) {
+    // Just hide the form but keep the context for drawing processing
+    showAddForm.value = false;
+    editingAnnotation.value = null;
+    hasDrawingData.value = false;
+    if (props.isDualMode) {
+      if (props.drawingCanvasA) props.drawingCanvasA.disableDrawingMode();
+      if (props.drawingCanvasB) props.drawingCanvasB.disableDrawingMode();
+    } else {
+      primaryDrawingCanvas.value.disableDrawingMode();
+    }
+    newAnnotation.value = {
+      content: '',
+      severity: 'medium',
+      color: '#fbbf24',
+      frame: 0,
+      annotationType: 'text',
+      drawingData: null,
+    };
+    emit('form-hide');
+
+    // Clear context after a short delay to allow drawing processing
+    setTimeout(() => {
+      emit('annotation-edit', null);
+    }, 100);
+  } else {
+    // Normal flow - clear context immediately
+    cancelForm();
+  }
 };
 
 const cancelForm = () => {
@@ -212,8 +335,16 @@ const cancelForm = () => {
   editingAnnotation.value = null;
   showDrawingSection.value = false;
   hasDrawingData.value = false;
-  props.drawingCanvas.disableDrawingMode();
-  props.drawingCanvas.clearCurrentFrameDrawings();
+  if (props.isDualMode) {
+    // In dual mode, disable drawing on both canvases
+    if (props.drawingCanvasA) props.drawingCanvasA.disableDrawingMode();
+    if (props.drawingCanvasB) props.drawingCanvasB.disableDrawingMode();
+    if (props.drawingCanvasA) props.drawingCanvasA.clearCurrentFrameDrawings();
+    if (props.drawingCanvasB) props.drawingCanvasB.clearCurrentFrameDrawings();
+  } else {
+    primaryDrawingCanvas.value.disableDrawingMode();
+    primaryDrawingCanvas.value.clearCurrentFrameDrawings();
+  }
   newAnnotation.value = {
     content: '',
     severity: 'medium',
@@ -222,6 +353,9 @@ const cancelForm = () => {
     annotationType: 'text',
     drawingData: null,
   };
+
+  // Clear annotation context by emitting annotation-edit with null
+  emit('annotation-edit', null);
   emit('form-hide');
 };
 
@@ -237,7 +371,14 @@ const onSeverityChange = () => {
   const severityInfo = getSeverityInfo(newAnnotation.value.severity);
   newAnnotation.value.color = severityInfo.color;
   // Update drawing canvas severity too
-  props.drawingCanvas.setSeverity(newAnnotation.value.severity);
+  if (props.isDualMode) {
+    if (props.drawingCanvasA)
+      props.drawingCanvasA.setSeverity(newAnnotation.value.severity);
+    if (props.drawingCanvasB)
+      props.drawingCanvasB.setSeverity(newAnnotation.value.severity);
+  } else {
+    primaryDrawingCanvas.value.setSeverity(newAnnotation.value.severity);
+  }
 };
 
 // Drawing-related methods
@@ -245,30 +386,57 @@ const toggleDrawingSection = () => {
   showDrawingSection.value = !showDrawingSection.value;
 
   if (showDrawingSection.value) {
-    props.drawingCanvas.enableDrawingMode();
+    if (props.isDualMode) {
+      // In dual mode, enable drawing on both canvases
+      if (props.drawingCanvasA) props.drawingCanvasA.enableDrawingMode();
+      if (props.drawingCanvasB) props.drawingCanvasB.enableDrawingMode();
+    } else {
+      primaryDrawingCanvas.value.enableDrawingMode();
+    }
   } else {
-    props.drawingCanvas.disableDrawingMode();
+    if (props.isDualMode) {
+      if (props.drawingCanvasA) props.drawingCanvasA.disableDrawingMode();
+      if (props.drawingCanvasB) props.drawingCanvasB.disableDrawingMode();
+    } else {
+      primaryDrawingCanvas.value.disableDrawingMode();
+    }
   }
 };
 
-const onDrawingCreated = (drawingData) => {
-  // If we're editing an existing annotation and it already has drawing data,
-  // we need to merge the new drawing with the existing one
-  if (editingAnnotation.value && newAnnotation.value.drawingData) {
-    // Merge the paths from both drawings
-    const existingDrawing = newAnnotation.value.drawingData;
-    const mergedDrawing = {
-      ...existingDrawing,
-      paths: [...existingDrawing.paths, ...drawingData.paths],
-      // Update canvas dimensions to current size
-      canvasWidth: drawingData.canvasWidth,
-      canvasHeight: drawingData.canvasHeight,
-    };
+const onDrawingCreated = (drawingData, videoContext = null) => {
+  if (props.isDualMode) {
+    // In dual mode, we need to handle drawings from both canvases
+    if (!newAnnotation.value.drawingData) {
+      newAnnotation.value.drawingData = {};
+    }
 
-    newAnnotation.value.drawingData = mergedDrawing;
+    // Store drawing data based on video context
+    if (videoContext === 'A') {
+      newAnnotation.value.drawingData.drawingA = drawingData;
+    } else if (videoContext === 'B') {
+      newAnnotation.value.drawingData.drawingB = drawingData;
+    } else {
+      // If no context specified, treat as drawing A for backward compatibility
+      newAnnotation.value.drawingData.drawingA = drawingData;
+    }
   } else {
-    // For new annotations or when no existing drawing data, just use the new data
-    newAnnotation.value.drawingData = drawingData;
+    // Single mode logic (existing)
+    if (editingAnnotation.value && newAnnotation.value.drawingData) {
+      // Merge the paths from both drawings
+      const existingDrawing = newAnnotation.value.drawingData;
+      const mergedDrawing = {
+        ...existingDrawing,
+        paths: [...existingDrawing.paths, ...drawingData.paths],
+        // Update canvas dimensions to current size
+        canvasWidth: drawingData.canvasWidth,
+        canvasHeight: drawingData.canvasHeight,
+      };
+
+      newAnnotation.value.drawingData = mergedDrawing;
+    } else {
+      // For new annotations or when no existing drawing data, just use the new data
+      newAnnotation.value.drawingData = drawingData;
+    }
   }
 
   hasDrawingData.value = true;
@@ -277,14 +445,26 @@ const onDrawingCreated = (drawingData) => {
 };
 
 const clearDrawing = () => {
-  props.drawingCanvas.clearCurrentFrameDrawings();
+  if (props.isDualMode) {
+    if (props.drawingCanvasA) props.drawingCanvasA.clearCurrentFrameDrawings();
+    if (props.drawingCanvasB) props.drawingCanvasB.clearCurrentFrameDrawings();
+  } else {
+    primaryDrawingCanvas.value.clearCurrentFrameDrawings();
+  }
   newAnnotation.value.drawingData = null;
   hasDrawingData.value = false;
 };
 
 // Setup drawing canvas frame
 onMounted(() => {
-  props.drawingCanvas.currentFrame.value = props.currentFrame;
+  if (props.isDualMode) {
+    if (props.drawingCanvasA)
+      props.drawingCanvasA.currentFrame.value = props.currentFrame;
+    if (props.drawingCanvasB)
+      props.drawingCanvasB.currentFrame.value = props.currentFrame;
+  } else {
+    primaryDrawingCanvas.value.currentFrame.value = props.currentFrame;
+  }
 });
 
 // Watch for currentFrame changes and update the annotation form if it's open
@@ -298,11 +478,135 @@ watch(
   }
 );
 
+// Comment-related methods
+const toggleComments = (annotationId) => {
+  if (expandedComments.value.has(annotationId)) {
+    expandedComments.value.delete(annotationId);
+  } else {
+    expandedComments.value.add(annotationId);
+    // Mark comments as viewed when expanding
+    markCommentsAsViewed(annotationId);
+  }
+};
+
+const isCommentsExpanded = (annotationId) => {
+  return expandedComments.value.has(annotationId);
+};
+
+const getCommentCount = (annotation) => {
+  // Use global comment count if available, otherwise fall back to local tracking
+  const globalCount = getTotalCommentCount(annotation.id);
+  if (globalCount > 0) {
+    return globalCount;
+  }
+  return (
+    annotation.comment_count || commentCounts.value.get(annotation.id) || 0
+  );
+};
+
+const handleCommentAdded = (comment) => {
+  // Update comment count for the annotation
+  const currentCount = commentCounts.value.get(comment.annotation_id) || 0;
+  commentCounts.value.set(comment.annotation_id, currentCount + 1);
+
+  // Add visual indicator for new comment
+  const annotation = props.annotations.find(
+    (a) => a.id === comment.annotation_id
+  );
+  if (annotation) {
+    // Add a temporary highlight class or indicator
+    setTimeout(() => {
+      // Auto-expand comments if not already expanded
+      if (!expandedComments.value.has(comment.annotation_id)) {
+        expandedComments.value.add(comment.annotation_id);
+      }
+    }, 100);
+  }
+
+  // Emit to parent
+  emit('comment-added', comment);
+};
+
+const handleCommentUpdated = (comment) => {
+  // Emit to parent
+  emit('comment-updated', comment);
+};
+
+const handleCommentDeleted = (comment) => {
+  // Update comment count for the annotation
+  const currentCount = commentCounts.value.get(comment.annotation_id) || 0;
+  commentCounts.value.set(comment.annotation_id, Math.max(0, currentCount - 1));
+
+  // Emit to parent
+  emit('comment-deleted', comment);
+};
+
+// Setup global comment tracking
+const setupGlobalCommentTracking = () => {
+  if (props.videoId) {
+    console.log(
+      '🔄 [AnnotationPanel] Setting up global comment tracking for video:',
+      props.videoId
+    );
+
+    // Initialize comment counts for existing annotations
+    initializeCommentCounts(props.annotations);
+
+    // Setup global subscription (works for both authenticated and anonymous users)
+    setupGlobalCommentSubscription(props.videoId, user.value?.id);
+
+    // Listen for new comment events
+    onNewComment((event) => {
+      console.log('📥 [AnnotationPanel] New comment event received:', event);
+      // The global comment system will handle the indicator automatically
+    });
+  }
+};
+
+// Watch for videoId changes to setup global tracking
+watch(
+  () => props.videoId,
+  (newVideoId) => {
+    if (newVideoId) {
+      setupGlobalCommentTracking();
+    } else {
+      cleanupGlobalComments();
+    }
+  },
+  { immediate: true }
+);
+
+// Watch for user changes to update the subscription with user ID
+watch(user, (newUser) => {
+  if (props.videoId) {
+    // Re-setup subscription with updated user ID
+    cleanupGlobalComments();
+    setupGlobalCommentTracking();
+  }
+});
+
+// Watch for annotations changes to update comment counts
+watch(
+  () => props.annotations,
+  (newAnnotations) => {
+    if (newAnnotations && newAnnotations.length > 0) {
+      initializeCommentCounts(newAnnotations);
+    }
+  },
+  { immediate: true }
+);
+
+// Cleanup on unmount
+onUnmounted(() => {
+  cleanupGlobalComments();
+});
+
 // Expose methods to parent component
 defineExpose({
   startAddAnnotation,
   cancelForm,
   onDrawingCreated,
+  toggleComments,
 });
 </script>
 
@@ -315,9 +619,15 @@ defineExpose({
       <h3 v-if="readOnly" class="text-sm font-medium text-gray-600">
         Annotations (View Only)
       </h3>
+      <h3
+        v-else-if="!isAuthenticated"
+        class="text-sm font-medium text-gray-600"
+      >
+        Annotations (Login to Create)
+      </h3>
       <div v-else class="flex-1"></div>
       <button
-        v-if="!readOnly"
+        v-if="!readOnly && isAuthenticated"
         class="btn btn-primary flex items-center space-x-1"
         @click="startAddAnnotation"
         title="Add new annotation"
@@ -565,7 +875,9 @@ defineExpose({
         :key="annotation.id"
         class="card card-hover mb-2 p-2 cursor-pointer transition-all duration-200 relative group"
         :class="{
-          'bg-gray-50': selectedAnnotation?.id === annotation.id,
+          'bg-blue-50 border-blue-300 shadow-md ring-2 ring-blue-200':
+            selectedAnnotation?.id === annotation.id,
+          'bg-white': selectedAnnotation?.id !== annotation.id,
         }"
         :style="{
           borderLeft: `4px solid ${getSeverityInfo(annotation.severity).color}`,
@@ -608,7 +920,49 @@ defineExpose({
               <line x1="12" y1="8" x2="12.01" y2="8"></line>
             </svg>
 
-            <span>{{ getSeverityInfo(annotation.severity).label }}</span>
+            <span
+              :class="{
+                'text-blue-700 font-medium':
+                  selectedAnnotation?.id === annotation.id,
+              }"
+            >
+              {{ getSeverityInfo(annotation.severity).label }}
+            </span>
+
+            <!-- Comment count indicator -->
+            <div
+              v-if="getCommentCount(annotation) > 0"
+              class="flex items-center space-x-1 ml-2 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs relative"
+            >
+              <svg
+                class="w-3 h-3"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
+                ></path>
+              </svg>
+              <span>{{ getCommentCount(annotation) }}</span>
+
+              <!-- New comments indicator (always visible when there are new comments) -->
+              <div
+                v-if="hasNewComments(annotation.id)"
+                class="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse"
+                :title="`${getNewCommentCount(annotation.id)} new comment${
+                  getNewCommentCount(annotation.id) > 1 ? 's' : ''
+                }`"
+              ></div>
+
+              <!-- Real-time activity indicator (when comments are expanded) -->
+              <div
+                v-else-if="isCommentsExpanded(annotation.id)"
+                class="absolute -top-1 -right-1 w-2 h-2 bg-green-400 rounded-full animate-pulse"
+                title="Real-time comments active"
+              ></div>
+            </div>
           </div>
           <div
             class="font-mono text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded flex flex-col items-center"
@@ -625,7 +979,13 @@ defineExpose({
 
         <div>
           <div class="flex items-center space-x-1 mb-0.5">
-            <h4 class="text-sm font-medium text-gray-900 leading-tight">
+            <h4
+              class="text-sm font-medium leading-tight"
+              :class="{
+                'text-blue-900': selectedAnnotation?.id === annotation.id,
+                'text-gray-900': selectedAnnotation?.id !== annotation.id,
+              }"
+            >
               {{ annotation.title }}
             </h4>
             <!-- Drawing indicator -->
@@ -656,11 +1016,39 @@ defineExpose({
           </p>
         </div>
 
-        <div
-          v-if="!readOnly"
-          class="flex justify-end mt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-        >
-          <div class="flex space-x-1">
+        <!-- Action buttons and comment toggle -->
+        <div class="flex justify-between items-center mt-1">
+          <!-- Comment toggle button (always visible) -->
+          <button
+            class="btn btn-ghost p-1 text-blue-600 hover:text-blue-700"
+            @click.stop="toggleComments(annotation.id)"
+            :title="
+              isCommentsExpanded(annotation.id)
+                ? 'Hide comments'
+                : 'Show comments'
+            "
+          >
+            <svg
+              class="icon icon-sm"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
+              ></path>
+            </svg>
+            <span class="text-xs ml-1">
+              {{ isCommentsExpanded(annotation.id) ? 'Hide' : 'Comments' }}
+            </span>
+          </button>
+
+          <!-- Edit/Delete buttons (only visible on hover and when not read-only) -->
+          <div
+            v-if="!readOnly"
+            class="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+          >
             <button
               class="btn btn-ghost p-1"
               @click.stop="startEditAnnotation(annotation)"
@@ -689,6 +1077,35 @@ defineExpose({
             </button>
           </div>
         </div>
+
+        <!-- Expandable Comment Section -->
+        <div
+          v-show="isCommentsExpanded(annotation.id)"
+          class="mt-2 border-t border-gray-200 pt-2"
+        >
+          <CommentSection
+            :annotation-id="annotation.id"
+            :read-only="readOnly"
+            :current-user="user"
+            :video-id="videoId"
+            @comment-added="handleCommentAdded"
+            @comment-updated="handleCommentUpdated"
+            @comment-deleted="handleCommentDeleted"
+          />
+        </div>
+
+        <!-- Hidden Comment Section for real-time subscriptions when not expanded -->
+        <CommentSection
+          v-if="!isCommentsExpanded(annotation.id)"
+          v-show="false"
+          :annotation-id="annotation.id"
+          :read-only="true"
+          :current-user="user"
+          :video-id="videoId"
+          @comment-added="handleCommentAdded"
+          @comment-updated="handleCommentUpdated"
+          @comment-deleted="handleCommentDeleted"
+        />
       </div>
     </div>
 
@@ -706,5 +1123,86 @@ defineExpose({
 </template>
 
 <style scoped>
-/* Custom styles if needed */
+@import 'tailwindcss' reference;
+
+/* Custom styles for comment integration */
+.comment-section {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.btn {
+  @apply inline-flex items-center justify-center rounded text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none;
+}
+
+.btn-ghost {
+  @apply hover:bg-gray-100 hover:text-gray-900;
+}
+
+.btn-primary {
+  @apply bg-blue-600 text-white hover:bg-blue-700;
+}
+
+.btn-secondary {
+  @apply bg-gray-200 text-gray-900 hover:bg-gray-300;
+}
+
+.icon {
+  @apply w-4 h-4;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.icon-sm {
+  @apply w-3 h-3;
+}
+
+.card {
+  @apply rounded-lg border border-gray-200 bg-white shadow-sm;
+}
+
+.card-hover {
+  @apply hover:shadow-md transition-shadow duration-200;
+}
+
+.input {
+  @apply flex h-10 w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
+}
+
+.input::placeholder {
+  color: #6b7280;
+}
+
+/* Comment toggle button styling */
+.btn-ghost.text-blue-600 {
+  @apply text-blue-600 hover:text-blue-700 hover:bg-blue-50;
+}
+
+/* Smooth transitions for comment sections */
+.comment-section-enter-active,
+.comment-section-leave-active {
+  transition: all 0.3s ease;
+}
+
+.comment-section-enter-from,
+.comment-section-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+/* Ensure proper spacing for comment sections */
+.comment-section :deep(.comment-section) {
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+/* Responsive design for comment sections */
+@media (max-width: 640px) {
+  .comment-section {
+    max-height: 250px;
+  }
+}
 </style>

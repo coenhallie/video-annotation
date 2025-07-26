@@ -1,83 +1,97 @@
 @import 'tailwindcss';
+@import './base.css';
 
-/* Modern Minimalist Design System */
-:root {
-  --color-bg-primary: #ffffff;
-  --color-bg-secondary: #f8f9fa;
-  --color-bg-tertiary: #e9ecef;
-  --color-bg-dark: #212529;
-  --color-bg-darker: #1a1d20;
+@layer base {
+  /* Modern Minimalist Design System */
+  :root {
+    --color-bg-primary: #ffffff;
+    --color-bg-secondary: #f8f9fa;
+    --color-bg-tertiary: #e9ecef;
+    --color-bg-dark: #212529;
+    --color-bg-darker: #1a1d20;
 
-  --color-text-primary: #212529;
-  --color-text-secondary: #6c757d;
-  --color-text-muted: #adb5bd;
-  --color-text-inverse: #ffffff;
+    --color-text-primary: #212529;
+    --color-text-secondary: #6c757d;
+    --color-text-muted: #adb5bd;
+    --color-text-inverse: #ffffff;
 
-  --color-border: #dee2e6;
-  --color-border-light: #f1f3f4;
-  --color-border-dark: #495057;
+    --color-border: #dee2e6;
+    --color-border-light: #f1f3f4;
+    --color-border-dark: #495057;
 
-  --color-accent: #000000;
-  --color-accent-light: #343a40;
-  --color-accent-hover: #495057;
+    --color-accent: #000000;
+    --color-accent-light: #343a40;
+    --color-accent-hover: #495057;
 
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
 
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 8px;
+  }
 }
 
-/* Modern Icon Styles */
-.icon {
-  width: 16px;
-  height: 16px;
-  stroke: currentColor;
-  fill: none;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
+@layer components {
+  /* Modern Icon Styles */
+  .icon {
+    width: 16px;
+    height: 16px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
 
-.icon-sm {
-  width: 14px;
-  height: 14px;
-}
+  .icon-sm {
+    width: 14px;
+    height: 14px;
+  }
 
-.icon-lg {
-  width: 20px;
-  height: 20px;
-}
+  .icon-xs {
+    width: 12px;
+    height: 12px;
+  }
 
-/* Button Styles */
-.btn {
-  @apply inline-flex items-center justify-center px-3 py-2 text-sm font-medium rounded-md transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2;
-}
+  .icon-lg {
+    width: 20px;
+    height: 20px;
+  }
 
-.btn-primary {
-  @apply bg-black text-white hover:bg-gray-800 focus:ring-gray-500;
-}
+  /* Button Styles */
+  .btn {
+    @apply inline-flex items-center justify-center px-3 py-2 text-sm font-medium rounded-md transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2;
+  }
 
-.btn-secondary {
-  @apply bg-gray-100 text-gray-900 hover:bg-gray-200 focus:ring-gray-500;
-}
+  .btn-primary {
+    @apply bg-black text-white hover:bg-gray-800 focus:ring-gray-500;
+  }
 
-.btn-ghost {
-  @apply bg-transparent text-gray-600 hover:bg-gray-100 hover:text-gray-900 focus:ring-gray-500;
-}
+  .btn-secondary {
+    @apply bg-gray-100 text-gray-900 hover:bg-gray-200 focus:ring-gray-500;
+  }
 
-/* Input Styles */
-.input {
-  @apply w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-gray-500 transition-colors;
-}
+  .btn-ghost {
+    @apply bg-transparent text-gray-600 hover:bg-gray-100 hover:text-gray-900 focus:ring-gray-500;
+  }
 
-/* Card Styles */
-.card {
-  @apply bg-white border border-gray-200 rounded-lg shadow-sm;
-}
+  .btn-sm {
+    @apply px-2 py-1 text-xs;
+  }
 
-.card-hover {
-  @apply hover:border-gray-300 hover:shadow-md transition-all duration-200;
+  /* Input Styles */
+  .input {
+    @apply w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-gray-500 transition-colors;
+  }
+
+  /* Card Styles */
+  .card {
+    @apply bg-white border border-gray-200 rounded-lg shadow-sm;
+  }
+
+  .card-hover {
+    @apply hover:border-gray-300 hover:shadow-md transition-all duration-200;
+  }
 }

@@ -137,12 +137,13 @@ export function useVideoAnnotations(
   };
 
   const loadAnnotations = async () => {
-    if (!currentVideo.value) {
+    // For comparison context, we don't need currentVideo
+    if (!isComparisonContext.value && !currentVideo.value) {
       return;
     }
 
     // Allow loading annotations if user is authenticated OR if video is public
-    if (!toValue(user) && !currentVideo.value.is_public) {
+    if (!toValue(user) && currentVideo.value && !currentVideo.value.is_public) {
       return;
     }
 
@@ -178,7 +179,24 @@ export function useVideoAnnotations(
   };
 
   const addAnnotation = async (annotationData) => {
-    if (!currentVideo.value || !toValue(user)) {
+    console.log('🔍 [DEBUG] addAnnotation called with:', {
+      annotationData,
+      currentVideo: currentVideo.value,
+      user: toValue(user)?.email,
+      isComparisonContext: isComparisonContext.value,
+      comparisonVideoId: toValue(comparisonVideoId),
+    });
+
+    if (!toValue(user)) {
+      console.log('❌ [DEBUG] addAnnotation - Missing user');
+      return;
+    }
+
+    // For comparison context, we don't need currentVideo
+    if (!isComparisonContext.value && !currentVideo.value) {
+      console.log(
+        '❌ [DEBUG] addAnnotation - Missing currentVideo for individual video context'
+      );
       return;
     }
 
@@ -209,6 +227,10 @@ export function useVideoAnnotations(
           undefined, // synchronizedFrame
           toValue(projectId)
         );
+        console.log(
+          '✅ [DEBUG] addAnnotation - comparison annotation created:',
+          newAnnotation
+        );
       } else {
         // In individual video context, create individual video annotation
         console.log(
@@ -228,13 +250,22 @@ export function useVideoAnnotations(
         );
 
         newAnnotation = transformDatabaseAnnotationToApp(createdAnnotation);
+        console.log(
+          '✅ [DEBUG] addAnnotation - individual annotation created:',
+          newAnnotation
+        );
       }
 
       annotations.value.push(newAnnotation);
       annotations.value.sort((a, b) => a.timestamp - b.timestamp);
 
+      console.log(
+        '✅ [DEBUG] addAnnotation - annotation added to local array, total:',
+        annotations.value.length
+      );
       return newAnnotation;
     } catch (err) {
+      console.error('❌ [DEBUG] addAnnotation - Error:', err);
       error.value = err.message;
       throw err;
     }

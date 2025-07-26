@@ -171,16 +171,32 @@ import type { UseDrawingCanvas } from '@/composables/useDrawingCanvas';
 interface Props {
   drawingCanvas: UseDrawingCanvas;
   currentFrame: number;
+  // Dual video mode props
+  isDualMode?: boolean;
+  activeVideoContext?: string;
+  drawingCanvasA?: UseDrawingCanvas;
+  drawingCanvasB?: UseDrawingCanvas;
 }
 
 interface Emits {
   (e: 'jump-to-frame', frame: number): void;
+  (e: 'video-context-changed', context: string): void;
 }
 
 const props = defineProps<Props>();
 const emit = defineEmits<Emits>();
 
-// Destructure drawing canvas composable
+// Get the active drawing canvas based on mode and context
+const activeDrawingCanvas = computed(() => {
+  if (props.isDualMode) {
+    return props.activeVideoContext === 'A'
+      ? props.drawingCanvasA
+      : props.drawingCanvasB;
+  }
+  return props.drawingCanvas;
+});
+
+// Destructure drawing canvas composable from active canvas
 const {
   isDrawingMode,
   currentTool,
@@ -195,7 +211,7 @@ const {
   getFramesWithDrawings,
   hasDrawingsOnFrame,
   currentFrameDrawings,
-} = props.drawingCanvas;
+} = activeDrawingCanvas.value || props.drawingCanvas;
 
 // Computed properties
 const totalDrawingsCount = computed(() => getTotalDrawingsCount.value);

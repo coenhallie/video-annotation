@@ -9,7 +9,7 @@
       <div
         class="flex items-center justify-between p-6 border-b border-gray-200"
       >
-        <h2 class="text-xl font-semibold text-gray-900">Share Video</h2>
+        <h2 class="text-xl font-semibold text-gray-900">{{ modalTitle }}</h2>
         <button
           @click="closeModal"
           class="text-gray-400 hover:text-gray-600 transition-colors"
@@ -88,7 +88,7 @@
               Share Link Generated!
             </h3>
             <p class="text-sm text-gray-600">
-              Anyone with this link can view your video and annotations.
+              {{ shareDescription }}
             </p>
           </div>
 
@@ -141,39 +141,6 @@
               </button>
             </div>
           </div>
-
-          <!-- Warning -->
-          <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-            <div class="flex">
-              <div class="flex-shrink-0">
-                <svg
-                  class="h-5 w-5 text-yellow-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"
-                  ></path>
-                </svg>
-              </div>
-              <div class="ml-3">
-                <h3 class="text-sm font-medium text-yellow-800">
-                  Public Access
-                </h3>
-                <div class="mt-2 text-sm text-yellow-700">
-                  <p>
-                    This video is now publicly accessible. Anyone with the link
-                    can view it and its annotations. You can make it private
-                    again from your video list.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
 
         <!-- Initial State -->
@@ -194,11 +161,10 @@
             </svg>
           </div>
           <h3 class="text-lg font-medium text-gray-900 mb-2">
-            Share Your Video
+            {{ modalTitle }}
           </h3>
           <p class="text-gray-600 mb-6">
-            Generate a shareable link that includes your video and all
-            annotations.
+            {{ shareDescription }}
           </p>
           <button
             @click="generateShareLink"
@@ -225,7 +191,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { ShareService } from '../services/shareService.ts';
 
 // Props
@@ -237,6 +203,15 @@ const props = defineProps({
   videoId: {
     type: String,
     default: '',
+  },
+  comparisonId: {
+    type: String,
+    default: '',
+  },
+  shareType: {
+    type: String,
+    default: 'video',
+    validator: (value) => ['video', 'comparison'].includes(value),
   },
 });
 
@@ -250,6 +225,19 @@ const error = ref(null);
 const copied = ref(false);
 const shareUrlInput = ref(null);
 
+// Computed properties
+const modalTitle = computed(() => {
+  return props.shareType === 'comparison'
+    ? 'Share Comparison Video'
+    : 'Share Video';
+});
+
+const shareDescription = computed(() => {
+  return props.shareType === 'comparison'
+    ? 'Anyone with this link can view your comparison video and all annotations.'
+    : 'Anyone with this link can view your video and all annotations.';
+});
+
 // Methods
 const closeModal = () => {
   emit('close');
@@ -260,27 +248,58 @@ const closeModal = () => {
 };
 
 const generateShareLink = async () => {
-  if (!props.videoId) {
-    error.value = 'No video selected to share';
-    return;
-  }
+  if (props.shareType === 'comparison') {
+    if (!props.comparisonId) {
+      error.value = 'No comparison video selected to share';
+      return;
+    }
 
-  isGenerating.value = true;
-  error.value = null;
+    isGenerating.value = true;
+    error.value = null;
 
-  try {
-    console.log(
-      '🔗 [ShareModal] Generating share link for video:',
-      props.videoId
-    );
-    const url = await ShareService.createShareableLink(props.videoId);
-    shareUrl.value = url;
-    console.log('✅ [ShareModal] Share link generated:', url);
-  } catch (err) {
-    console.error('❌ [ShareModal] Error generating share link:', err);
-    error.value = 'Failed to generate share link. Please try again.';
-  } finally {
-    isGenerating.value = false;
+    try {
+      console.log(
+        '🔗 [ShareModal] Generating share link for comparison:',
+        props.comparisonId
+      );
+      const url = await ShareService.createComparisonShareableLink(
+        props.comparisonId
+      );
+      shareUrl.value = url;
+      console.log('✅ [ShareModal] Comparison share link generated:', url);
+    } catch (err) {
+      console.error(
+        '❌ [ShareModal] Error generating comparison share link:',
+        err
+      );
+      error.value =
+        'Failed to generate comparison share link. Please try again.';
+    } finally {
+      isGenerating.value = false;
+    }
+  } else {
+    if (!props.videoId) {
+      error.value = 'No video selected to share';
+      return;
+    }
+
+    isGenerating.value = true;
+    error.value = null;
+
+    try {
+      console.log(
+        '🔗 [ShareModal] Generating share link for video:',
+        props.videoId
+      );
+      const url = await ShareService.createShareableLink(props.videoId);
+      shareUrl.value = url;
+      console.log('✅ [ShareModal] Share link generated:', url);
+    } catch (err) {
+      console.error('❌ [ShareModal] Error generating share link:', err);
+      error.value = 'Failed to generate share link. Please try again.';
+    } finally {
+      isGenerating.value = false;
+    }
   }
 };
 

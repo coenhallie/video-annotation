@@ -1,4 +1,28 @@
 import { supabase } from '../composables/useSupabase';
+import { CommentService } from './commentService';
+import type {
+  AnonymousSession,
+  SharedComparisonVideoWithCommentPermissions,
+} from '../types/database';
+
+export interface SharedVideoWithCommentPermissions {
+  id: string;
+  title: string;
+  description?: string;
+  url?: string;
+  file_path?: string;
+  video_type: string;
+  is_public: boolean;
+  can_comment: boolean;
+  annotations: any[];
+}
+
+export interface CommentPermissionContext {
+  canComment: boolean;
+  isAnonymous: boolean;
+  sessionId?: string;
+  reason?: string;
+}
 
 export class ShareService {
   // Generate a shareable link for a video
@@ -21,9 +45,16 @@ export class ShareService {
     }
   }
 
-  // Get shared video data (public videos only)
-  static async getSharedVideo(videoId: string) {
+  // Get shared video data with comment permissions (public videos only)
+  static async getSharedVideoWithCommentPermissions(
+    videoId: string
+  ): Promise<SharedVideoWithCommentPermissions> {
     try {
+      console.log(
+        '🔍 [ShareService] Loading shared video with comment permissions:',
+        videoId
+      );
+
       // Get the video (must be public)
       const { data: video, error: videoError } = await supabase
         .from('videos')
@@ -67,14 +98,44 @@ export class ShareService {
           drawingData: annotation.drawing_data,
         })) || [];
 
+      // Determine comment permissions for shared videos
+      const canComment = this.canCommentOnSharedVideo(video);
+
       return {
-        video,
+        id: video.id,
+        title: video.title,
+        description: video.description,
+        url: video.url,
+        file_path: video.file_path,
+        video_type: video.video_type,
+        is_public: video.is_public,
+        can_comment: canComment,
         annotations: mappedAnnotations,
       };
     } catch (error) {
-      console.error('❌ [ShareService] Error getting shared video:', error);
+      console.error(
+        '❌ [ShareService] Error getting shared video with comment permissions:',
+        error
+      );
       throw error;
     }
+  }
+
+  // Legacy method for backward compatibility
+  static async getSharedVideo(videoId: string) {
+    const result = await this.getSharedVideoWithCommentPermissions(videoId);
+    return {
+      video: {
+        id: result.id,
+        title: result.title,
+        description: result.description,
+        url: result.url,
+        file_path: result.file_path,
+        video_type: result.video_type,
+        is_public: result.is_public,
+      },
+      annotations: result.annotations,
+    };
   }
 
   // Make a video private again
@@ -114,9 +175,643 @@ export class ShareService {
     }
   }
 
-  // Parse share URL parameters
-  static parseShareUrl(): string | null {
+  // Parse share URL parameters with type detection
+  static parseShareUrl(): {
+    type: 'video' | 'comparison' | null;
+    id: string | null;
+  } {
     const urlParams = new URLSearchParams(window.location.search);
-    return urlParams.get('share');
+
+    const videoId = urlParams.get('share');
+    const comparisonId = urlParams.get('shareComparison');
+
+    if (videoId) {
+      return { type: 'video', id: videoId };
+    }
+
+    if (comparisonId) {
+      return { type: 'comparison', id: comparisonId };
+    }
+
+    return { type: null, id: null };
+  }
+
+  // Legacy method for backward compatibility
+  static parseShareUrlLegacy(): string | null {
+    const result = this.parseShareUrl();
+    return result.type === 'video' ? result.id : null;
+  }
+
+  // ===== COMPARISON VIDEO SHARING METHODS =====
+
+  /**
+   * Create shareable link for comparison video
+   */
+  static async createComparisonShareableLink(
+    comparisonId: string
+  ): Promise<string> {
+    try {
+      // Make the comparison video public
+      await supabase
+        .from('comparison_videos')
+        .update({ is_public: true })
+        .eq('id', comparisonId);
+
+      // Generate the shareable URL
+      const baseUrl = window.location.origin;
+      const shareUrl = `${baseUrl}?shareComparison=${comparisonId}`;
+
+      return shareUrl;
+    } catch (error) {
+      console.error(
+        '❌ [ShareService] Error creating comparison shareable link:',
+        error
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Get shared comparison video with comment permissions
+   */
+  static async getSharedComparisonVideoWithCommentPermissions(
+    comparisonId: string
+  ): Promise<SharedComparisonVideoWithCommentPermissions> {
+    try {
+      // Get the comparison video (must be public)
+      const { data: comparison, error: comparisonError } = await supabase
+        .from('comparison_videos')
+        .select('*')
+        .eq('id', comparisonId)
+        .eq('is_public', true)
+        .single();
+
+      if (comparisonError || !comparison) {
+        throw new Error('Comparison video not found or not public');
+      }
+
+      // Get both videos (may be public or private)
+      const [videoAResult, videoBResult] = await Promise.all([
+        supabase
+          .from('videos')
+          .select('*')
+          .eq('id', comparison.video_a_id)
+          .single(),
+        supabase
+          .from('videos')
+          .select('*')
+          .eq('id', comparison.video_b_id)
+          .single(),
+      ]);
+
+      // Handle missing videos (but allow private videos in comparison context)
+      const videoA = this.createVideoForComparison(videoAResult, 'Video A');
+      const videoB = this.createVideoForComparison(videoBResult, 'Video B');
+
+      // Get annotations for the comparison context
+      const { data: annotations } = await supabase
+        .from('annotations')
+        .select('*')
+        .eq('comparison_video_id', comparisonId)
+        .order('timestamp', { ascending: true });
+
+      const mappedAnnotations =
+        annotations?.map((annotation) => ({
+          ...annotation,
+          annotationType: annotation.annotation_type,
+          drawingData: annotation.drawing_data,
+        })) || [];
+
+      // Comment permissions for comparison videos
+      const canComment = comparison.is_public;
+
+      return {
+        id: comparison.id,
+        title: comparison.title,
+        description: comparison.description,
+        video_a: videoA,
+        video_b: videoB,
+        is_public: comparison.is_public,
+        can_comment: canComment,
+        annotations: mappedAnnotations,
+        thumbnail_url: comparison.thumbnail_url,
+        duration: comparison.duration,
+        fps: comparison.fps,
+        total_frames: comparison.total_frames,
+      };
+    } catch (error) {
+      console.error(
+        '❌ [ShareService] Error getting shared comparison video:',
+        error
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Create video data for comparison sharing (allows private videos)
+   */
+  private static createVideoForComparison(
+    videoResult: any,
+    fallbackTitle: string
+  ): SharedVideoWithCommentPermissions | null {
+    const { data: video, error } = videoResult;
+
+    if (error || !video) {
+      return {
+        id: 'placeholder',
+        title: `${fallbackTitle} (Unavailable)`,
+        description: 'This video is no longer available or has been deleted',
+        url: '',
+        file_path: '',
+        video_type: 'placeholder',
+        is_public: false,
+        can_comment: false,
+        annotations: [],
+      };
+    }
+
+    // For comparison sharing, allow both public and private videos
+    // The comparison itself being public is sufficient for access control
+    return {
+      id: video.id,
+      title: video.title,
+      description: video.description,
+      url: video.url,
+      file_path: video.file_path,
+      video_type: video.video_type,
+      is_public: video.is_public,
+      can_comment: false, // Comments are handled at comparison level
+      annotations: [], // Will be loaded separately if needed
+    };
+  }
+
+  /**
+   * Create placeholder for missing/private videos (legacy method)
+   */
+  private static createVideoPlaceholderIfNeeded(
+    videoResult: any,
+    fallbackTitle: string
+  ): SharedVideoWithCommentPermissions | null {
+    const { data: video, error } = videoResult;
+
+    if (error || !video) {
+      return {
+        id: 'placeholder',
+        title: `${fallbackTitle} (Unavailable)`,
+        description:
+          'This video is no longer available or has been made private',
+        url: '',
+        file_path: '',
+        video_type: 'placeholder',
+        is_public: false,
+        can_comment: false,
+        annotations: [],
+      };
+    }
+
+    // Check if video is public for shared access
+    if (!video.is_public) {
+      return {
+        id: 'placeholder',
+        title: `${video.title} (Private)`,
+        description:
+          'This video has been made private and is no longer accessible',
+        url: '',
+        file_path: '',
+        video_type: 'placeholder',
+        is_public: false,
+        can_comment: false,
+        annotations: [],
+      };
+    }
+
+    // Return full video data with comment permissions
+    return {
+      id: video.id,
+      title: video.title,
+      description: video.description,
+      url: video.url,
+      file_path: video.file_path,
+      video_type: video.video_type,
+      is_public: video.is_public,
+      can_comment: this.canCommentOnSharedVideo(video),
+      annotations: [], // Will be loaded separately if needed
+    };
+  }
+
+  /**
+   * Make comparison video private
+   */
+  static async makeComparisonVideoPrivate(comparisonId: string): Promise<void> {
+    try {
+      await supabase
+        .from('comparison_videos')
+        .update({ is_public: false })
+        .eq('id', comparisonId);
+    } catch (error) {
+      console.error(
+        '❌ [ShareService] Error making comparison video private:',
+        error
+      );
+      throw error;
+    }
+  }
+
+  // ===== COMMENT PERMISSION METHODS =====
+
+  /**
+   * Check if commenting is allowed on a shared video
+   */
+  static canCommentOnSharedVideo(video: any): boolean {
+    try {
+      // For now, all public shared videos allow commenting
+      // This can be extended to check specific video settings or user permissions
+      return video.is_public === true;
+    } catch (error) {
+      console.error(
+        '❌ [ShareService] Error checking comment permissions:',
+        error
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Get comment permission context for a shared video
+   */
+  static async getCommentPermissionContext(
+    videoId: string,
+    sessionId?: string
+  ): Promise<CommentPermissionContext> {
+    try {
+      console.log('🔍 [ShareService] Getting comment permission context:', {
+        videoId,
+        sessionId,
+      });
+
+      // Get the video to check if it's public
+      const { data: video, error: videoError } = await supabase
+        .from('videos')
+        .select('id, is_public')
+        .eq('id', videoId)
+        .eq('is_public', true)
+        .single();
+
+      if (videoError || !video) {
+        return {
+          canComment: false,
+          isAnonymous: false,
+          reason: 'Video not found or not public',
+        };
+      }
+
+      const canComment = this.canCommentOnSharedVideo(video);
+      const isAnonymous = !sessionId ? false : true;
+
+      return {
+        canComment,
+        isAnonymous,
+        sessionId,
+      };
+    } catch (error) {
+      console.error(
+        '❌ [ShareService] Error getting comment permission context:',
+        error
+      );
+      return {
+        canComment: false,
+        isAnonymous: false,
+        reason: 'Error checking permissions',
+      };
+    }
+  }
+
+  /**
+   * Create an anonymous session for shared video commenting
+   */
+  static async createAnonymousSessionForSharedVideo(
+    videoId: string,
+    displayName: string
+  ): Promise<AnonymousSession> {
+    try {
+      console.log(
+        '🔍 [ShareService] Creating anonymous session for shared video:',
+        { videoId, displayName }
+      );
+
+      // Enhanced validation
+      const validation = await this.validateAnonymousSessionCreation(
+        videoId,
+        displayName
+      );
+      if (!validation.valid) {
+        throw new Error(validation.reason || 'Validation failed');
+      }
+
+      // Create the anonymous session using the comment service
+      const session = await CommentService.createAnonymousSession({
+        display_name: displayName.trim(),
+        video_id: videoId,
+      });
+
+      console.log(
+        '✅ [ShareService] Successfully created anonymous session for shared video'
+      );
+      return session;
+    } catch (error) {
+      console.error(
+        '❌ [ShareService] Error creating anonymous session for shared video:',
+        error
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Validate shared video access for commenting
+   */
+  static async validateSharedVideoAccess(videoId: string): Promise<boolean> {
+    try {
+      // Validate video ID format
+      if (!videoId || typeof videoId !== 'string') {
+        console.error('❌ [ShareService] Invalid video ID format:', videoId);
+        return false;
+      }
+
+      const { data: video, error } = await supabase
+        .from('videos')
+        .select('id, is_public')
+        .eq('id', videoId)
+        .eq('is_public', true)
+        .single();
+
+      if (error) {
+        console.error(
+          '❌ [ShareService] Database error validating video access:',
+          error
+        );
+        return false;
+      }
+
+      const isValid = !!video;
+      console.log('🔍 [ShareService] Video access validation result:', {
+        videoId,
+        isValid,
+      });
+      return isValid;
+    } catch (error) {
+      console.error(
+        '❌ [ShareService] Error validating shared video access:',
+        error
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Enhanced validation for anonymous session creation
+   */
+  static async validateAnonymousSessionCreation(
+    videoId: string,
+    displayName: string
+  ): Promise<{ valid: boolean; reason?: string }> {
+    try {
+      // Validate inputs
+      if (!videoId || typeof videoId !== 'string') {
+        return { valid: false, reason: 'Invalid video ID' };
+      }
+
+      if (
+        !displayName ||
+        typeof displayName !== 'string' ||
+        displayName.trim().length === 0
+      ) {
+        return { valid: false, reason: 'Display name is required' };
+      }
+
+      if (displayName.trim().length > 50) {
+        return {
+          valid: false,
+          reason: 'Display name must be 50 characters or less',
+        };
+      }
+
+      // Validate video access
+      const hasAccess = await this.validateSharedVideoAccess(videoId);
+      if (!hasAccess) {
+        return { valid: false, reason: 'Video not found or not accessible' };
+      }
+
+      // Check comment permissions
+      const permissionContext = await this.getCommentPermissionContext(videoId);
+      if (!permissionContext.canComment) {
+        return {
+          valid: false,
+          reason:
+            permissionContext.reason || 'Commenting not allowed on this video',
+        };
+      }
+
+      return { valid: true };
+    } catch (error) {
+      console.error(
+        '❌ [ShareService] Error validating anonymous session creation:',
+        error
+      );
+      return { valid: false, reason: 'Validation error occurred' };
+    }
+  }
+
+  /**
+   * Get comment permission context for comparison videos
+   */
+  static async getComparisonCommentPermissionContext(
+    comparisonId: string,
+    sessionId?: string
+  ): Promise<CommentPermissionContext> {
+    try {
+      // Get the comparison video to check if it's public
+      const { data: comparison, error } = await supabase
+        .from('comparison_videos')
+        .select('id, is_public')
+        .eq('id', comparisonId)
+        .eq('is_public', true)
+        .single();
+
+      if (error || !comparison) {
+        return {
+          canComment: false,
+          isAnonymous: false,
+          reason: 'Comparison video not found or not public',
+        };
+      }
+
+      const canComment = comparison.is_public;
+      const isAnonymous = !sessionId ? false : true;
+
+      return {
+        canComment,
+        isAnonymous,
+        sessionId,
+      };
+    } catch (error) {
+      console.error(
+        '❌ [ShareService] Error getting comparison comment permissions:',
+        error
+      );
+      return {
+        canComment: false,
+        isAnonymous: false,
+        reason: 'Error checking permissions',
+      };
+    }
+  }
+
+  /**
+   * Create an anonymous session for shared comparison video commenting
+   */
+  static async createAnonymousSessionForSharedComparison(
+    comparisonId: string,
+    displayName: string
+  ): Promise<AnonymousSession> {
+    try {
+      console.log(
+        '🔍 [ShareService] Creating anonymous session for shared comparison:',
+        { comparisonId, displayName }
+      );
+
+      // Enhanced validation
+      const validation =
+        await this.validateAnonymousSessionCreationForComparison(
+          comparisonId,
+          displayName
+        );
+      if (!validation.valid) {
+        throw new Error(validation.reason || 'Validation failed');
+      }
+
+      // Create the anonymous session using the comment service
+      const session = await CommentService.createAnonymousSession({
+        display_name: displayName.trim(),
+        comparison_video_id: comparisonId,
+      });
+
+      console.log(
+        '✅ [ShareService] Successfully created anonymous session for shared comparison'
+      );
+      return session;
+    } catch (error) {
+      console.error(
+        '❌ [ShareService] Error creating anonymous session for shared comparison:',
+        error
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Validate shared comparison video access for commenting
+   */
+  static async validateSharedComparisonAccess(
+    comparisonId: string
+  ): Promise<boolean> {
+    try {
+      // Validate comparison ID format
+      if (!comparisonId || typeof comparisonId !== 'string') {
+        console.error(
+          '❌ [ShareService] Invalid comparison ID format:',
+          comparisonId
+        );
+        return false;
+      }
+
+      const { data: comparison, error } = await supabase
+        .from('comparison_videos')
+        .select('id, is_public')
+        .eq('id', comparisonId)
+        .eq('is_public', true)
+        .single();
+
+      if (error) {
+        console.error(
+          '❌ [ShareService] Database error validating comparison access:',
+          error
+        );
+        return false;
+      }
+
+      const isValid = !!comparison;
+      console.log('🔍 [ShareService] Comparison access validation result:', {
+        comparisonId,
+        isValid,
+      });
+      return isValid;
+    } catch (error) {
+      console.error(
+        '❌ [ShareService] Error validating shared comparison access:',
+        error
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Enhanced validation for anonymous session creation for comparisons
+   */
+  static async validateAnonymousSessionCreationForComparison(
+    comparisonId: string,
+    displayName: string
+  ): Promise<{ valid: boolean; reason?: string }> {
+    try {
+      // Validate inputs
+      if (!comparisonId || typeof comparisonId !== 'string') {
+        return { valid: false, reason: 'Invalid comparison ID' };
+      }
+
+      if (
+        !displayName ||
+        typeof displayName !== 'string' ||
+        displayName.trim().length === 0
+      ) {
+        return { valid: false, reason: 'Display name is required' };
+      }
+
+      if (displayName.trim().length > 50) {
+        return {
+          valid: false,
+          reason: 'Display name must be 50 characters or less',
+        };
+      }
+
+      // Validate comparison access
+      const hasAccess = await this.validateSharedComparisonAccess(comparisonId);
+      if (!hasAccess) {
+        return {
+          valid: false,
+          reason: 'Comparison not found or not accessible',
+        };
+      }
+
+      // Check comment permissions
+      const permissionContext =
+        await this.getComparisonCommentPermissionContext(comparisonId);
+      if (!permissionContext.canComment) {
+        return {
+          valid: false,
+          reason:
+            permissionContext.reason ||
+            'Commenting not allowed on this comparison',
+        };
+      }
+
+      return { valid: true };
+    } catch (error) {
+      console.error(
+        '❌ [ShareService] Error validating anonymous session creation for comparison:',
+        error
+      );
+      return { valid: false, reason: 'Validation error occurred' };
+    }
   }
 }

@@ -46,6 +46,34 @@ export class VideoService {
       throw error;
     }
 
+    // For uploaded videos without URL, generate URL from file_path
+    if (
+      videoData.video_type === 'upload' &&
+      (!videoData.url || videoData.url.trim() === '') &&
+      videoData.file_path &&
+      videoData.file_path.trim() !== ''
+    ) {
+      console.log(
+        '🔧 [VideoService] Generating URL from file_path for uploaded video'
+      );
+      try {
+        const { data: urlData } = supabase.storage
+          .from('videos')
+          .getPublicUrl(videoData.file_path);
+
+        if (urlData?.publicUrl) {
+          videoData.url = urlData.publicUrl;
+          console.log('✅ [VideoService] Generated URL:', videoData.url);
+        }
+      } catch (urlError) {
+        console.warn(
+          '⚠️ [VideoService] Failed to generate URL from file_path:',
+          urlError
+        );
+        // Continue without URL - the video player will handle file_path directly
+      }
+    }
+
     // For uploaded videos, always create new records (no deduplication)
     if (videoData.video_type === 'upload') {
       console.log('🔍 [VideoService] Creating new uploaded video record');
