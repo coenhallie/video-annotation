@@ -322,14 +322,50 @@ const handleSeekToTime = (time) => {
   }
 };
 
+// Timeline event handlers with fade transition for annotation clicks
+const handleSeekToTimeWithFade = async (time) => {
+  console.log('handleSeekToTimeWithFade called with time:', time);
+
+  if (playerMode.value === 'dual' && dualVideoPlayer) {
+    console.log('Seeking in dual mode with fade');
+    // For dual mode, we could implement fade transition later if needed
+    dualVideoPlayer.syncSeek(time);
+  } else {
+    console.log(
+      'DEBUG - unifiedVideoPlayerRef.value:',
+      unifiedVideoPlayerRef.value
+    );
+
+    if (
+      unifiedVideoPlayerRef.value?.performVideoFadeTransition &&
+      unifiedVideoPlayerRef.value?.seekTo
+    ) {
+      console.log(
+        'Calling unifiedVideoPlayerRef.performVideoFadeTransition with time:',
+        time
+      );
+      await unifiedVideoPlayerRef.value.performVideoFadeTransition(() => {
+        unifiedVideoPlayerRef.value.seekTo(time);
+      });
+    } else if (unifiedVideoPlayerRef.value?.seekTo) {
+      console.log(
+        'Fade transition not available, falling back to regular seek'
+      );
+      unifiedVideoPlayerRef.value.seekTo(time);
+    } else {
+      console.warn('seekTo method not found on unifiedVideoPlayerRef');
+    }
+  }
+};
+
 const handleAnnotationClick = (annotation) => {
   console.log('🎨 [App] handleAnnotationClick called with:', annotation);
 
   selectedAnnotation.value = annotation;
 
-  // Seek to annotation timestamp.
+  // Seek to annotation timestamp with fade transition.
   // The drawing canvas will automatically update based on the new currentFrame.
-  handleSeekToTime(annotation.timestamp);
+  handleSeekToTimeWithFade(annotation.timestamp);
 };
 
 // Timeline play/pause handlers

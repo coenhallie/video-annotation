@@ -152,17 +152,7 @@ const handleCancel = () => {
 };
 
 const handleKeydown = (event) => {
-  // Submit on Ctrl+Enter or Cmd+Enter
-  if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
-    event.preventDefault();
-    handleSubmit();
-  }
-
-  // Cancel on Escape
-  if (event.key === 'Escape') {
-    event.preventDefault();
-    handleCancel();
-  }
+  // Hotkey functionality removed
 };
 
 const handleTyping = () => {
@@ -286,10 +276,7 @@ initializeForm();
       ></textarea>
 
       <!-- Character Count -->
-      <div class="flex justify-between items-center mt-1">
-        <p class="text-xs text-gray-500">
-          Press Ctrl+Enter to submit, Esc to cancel
-        </p>
+      <div class="flex justify-end items-center mt-1">
         <span :class="['text-xs', characterCountClass]">
           {{ characterCount }}/{{ MAX_CONTENT_LENGTH }}
         </span>

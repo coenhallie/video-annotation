@@ -4,7 +4,12 @@
     class="canvas-container"
     :class="{ 'drawing-mode': isDrawingMode }"
   >
-    <canvas ref="fabricCanvas" class="drawing-canvas" />
+    <canvas
+      ref="fabricCanvas"
+      class="drawing-canvas"
+      :class="{ 'fade-transition': isTransitioning }"
+      :style="{ opacity: canvasOpacity }"
+    />
 
     <!-- Loading indicator for drawings -->
     <div
@@ -75,10 +80,11 @@ const canvasHeight = ref(0);
 const isDrawing = ref(false);
 const resizeObserver = ref<ResizeObserver>();
 
-// Drawing session state
-const currentDrawingSession = ref<DrawingData | null>(null);
-const isInDrawingSession = ref(false);
-const sessionTimer = ref<NodeJS.Timeout | null>(null);
+// Fade transition state
+const isTransitioning = ref(false);
+const canvasOpacity = ref(1);
+
+// Drawing session state - removed as we now save each drawing immediately
 
 // Severity colors mapping
 const severityColors = {
@@ -133,30 +139,17 @@ const handlePathCreated = (event: { path: fabric.FabricObject }) => {
   // Create drawing path from the fabric path
   const drawingPath = createDrawingPathFromFabricPath(path);
 
-  // Clear any existing timer
-  if (sessionTimer.value) {
-    clearTimeout(sessionTimer.value);
-  }
+  // Create a new drawing for each path (stroke) immediately
+  // This ensures every drawing stroke is saved separately
+  const newDrawing = {
+    paths: [drawingPath],
+    canvasWidth: canvasWidth.value,
+    canvasHeight: canvasHeight.value,
+    frame: props.currentFrame,
+  };
 
-  // Add to current drawing session or create new one
-  if (!currentDrawingSession.value) {
-    // Start new drawing session
-    currentDrawingSession.value = {
-      paths: [drawingPath],
-      canvasWidth: canvasWidth.value,
-      canvasHeight: canvasHeight.value,
-      frame: props.currentFrame,
-    };
-    isInDrawingSession.value = true;
-  } else {
-    // Add to existing drawing session
-    currentDrawingSession.value.paths.push(drawingPath);
-  }
-
-  // Set timer to finish session after delay
-  sessionTimer.value = setTimeout(() => {
-    finishDrawingSession();
-  }, 1500); // 1.5 second delay to allow for multiple strokes
+  // Emit the drawing immediately - no session timer needed
+  emit('drawing-created', newDrawing);
 
   if (canvas.value) {
     canvas.value.renderAll();
@@ -222,12 +215,9 @@ const handleMouseUp = (event: fabric.TEvent) => {
 };
 
 // Finish the current drawing session and emit the complete drawing
+// Note: This function is now unused since we emit drawings immediately
 const finishDrawingSession = () => {
-  if (currentDrawingSession.value && isInDrawingSession.value) {
-    emit('drawing-created', currentDrawingSession.value);
-    currentDrawingSession.value = null;
-    isInDrawingSession.value = false;
-  }
+  // No longer needed - drawings are emitted immediately in handlePathCreated
 };
 
 // Update canvas size to fill the container
@@ -253,9 +243,20 @@ const updateCanvasSize = () => {
   }
 };
 
-// Load existing drawings for current frame
-const loadDrawingsForFrame = () => {
+// Load existing drawings for current frame with fade transition
+const loadDrawingsForFrame = async () => {
   if (!canvas.value) return;
+
+  // Start fade transition
+  isTransitioning.value = true;
+
+  // Fade out current drawings
+  canvasOpacity.value = 0;
+
+  // Wait for fade out to complete
+  await new Promise((resolve) => setTimeout(resolve, 150));
+
+  // Clear and load new drawings
   canvas.value.clear();
   const frameDrawings =
     props.existingDrawings?.filter(
@@ -267,6 +268,14 @@ const loadDrawingsForFrame = () => {
       renderDrawingPath(path);
     });
   });
+
+  // Fade in new drawings
+  canvasOpacity.value = 1;
+
+  // Wait for fade in to complete, then end transition
+  setTimeout(() => {
+    isTransitioning.value = false;
+  }, 150);
 };
 
 // Render a drawing path on canvas
@@ -322,8 +331,7 @@ watch(
         if (canvasContainer.value) {
           canvasContainer.value.style.cursor = 'default';
         }
-        // Finish any active drawing session when exiting drawing mode
-        finishDrawingSession();
+        // No need to finish drawing session since we emit drawings immediately
       }
     } else {
       console.warn(
@@ -353,18 +361,17 @@ watch(
 
 watch(
   () => props.currentFrame,
-  () => {
-    // Finish any active drawing session when frame changes
-    finishDrawingSession();
-    loadDrawingsForFrame();
+  async () => {
+    // Load drawings for the new frame with fade transition
+    await loadDrawingsForFrame();
   }
 );
 
 // Watch for changes to existing drawings and reload them
 watch(
   () => props.existingDrawings,
-  () => {
-    loadDrawingsForFrame();
+  async () => {
+    await loadDrawingsForFrame();
   },
   { deep: true }
 );
@@ -387,9 +394,7 @@ onUnmounted(() => {
   if (canvas.value) {
     canvas.value.dispose();
   }
-  if (sessionTimer.value) {
-    clearTimeout(sessionTimer.value);
-  }
+  // sessionTimer cleanup removed since we no longer use session timers
 });
 
 // Expose methods for parent component
@@ -430,7 +435,13 @@ defineExpose({
   left: 0;
   width: 100%;
   height: 100%;
+  transition: opacity 150ms ease-in-out;
 }
+
+.drawing-canvas.fade-transition {
+  transition: opacity 150ms ease-in-out;
+}
+
 .canvas-container.drawing-mode .drawing-canvas {
   cursor: crosshair;
 }

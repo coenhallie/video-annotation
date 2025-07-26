@@ -54,6 +54,8 @@
           v-else
           ref="singleVideoElement"
           class="video-element"
+          :class="{ 'video-fade-transition': isVideoTransitioning }"
+          :style="{ opacity: videoOpacity }"
           :src="videoUrl"
           :poster="poster"
           :autoplay="autoplay"
@@ -180,6 +182,8 @@
               v-if="videoAUrl"
               ref="videoAElement"
               class="video-element"
+              :class="{ 'video-fade-transition': isVideoTransitioning }"
+              :style="{ opacity: videoOpacity }"
               :src="videoAUrl"
               preload="metadata"
               @click="handleVideoClick"
@@ -229,6 +233,8 @@
               v-if="videoBUrl"
               ref="videoBElement"
               class="video-element"
+              :class="{ 'video-fade-transition': isVideoTransitioning }"
+              :style="{ opacity: videoOpacity }"
               :src="videoBUrl"
               preload="metadata"
               @click="handleVideoClick"
@@ -375,6 +381,10 @@ const singleVideoState = ref({
   isLoading: false,
   error: null,
 });
+
+// Video fade transition state
+const isVideoTransitioning = ref(false);
+const videoOpacity = ref(1);
 
 // Setup video event listeners
 const setupVideoEventListeners = (
@@ -530,6 +540,32 @@ const handleVolumeChange = (event: Event) => {
   setVolume(newVolume);
 };
 
+// Handle video fade transition when seeking to a new frame
+const performVideoFadeTransition = async (seekFunction: () => void) => {
+  // Start fade transition
+  isVideoTransitioning.value = true;
+
+  // Fade out video
+  videoOpacity.value = 0;
+
+  // Wait for fade out to complete
+  await new Promise((resolve) => setTimeout(resolve, 150));
+
+  // Perform the seek operation
+  seekFunction();
+
+  // Wait a bit for the video to update the frame
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  // Fade in video
+  videoOpacity.value = 1;
+
+  // Wait for fade in to complete, then end transition
+  setTimeout(() => {
+    isVideoTransitioning.value = false;
+  }, 150);
+};
+
 // Handle video click
 const handleVideoClick = () => {
   pause();
@@ -633,6 +669,7 @@ defineExpose({
   play,
   pause,
   togglePlayPause,
+  performVideoFadeTransition,
   singleVideoElement,
   videoAElement,
   videoBElement,
@@ -665,6 +702,11 @@ defineExpose({
   height: auto;
   display: block;
   cursor: pointer;
+  transition: opacity 150ms ease-in-out;
+}
+
+.video-element.video-fade-transition {
+  transition: opacity 150ms ease-in-out;
 }
 
 /* Loading States */
