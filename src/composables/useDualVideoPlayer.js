@@ -2,6 +2,7 @@ import { ref, reactive, watch } from 'vue';
 import { useNotifications } from './useNotifications.ts';
 import { useVideoAnnotations } from './useVideoAnnotations.ts';
 import { useDrawingCanvas } from './useDrawingCanvas.ts';
+import { AnnotationService } from '../services/annotationService.ts';
 
 export function useDualVideoPlayer() {
   const { error: showError } = useNotifications();
@@ -17,7 +18,7 @@ export function useDualVideoPlayer() {
   const isPlaying = ref(false);
   const currentFrame = ref(0);
   const totalFrames = ref(0);
-  const fps = ref(30);
+  const fps = ref(30); // Primary FPS (from Video A by default)
 
   // Individual video states (for metadata)
   const videoAState = reactive({
@@ -34,6 +35,10 @@ export function useDualVideoPlayer() {
     isLoaded: false,
   });
 
+  // FPS compatibility tracking
+  const fpsCompatible = ref(true);
+  const primaryVideo = ref('A'); // Which video drives the timeline
+
   // Annotation system integration
   const videoAId = ref('');
   const videoBId = ref('');
@@ -44,6 +49,10 @@ export function useDualVideoPlayer() {
   const drawingCanvasA = useDrawingCanvas();
   const drawingCanvasB = useDrawingCanvas();
 
+  // Drawing canvas component references (will be set by UnifiedVideoPlayer)
+  const drawingCanvasARef = ref(null);
+  const drawingCanvasBRef = ref(null);
+
   // Annotation composables for both videos
   let videoAAnnotations = null;
   let videoBAnnotations = null;
@@ -53,16 +62,52 @@ export function useDualVideoPlayer() {
   const eventListeners = new Map();
 
   // Frame calculation utilities
-  const timeToFrame = (timeInSeconds) => {
-    return Math.round(timeInSeconds * fps.value);
+  const timeToFrame = (timeInSeconds, videoContext = null) => {
+    const targetFps =
+      videoContext === 'A'
+        ? videoAState.fps
+        : videoContext === 'B'
+        ? videoBState.fps
+        : fps.value;
+    return Math.round(timeInSeconds * targetFps);
   };
 
-  const frameToTime = (frameNumber) => {
-    return frameNumber / fps.value;
+  const frameToTime = (frameNumber, videoContext = null) => {
+    const targetFps =
+      videoContext === 'A'
+        ? videoAState.fps
+        : videoContext === 'B'
+        ? videoBState.fps
+        : fps.value;
+    return frameNumber / targetFps;
   };
 
   const updateFrameFromTime = () => {
-    currentFrame.value = timeToFrame(currentTime.value);
+    // Use primary video's FPS for shared frame calculation
+    const primaryFps =
+      primaryVideo.value === 'A' ? videoAState.fps : videoBState.fps;
+    currentFrame.value = Math.round(currentTime.value * primaryFps);
+  };
+
+  // FPS compatibility check
+  const checkFpsCompatibility = () => {
+    if (videoAState.isLoaded && videoBState.isLoaded) {
+      const fpsDifference = Math.abs(videoAState.fps - videoBState.fps);
+      fpsCompatible.value = fpsDifference < 0.1; // Allow small differences
+
+      // Set primary video to the one with higher FPS for better precision
+      primaryVideo.value = videoAState.fps >= videoBState.fps ? 'A' : 'B';
+      fps.value =
+        primaryVideo.value === 'A' ? videoAState.fps : videoBState.fps;
+
+      console.log('FPS Compatibility Check:', {
+        videoA: videoAState.fps,
+        videoB: videoBState.fps,
+        compatible: fpsCompatible.value,
+        primary: primaryVideo.value,
+        sharedFps: fps.value,
+      });
+    }
   };
 
   // Automatic state synchronization functions
@@ -75,14 +120,34 @@ export function useDualVideoPlayer() {
       timeupdate: () => {
         // Update shared state from the primary video (videoA takes precedence)
         if (videoElement === videoARef.value) {
+          console.log('🎬 [DualVideoPlayer] Video A timeupdate:', {
+            videoId,
+            currentTime: videoElement.currentTime,
+            sharedCurrentTime: currentTime.value,
+            frame: timeToFrame(videoElement.currentTime, 'A'),
+          });
           currentTime.value = videoElement.currentTime;
           updateFrameFromTime();
+        } else {
+          console.log('🎬 [DualVideoPlayer] Video B timeupdate:', {
+            videoId,
+            currentTime: videoElement.currentTime,
+            sharedCurrentTime: currentTime.value,
+            frame: timeToFrame(videoElement.currentTime, 'B'),
+          });
         }
       },
 
       loadedmetadata: () => {
         videoState.duration = videoElement.duration;
         videoState.isLoaded = true;
+
+        // Detect FPS for this specific video
+        // Default to 30 FPS but try to detect actual FPS
+        videoState.fps = 30; // Will be enhanced with actual detection
+        videoState.totalFrames = Math.round(
+          videoState.duration * videoState.fps
+        );
 
         // Update shared duration to the shorter of the two videos to keep them in sync
         // Only update if both videos have loaded their metadata
@@ -92,21 +157,37 @@ export function useDualVideoPlayer() {
             videoBState.duration
           );
           duration.value = minDuration;
+
+          // Check FPS compatibility and set primary video
+          checkFpsCompatibility();
+
+          // Calculate total frames using primary video's FPS
           totalFrames.value = Math.round(minDuration * fps.value);
         } else if (videoAState.duration > 0 && videoBState.duration === 0) {
           // Only video A has loaded, use its duration temporarily
           duration.value = videoAState.duration;
-          totalFrames.value = Math.round(videoAState.duration * fps.value);
+          fps.value = videoAState.fps;
+          totalFrames.value = Math.round(
+            videoAState.duration * videoAState.fps
+          );
         } else if (videoBState.duration > 0 && videoAState.duration === 0) {
           // Only video B has loaded, use its duration temporarily
           duration.value = videoBState.duration;
-          totalFrames.value = Math.round(videoBState.duration * fps.value);
+          fps.value = videoBState.fps;
+          totalFrames.value = Math.round(
+            videoBState.duration * videoBState.fps
+          );
         }
 
         console.log(`Video ${videoId} loaded:`, {
           duration: videoState.duration,
+          fps: videoState.fps,
+          totalFrames: videoState.totalFrames,
           sharedDuration: duration.value,
-          totalFrames: totalFrames.value,
+          sharedFps: fps.value,
+          sharedTotalFrames: totalFrames.value,
+          fpsCompatible: fpsCompatible.value,
+          primaryVideo: primaryVideo.value,
         });
       },
 
@@ -119,11 +200,43 @@ export function useDualVideoPlayer() {
       },
 
       seeking: () => {
+        console.log('🎬 [DualVideoPlayer] Video seeking event:', {
+          videoId,
+          currentTime: videoElement.currentTime,
+          isVideoA: videoElement === videoARef.value,
+          isVideoB: videoElement === videoBRef.value,
+          isSyncing,
+        });
+
+        // Prevent infinite loop - don't sync if we're already in a sync operation
+        if (isSyncing) {
+          console.log('🎬 [DualVideoPlayer] Skipping sync - already syncing');
+          return;
+        }
+
         // Sync the other video when one is seeking
         if (videoElement === videoARef.value && videoBRef.value) {
+          console.log(
+            '🎬 [DualVideoPlayer] Syncing Video B to Video A time:',
+            videoElement.currentTime
+          );
+          isSyncing = true;
           videoBRef.value.currentTime = videoElement.currentTime;
+          // Reset flag after a short delay to allow the seek to complete
+          setTimeout(() => {
+            isSyncing = false;
+          }, 50);
         } else if (videoElement === videoBRef.value && videoARef.value) {
+          console.log(
+            '🎬 [DualVideoPlayer] Syncing Video A to Video B time:',
+            videoElement.currentTime
+          );
+          isSyncing = true;
           videoARef.value.currentTime = videoElement.currentTime;
+          // Reset flag after a short delay to allow the seek to complete
+          setTimeout(() => {
+            isSyncing = false;
+          }, 50);
         }
       },
 
@@ -174,11 +287,37 @@ export function useDualVideoPlayer() {
     }
   });
 
+  // Debouncing for smooth scrubbing
+  let seekTimeout = null;
+  const SEEK_DEBOUNCE_MS = 16; // ~60fps for smooth scrubbing
+
+  // Prevent infinite loop in seeking synchronization
+  let isSyncing = false;
+
   // Synchronization methods
-  const syncSeek = (time) => {
+  const syncSeek = (time, immediate = false) => {
+    console.log('🎬 [DualVideoPlayer] syncSeek called:', {
+      requestedTime: time,
+      immediate,
+      hasVideoA: !!videoARef.value,
+      hasVideoB: !!videoBRef.value,
+      videoALoaded: videoAState.isLoaded,
+      videoBLoaded: videoBState.isLoaded,
+      videoADuration: videoAState.duration,
+      videoBDuration: videoBState.duration,
+      videoAFps: videoAState.fps,
+      videoBFps: videoBState.fps,
+      fpsCompatible: fpsCompatible.value,
+      primaryVideo: primaryVideo.value,
+      currentTime: currentTime.value,
+      hasPendingSeek: !!seekTimeout,
+    });
+
     try {
       if (!videoARef.value && !videoBRef.value) {
-        console.warn('No video elements available for seeking');
+        console.warn(
+          '🎬 [DualVideoPlayer] No video elements available for seeking'
+        );
         return;
       }
 
@@ -186,25 +325,95 @@ export function useDualVideoPlayer() {
       const minDuration = Math.min(videoAState.duration, videoBState.duration);
       const clampedTime = Math.max(0, Math.min(time, minDuration));
 
-      // Seek both videos
-      if (videoARef.value && videoAState.isLoaded) {
-        videoARef.value.currentTime = clampedTime;
-      }
-      if (videoBRef.value && videoBState.isLoaded) {
-        videoBRef.value.currentTime = clampedTime;
-      }
+      console.log('🎬 [DualVideoPlayer] Time clamping:', {
+        originalTime: time,
+        minDuration,
+        clampedTime,
+        videoADuration: videoAState.duration,
+        videoBDuration: videoBState.duration,
+      });
 
       // Update shared state immediately for responsive UI
       currentTime.value = clampedTime;
       updateFrameFromTime();
 
-      console.log('Sync seek:', {
-        requestedTime: time,
-        clampedTime,
+      console.log('🎬 [DualVideoPlayer] Updated shared state:', {
+        currentTime: currentTime.value,
         currentFrame: currentFrame.value,
+        totalFrames: totalFrames.value,
+        fps: fps.value,
       });
+
+      // Debounce actual video seeking for smooth scrubbing
+      if (seekTimeout) {
+        console.log('🎬 [DualVideoPlayer] Clearing existing seek timeout');
+        clearTimeout(seekTimeout);
+      }
+
+      const performSeek = () => {
+        console.log('🎬 [DualVideoPlayer] Performing actual video seek');
+
+        // Set sync flag to prevent circular synchronization
+        isSyncing = true;
+
+        // Seek both videos with frame-accurate positioning
+        if (videoARef.value && videoAState.isLoaded) {
+          // For Video A, use its specific FPS for frame accuracy
+          const frameA = timeToFrame(clampedTime, 'A');
+          const accurateTimeA = frameToTime(frameA, 'A');
+          console.log('🎬 [DualVideoPlayer] Video A seek:', {
+            clampedTime,
+            frameA,
+            accurateTimeA,
+            fps: videoAState.fps,
+            beforeSeek: videoARef.value.currentTime,
+          });
+          videoARef.value.currentTime = accurateTimeA;
+        }
+
+        if (videoBRef.value && videoBState.isLoaded) {
+          // For Video B, use its specific FPS for frame accuracy
+          const frameB = timeToFrame(clampedTime, 'B');
+          const accurateTimeB = frameToTime(frameB, 'B');
+          console.log('🎬 [DualVideoPlayer] Video B seek:', {
+            clampedTime,
+            frameB,
+            accurateTimeB,
+            fps: videoBState.fps,
+            beforeSeek: videoBRef.value.currentTime,
+          });
+          videoBRef.value.currentTime = accurateTimeB;
+        }
+
+        // Reset sync flag after seeks complete
+        setTimeout(() => {
+          isSyncing = false;
+        }, 100);
+
+        console.log('🎬 [DualVideoPlayer] Sync seek completed:', {
+          requestedTime: time,
+          clampedTime,
+          currentFrame: currentFrame.value,
+          fpsCompatible: fpsCompatible.value,
+          primaryVideo: primaryVideo.value,
+          videoACurrentTime: videoARef.value?.currentTime,
+          videoBCurrentTime: videoBRef.value?.currentTime,
+        });
+      };
+
+      if (immediate) {
+        console.log('🎬 [DualVideoPlayer] Immediate seek execution');
+        performSeek();
+      } else {
+        console.log(
+          '🎬 [DualVideoPlayer] Scheduling debounced seek in',
+          SEEK_DEBOUNCE_MS,
+          'ms'
+        );
+        seekTimeout = setTimeout(performSeek, SEEK_DEBOUNCE_MS);
+      }
     } catch (error) {
-      console.error('Sync seek failed:', error);
+      console.error('🎬 [DualVideoPlayer] Sync seek failed:', error);
       showError(
         'Failed to synchronize video seeking',
         'Please try again or check your video files.'
@@ -442,21 +651,301 @@ export function useDualVideoPlayer() {
   const currentAnnotationContext = ref(null);
 
   const setCurrentAnnotationContext = (annotation) => {
+    console.log('🔍 [DEBUG] setCurrentAnnotationContext called with:', {
+      annotation: annotation,
+      annotationId: annotation?.id,
+      annotationType: annotation?.annotationType,
+      hasDrawingData: !!annotation?.drawingData,
+      drawingDataKeys: annotation?.drawingData
+        ? Object.keys(annotation.drawingData)
+        : null,
+      timestamp: annotation?.timestamp,
+      frame: annotation?.frame,
+      previousContextId: currentAnnotationContext.value?.id || 'none',
+    });
+
     currentAnnotationContext.value = annotation;
-    console.log(
-      '🎨 [DualVideoPlayer] Set current annotation context:',
-      annotation?.id,
-      annotation
-    );
+
+    console.log('🔍 [DEBUG] setCurrentAnnotationContext - context updated:', {
+      newContextId: currentAnnotationContext.value?.id || 'none',
+      fullContext: currentAnnotationContext.value,
+    });
   };
 
   const clearCurrentAnnotationContext = () => {
     const previousId = currentAnnotationContext.value?.id;
-    currentAnnotationContext.value = null;
+    const previousContext = currentAnnotationContext.value;
+
+    console.log('🔍 [DEBUG] clearCurrentAnnotationContext called:', {
+      previousId: previousId || 'none',
+      previousContext: previousContext,
+      hadDrawingData: !!previousContext?.drawingData,
+    });
+
+    // CANVAS PERSISTENCE FIX: Store current canvas state before clearing context
+    const canvasStateBeforeClear = {
+      canvasAHasDrawings: drawingCanvasARef.value
+        ? drawingCanvasARef.value.hasDrawingsOnCurrentFrame()
+        : false,
+      canvasBHasDrawings: drawingCanvasBRef.value
+        ? drawingCanvasBRef.value.hasDrawingsOnCurrentFrame()
+        : false,
+      currentFrame: currentFrame.value,
+    };
+
     console.log(
-      '🎨 [DualVideoPlayer] Cleared current annotation context (was:',
-      previousId + ')'
+      '🎨 [CANVAS-STATE] Canvas state before clearing context:',
+      canvasStateBeforeClear
     );
+
+    currentAnnotationContext.value = null;
+
+    // CANVAS PERSISTENCE FIX: Verify canvas state is preserved after context clearing
+    setTimeout(() => {
+      const canvasStateAfterClear = {
+        canvasAHasDrawings: drawingCanvasARef.value
+          ? drawingCanvasARef.value.hasDrawingsOnCurrentFrame()
+          : false,
+        canvasBHasDrawings: drawingCanvasBRef.value
+          ? drawingCanvasBRef.value.hasDrawingsOnCurrentFrame()
+          : false,
+        currentFrame: currentFrame.value,
+      };
+
+      console.log(
+        '🎨 [CANVAS-STATE] Canvas state after clearing context:',
+        canvasStateAfterClear
+      );
+
+      // Log if drawings were lost during context clearing
+      if (
+        canvasStateBeforeClear.canvasAHasDrawings &&
+        !canvasStateAfterClear.canvasAHasDrawings
+      ) {
+        console.warn(
+          '⚠️ [CANVAS-STATE] Canvas A drawings were lost during context clearing!'
+        );
+      }
+      if (
+        canvasStateBeforeClear.canvasBHasDrawings &&
+        !canvasStateAfterClear.canvasBHasDrawings
+      ) {
+        console.warn(
+          '⚠️ [CANVAS-STATE] Canvas B drawings were lost during context clearing!'
+        );
+      }
+    }, 50);
+
+    console.log('🔍 [DEBUG] clearCurrentAnnotationContext - context cleared:', {
+      newContext: currentAnnotationContext.value,
+    });
+  };
+
+  // Set canvas component references
+  const setCanvasRefs = (canvasARef, canvasBRef) => {
+    drawingCanvasARef.value = canvasARef;
+    drawingCanvasBRef.value = canvasBRef;
+    console.log(
+      '🎨 [DualVideoPlayer] Canvas refs set:',
+      !!canvasARef,
+      !!canvasBRef
+    );
+  };
+
+  // Drawing session management for grouping strokes
+  const currentDrawingSession = ref(null);
+  const drawingSessionTimeout = ref(null);
+
+  // Sync comparison annotations to drawing canvases
+  const syncAnnotationsToCanvases = () => {
+    if (!comparisonAnnotations?.annotations?.value) return;
+
+    const annotations = comparisonAnnotations.annotations.value;
+
+    // Filter drawing annotations
+    const drawingAnnotations = annotations.filter(
+      (annotation) => annotation.type === 'drawing' && annotation.drawingData
+    );
+
+    // Create separate annotation arrays for Video A and Video B
+    const annotationsA = [];
+    const annotationsB = [];
+
+    drawingAnnotations.forEach((annotation) => {
+      // Create annotation for Video A if it has drawingA data
+      if (annotation.drawingData?.drawingA) {
+        annotationsA.push({
+          ...annotation,
+          drawingData: annotation.drawingData.drawingA,
+          annotationType: 'drawing',
+        });
+      }
+
+      // Create annotation for Video B if it has drawingB data
+      if (annotation.drawingData?.drawingB) {
+        annotationsB.push({
+          ...annotation,
+          drawingData: annotation.drawingData.drawingB,
+          annotationType: 'drawing',
+        });
+      }
+    });
+
+    // Load drawings into canvas instances
+    drawingCanvasA.loadDrawingsFromAnnotations(annotationsA);
+    drawingCanvasB.loadDrawingsFromAnnotations(annotationsB);
+
+    console.log(
+      `🎨 [DualVideoPlayer] Synced ${annotationsA.length} annotations to Video A, ${annotationsB.length} to Video B`
+    );
+  };
+
+  // New function to handle annotation updates with drawing data
+  const updateAnnotationWithDrawing = async (drawingDataA, drawingDataB) => {
+    console.log(
+      '🔍 [DEBUG] updateAnnotationWithDrawing called with parameters:',
+      {
+        drawingDataA: drawingDataA,
+        drawingDataB: drawingDataB,
+        hasDrawingA: !!drawingDataA,
+        hasDrawingB: !!drawingDataB,
+      }
+    );
+    console.log('🔍 [DEBUG] Current annotation context at start:', {
+      hasContext: !!currentAnnotationContext.value,
+      contextId: currentAnnotationContext.value?.id,
+      contextType: currentAnnotationContext.value?.annotationType,
+      contextDrawingData: currentAnnotationContext.value?.drawingData,
+      fullContext: currentAnnotationContext.value,
+    });
+
+    if (!currentAnnotationContext.value) {
+      console.warn(
+        '🔍 [DEBUG] No annotation context for update - returning null'
+      );
+      return null;
+    }
+
+    try {
+      console.log(
+        '🔍 [DEBUG] Using provided drawing data instead of getting from canvases'
+      );
+
+      console.log('🔍 [DEBUG] Drawing data details:', {
+        drawingDataA: drawingDataA,
+        drawingDataB: drawingDataB,
+        drawingAHasPaths: drawingDataA?.paths?.length > 0,
+        drawingBHasPaths: drawingDataB?.paths?.length > 0,
+        drawingAPathCount: drawingDataA?.paths?.length || 0,
+        drawingBPathCount: drawingDataB?.paths?.length || 0,
+      });
+
+      // Prepare the updated annotation data
+      const updatedAnnotation = { ...currentAnnotationContext.value };
+
+      console.log('🔍 [DEBUG] Initial updated annotation:', {
+        id: updatedAnnotation.id,
+        existingDrawingData: updatedAnnotation.drawingData,
+        hasExistingDrawingData: !!updatedAnnotation.drawingData,
+      });
+
+      // Initialize drawingData if it doesn't exist
+      if (!updatedAnnotation.drawingData) {
+        updatedAnnotation.drawingData = {};
+        console.log('🔍 [DEBUG] Initialized empty drawingData object');
+      }
+
+      // Update drawing data for each video context if there's drawing data
+      if (drawingDataA && drawingDataA.paths && drawingDataA.paths.length > 0) {
+        updatedAnnotation.drawingData.drawingA = drawingDataA;
+        console.log('🔍 [DEBUG] Added drawingA to annotation:', drawingDataA);
+      } else {
+        console.log('🔍 [DEBUG] No valid drawingA data to add');
+      }
+
+      if (drawingDataB && drawingDataB.paths && drawingDataB.paths.length > 0) {
+        updatedAnnotation.drawingData.drawingB = drawingDataB;
+        console.log('🔍 [DEBUG] Added drawingB to annotation:', drawingDataB);
+      } else {
+        console.log('🔍 [DEBUG] No valid drawingB data to add');
+      }
+
+      console.log('🔍 [DEBUG] Final merged drawingData object:', {
+        drawingData: updatedAnnotation.drawingData,
+        hasDrawingA: !!updatedAnnotation.drawingData.drawingA,
+        hasDrawingB: !!updatedAnnotation.drawingData.drawingB,
+        drawingDataKeys: Object.keys(updatedAnnotation.drawingData),
+      });
+
+      console.log(
+        '🔍 [DEBUG] About to call AnnotationService.updateAnnotation with:',
+        {
+          annotationId: currentAnnotationContext.value.id,
+          updatedAnnotation: updatedAnnotation,
+          drawingDataPayload: updatedAnnotation.drawingData,
+        }
+      );
+
+      // Update the annotation in the database
+      const result = await AnnotationService.updateAnnotation(
+        currentAnnotationContext.value.id,
+        updatedAnnotation
+      );
+
+      console.log('🔍 [DEBUG] AnnotationService.updateAnnotation result:', {
+        result: result,
+        success: !!result,
+      });
+
+      // CANVAS STATE TRACKING: Log what happens to canvas state after database update
+      console.log(
+        '🎨 [CANVAS-STATE] Canvas state after database update but before context clear:',
+        {
+          canvasAHasDrawings: drawingCanvasARef.value
+            ? drawingCanvasARef.value.hasDrawingsOnCurrentFrame()
+            : false,
+          canvasBHasDrawings: drawingCanvasBRef.value
+            ? drawingCanvasBRef.value.hasDrawingsOnCurrentFrame()
+            : false,
+          annotationSavedSuccessfully: !!result,
+          savedDrawingData: result?.drawingData,
+          currentFrame: currentFrame.value,
+          timestamp: Date.now(),
+        }
+      );
+
+      // Clear the annotation context after successful update
+      console.log(
+        '🔍 [DEBUG] Clearing annotation context after successful update'
+      );
+      clearCurrentAnnotationContext();
+
+      // CANVAS STATE TRACKING: Log canvas state after clearing context
+      console.log(
+        '🎨 [CANVAS-STATE] Canvas state after clearing annotation context:',
+        {
+          canvasAHasDrawings: drawingCanvasARef.value
+            ? drawingCanvasARef.value.hasDrawingsOnCurrentFrame()
+            : false,
+          canvasBHasDrawings: drawingCanvasBRef.value
+            ? drawingCanvasBRef.value.hasDrawingsOnCurrentFrame()
+            : false,
+          contextCleared: !currentAnnotationContext.value,
+          currentFrame: currentFrame.value,
+          timestamp: Date.now(),
+        }
+      );
+
+      return result;
+    } catch (error) {
+      console.error('🔍 [DEBUG] Error in updateAnnotationWithDrawing:', {
+        error: error,
+        errorMessage: error.message,
+        errorStack: error.stack,
+        contextId: currentAnnotationContext.value?.id,
+      });
+      throw error;
+    }
   };
 
   const handleDrawingCreated = async (
@@ -465,95 +954,129 @@ export function useDualVideoPlayer() {
     userId = null
   ) => {
     try {
-      const drawingCanvas =
-        videoContext === 'A' ? drawingCanvasA : drawingCanvasB;
-
-      // Add drawing to the appropriate canvas
-      drawingCanvas.addDrawing(drawing);
-
       console.log(
-        `🎨 [DualVideoPlayer] Processing drawing for video ${videoContext}, annotation context:`,
-        currentAnnotationContext.value?.id || 'null'
+        `🎨 [DualVideoPlayer] Processing drawing for video ${videoContext}, session:`,
+        currentDrawingSession.value?.id || 'none',
+        'annotation context:',
+        currentAnnotationContext.value?.id || 'none'
       );
 
-      // Check if we're adding to an existing annotation or creating a new one
-      if (currentAnnotationContext.value) {
-        // Adding drawing to existing annotation
+      // Clear any existing timeout
+      if (drawingSessionTimeout.value) {
+        clearTimeout(drawingSessionTimeout.value);
+      }
+
+      // Note: Removed premature update logic for existing annotation context
+      // Updates should only happen when the user clicks 'Save'
+
+      if (
+        currentDrawingSession.value &&
+        currentDrawingSession.value.frame === drawing.frame &&
+        currentDrawingSession.value.videoContext === videoContext
+      ) {
+        // Add to existing drawing session (for continuous drawing)
         console.log(
-          `🎨 [DualVideoPlayer] Adding drawing to existing annotation ${currentAnnotationContext.value.id} for video ${videoContext}`
+          `🎨 [DualVideoPlayer] Adding stroke to existing drawing session for video ${videoContext}`
         );
 
-        // Get current drawing data from the annotation
-        const existingDrawingData = currentAnnotationContext.value.drawingData;
+        // Merge paths into the session drawing
+        currentDrawingSession.value.drawing.paths.push(...drawing.paths);
 
-        // For dual video mode, we need to handle drawing data differently
-        let updatedDrawingData;
-        if (videoContext === 'A' || videoContext === 'B') {
-          // Dual video mode - store drawings per video context
-          updatedDrawingData = existingDrawingData || {};
-          const contextKey = `drawing${videoContext}`;
-
-          // If there's existing drawing data for this context, merge the paths
-          if (updatedDrawingData[contextKey]) {
-            updatedDrawingData[contextKey] = {
-              ...updatedDrawingData[contextKey],
-              paths: [
-                ...updatedDrawingData[contextKey].paths,
-                ...drawing.paths,
-              ],
-              canvasWidth: drawing.canvasWidth,
-              canvasHeight: drawing.canvasHeight,
-            };
-          } else {
-            updatedDrawingData[contextKey] = drawing;
-          }
-        } else {
-          // Single video mode - merge paths directly
-          if (existingDrawingData && existingDrawingData.paths) {
-            updatedDrawingData = {
-              ...existingDrawingData,
-              paths: [...existingDrawingData.paths, ...drawing.paths],
-              canvasWidth: drawing.canvasWidth,
-              canvasHeight: drawing.canvasHeight,
-            };
-          } else {
-            updatedDrawingData = drawing;
-          }
+        // Update the annotation in database
+        const drawingKey = videoContext === 'A' ? 'drawingA' : 'drawingB';
+        const updatedAnnotation = { ...currentDrawingSession.value.annotation };
+        if (!updatedAnnotation.drawingData) {
+          updatedAnnotation.drawingData = {};
         }
+        updatedAnnotation.drawingData[drawingKey] =
+          currentDrawingSession.value.drawing;
 
-        // Update the existing annotation with the new drawing data
-        await updateAnnotation(
-          currentAnnotationContext.value.id,
-          {
-            drawingData: updatedDrawingData,
-            annotationType: 'drawing', // Ensure it's marked as a drawing annotation
-          },
-          videoContext
+        await AnnotationService.updateAnnotation(
+          currentDrawingSession.value.annotation.id,
+          updatedAnnotation
         );
 
         console.log(
-          `✅ [DualVideoPlayer] Drawing added to existing annotation for video ${videoContext}`
+          `✅ [DualVideoPlayer] Updated drawing session for video ${videoContext}`
         );
       } else {
-        // Creating new standalone drawing annotation
+        // Start new drawing session (create new annotation)
         console.log(
-          `🎨 [DualVideoPlayer] Creating new drawing annotation for video ${videoContext}`
+          `🎨 [DualVideoPlayer] Starting new drawing session for video ${videoContext}`
         );
 
-        // Convert drawing to annotation and save it
-        const annotation = drawingCanvas.convertDrawingToAnnotation(
+        // Create annotation data with drawing for the specific video
+        const drawingCanvas =
+          videoContext === 'A' ? drawingCanvasA : drawingCanvasB;
+        const drawingKey = videoContext === 'A' ? 'drawingA' : 'drawingB';
+
+        // Use the drawing canvas to convert drawing to annotation format
+        const baseAnnotation = drawingCanvas.convertDrawingToAnnotation(
           drawing,
-          videoContext === 'A' ? videoAId.value : videoBId.value,
+          null, // No individual video_id for comparison annotations
           userId || 'user', // Use provided userId or fallback
           'Drawing Annotation',
           `Drawing on frame ${drawing.frame} - Video ${videoContext}`
         );
 
-        // Add annotation with video context
-        await addAnnotation(annotation, videoContext);
+        // Modify the annotation to use dual video format
+        const annotation = {
+          ...baseAnnotation,
+          drawingData: {
+            [drawingKey]: drawing,
+          },
+        };
+
+        // Create comparison annotation
+        const dbVideoContext =
+          videoContext === 'A'
+            ? 'video_a'
+            : videoContext === 'B'
+            ? 'video_b'
+            : 'comparison';
+
+        const createdAnnotation =
+          await AnnotationService.createComparisonAnnotation(
+            comparisonVideoId.value,
+            annotation,
+            userId || 'user',
+            dbVideoContext,
+            drawing.frame,
+            projectId.value
+          );
+
+        // Start new session
+        currentDrawingSession.value = {
+          id: Date.now(),
+          annotation: createdAnnotation,
+          drawing: { ...drawing }, // Copy the drawing
+          frame: drawing.frame,
+          videoContext: videoContext,
+        };
 
         console.log(
-          `✅ [DualVideoPlayer] New drawing annotation created for video ${videoContext}`
+          `✅ [DualVideoPlayer] New drawing session started for video ${videoContext}`
+        );
+      }
+
+      // Set timeout to end session after 2 seconds of inactivity
+      drawingSessionTimeout.value = setTimeout(() => {
+        console.log(
+          `🎨 [DualVideoPlayer] Ending drawing session due to inactivity`
+        );
+        currentDrawingSession.value = null;
+        drawingSessionTimeout.value = null;
+      }, 2000);
+
+      // Add drawing to canvas for immediate visual feedback
+      const canvasRef =
+        videoContext === 'A'
+          ? drawingCanvasARef.value
+          : drawingCanvasBRef.value;
+      if (canvasRef && canvasRef.$el) {
+        // The drawing should already be visible since it was created on the canvas
+        console.log(
+          `🎨 [DualVideoPlayer] Drawing should be visible on canvas ${videoContext}`
         );
       }
     } catch (error) {
@@ -583,6 +1106,24 @@ export function useDualVideoPlayer() {
   const getDrawingCanvas = (videoContext = 'A') => {
     return videoContext === 'A' ? drawingCanvasA : drawingCanvasB;
   };
+
+  // Watch for annotation changes and sync to canvases
+  watch(
+    () => comparisonAnnotations?.annotations?.value,
+    () => {
+      if (comparisonAnnotations?.annotations?.value) {
+        syncAnnotationsToCanvases();
+      }
+    },
+    { deep: true }
+  );
+
+  // Watch for frame changes and sync to canvases
+  watch(currentFrame, () => {
+    if (comparisonAnnotations?.annotations?.value) {
+      syncAnnotationsToCanvases();
+    }
+  });
 
   // Cleanup function
   const cleanup = () => {
@@ -622,6 +1163,10 @@ export function useDualVideoPlayer() {
     videoAState,
     videoBState,
 
+    // FPS compatibility
+    fpsCompatible,
+    primaryVideo,
+
     // Annotation state
     videoAId,
     videoBId,
@@ -645,8 +1190,11 @@ export function useDualVideoPlayer() {
     updateAnnotation,
     deleteAnnotation,
     handleDrawingCreated,
+    updateAnnotationWithDrawing,
     setCurrentAnnotationContext,
     clearCurrentAnnotationContext,
+    setCanvasRefs,
+    syncAnnotationsToCanvases,
     setVideoSize,
     getAnnotations,
     getDrawingCanvas,
@@ -657,6 +1205,7 @@ export function useDualVideoPlayer() {
     timeToFrame,
     frameToTime,
     updateFrameFromTime,
+    checkFpsCompatibility,
     cleanup,
   };
 }

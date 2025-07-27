@@ -59,9 +59,10 @@ export interface DatabaseVideo {
 
 export interface DatabaseAnnotation {
   id: string;
-  video_id: string;
+  video_id?: string; // Nullable for comparison annotations
+  comparison_video_id?: string; // For comparison video annotations
   user_id: string;
-  // project_id?: string; // Removed: column doesn't exist in database
+  project_id?: string;
   content: string;
   title: string;
   severity: SeverityLevel;
@@ -74,6 +75,8 @@ export interface DatabaseAnnotation {
   duration_frames: number;
   annotation_type: AnnotationType;
   drawing_data?: DrawingData;
+  video_context?: VideoContext; // Context for comparison annotations
+  synchronized_frame?: number; // For synchronized comparison annotations
   metadata?: Record<string, any>;
   created_at: string;
   updated_at: string;
@@ -403,7 +406,7 @@ export function transformAppAnnotationToDatabase(
     drawing_data: appAnnotation.drawingData || null,
     // New columns for comparison support
     comparison_video_id: null, // Will be set by comparison-specific functions
-    video_context: 'individual', // Default to individual video context
+    video_context: 'individual' as VideoContext, // Default to individual video context
     synchronized_frame: null, // Will be set for comparison annotations
   };
 
@@ -524,6 +527,14 @@ export function transformAppAnnotationToComparisonDatabase(
   // For comparison annotations, video_id should be null and comparison_video_id should be set
   const actualVideoId = comparison_video_id ? null : video_id;
 
+  // Map video context from dual video player format to database format
+  const mappedVideoContext =
+    video_context === 'A'
+      ? 'video_a'
+      : video_context === 'B'
+      ? 'video_b'
+      : video_context || 'individual';
+
   const result = {
     video_id: actualVideoId,
     user_id,
@@ -533,16 +544,16 @@ export function transformAppAnnotationToComparisonDatabase(
     severity: appAnnotation.severity || 'medium',
     color: appAnnotation.color || '#6b7280',
     timestamp: appAnnotation.timestamp || 0,
-    frame: appAnnotation.frame || 0,
-    start_frame: appAnnotation.frame || 0,
-    end_frame: appAnnotation.frame || 0,
+    frame: appAnnotation.frame || null, // Use null for optional frame field
+    start_frame: appAnnotation.frame || 0, // Required field, use 0 as fallback
+    end_frame: appAnnotation.frame || null, // Use null for point-in-time annotations
     duration: 0, // Default duration for point-in-time annotations
     duration_frames: 1, // Default duration_frames for point-in-time annotations
     annotation_type: appAnnotation.annotationType || 'text',
     drawing_data: appAnnotation.drawingData || null,
     // Now supported comparison columns
     comparison_video_id: comparison_video_id || null,
-    video_context: video_context || 'individual',
+    video_context: mappedVideoContext,
     synchronized_frame: synchronized_frame || null,
   };
 

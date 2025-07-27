@@ -52,9 +52,9 @@ interface Props {
 }
 
 interface Emits {
-  (e: 'drawing-created', drawing: DrawingData): void;
-  (e: 'drawing-updated', drawing: DrawingData): void;
-  (e: 'drawing-deleted', drawingId: string): void;
+  (e: 'drawing-created', drawing: DrawingData, event?: Event): void;
+  (e: 'drawing-updated', drawing: DrawingData, event?: Event): void;
+  (e: 'drawing-deleted', drawingId: string, event?: Event): void;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -148,8 +148,16 @@ const handlePathCreated = (event: { path: fabric.FabricObject }) => {
     frame: props.currentFrame,
   };
 
-  // Emit the drawing immediately - no session timer needed
-  emit('drawing-created', newDrawing);
+  // Create a synthetic DOM event with the canvas container as target
+  // This allows the UnifiedVideoPlayer to determine which video canvas triggered the drawing
+  const syntheticEvent = new Event('drawing-created', { bubbles: true });
+  Object.defineProperty(syntheticEvent, 'target', {
+    value: canvasContainer.value,
+    enumerable: true,
+  });
+
+  // Emit the drawing with the synthetic event for video context detection
+  emit('drawing-created', newDrawing, syntheticEvent);
 
   if (canvas.value) {
     canvas.value.renderAll();

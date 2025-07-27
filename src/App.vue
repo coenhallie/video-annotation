@@ -358,14 +358,51 @@ const handleSeekToTimeWithFade = async (time) => {
   }
 };
 
-const handleAnnotationClick = (annotation) => {
+const handleAnnotationClick = async (annotation) => {
   console.log('🎨 [App] handleAnnotationClick called with:', annotation);
 
   selectedAnnotation.value = annotation;
 
   // Seek to annotation timestamp with fade transition.
   // The drawing canvas will automatically update based on the new currentFrame.
-  handleSeekToTimeWithFade(annotation.timestamp);
+  await handleSeekToTimeWithFade(annotation.timestamp);
+
+  // DRAWING LOADING FIX: Load drawings AFTER fade transition completes (350ms+)
+  // Add extra buffer to ensure fade transition is fully complete
+  setTimeout(() => {
+    if (annotation && annotation.drawingData) {
+      console.log(
+        '🎨 [App] Loading drawings from annotation click (after fade transition):',
+        annotation.drawingData
+      );
+
+      if (playerMode.value === 'dual' && dualVideoPlayer) {
+        // In dual mode, load drawing data to both canvases if it exists
+        if (
+          dualVideoPlayer.drawingCanvasA &&
+          annotation.drawingData?.drawingA
+        ) {
+          console.log('🎨 [App] Loading drawing A to canvas');
+          dualVideoPlayer.drawingCanvasA.addDrawing(
+            annotation.drawingData.drawingA
+          );
+        }
+        if (
+          dualVideoPlayer.drawingCanvasB &&
+          annotation.drawingData?.drawingB
+        ) {
+          console.log('🎨 [App] Loading drawing B to canvas');
+          dualVideoPlayer.drawingCanvasB.addDrawing(
+            annotation.drawingData.drawingB
+          );
+        }
+      } else if (playerMode.value === 'single') {
+        // In single mode, load drawing data to the primary canvas
+        console.log('🎨 [App] Loading drawing to single canvas');
+        drawingCanvas.addDrawing(annotation.drawingData);
+      }
+    }
+  }, 400); // 400ms delay to ensure 350ms fade transition + buffer is complete
 };
 
 // Timeline play/pause handlers
@@ -1812,6 +1849,7 @@ const initializeSharedComparison = async (comparisonId) => {
           :is-dual-mode="playerMode === 'dual'"
           :drawing-canvas-a="dualVideoPlayer?.drawingCanvasA"
           :drawing-canvas-b="dualVideoPlayer?.drawingCanvasB"
+          :dual-video-player="dualVideoPlayer"
           :comment-permissions="commentPermissions"
           :anonymous-session="anonymousSession"
           :is-shared-video="isSharedVideo || isSharedComparison"

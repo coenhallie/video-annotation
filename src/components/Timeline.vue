@@ -38,12 +38,33 @@ const props = defineProps({
     type: String,
     default: 'single',
   },
+  // New props for dual video FPS handling
+  fpsCompatible: {
+    type: Boolean,
+    default: true,
+  },
+  primaryVideo: {
+    type: String,
+    default: 'A',
+  },
+  videoAState: {
+    type: Object,
+    default: () => ({ fps: 30, duration: 0 }),
+  },
+  videoBState: {
+    type: Object,
+    default: () => ({ fps: 30, duration: 0 }),
+  },
 });
 
 const emit = defineEmits(['seek-to-time', 'annotation-click', 'play', 'pause']);
 
 const timelineRef = ref(null);
 const isDragging = ref(false);
+
+// Debouncing for smooth scrubbing
+let seekTimeout = null;
+const SEEK_DEBOUNCE_MS = 16; // ~60fps for smooth scrubbing
 
 // Use time-based progress for consistency with video player
 const progressPercentage = computed(() => {
@@ -72,10 +93,57 @@ const formatFrame = (frameNumber) => {
   return `Frame ${frameNumber.toLocaleString()}`;
 };
 
+// Debounced timeline interaction for smooth scrubbing
+const debouncedSeek = (time, immediate = false) => {
+  console.log('🎯 [Timeline] debouncedSeek called:', {
+    time,
+    immediate,
+    duration: props.duration,
+    playerMode: props.playerMode,
+    currentTime: props.currentTime,
+    hasTimeout: !!seekTimeout,
+  });
+
+  if (seekTimeout) {
+    clearTimeout(seekTimeout);
+    console.log('🎯 [Timeline] Cleared existing seek timeout');
+  }
+
+  if (immediate) {
+    console.log('🎯 [Timeline] Immediate seek to:', time);
+    emit('seek-to-time', time);
+  } else {
+    console.log(
+      '🎯 [Timeline] Debounced seek scheduled for:',
+      time,
+      'in',
+      SEEK_DEBOUNCE_MS,
+      'ms'
+    );
+    seekTimeout = setTimeout(() => {
+      console.log('🎯 [Timeline] Executing debounced seek to:', time);
+      emit('seek-to-time', time);
+    }, SEEK_DEBOUNCE_MS);
+  }
+};
+
 // Simplified timeline interaction - use time-based seeking for consistency
-const handleTimelineClick = (event) => {
+const handleTimelineClick = (event, immediate = false) => {
+  console.log('🎯 [Timeline] handleTimelineClick called:', {
+    immediate,
+    hasTimelineRef: !!timelineRef.value,
+    duration: props.duration,
+    playerMode: props.playerMode,
+  });
+
   if (!timelineRef.value || !props.duration) {
-    console.warn('Timeline click ignored: missing timelineRef or duration');
+    console.warn(
+      '🎯 [Timeline] Timeline click ignored: missing timelineRef or duration',
+      {
+        timelineRef: !!timelineRef.value,
+        duration: props.duration,
+      }
+    );
     return;
   }
 
@@ -84,30 +152,71 @@ const handleTimelineClick = (event) => {
   const percentage = Math.max(0, Math.min(clickX / rect.width, 1));
   const newTime = percentage * props.duration;
 
-  emit('seek-to-time', newTime);
+  console.log('🎯 [Timeline] Timeline click calculation:', {
+    clickX,
+    rectWidth: rect.width,
+    percentage,
+    newTime,
+    duration: props.duration,
+    immediate,
+  });
+
+  // Use debounced seeking for smooth scrubbing, immediate for clicks
+  debouncedSeek(newTime, immediate);
 };
 
 const handleTimelineMouseDown = (event) => {
+  console.log('🎯 [Timeline] handleTimelineMouseDown called:', {
+    duration: props.duration,
+    playerMode: props.playerMode,
+    isDragging: isDragging.value,
+    eventType: event.type,
+  });
+
   if (!props.duration) {
-    console.warn('Timeline mousedown ignored: missing duration');
+    console.warn('🎯 [Timeline] Timeline mousedown ignored: missing duration', {
+      duration: props.duration,
+      playerMode: props.playerMode,
+    });
     return;
   }
 
   isDragging.value = true;
-  handleTimelineClick(event);
+  console.log('🎯 [Timeline] Starting drag operation, calling immediate seek');
+  handleTimelineClick(event, true); // Immediate seek on initial click
 
   const handleMouseMove = (e) => {
     if (isDragging.value) {
-      handleTimelineClick(e);
+      console.log(
+        '🎯 [Timeline] Mouse move during drag, calling debounced seek'
+      );
+      handleTimelineClick(e, false); // Debounced seek during drag
     }
   };
 
-  const handleMouseUp = () => {
+  const handleMouseUp = (e) => {
+    console.log('🎯 [Timeline] Mouse up, ending drag operation:', {
+      isDragging: isDragging.value,
+      hasPendingTimeout: !!seekTimeout,
+    });
+
+    if (isDragging.value) {
+      console.log('🎯 [Timeline] Final seek on mouse up');
+      handleTimelineClick(e, true); // Immediate seek on release
+    }
     isDragging.value = false;
     document.removeEventListener('mousemove', handleMouseMove);
     document.removeEventListener('mouseup', handleMouseUp);
+
+    // Clear any pending debounced seeks
+    if (seekTimeout) {
+      console.log('🎯 [Timeline] Clearing pending seek timeout on mouse up');
+      clearTimeout(seekTimeout);
+      seekTimeout = null;
+    }
   };
 
+  console.log('🎯 [Timeline] Adding mouse event listeners');
   document.addEventListener('mousemove', handleMouseMove);
   document.addEventListener('mouseup', handleMouseUp);
 };
@@ -284,7 +393,21 @@ const timeMarkers = computed(() => {
           <span class="opacity-50">/</span>
           <span>{{ formatFrame(totalFrames) }}</span>
           <span class="opacity-50">@</span>
-          <span>{{ fps }}fps</span>
+          <span
+            v-if="playerMode === 'dual' && !fpsCompatible"
+            class="text-yellow-400"
+            :title="`Video A: ${videoAState.fps}fps, Video B: ${videoBState.fps}fps`"
+          >
+            {{ fps }}fps ({{ primaryVideo }})
+          </span>
+          <span v-else>{{ fps }}fps</span>
+          <span
+            v-if="playerMode === 'dual' && !fpsCompatible"
+            class="text-yellow-400 text-xs ml-1"
+            title="Videos have different frame rates"
+          >
+            ⚠️
+          </span>
         </div>
       </div>
 

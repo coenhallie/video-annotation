@@ -295,6 +295,9 @@ interface Props {
   videoAState?: any;
   videoBState?: any;
   dualVideoPlayer?: any;
+  // FPS compatibility props for dual video mode
+  fpsCompatible?: boolean;
+  primaryVideo?: string;
   // Annotation-related props
   projectId?: string;
   comparisonVideoId?: string;
@@ -336,6 +339,8 @@ const props = withDefaults(defineProps<Props>(), {
   autoplay: false,
   controls: true,
   poster: '',
+  fpsCompatible: true,
+  primaryVideo: 'A',
 });
 
 const emit = defineEmits<Emits>();
@@ -515,6 +520,21 @@ watch(
       if (props.dualVideoPlayer) {
         props.dualVideoPlayer.videoBRef.value = video;
       }
+    }
+  },
+  { flush: 'post' }
+);
+
+// Watch for canvas refs and set them in dual video player
+watch(
+  [drawingCanvasARef, drawingCanvasBRef],
+  ([canvasA, canvasB]) => {
+    if (
+      props.mode === 'dual' &&
+      props.dualVideoPlayer &&
+      props.dualVideoPlayer.setCanvasRefs
+    ) {
+      props.dualVideoPlayer.setCanvasRefs(canvasA, canvasB);
     }
   },
   { flush: 'post' }

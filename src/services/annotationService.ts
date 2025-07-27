@@ -111,14 +111,64 @@ export class AnnotationService {
     annotationId: string,
     updates: AnnotationUpdate
   ) {
+    console.log('🔍 [DEBUG] AnnotationService.updateAnnotation called with:', {
+      annotationId: annotationId,
+      updates: updates,
+      hasDrawingData: !!(updates as any).drawing_data,
+      drawingDataKeys: (updates as any).drawing_data
+        ? Object.keys((updates as any).drawing_data)
+        : null,
+      updateKeys: Object.keys(updates),
+    });
+
+    console.log('🔍 [DEBUG] Drawing data payload details:', {
+      drawingData: (updates as any).drawing_data,
+      drawingDataType: typeof (updates as any).drawing_data,
+      drawingDataStringified: (updates as any).drawing_data
+        ? JSON.stringify((updates as any).drawing_data)
+        : null,
+    });
+
+    // Remove annotationType from updates object as it should not be included in update requests
+    const updatesAny = updates as any;
+    const { annotationType, ...cleanUpdates } = updatesAny;
+
+    console.log('🔍 [DEBUG] Cleaned updates object (removed annotationType):', {
+      originalKeys: Object.keys(updates),
+      cleanedKeys: Object.keys(cleanUpdates),
+      removedAnnotationType: !!annotationType,
+    });
+
     const { data, error } = await supabase
       .from('annotations')
-      .update(updates)
+      .update(cleanUpdates)
       .eq('id', annotationId)
       .select()
       .single();
 
-    if (error) throw error;
+    console.log('🔍 [DEBUG] Supabase update result:', {
+      success: !error,
+      error: error,
+      data: data,
+      returnedDrawingData: data?.drawingData,
+      dataId: data?.id,
+    });
+
+    if (error) {
+      console.error('🔍 [DEBUG] Supabase update error details:', {
+        error: error,
+        errorMessage: error.message,
+        errorCode: error.code,
+        errorDetails: error.details,
+        errorHint: error.hint,
+      });
+      throw error;
+    }
+
+    console.log(
+      '🔍 [DEBUG] AnnotationService.updateAnnotation returning:',
+      data
+    );
     return data;
   }
 
@@ -491,7 +541,7 @@ export class AnnotationService {
 
     const annotationData = transformAppAnnotationToComparisonDatabase(
       annotation,
-      comparisonVideoId, // Use comparison video ID as video_id for comparison annotations
+      null, // video_id should be null for comparison annotations
       userId,
       comparisonVideoId,
       videoContext,

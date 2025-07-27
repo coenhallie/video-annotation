@@ -106,6 +106,14 @@ export function useDrawingCanvas() {
     const frameDrawings = state.value.drawings.get(frame) || [];
     frameDrawings.push(drawing);
     state.value.drawings.set(frame, frameDrawings);
+
+    // CANVAS STATE TRACKING: Log when drawings are added
+    console.log('🎨 [CANVAS-STATE] Drawing added to canvas:', {
+      frame: frame,
+      pathCount: drawing.paths?.length || 0,
+      totalDrawingsOnFrame: frameDrawings.length,
+      timestamp: Date.now(),
+    });
   };
 
   // Update drawing
@@ -132,7 +140,19 @@ export function useDrawingCanvas() {
 
   // Clear drawings for current frame
   const clearCurrentFrameDrawings = () => {
-    state.value.drawings.delete(currentFrame.value);
+    const frame = currentFrame.value;
+    const hadDrawings = state.value.drawings.has(frame);
+    const drawingCount = state.value.drawings.get(frame)?.length || 0;
+
+    state.value.drawings.delete(frame);
+
+    // CANVAS STATE TRACKING: Log when drawings are cleared
+    console.log('🎨 [CANVAS-STATE] Drawings cleared from canvas:', {
+      frame: frame,
+      hadDrawings: hadDrawings,
+      clearedDrawingCount: drawingCount,
+      timestamp: Date.now(),
+    });
   };
 
   // Clear all drawings
@@ -178,7 +198,8 @@ export function useDrawingCanvas() {
         annotation.annotationType === 'drawing' && annotation.drawingData
     );
 
-    // Simulate async loading for better UX (drawings load instantly but this gives visual feedback)
+    // TIMING FIX: Reduce delay to prevent interference with video fade transition timing
+    // The 300ms delay was causing race conditions with the 350ms video fade transition
     setTimeout(() => {
       drawingAnnotations.forEach((annotation) => {
         if (annotation.drawingData) {
@@ -191,7 +212,7 @@ export function useDrawingCanvas() {
 
       // Clear loading state
       state.value.isLoadingDrawings = false;
-    }, 300); // Small delay to show loading indicator
+    }, 100); // Reduced delay to prevent race conditions with video transitions
   };
 
   // Serialize drawings for storage
@@ -276,6 +297,27 @@ export function useDrawingCanvas() {
     return frameDrawings ? frameDrawings.length > 0 : false;
   };
 
+  // Check if current frame has drawings
+  const hasDrawingsOnCurrentFrame = (): boolean => {
+    return hasDrawingsOnFrame(currentFrame.value);
+  };
+
+  // Get current frame drawing data (merges all drawings on current frame)
+  const getCurrentFrameDrawing = (): DrawingData | null => {
+    const frameDrawings = getDrawingsForFrame(currentFrame.value);
+    if (frameDrawings.length === 0) return null;
+
+    // Merge all drawings on current frame into single DrawingData
+    const allPaths = frameDrawings.flatMap((drawing) => drawing.paths);
+
+    return {
+      paths: allPaths,
+      canvasWidth: state.value.canvasSize.width,
+      canvasHeight: state.value.canvasSize.height,
+      frame: currentFrame.value,
+    };
+  };
+
   // Export interface
   return {
     // State
@@ -320,6 +362,8 @@ export function useDrawingCanvas() {
     getTotalDrawingsCount,
     getFramesWithDrawings,
     hasDrawingsOnFrame,
+    hasDrawingsOnCurrentFrame,
+    getCurrentFrameDrawing,
   };
 }
 

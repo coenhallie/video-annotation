@@ -427,21 +427,18 @@ export class CommentService {
     });
 
     try {
-      // Get annotation and video details
-      const { data: annotation, error } = await supabase
+      // First, get the annotation to determine if it's individual or comparison
+      const { data: annotation, error: annotationError } = await supabase
         .from('annotations')
-        .select(
-          `
-          id,
-          user_id,
-          videos!inner(id, is_public, owner_id)
-        `
-        )
+        .select('id, user_id, video_id, comparison_video_id')
         .eq('id', annotationId)
         .single();
 
-      if (error) {
-        console.error('❌ [CommentService] Error getting annotation:', error);
+      if (annotationError) {
+        console.error(
+          '❌ [CommentService] Error getting annotation:',
+          annotationError
+        );
         return {
           canComment: false,
           canModerate: false,
@@ -449,21 +446,81 @@ export class CommentService {
         };
       }
 
-      const video = Array.isArray(annotation.videos)
-        ? annotation.videos[0]
-        : annotation.videos;
-      if (!video) {
+      let videoData: { is_public: boolean; owner_id: string } | null = null;
+
+      // Check if it's a comparison annotation
+      if (annotation.comparison_video_id) {
+        console.log(
+          '🔍 [CommentService] Checking comparison video permissions'
+        );
+        const { data: comparisonVideo, error: comparisonError } = await supabase
+          .from('comparison_videos')
+          .select('is_public, user_id')
+          .eq('id', annotation.comparison_video_id)
+          .single();
+
+        if (comparisonError) {
+          console.error(
+            '❌ [CommentService] Error getting comparison video:',
+            comparisonError
+          );
+          return {
+            canComment: false,
+            canModerate: false,
+            reason: 'Comparison video not found',
+          };
+        }
+
+        videoData = {
+          is_public: comparisonVideo.is_public,
+          owner_id: comparisonVideo.user_id,
+        };
+      } else if (annotation.video_id) {
+        console.log(
+          '🔍 [CommentService] Checking individual video permissions'
+        );
+        const { data: video, error: videoError } = await supabase
+          .from('videos')
+          .select('is_public, owner_id')
+          .eq('id', annotation.video_id)
+          .single();
+
+        if (videoError) {
+          console.error('❌ [CommentService] Error getting video:', videoError);
+          return {
+            canComment: false,
+            canModerate: false,
+            reason: 'Video not found',
+          };
+        }
+
+        videoData = {
+          is_public: video.is_public,
+          owner_id: video.owner_id,
+        };
+      } else {
+        console.error(
+          '❌ [CommentService] Annotation has neither video_id nor comparison_video_id'
+        );
         return {
           canComment: false,
           canModerate: false,
-          reason: 'Video not found',
+          reason: 'Invalid annotation: no associated video',
+        };
+      }
+
+      if (!videoData) {
+        return {
+          canComment: false,
+          canModerate: false,
+          reason: 'Video data not found',
         };
       }
 
       // Check if user can comment
       const canComment =
-        video.is_public || // Public video
-        (userId && video.owner_id === userId) || // Video owner
+        videoData.is_public || // Public video/comparison
+        (userId && videoData.owner_id === userId) || // Video/comparison owner
         (userId && annotation.user_id === userId); // Annotation owner
 
       // Check if user can moderate (annotation owner)
@@ -472,6 +529,9 @@ export class CommentService {
       console.log('✅ [CommentService] Permission check result:', {
         canComment,
         canModerate,
+        annotationType: annotation.comparison_video_id
+          ? 'comparison'
+          : 'individual',
       });
       return { canComment, canModerate };
     } catch (error) {
