@@ -1,6 +1,6 @@
 import { ref, onUnmounted, watch, readonly, toValue } from 'vue';
 import { supabase } from './useSupabase';
-import { transformDatabaseAnnotationToApp } from '../types/database';
+import type { DatabaseAnnotation, Annotation } from '../types/database';
 
 export function useRealtimeAnnotations(videoId, annotations) {
   const isConnected = ref(false);
@@ -20,11 +20,11 @@ export function useRealtimeAnnotations(videoId, annotations) {
           event: 'INSERT',
           schema: 'public',
           table: 'annotations',
-          filter: `video_id=eq.${toValue(videoId)}`,
+          filter: `videoId=eq.${toValue(videoId)}`,
         },
         (payload) => {
           console.log('New annotation:', payload.new);
-          const newAnnotation = transformDatabaseAnnotationToApp(payload.new);
+          const newAnnotation = payload.new as Annotation;
 
           // Add to annotations if not already present
           if (!annotations.value.find((a) => a.id === newAnnotation.id)) {
@@ -39,13 +39,11 @@ export function useRealtimeAnnotations(videoId, annotations) {
           event: 'UPDATE',
           schema: 'public',
           table: 'annotations',
-          filter: `video_id=eq.${toValue(videoId)}`,
+          filter: `videoId=eq.${toValue(videoId)}`,
         },
         (payload) => {
           console.log('Updated annotation:', payload.new);
-          const updatedAnnotation = transformDatabaseAnnotationToApp(
-            payload.new
-          );
+          const updatedAnnotation = payload.new as Annotation;
 
           const index = annotations.value.findIndex(
             (a) => a.id === updatedAnnotation.id
@@ -61,7 +59,7 @@ export function useRealtimeAnnotations(videoId, annotations) {
           event: 'DELETE',
           schema: 'public',
           table: 'annotations',
-          filter: `video_id=eq.${toValue(videoId)}`,
+          filter: `videoId=eq.${toValue(videoId)}`,
         },
         (payload) => {
           console.log('Deleted annotation:', payload.old);
@@ -102,9 +100,9 @@ export function useRealtimeAnnotations(videoId, annotations) {
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
           await presenceChannel.track({
-            user_id: userId,
-            user_name: userName,
-            online_at: new Date().toISOString(),
+            userId: userId,
+            userName: userName,
+            onlineAt: new Date().toISOString(),
           });
         }
       });

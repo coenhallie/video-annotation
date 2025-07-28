@@ -9,7 +9,6 @@ import {
 } from 'vue';
 import type { Ref } from 'vue';
 import { supabase } from './useSupabase';
-import { transformDatabaseCommentToApp } from '../types/database';
 import type { Comment } from '../types/database';
 
 export interface RealtimeCommentEvent {
@@ -19,11 +18,11 @@ export interface RealtimeCommentEvent {
 }
 
 export interface CommentPresence {
-  user_id: string;
-  user_name: string;
-  annotation_id: string;
+  userId: string;
+  userName: string;
+  annotationId: string;
   typing: boolean;
-  online_at: string;
+  onlineAt: string;
 }
 
 export function useRealtimeComments(annotationId: string | Ref<string>) {
@@ -84,7 +83,7 @@ export function useRealtimeComments(annotationId: string | Ref<string>) {
           event: 'INSERT',
           schema: 'public',
           table: 'annotation_comments',
-          filter: `annotation_id=eq.${currentId}`,
+          filter: `annotationId=eq.${currentId}`,
         },
         (payload) => {
           console.log('📥 [RealtimeComments] New comment:', payload.new);
@@ -97,7 +96,7 @@ export function useRealtimeComments(annotationId: string | Ref<string>) {
           event: 'UPDATE',
           schema: 'public',
           table: 'annotation_comments',
-          filter: `annotation_id=eq.${currentId}`,
+          filter: `annotationId=eq.${currentId}`,
         },
         (payload) => {
           console.log('📝 [RealtimeComments] Updated comment:', payload.new);
@@ -110,7 +109,7 @@ export function useRealtimeComments(annotationId: string | Ref<string>) {
           event: 'DELETE',
           schema: 'public',
           table: 'annotation_comments',
-          filter: `annotation_id=eq.${currentId}`,
+          filter: `annotationId=eq.${currentId}`,
         },
         (payload) => {
           console.log('🗑️ [RealtimeComments] Deleted comment:', payload.old);
@@ -174,30 +173,30 @@ export function useRealtimeComments(annotationId: string | Ref<string>) {
       })
       .on('broadcast', { event: 'typing_start' }, ({ payload }) => {
         console.log('⌨️ [RealtimeComments] User started typing:', payload);
-        if (payload.user_id !== userId) {
-          typingUsers.value.set(payload.user_id, payload);
+        if (payload.userId !== userId) {
+          typingUsers.value.set(payload.userId, payload);
           eventHandlers.onTypingStart.forEach((handler) =>
-            handler(payload.user_id, payload.user_name)
+            handler(payload.userId, payload.userName)
           );
         }
       })
       .on('broadcast', { event: 'typing_stop' }, ({ payload }) => {
         console.log('⌨️ [RealtimeComments] User stopped typing:', payload);
-        if (payload.user_id !== userId) {
-          typingUsers.value.delete(payload.user_id);
+        if (payload.userId !== userId) {
+          typingUsers.value.delete(payload.userId);
           eventHandlers.onTypingStop.forEach((handler) =>
-            handler(payload.user_id)
+            handler(payload.userId)
           );
         }
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
           await presenceChannel.track({
-            user_id: userId,
-            user_name: userName,
-            annotation_id: currentId,
+            userId: userId,
+            userName: userName,
+            annotationId: currentId,
             typing: false,
-            online_at: new Date().toISOString(),
+            onlineAt: new Date().toISOString(),
           });
         }
       });
@@ -208,7 +207,7 @@ export function useRealtimeComments(annotationId: string | Ref<string>) {
    */
   const handleCommentInsert = (dbComment: any) => {
     try {
-      const comment = transformDatabaseCommentToApp(dbComment);
+      const comment = dbComment as Comment;
 
       // Check if comment already exists (avoid duplicates)
       const exists = realtimeComments.value.find((c) => c.id === comment.id);
@@ -216,7 +215,7 @@ export function useRealtimeComments(annotationId: string | Ref<string>) {
         realtimeComments.value.push(comment);
         realtimeComments.value.sort(
           (a, b) =>
-            new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
         );
       }
 
@@ -241,10 +240,8 @@ export function useRealtimeComments(annotationId: string | Ref<string>) {
    */
   const handleCommentUpdate = (dbComment: any, dbOldComment?: any) => {
     try {
-      const comment = transformDatabaseCommentToApp(dbComment);
-      const oldComment = dbOldComment
-        ? transformDatabaseCommentToApp(dbOldComment)
-        : undefined;
+      const comment = dbComment as Comment;
+      const oldComment = dbOldComment ? (dbOldComment as Comment) : undefined;
 
       // Update in realtime comments array
       const index = realtimeComments.value.findIndex(
@@ -278,7 +275,7 @@ export function useRealtimeComments(annotationId: string | Ref<string>) {
    */
   const handleCommentDelete = (dbComment: any) => {
     try {
-      const comment = transformDatabaseCommentToApp(dbComment);
+      const comment = dbComment as Comment;
 
       // Remove from realtime comments array
       const index = realtimeComments.value.findIndex(
@@ -363,9 +360,9 @@ export function useRealtimeComments(annotationId: string | Ref<string>) {
       type: 'broadcast',
       event,
       payload: {
-        user_id: userId,
-        user_name: userName,
-        annotation_id: currentAnnotationId.value,
+        userId: userId,
+        userName: userName,
+        annotationId: currentAnnotationId.value,
         typing: isTyping,
         timestamp: new Date().toISOString(),
       },

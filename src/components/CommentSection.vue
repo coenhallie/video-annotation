@@ -92,7 +92,7 @@ const allComments = computed(() => {
 
 const sortedComments = computed(() => {
   return [...allComments.value].sort(
-    (a, b) => new Date(a.created_at) - new Date(b.created_at)
+    (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
   );
 });
 
@@ -148,7 +148,7 @@ const loadAnonymousSession = () => {
   if (isAuthenticated.value) return;
 
   // Try to get existing session from localStorage
-  const sessionId = localStorage.getItem('anonymous_session_id');
+  const sessionId = localStorage.getItem('anonymousSessionId');
   if (sessionId) {
     CommentService.getAnonymousSession(sessionId)
       .then((session) => {
@@ -158,7 +158,7 @@ const loadAnonymousSession = () => {
           CommentService.updateAnonymousSessionActivity(sessionId);
         } else {
           // Session not found, clear localStorage
-          localStorage.removeItem('anonymous_session_id');
+          localStorage.removeItem('anonymousSessionId');
         }
       })
       .catch((err) => {
@@ -166,7 +166,7 @@ const loadAnonymousSession = () => {
           '❌ [CommentSection] Error loading anonymous session:',
           err
         );
-        localStorage.removeItem('anonymous_session_id');
+        localStorage.removeItem('anonymousSessionId');
       });
   }
 };
@@ -174,12 +174,12 @@ const loadAnonymousSession = () => {
 const createAnonymousSession = async (displayName, videoId) => {
   try {
     const session = await CommentService.createAnonymousSession({
-      display_name: displayName,
-      video_id: videoId,
+      displayName: displayName,
+      videoId: videoId,
     });
 
     anonymousSession.value = session;
-    localStorage.setItem('anonymous_session_id', session.session_id);
+    localStorage.setItem('anonymousSessionId', session.sessionId);
 
     console.log('✅ [CommentSection] Created anonymous session:', session);
     return session;
@@ -217,7 +217,7 @@ const handleCommentSubmit = async (commentData) => {
       const optimisticComment = {
         ...editingComment.value,
         content: commentData.content,
-        updated_at: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       };
 
       // Add optimistic update
@@ -227,7 +227,7 @@ const handleCommentSubmit = async (commentData) => {
         result = await CommentService.updateCommentWithRealtime(
           editingComment.value.id,
           { content: commentData.content },
-          anonymousSession.value?.session_id
+          anonymousSession.value?.sessionId
         );
 
         // Remove optimistic comment
@@ -251,13 +251,13 @@ const handleCommentSubmit = async (commentData) => {
     } else {
       // Create new comment with optimistic update
       const createParams = {
-        annotation_id: props.annotationId,
+        annotationId: props.annotationId,
         content: commentData.content,
       };
 
       if (isAuthenticated.value) {
-        createParams.user_id = currentUserId.value;
-        createParams.is_anonymous = false;
+        createParams.userId = currentUserId.value;
+        createParams.isAnonymous = false;
       } else {
         // Handle anonymous comment
         let session = anonymousSession.value;
@@ -278,22 +278,22 @@ const handleCommentSubmit = async (commentData) => {
           throw new Error('Anonymous session required for anonymous comments');
         }
 
-        createParams.session_id = session.session_id;
-        createParams.user_display_name = session.display_name;
-        createParams.is_anonymous = true;
+        createParams.sessionId = session.sessionId;
+        createParams.userDisplayName = session.displayName;
+        createParams.isAnonymous = true;
       }
 
       // Create optimistic comment
       const optimisticComment = {
         id: `temp_${Date.now()}`,
-        annotation_id: props.annotationId,
+        annotationId: props.annotationId,
         content: commentData.content,
-        user_id: createParams.user_id || null,
-        session_id: createParams.session_id || null,
-        user_display_name: createParams.user_display_name || null,
-        is_anonymous: createParams.is_anonymous || false,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        userId: createParams.userId || null,
+        sessionId: createParams.sessionId || null,
+        userDisplayName: createParams.userDisplayName || null,
+        isAnonymous: createParams.isAnonymous || false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         user: isAuthenticated.value ? user.value : null,
       };
 
@@ -336,7 +336,7 @@ const handleCommentDelete = async (comment) => {
   try {
     await CommentService.deleteCommentWithRealtime(
       comment.id,
-      anonymousSession.value?.session_id
+      anonymousSession.value?.sessionId
     );
 
     // Remove comment from local array
@@ -362,7 +362,7 @@ const handleCommentModerate = async (comment) => {
     } else {
       await CommentService.deleteComment(
         comment.id,
-        anonymousSession.value?.session_id
+        anonymousSession.value?.sessionId
       );
     }
 
@@ -384,9 +384,9 @@ const canEditComment = (comment) => {
   if (props.readOnly) return false;
 
   if (isAuthenticated.value) {
-    return comment.user_id === currentUserId.value;
+    return comment.userId === currentUserId.value;
   } else {
-    return comment.session_id === anonymousSession.value?.session_id;
+    return comment.sessionId === anonymousSession.value?.sessionId;
   }
 };
 
@@ -421,7 +421,7 @@ const handleRealtimeCommentInsert = (comment) => {
     comments.value.push(comment);
     comments.value.sort(
       (a, b) =>
-        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
     );
   }
 
@@ -486,17 +486,13 @@ const handleFormTyping = () => {
   }
 
   // Broadcast typing start
-  broadcastTyping(
-    user.value.id,
-    user.value.full_name || user.value.email,
-    true
-  );
+  broadcastTyping(user.value.id, user.value.fullName || user.value.email, true);
 
   // Set timeout to stop typing
   typingTimeout.value = setTimeout(() => {
     broadcastTyping(
       user.value.id,
-      user.value.full_name || user.value.email,
+      user.value.fullName || user.value.email,
       false
     );
   }, 2000);
@@ -514,7 +510,7 @@ const handleFormStopTyping = () => {
   // Broadcast typing stop
   broadcastTyping(
     user.value.id,
-    user.value.full_name || user.value.email,
+    user.value.fullName || user.value.email,
     false
   );
 };
@@ -534,7 +530,7 @@ const setupRealtimeSubscriptions = () => {
   if (isAuthenticated.value && user.value) {
     setupPresenceTracking(
       user.value.id,
-      user.value.full_name || user.value.email
+      user.value.fullName || user.value.email
     );
   }
 };

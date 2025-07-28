@@ -2,19 +2,19 @@ import type { Video, ComparisonVideo } from './database';
 
 export type Project = {
   id: string;
-  project_type: 'single' | 'dual';
+  projectType: 'single' | 'dual';
   title: string;
-  thumbnail_url?: string;
-  created_at: string;
+  thumbnailUrl?: string;
+  createdAt: string;
 } & (
   | {
-      project_type: 'single';
+      projectType: 'single';
       video: Video;
     }
   | {
-      project_type: 'dual';
-      video_a: Video;
-      video_b: Video;
-      comparison_video: ComparisonVideo;
+      projectType: 'dual';
+      videoA: Video;
+      videoB: Video;
+      comparisonVideo: ComparisonVideo;
     }
 );

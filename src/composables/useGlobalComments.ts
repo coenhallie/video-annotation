@@ -1,6 +1,5 @@
 import { ref, reactive, computed } from 'vue';
 import { supabase } from './useSupabase';
-import { transformDatabaseCommentToApp } from '../types/database';
 import type { Comment } from '../types/database';
 
 // Global state for comment tracking across all annotations
@@ -12,7 +11,7 @@ const isGlobalSubscriptionActive = ref(false);
 export interface GlobalCommentEvent {
   type: 'INSERT' | 'UPDATE' | 'DELETE';
   comment: Comment;
-  annotation_id: string;
+  annotationId: string;
 }
 
 export function useGlobalComments() {
@@ -108,7 +107,7 @@ export function useGlobalComments() {
     videoId?: string
   ) => {
     try {
-      const comment = transformDatabaseCommentToApp(dbComment);
+      const comment = dbComment as Comment;
 
       // Filter comments by video ID - we need to verify this comment belongs to our video
       // Since we can't filter at the database level, we'll need to check annotation ownership
@@ -119,27 +118,27 @@ export function useGlobalComments() {
           '📥 [GlobalComments] Processing comment for video:',
           videoId,
           'annotation:',
-          comment.annotation_id
+          comment.annotationId
         );
       }
 
       // Don't show indicator for comments from the current user
-      if (currentUserId && comment.user_id === currentUserId) {
+      if (currentUserId && comment.userId === currentUserId) {
         console.log('🔇 [GlobalComments] Skipping indicator for own comment');
         return;
       }
 
       // Add to new comments tracking
-      if (!newCommentsByAnnotation.value.has(comment.annotation_id)) {
-        newCommentsByAnnotation.value.set(comment.annotation_id, new Set());
+      if (!newCommentsByAnnotation.value.has(comment.annotationId)) {
+        newCommentsByAnnotation.value.set(comment.annotationId, new Set());
       }
-      newCommentsByAnnotation.value.get(comment.annotation_id)!.add(comment.id);
+      newCommentsByAnnotation.value.get(comment.annotationId)!.add(comment.id);
 
       // Update comment count
       const currentCount =
-        commentCountsByAnnotation.value.get(comment.annotation_id) || 0;
+        commentCountsByAnnotation.value.get(comment.annotationId) || 0;
       commentCountsByAnnotation.value.set(
-        comment.annotation_id,
+        comment.annotationId,
         currentCount + 1
       );
 
@@ -147,13 +146,13 @@ export function useGlobalComments() {
       const event: GlobalCommentEvent = {
         type: 'INSERT',
         comment,
-        annotation_id: comment.annotation_id,
+        annotationId: comment.annotationId,
       };
       eventHandlers.onNewComment.forEach((handler) => handler(event));
 
       console.log(
         '✅ [GlobalComments] New comment indicator added for annotation:',
-        comment.annotation_id
+        comment.annotationId
       );
     } catch (error) {
       console.error(
@@ -173,13 +172,13 @@ export function useGlobalComments() {
     videoId?: string
   ) => {
     try {
-      const comment = transformDatabaseCommentToApp(dbComment);
+      const comment = dbComment as Comment;
 
       // Trigger event handlers
       const event: GlobalCommentEvent = {
         type: 'UPDATE',
         comment,
-        annotation_id: comment.annotation_id,
+        annotationId: comment.annotationId,
       };
       eventHandlers.onCommentUpdate.forEach((handler) => handler(event));
     } catch (error) {
@@ -199,20 +198,20 @@ export function useGlobalComments() {
     videoId?: string
   ) => {
     try {
-      const comment = transformDatabaseCommentToApp(dbComment);
+      const comment = dbComment as Comment;
 
       // Remove from new comments tracking
-      if (newCommentsByAnnotation.value.has(comment.annotation_id)) {
+      if (newCommentsByAnnotation.value.has(comment.annotationId)) {
         newCommentsByAnnotation.value
-          .get(comment.annotation_id)!
+          .get(comment.annotationId)!
           .delete(comment.id);
       }
 
       // Update comment count
       const currentCount =
-        commentCountsByAnnotation.value.get(comment.annotation_id) || 0;
+        commentCountsByAnnotation.value.get(comment.annotationId) || 0;
       commentCountsByAnnotation.value.set(
-        comment.annotation_id,
+        comment.annotationId,
         Math.max(0, currentCount - 1)
       );
 
@@ -220,7 +219,7 @@ export function useGlobalComments() {
       const event: GlobalCommentEvent = {
         type: 'DELETE',
         comment,
-        annotation_id: comment.annotation_id,
+        annotationId: comment.annotationId,
       };
       eventHandlers.onCommentDelete.forEach((handler) => handler(event));
     } catch (error) {
@@ -269,13 +268,13 @@ export function useGlobalComments() {
    * Initialize comment counts for existing annotations
    */
   const initializeCommentCounts = (
-    annotations: Array<{ id: string; comment_count?: number }>
+    annotations: Array<{ id: string; commentCount?: number }>
   ) => {
     annotations.forEach((annotation) => {
-      if (annotation.comment_count !== undefined) {
+      if (annotation.commentCount !== undefined) {
         commentCountsByAnnotation.value.set(
           annotation.id,
-          annotation.comment_count
+          annotation.commentCount
         );
       }
     });

@@ -36,8 +36,8 @@ export function useVideoSession(videoId) {
 
     try {
       console.log('🎬 [useVideoSession] Starting session for:', {
-        video_id: currentVideoId,
-        user_id: currentUser?.id || 'anonymous',
+        videoId: currentVideoId,
+        userId: currentUser?.id || 'anonymous',
       });
 
       // Check if this is a shared video and initialize comment permissions
@@ -94,9 +94,9 @@ export function useVideoSession(videoId) {
     try {
       const { error } = await supabase
         .from('video_sessions')
-        .update({ is_active: false })
-        .eq('video_id', toValue(videoId))
-        .eq('user_id', toValue(user).id);
+        .update({ isActive: false })
+        .eq('videoId', toValue(videoId))
+        .eq('userId', toValue(user).id);
 
       if (error) throw error;
 
@@ -138,8 +138,8 @@ export function useVideoSession(videoId) {
 
     try {
       console.log('🎬 [useVideoSession] Updating session activity for:', {
-        video_id: currentVideoId,
-        user_id: currentUser.id,
+        videoId: currentVideoId,
+        userId: currentUser.id,
       });
 
       const { data, error } = await supabase.rpc('update_session_activity', {
@@ -235,7 +235,7 @@ export function useVideoSession(videoId) {
         const permissionContext =
           await ShareService.getCommentPermissionContext(
             currentVideoId,
-            anonymousSession.value?.session_id
+            anonymousSession.value?.sessionId
           );
         commentPermissions.value = permissionContext;
 
@@ -314,8 +314,8 @@ export function useVideoSession(videoId) {
     return {
       videoId: toValue(videoId),
       userId: toValue(user)?.id,
-      sessionId: anonymousSession.value?.session_id,
-      displayName: anonymousSession.value?.display_name,
+      sessionId: anonymousSession.value?.sessionId,
+      displayName: anonymousSession.value?.displayName,
       permissions: commentPermissions.value,
       isSharedVideo: isSharedVideo.value,
     };

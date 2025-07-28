@@ -5,10 +5,6 @@ import type {
   VideoContext,
   Annotation,
 } from '../types/database';
-import {
-  transformDatabaseAnnotationToApp,
-  transformAppAnnotationToComparisonDatabase,
-} from '../types/database';
 import { CommentService, type CommentPermissions } from './commentService';
 
 export class AnnotationService {
@@ -56,14 +52,17 @@ export class AnnotationService {
       includeCommentCounts,
     });
 
-    let query = supabase
-      .from('annotations')
-      .select('*')
-      .eq('video_id', videoId);
+    // Validate videoId to prevent undefined queries
+    if (!videoId || videoId === 'undefined') {
+      console.warn('⚠️ [AnnotationService] Invalid videoId provided:', videoId);
+      return [];
+    }
 
-    // Filter by project_id if provided
+    let query = supabase.from('annotations').select('*').eq('videoId', videoId);
+
+    // Filter by projectId if provided
     if (projectId) {
-      query = query.eq('project_id', projectId);
+      query = query.eq('projectId', projectId);
     }
 
     const { data, error } = await query.order('timestamp', { ascending: true });
@@ -92,7 +91,7 @@ export class AnnotationService {
         // Add comment counts to annotations
         return data.map((annotation, index) => ({
           ...annotation,
-          comment_count: commentCounts[index] || 0,
+          commentCount: commentCounts[index] || 0,
         }));
       } catch (commentError) {
         console.warn(
@@ -114,18 +113,18 @@ export class AnnotationService {
     console.log('🔍 [DEBUG] AnnotationService.updateAnnotation called with:', {
       annotationId: annotationId,
       updates: updates,
-      hasDrawingData: !!(updates as any).drawing_data,
-      drawingDataKeys: (updates as any).drawing_data
-        ? Object.keys((updates as any).drawing_data)
+      hasDrawingData: !!(updates as any).drawingData,
+      drawingDataKeys: (updates as any).drawingData
+        ? Object.keys((updates as any).drawingData)
         : null,
       updateKeys: Object.keys(updates),
     });
 
     console.log('🔍 [DEBUG] Drawing data payload details:', {
-      drawingData: (updates as any).drawing_data,
-      drawingDataType: typeof (updates as any).drawing_data,
-      drawingDataStringified: (updates as any).drawing_data
-        ? JSON.stringify((updates as any).drawing_data)
+      drawingData: (updates as any).drawingData,
+      drawingDataType: typeof (updates as any).drawingData,
+      drawingDataStringified: (updates as any).drawingData
+        ? JSON.stringify((updates as any).drawingData)
         : null,
     });
 
@@ -223,7 +222,7 @@ export class AnnotationService {
         return data.map((annotation) => ({
           ...annotation,
           comments: commentsMap[annotation.id] || [],
-          comment_count: (commentsMap[annotation.id] || []).length,
+          commentCount: (commentsMap[annotation.id] || []).length,
         }));
       } catch (commentError) {
         console.warn(
@@ -428,7 +427,7 @@ export class AnnotationService {
       // Get annotation to check if user is the owner
       const { data: annotation, error } = await supabase
         .from('annotations')
-        .select('user_id')
+        .select('userId')
         .eq('id', annotationId)
         .single();
 
@@ -441,7 +440,7 @@ export class AnnotationService {
       }
 
       // User can moderate if they are the annotation owner
-      const canModerate = userId && annotation.user_id === userId;
+      const canModerate = userId && annotation.userId === userId;
 
       console.log(
         '✅ [AnnotationService] Moderation check result:',
@@ -473,7 +472,7 @@ export class AnnotationService {
     const { data, error } = await supabase
       .from('annotations')
       .select('*')
-      .eq('comparison_video_id', comparisonVideoId)
+      .eq('comparisonVideoId', comparisonVideoId)
       .order('timestamp', { ascending: true });
 
     if (error) {
@@ -488,7 +487,7 @@ export class AnnotationService {
       '✅ [AnnotationService] Retrieved comparison annotations:',
       data?.length || 0
     );
-    return data?.map(transformDatabaseAnnotationToApp) || [];
+    return data || [];
   }
 
   /**
@@ -509,12 +508,12 @@ export class AnnotationService {
     return {
       comparison: comparisonAnnotations,
       videoA: videoAAnnotations.map((ann) => ({
-        ...transformDatabaseAnnotationToApp(ann),
-        video_context: 'video_a' as const,
+        ...ann,
+        videoContext: 'video_a' as const,
       })),
       videoB: videoBAnnotations.map((ann) => ({
-        ...transformDatabaseAnnotationToApp(ann),
-        video_context: 'video_b' as const,
+        ...ann,
+        videoContext: 'video_b' as const,
       })),
     };
   }
@@ -539,15 +538,29 @@ export class AnnotationService {
       annotationType: annotation.annotationType,
     });
 
-    const annotationData = transformAppAnnotationToComparisonDatabase(
-      annotation,
-      null, // video_id should be null for comparison annotations
+    // Create annotation data directly without transformation
+    const annotationData: AnnotationInsert = {
+      videoId: null, // videoId should be null for comparison annotations
       userId,
+      projectId: projectId || null,
+      content: annotation.content || '',
+      title: annotation.title || 'Untitled Annotation',
+      severity: annotation.severity || 'medium',
+      color: annotation.color || '#6b7280',
+      timestamp: annotation.timestamp || 0,
+      frame: annotation.frame || null,
+      startFrame: annotation.frame || 0,
+      endFrame: annotation.frame || null,
+      duration: annotation.duration || 1 / 30, // Default to 1 frame at 30fps
+      durationFrames: annotation.durationFrames || 1,
+      annotationType:
+        annotation.annotationType ||
+        (annotation.drawingData ? 'drawing' : 'text'),
+      drawingData: annotation.drawingData || null,
       comparisonVideoId,
       videoContext,
-      synchronizedFrame,
-      projectId
-    );
+      synchronizedFrame: synchronizedFrame || null,
+    };
 
     console.log(
       '🔍 [AnnotationService] Transformed annotation data for DB:',
@@ -582,7 +595,7 @@ export class AnnotationService {
       '✅ [AnnotationService] Successfully created comparison annotation:',
       data
     );
-    return transformDatabaseAnnotationToApp(data);
+    return data;
   }
 
   /**
@@ -594,7 +607,7 @@ export class AnnotationService {
     comparisonVideoId?: string,
     synchronizedFrame?: number
   ) {
-    // Note: video_context, comparison_video_id, and synchronized_frame are not supported in current database schema
+    // Note: videoContext, comparisonVideoId, and synchronizedFrame are not supported in current database schema
     // This method is kept for API compatibility but only updates basic annotation fields
     const updates: any = {};
 
@@ -607,7 +620,7 @@ export class AnnotationService {
       .single();
 
     if (error) throw error;
-    return transformDatabaseAnnotationToApp(data);
+    return data;
   }
 
   /**
@@ -663,7 +676,7 @@ export class AnnotationService {
       const { data: annotations, error: fetchError } = await supabase
         .from('annotations')
         .select('id')
-        .eq('video_id', comparisonVideoId);
+        .eq('videoId', comparisonVideoId);
 
       if (fetchError) {
         console.error(
@@ -694,7 +707,7 @@ export class AnnotationService {
       const { error } = await supabase
         .from('annotations')
         .delete()
-        .eq('video_id', comparisonVideoId);
+        .eq('videoId', comparisonVideoId);
 
       if (error) throw error;
     } catch (error) {
@@ -713,7 +726,7 @@ export class AnnotationService {
     const { count, error } = await supabase
       .from('annotations')
       .select('*', { count: 'exact', head: true })
-      .eq('video_id', comparisonVideoId);
+      .eq('videoId', comparisonVideoId);
 
     if (error) throw error;
     return count || 0;

@@ -693,6 +693,10 @@ defineExpose({
   singleVideoElement,
   videoAElement,
   videoBElement,
+  // Expose drawing canvas refs for annotation panel
+  singleDrawingCanvasRef,
+  drawingCanvasARef,
+  drawingCanvasBRef,
 });
 </script>
 

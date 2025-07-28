@@ -55,6 +55,10 @@ interface Emits {
   (e: 'drawing-created', drawing: DrawingData, event?: Event): void;
   (e: 'drawing-updated', drawing: DrawingData, event?: Event): void;
   (e: 'drawing-deleted', drawingId: string, event?: Event): void;
+  (
+    e: 'drawing-stroke-added',
+    data: { path: DrawingPath; sessionPaths: DrawingPath[]; frame: number }
+  ): void;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -129,6 +133,14 @@ const setupCanvasEvents = () => {
   canvas.value.on('mouse:up', handleMouseUp);
 };
 
+// Store accumulated drawing paths for the current session
+const currentDrawingSession = ref<{
+  paths: DrawingPath[];
+  canvasWidth: number;
+  canvasHeight: number;
+  frame: number;
+} | null>(null);
+
 // Handle path creation (when drawing is completed)
 const handlePathCreated = (event: { path: fabric.FabricObject }) => {
   const path = event.path as fabric.Path;
@@ -139,14 +151,43 @@ const handlePathCreated = (event: { path: fabric.FabricObject }) => {
   // Create drawing path from the fabric path
   const drawingPath = createDrawingPathFromFabricPath(path);
 
-  // Create a new drawing for each path (stroke) immediately
-  // This ensures every drawing stroke is saved separately
-  const newDrawing = {
-    paths: [drawingPath],
-    canvasWidth: canvasWidth.value,
-    canvasHeight: canvasHeight.value,
+  // Initialize or update the current drawing session
+  if (
+    !currentDrawingSession.value ||
+    currentDrawingSession.value.frame !== props.currentFrame
+  ) {
+    // Start new drawing session for this frame
+    currentDrawingSession.value = {
+      paths: [drawingPath],
+      canvasWidth: canvasWidth.value,
+      canvasHeight: canvasHeight.value,
+      frame: props.currentFrame,
+    };
+  } else {
+    // Add to existing drawing session
+    currentDrawingSession.value.paths.push(drawingPath);
+  }
+
+  // Emit stroke-added event for real-time visual feedback (but don't save to DB yet)
+  emit('drawing-stroke-added', {
+    path: drawingPath,
+    sessionPaths: currentDrawingSession.value.paths,
     frame: props.currentFrame,
-  };
+  });
+
+  if (canvas.value) {
+    canvas.value.renderAll();
+  }
+};
+
+// Function to complete the drawing session and emit for saving
+const completeDrawingSession = () => {
+  if (
+    !currentDrawingSession.value ||
+    currentDrawingSession.value.paths.length === 0
+  ) {
+    return;
+  }
 
   // Create a synthetic DOM event with the canvas container as target
   // This allows the UnifiedVideoPlayer to determine which video canvas triggered the drawing
@@ -156,12 +197,11 @@ const handlePathCreated = (event: { path: fabric.FabricObject }) => {
     enumerable: true,
   });
 
-  // Emit the drawing with the synthetic event for video context detection
-  emit('drawing-created', newDrawing, syntheticEvent);
+  // Emit the complete drawing session for saving
+  emit('drawing-created', currentDrawingSession.value, syntheticEvent);
 
-  if (canvas.value) {
-    canvas.value.renderAll();
-  }
+  // Clear the session
+  currentDrawingSession.value = null;
 };
 
 // Convert fabric path to DrawingPath (single path)
@@ -318,6 +358,32 @@ const clearDrawings = () => {
   }
 };
 
+// Check if there are drawings on the current frame
+const hasDrawingsOnCurrentFrame = (): boolean => {
+  if (!canvas.value) {
+    return false;
+  }
+
+  // Check if there are any objects on the fabric canvas
+  const objects = canvas.value.getObjects();
+  const hasCanvasObjects = objects.length > 0;
+
+  // Also check if there's an active drawing session for the current frame
+  const hasActiveSession =
+    currentDrawingSession.value &&
+    currentDrawingSession.value.frame === props.currentFrame &&
+    currentDrawingSession.value.paths.length > 0;
+
+  // Check if there are existing drawings for this frame from props
+  const hasExistingDrawings =
+    props.existingDrawings &&
+    props.existingDrawings.some(
+      (drawing) => drawing.frame === props.currentFrame
+    );
+
+  return hasCanvasObjects || hasActiveSession || hasExistingDrawings;
+};
+
 // Watch for prop changes
 watch(
   () => props.isDrawingMode,
@@ -405,9 +471,17 @@ onUnmounted(() => {
   // sessionTimer cleanup removed since we no longer use session timers
 });
 
+// Get current drawing session data without completing it
+const getCurrentDrawingSession = () => {
+  return currentDrawingSession.value;
+};
+
 // Expose methods for parent component
 defineExpose({
   clearDrawings,
+  completeDrawingSession,
+  hasDrawingsOnCurrentFrame,
+  getCurrentDrawingSession,
 });
 </script>
 

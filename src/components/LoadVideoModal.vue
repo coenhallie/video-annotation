@@ -235,7 +235,7 @@
                     </h3>
                     <!-- Project Type Indicator -->
                     <span
-                      v-if="project.project_type === 'single'"
+                      v-if="project.projectType === 'single'"
                       class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
                     >
                       Single Video
@@ -280,7 +280,7 @@
 
                   <!-- Single Video Project Details -->
                   <div
-                    v-if="project.project_type === 'single'"
+                    v-if="project.projectType === 'single'"
                     class="text-sm text-gray-600 space-y-1"
                   >
                     <div class="flex items-center space-x-4">
@@ -296,7 +296,7 @@
                     <div class="flex items-center space-x-4">
                       <span>
                         <span class="font-medium">Created:</span>
-                        {{ formatDate(project.created_at) }}
+                        {{ formatDate(project.createdAt) }}
                       </span>
                     </div>
                   </div>
@@ -306,25 +306,29 @@
                     <div class="grid grid-cols-2 gap-4">
                       <div class="space-y-1">
                         <p class="font-medium text-gray-700">Video A:</p>
-                        <p class="truncate">{{ project.video_a.title }}</p>
+                        <p class="truncate">
+                          {{ project.videoA?.title || 'Unknown Video' }}
+                        </p>
                         <p class="text-xs text-gray-500">
-                          {{ formatDuration(project.video_a.duration) }} •
-                          {{ project.video_a.fps }} FPS
+                          {{ formatDuration(project.videoA?.duration || 0) }} •
+                          {{ project.videoA?.fps || 30 }} FPS
                         </p>
                       </div>
                       <div class="space-y-1">
                         <p class="font-medium text-gray-700">Video B:</p>
-                        <p class="truncate">{{ project.video_b.title }}</p>
+                        <p class="truncate">
+                          {{ project.videoB?.title || 'Unknown Video' }}
+                        </p>
                         <p class="text-xs text-gray-500">
-                          {{ formatDuration(project.video_b.duration) }} •
-                          {{ project.video_b.fps }} FPS
+                          {{ formatDuration(project.videoB?.duration || 0) }} •
+                          {{ project.videoB?.fps || 30 }} FPS
                         </p>
                       </div>
                     </div>
                     <div class="flex items-center space-x-4 pt-1">
                       <span>
                         <span class="font-medium">Created:</span>
-                        {{ formatDate(project.created_at) }}
+                        {{ formatDate(project.createdAt) }}
                       </span>
                     </div>
                   </div>
@@ -823,7 +827,7 @@ const isDeleting = ref(false);
 
 // Computed properties
 const singleVideoProjects = computed(() =>
-  projects.value.filter((project) => project.project_type === 'single')
+  projects.value.filter((project) => project.projectType === 'single')
 );
 
 // Methods
@@ -893,7 +897,7 @@ const selectProject = async (project) => {
       '🎬 [LoadVideoModal] Project selected:',
       project.title,
       'Type:',
-      project.project_type
+      project.projectType
     );
 
     // Emit the project-selected event with the entire project object
@@ -1045,22 +1049,22 @@ const createComparison = async () => {
     const comparisonVideo = await ComparisonVideoService.createComparisonVideo({
       title: comparisonState.value.title,
       description: comparisonState.value.description,
-      video_a_id: comparisonState.value.selectedVideoA.video.id,
-      video_b_id: comparisonState.value.selectedVideoB.video.id,
-      video_a: comparisonState.value.selectedVideoA.video,
-      video_b: comparisonState.value.selectedVideoB.video,
+      videoAId: comparisonState.value.selectedVideoA.video.id,
+      videoBId: comparisonState.value.selectedVideoB.video.id,
+      videoA: comparisonState.value.selectedVideoA.video,
+      videoB: comparisonState.value.selectedVideoB.video,
     });
 
     // Transform to Project format
     const dualProject = {
       id: comparisonVideo.id,
-      project_type: 'dual',
+      projectType: 'dual',
       title: comparisonVideo.title,
       thumbnail_url: comparisonVideo.thumbnail_url,
-      created_at: comparisonVideo.created_at,
-      video_a: comparisonVideo.video_a,
-      video_b: comparisonVideo.video_b,
-      comparison_video: comparisonVideo,
+      createdAt: comparisonVideo.createdAt,
+      videoA: comparisonVideo.videoA,
+      videoB: comparisonVideo.videoB,
+      comparisonVideo: comparisonVideo,
     };
 
     handleComparisonCreated(dualProject);
@@ -1094,11 +1098,11 @@ const handleVideoUploadSuccess = (videoRecord) => {
   // Create a project-like object for the uploaded video
   const uploadProject = {
     id: videoRecord.id,
-    project_type: 'single',
+    projectType: 'single',
     title:
-      videoRecord.title || videoRecord.original_filename || 'Uploaded Video',
+      videoRecord.title || videoRecord.originalFilename || 'Uploaded Video',
     video: videoRecord,
-    created_at: videoRecord.created_at,
+    createdAt: videoRecord.createdAt,
   };
 
   // Add the new project to the projects list so it appears in the load projects tab
@@ -1241,19 +1245,19 @@ const loadVideoFromUrl = async () => {
     // Create a URL-based project object with proper structure
     const urlProject = {
       id: generateUUID(),
-      project_type: 'single',
+      projectType: 'single',
       title: `Video from URL`,
       video: {
         id: videoId,
-        video_id: videoId, // Add the missing video_id field that App.vue expects
+        videoId: videoId, // Add the missing videoId field that App.vue expects
         url: trimmedUrl,
-        video_type: 'url',
+        videoType: 'url',
         title: `Video from URL`,
         duration: videoMetadata.duration || 0,
         fps: 30, // Default, will be detected when video loads in player
-        total_frames: Math.floor((videoMetadata.duration || 0) * 30), // Estimate based on default FPS
-        original_filename: trimmedUrl.split('/').pop() || 'video-from-url',
-        file_path: null, // URL videos don't have file paths
+        totalFrames: Math.floor((videoMetadata.duration || 0) * 30), // Estimate based on default FPS
+        originalFilename: trimmedUrl.split('/').pop() || 'video-from-url',
+        filePath: null, // URL videos don't have file paths
       },
       created_at: new Date().toISOString(),
     };

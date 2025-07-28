@@ -30,95 +30,95 @@ export interface DrawingData {
 export interface DatabaseUser {
   id: string;
   email: string;
-  full_name?: string;
-  avatar_url?: string;
+  fullName?: string;
+  avatarUrl?: string;
   metadata?: Record<string, any>;
-  created_at: string;
-  updated_at: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface DatabaseVideo {
   id: string;
-  owner_id: string;
+  ownerId: string;
   title: string;
   url: string;
-  video_id: string;
+  videoId: string;
   fps: number;
   duration: number;
-  total_frames: number;
-  thumbnail_url?: string;
+  totalFrames: number;
+  thumbnailUrl?: string;
   metadata?: Record<string, any>;
-  is_public: boolean;
-  video_type: 'url' | 'upload';
-  file_path?: string;
-  file_size?: number;
-  original_filename?: string;
-  created_at: string;
-  updated_at: string;
+  isPublic: boolean;
+  videoType: 'url' | 'upload';
+  filePath?: string;
+  fileSize?: number;
+  originalFilename?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface DatabaseAnnotation {
   id: string;
-  video_id?: string; // Nullable for comparison annotations
-  comparison_video_id?: string; // For comparison video annotations
-  user_id: string;
-  project_id?: string;
+  videoId?: string; // Nullable for comparison annotations
+  comparisonVideoId?: string; // For comparison video annotations
+  userId: string;
+  projectId?: string;
   content: string;
   title: string;
   severity: SeverityLevel;
   color: string;
   timestamp: number;
   frame?: number;
-  start_frame: number;
-  end_frame?: number;
+  startFrame: number;
+  endFrame?: number;
   duration: number;
-  duration_frames: number;
-  annotation_type: AnnotationType;
-  drawing_data?: DrawingData;
-  video_context?: VideoContext; // Context for comparison annotations
-  synchronized_frame?: number; // For synchronized comparison annotations
+  durationFrames: number;
+  annotationType: AnnotationType;
+  drawingData?: DrawingData;
+  videoContext?: VideoContext; // Context for comparison annotations
+  synchronizedFrame?: number; // For synchronized comparison annotations
   metadata?: Record<string, any>;
-  created_at: string;
-  updated_at: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface DatabaseComparisonVideo {
   id: string;
-  user_id: string;
+  userId: string;
   title: string;
   description?: string;
-  video_a_id: string;
-  video_b_id: string;
+  videoAId: string;
+  videoBId: string;
   duration?: number;
   fps?: number;
-  total_frames?: number;
-  thumbnail_url?: string;
-  thumbnail_layout?: string;
-  is_public: boolean; // NEW FIELD
-  created_at: string;
-  updated_at: string;
+  totalFrames?: number;
+  thumbnailUrl?: string;
+  thumbnailLayout?: string;
+  isPublic: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // Comment system interfaces
 export interface DatabaseComment {
   id: string;
-  annotation_id: string;
-  user_id: string | null;
-  session_id: string | null;
+  annotationId: string;
+  userId: string | null;
+  sessionId: string | null;
   content: string;
-  user_display_name: string | null;
-  is_anonymous: boolean;
-  created_at: string;
-  updated_at: string;
+  userDisplayName: string | null;
+  isAnonymous: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface DatabaseAnonymousSession {
-  session_id: string;
-  display_name: string;
-  created_at: string;
-  last_active: string;
-  video_id: string | null;
-  comparison_video_id?: string | null;
+  sessionId: string;
+  displayName: string;
+  createdAt: string;
+  lastActive: string;
+  videoId: string | null;
+  comparisonVideoId?: string | null;
 }
 
 // Application-specific interfaces (for Vue components)
@@ -132,84 +132,86 @@ export interface Annotation {
   frame: number;
   annotationType: AnnotationType;
   drawingData?: DrawingData;
-  user_id?: string;
-  created_at?: string;
-  updated_at?: string;
+  userId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  duration: number;
+  durationFrames: number;
 }
 
 export interface Video {
   id: string;
   title: string;
   url: string;
-  video_id: string;
+  videoId: string;
   fps: number;
   duration: number;
-  total_frames: number;
-  thumbnail_url?: string;
-  is_public: boolean;
-  owner_id: string;
-  video_type: 'url' | 'upload';
-  file_path?: string;
-  file_size?: number;
-  original_filename?: string;
-  created_at: string;
-  updated_at: string;
+  totalFrames: number;
+  thumbnailUrl?: string;
+  isPublic: boolean;
+  ownerId: string;
+  videoType: 'url' | 'upload';
+  filePath?: string;
+  fileSize?: number;
+  originalFilename?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // Application interface for comparison videos
 export interface ComparisonVideo {
   id: string;
-  user_id: string;
+  userId: string;
   title: string;
   description?: string;
-  video_a_id: string;
-  video_b_id: string;
+  videoAId: string;
+  videoBId: string;
   duration?: number;
   fps?: number;
-  total_frames?: number;
-  thumbnail_url?: string;
-  thumbnail_layout?: string;
-  is_public: boolean; // NEW FIELD
-  created_at: string;
-  updated_at: string;
+  totalFrames?: number;
+  thumbnailUrl?: string;
+  thumbnailLayout?: string;
+  isPublic: boolean;
+  createdAt: string;
+  updatedAt: string;
 
   // Populated video references
-  video_a?: Video;
-  video_b?: Video;
+  videoA?: Video;
+  videoB?: Video;
 
   // Computed properties
-  annotation_count?: number;
-  comparison_annotation_count?: number;
+  annotationCount?: number;
+  comparisonAnnotationCount?: number;
 }
 
 // Application-level comment interfaces
 export interface CommentUser {
   id: string;
   email: string;
-  full_name?: string;
-  avatar_url?: string;
+  fullName?: string;
+  avatarUrl?: string;
 }
 
 export interface Comment {
   id: string;
-  annotation_id: string;
+  annotationId: string;
   content: string;
-  user_id: string | null;
-  session_id: string | null;
-  user_display_name: string | null;
-  is_anonymous: boolean;
-  created_at: string;
-  updated_at: string;
+  userId: string | null;
+  sessionId: string | null;
+  userDisplayName: string | null;
+  isAnonymous: boolean;
+  createdAt: string;
+  updatedAt: string;
   user?: CommentUser;
 }
 
 export interface AnonymousSession {
-  session_id: string;
-  display_name: string;
-  created_at: string;
-  last_active: string;
-  video_id: string | null;
-  comparison_video_id?: string | null; // NEW FIELD for comparison video sessions
+  sessionId: string;
+  displayName: string;
+  createdAt: string;
+  lastActive: string;
+  videoId: string | null;
+  comparisonVideoId?: string | null;
 }
 
 // New interface for shared comparison videos
@@ -217,15 +219,15 @@ export interface SharedComparisonVideoWithCommentPermissions {
   id: string;
   title: string;
   description?: string;
-  video_a: any | null; // Will be SharedVideoWithCommentPermissions from shareService
-  video_b: any | null; // Will be SharedVideoWithCommentPermissions from shareService
-  is_public: boolean;
-  can_comment: boolean;
+  videoA: any | null; // Will be SharedVideoWithCommentPermissions from shareService
+  videoB: any | null; // Will be SharedVideoWithCommentPermissions from shareService
+  isPublic: boolean;
+  canComment: boolean;
   annotations: any[];
-  thumbnail_url?: string;
+  thumbnailUrl?: string;
   duration?: number;
   fps?: number;
-  total_frames?: number;
+  totalFrames?: number;
 }
 
 // Union type for mixed video lists (individual + comparison)
@@ -237,45 +239,40 @@ export interface Database {
     Tables: {
       users: {
         Row: DatabaseUser;
-        Insert: Omit<DatabaseUser, 'id' | 'created_at' | 'updated_at'>;
-        Update: Partial<Omit<DatabaseUser, 'id' | 'created_at' | 'updated_at'>>;
+        Insert: Omit<DatabaseUser, 'id' | 'createdAt' | 'updatedAt'>;
+        Update: Partial<Omit<DatabaseUser, 'id' | 'createdAt' | 'updatedAt'>>;
       };
       videos: {
         Row: DatabaseVideo;
-        Insert: Omit<DatabaseVideo, 'id' | 'created_at' | 'updated_at'>;
-        Update: Partial<
-          Omit<DatabaseVideo, 'id' | 'created_at' | 'updated_at'>
-        >;
+        Insert: Omit<DatabaseVideo, 'id' | 'createdAt' | 'updatedAt'>;
+        Update: Partial<Omit<DatabaseVideo, 'id' | 'createdAt' | 'updatedAt'>>;
       };
       annotations: {
         Row: DatabaseAnnotation;
-        Insert: Omit<DatabaseAnnotation, 'id' | 'created_at' | 'updated_at'>;
+        Insert: Omit<DatabaseAnnotation, 'id' | 'createdAt' | 'updatedAt'>;
         Update: Partial<
-          Omit<DatabaseAnnotation, 'id' | 'created_at' | 'updated_at'>
+          Omit<DatabaseAnnotation, 'id' | 'createdAt' | 'updatedAt'>
         >;
       };
       comparison_videos: {
         Row: DatabaseComparisonVideo;
-        Insert: Omit<
-          DatabaseComparisonVideo,
-          'id' | 'created_at' | 'updated_at'
-        >;
+        Insert: Omit<DatabaseComparisonVideo, 'id' | 'createdAt' | 'updatedAt'>;
         Update: Partial<
-          Omit<DatabaseComparisonVideo, 'id' | 'created_at' | 'updated_at'>
+          Omit<DatabaseComparisonVideo, 'id' | 'createdAt' | 'updatedAt'>
         >;
       };
       annotation_comments: {
         Row: DatabaseComment;
-        Insert: Omit<DatabaseComment, 'id' | 'created_at' | 'updated_at'>;
+        Insert: Omit<DatabaseComment, 'id' | 'createdAt' | 'updatedAt'>;
         Update: Partial<
-          Omit<DatabaseComment, 'id' | 'created_at' | 'updated_at'>
+          Omit<DatabaseComment, 'id' | 'createdAt' | 'updatedAt'>
         >;
       };
       anonymous_sessions: {
         Row: DatabaseAnonymousSession;
-        Insert: Omit<DatabaseAnonymousSession, 'created_at' | 'last_active'>;
+        Insert: Omit<DatabaseAnonymousSession, 'createdAt' | 'lastActive'>;
         Update: Partial<
-          Omit<DatabaseAnonymousSession, 'session_id' | 'created_at'>
+          Omit<DatabaseAnonymousSession, 'sessionId' | 'createdAt'>
         >;
       };
     };
@@ -352,258 +349,17 @@ export type AnonymousSessionInsert =
 export type AnonymousSessionUpdate =
   Database['public']['Tables']['anonymous_sessions']['Update'];
 
-// Helper functions for data transformation
-export function transformDatabaseAnnotationToApp(
-  dbAnnotation: DatabaseAnnotation
-): Annotation {
-  const result = {
-    id: dbAnnotation.id,
-    content: dbAnnotation.content,
-    title: dbAnnotation.title,
-    severity: dbAnnotation.severity,
-    color: dbAnnotation.color,
-    timestamp: dbAnnotation.timestamp,
-    frame: dbAnnotation.frame,
-    annotationType: dbAnnotation.annotation_type,
-    drawingData: dbAnnotation.drawing_data,
-    user_id: dbAnnotation.user_id,
-    created_at: dbAnnotation.created_at,
-    updated_at: dbAnnotation.updated_at,
-  };
-
-  return result;
-}
-
-export function transformAppAnnotationToDatabase(
-  appAnnotation: Annotation,
-  video_id: string,
-  user_id: string,
-  project_id?: string
-): AnnotationInsert {
-  console.log('🔧 [Database] Transforming annotation to database format:', {
-    video_id,
-    user_id,
-    project_id,
-    annotationType: appAnnotation.annotationType,
-    frame: appAnnotation.frame,
-  });
-
-  const result = {
-    video_id,
-    user_id,
-    project_id: project_id || null, // Now supported in database
-    content: appAnnotation.content || '',
-    title: appAnnotation.title || 'Untitled Annotation',
-    severity: appAnnotation.severity || 'medium',
-    color: appAnnotation.color || '#6b7280',
-    timestamp: appAnnotation.timestamp || 0,
-    frame: appAnnotation.frame || 0,
-    start_frame: appAnnotation.frame || 0, // For point-in-time annotations, start_frame equals frame
-    end_frame: appAnnotation.frame || 0, // For point-in-time annotations, end_frame equals frame
-    duration: 0, // Default duration for point-in-time annotations
-    duration_frames: 1, // Default duration_frames for point-in-time annotations
-    annotation_type: appAnnotation.annotationType || 'text',
-    drawing_data: appAnnotation.drawingData || null,
-    // New columns for comparison support
-    comparison_video_id: null, // Will be set by comparison-specific functions
-    video_context: 'individual' as VideoContext, // Default to individual video context
-    synchronized_frame: null, // Will be set for comparison annotations
-  };
-
-  console.log('✅ [Database] Transformed annotation result:', result);
-  return result;
-}
-
-export function transformDatabaseVideoToApp(dbVideo: DatabaseVideo): Video {
-  return {
-    id: dbVideo.id,
-    title: dbVideo.title,
-    url: dbVideo.url,
-    video_id: dbVideo.video_id,
-    fps: dbVideo.fps,
-    duration: dbVideo.duration,
-    total_frames: dbVideo.total_frames,
-    thumbnail_url: dbVideo.thumbnail_url,
-    is_public: dbVideo.is_public,
-    owner_id: dbVideo.owner_id,
-    video_type: dbVideo.video_type,
-    file_path: dbVideo.file_path,
-    file_size: dbVideo.file_size,
-    original_filename: dbVideo.original_filename,
-    created_at: dbVideo.created_at,
-    updated_at: dbVideo.updated_at,
-  };
-}
+// Note: Transformation functions removed - database now uses camelCase matching frontend
 
 // Type guards for video entities
 export function isComparisonVideo(
   entity: VideoEntity
 ): entity is ComparisonVideo {
-  return 'video_a_id' in entity && 'video_b_id' in entity;
+  return 'videoAId' in entity && 'videoBId' in entity;
 }
 
 export function isIndividualVideo(entity: VideoEntity): entity is Video {
-  return 'video_id' in entity && !('video_a_id' in entity);
+  return 'videoId' in entity && !('videoAId' in entity);
 }
 
-// Transformation functions for comparison videos
-export function transformDatabaseComparisonVideoToApp(
-  dbComparisonVideo: DatabaseComparisonVideo,
-  videoA?: Video,
-  videoB?: Video
-): ComparisonVideo {
-  // Calculate duration and fps from videos if not available in comparison
-  const duration =
-    dbComparisonVideo.duration ||
-    (videoA && videoB ? Math.max(videoA.duration, videoB.duration) : undefined);
-  const fps = dbComparisonVideo.fps || (videoA ? videoA.fps : undefined);
-  const total_frames =
-    dbComparisonVideo.total_frames ||
-    (videoA && videoB
-      ? Math.max(videoA.total_frames, videoB.total_frames)
-      : undefined);
-
-  return {
-    id: dbComparisonVideo.id,
-    user_id: dbComparisonVideo.user_id,
-    title: dbComparisonVideo.title,
-    description: dbComparisonVideo.description,
-    video_a_id: dbComparisonVideo.video_a_id,
-    video_b_id: dbComparisonVideo.video_b_id,
-    duration,
-    fps,
-    total_frames,
-    thumbnail_url: dbComparisonVideo.thumbnail_url,
-    thumbnail_layout: dbComparisonVideo.thumbnail_layout,
-    is_public: dbComparisonVideo.is_public,
-    created_at: dbComparisonVideo.created_at,
-    updated_at: dbComparisonVideo.updated_at,
-    video_a: videoA,
-    video_b: videoB,
-  };
-}
-
-export function transformAppComparisonVideoToDatabase(
-  appComparisonVideo: Partial<ComparisonVideo>,
-  user_id: string
-): ComparisonVideoInsert {
-  return {
-    user_id,
-    title: appComparisonVideo.title!,
-    description: appComparisonVideo.description,
-    video_a_id: appComparisonVideo.video_a_id!,
-    video_b_id: appComparisonVideo.video_b_id!,
-    duration: appComparisonVideo.duration,
-    fps: appComparisonVideo.fps,
-    total_frames: appComparisonVideo.total_frames,
-    thumbnail_url: appComparisonVideo.thumbnail_url,
-    thumbnail_layout: appComparisonVideo.thumbnail_layout || 'side-by-side',
-    is_public: appComparisonVideo.is_public || false,
-  };
-}
-
-// Enhanced annotation transformation for comparison videos
-export function transformAppAnnotationToComparisonDatabase(
-  appAnnotation: Annotation,
-  video_id: string | null,
-  user_id: string,
-  comparison_video_id?: string,
-  video_context: VideoContext = 'individual',
-  synchronized_frame?: number,
-  project_id?: string
-): AnnotationInsert {
-  console.log(
-    '🔧 [Database] Transforming comparison annotation to database format:',
-    {
-      video_id,
-      user_id,
-      comparison_video_id,
-      video_context,
-      synchronized_frame,
-      project_id,
-    }
-  );
-
-  // For comparison annotations, video_id should be null and comparison_video_id should be set
-  const actualVideoId = comparison_video_id ? null : video_id;
-
-  // Map video context from dual video player format to database format
-  const mappedVideoContext =
-    video_context === 'A'
-      ? 'video_a'
-      : video_context === 'B'
-      ? 'video_b'
-      : video_context || 'individual';
-
-  const result = {
-    video_id: actualVideoId,
-    user_id,
-    project_id: project_id || null, // Now supported in database
-    content: appAnnotation.content || '',
-    title: appAnnotation.title || 'Untitled Annotation',
-    severity: appAnnotation.severity || 'medium',
-    color: appAnnotation.color || '#6b7280',
-    timestamp: appAnnotation.timestamp || 0,
-    frame: appAnnotation.frame || null, // Use null for optional frame field
-    start_frame: appAnnotation.frame || 0, // Required field, use 0 as fallback
-    end_frame: appAnnotation.frame || null, // Use null for point-in-time annotations
-    duration: 0, // Default duration for point-in-time annotations
-    duration_frames: 1, // Default duration_frames for point-in-time annotations
-    annotation_type: appAnnotation.annotationType || 'text',
-    drawing_data: appAnnotation.drawingData || null,
-    // Now supported comparison columns
-    comparison_video_id: comparison_video_id || null,
-    video_context: mappedVideoContext,
-    synchronized_frame: synchronized_frame || null,
-  };
-
-  console.log(
-    '✅ [Database] Transformed comparison annotation result:',
-    result
-  );
-  return result;
-}
-
-// Comment transformation functions
-export function transformDatabaseCommentToApp(dbComment: any): Comment {
-  return {
-    id: dbComment.id,
-    annotation_id: dbComment.annotation_id,
-    content: dbComment.content,
-    user_id: dbComment.user_id,
-    session_id: dbComment.session_id,
-    user_display_name: dbComment.user_display_name,
-    is_anonymous: dbComment.is_anonymous,
-    created_at: dbComment.created_at,
-    updated_at: dbComment.updated_at,
-    user: dbComment.user,
-  };
-}
-
-export function transformAppCommentToDatabase(
-  appComment: Partial<Comment>,
-  annotation_id: string,
-  user_id?: string,
-  session_id?: string
-): CommentInsert {
-  return {
-    annotation_id,
-    user_id: user_id || null,
-    session_id: session_id || null,
-    content: appComment.content!,
-    user_display_name: appComment.user_display_name || null,
-    is_anonymous: appComment.is_anonymous || false,
-  };
-}
-
-export function transformDatabaseAnonymousSessionToApp(
-  dbSession: DatabaseAnonymousSession
-): AnonymousSession {
-  return {
-    session_id: dbSession.session_id,
-    display_name: dbSession.display_name,
-    created_at: dbSession.created_at,
-    last_active: dbSession.last_active,
-    video_id: dbSession.video_id,
-  };
-}
+// Note: All transformation functions removed - database now uses camelCase matching frontend

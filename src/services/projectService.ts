@@ -10,15 +10,15 @@ export class ProjectService {
     if (!video) return false;
 
     // For URL videos, check if URL is not empty
-    if (video.video_type === 'url') {
+    if (video.videoType === 'url') {
       return video.url && video.url.trim() !== '';
     }
 
-    // For uploaded videos, check if either URL or file_path exists
-    if (video.video_type === 'upload') {
+    // For uploaded videos, check if either URL or filePath exists
+    if (video.videoType === 'upload') {
       return (
         (video.url && video.url.trim() !== '') ||
-        (video.file_path && video.file_path.trim() !== '')
+        (video.filePath && video.filePath.trim() !== '')
       );
     }
 
@@ -54,10 +54,10 @@ export class ProjectService {
           if (this.isVideoValid(video)) {
             projects.push({
               id: video.id,
-              project_type: 'single',
+              projectType: 'single',
               title: video.title,
-              thumbnail_url: video.thumbnail_url,
-              created_at: video.created_at,
+              thumbnailUrl: video.thumbnailUrl,
+              createdAt: video.createdAt,
               video: video,
             });
           } else {
@@ -66,9 +66,9 @@ export class ProjectService {
               {
                 id: video.id,
                 title: video.title,
-                video_type: video.video_type,
+                videoType: video.videoType,
                 url: video.url,
-                file_path: video.file_path,
+                filePath: video.filePath,
               }
             );
           }
@@ -79,20 +79,20 @@ export class ProjectService {
       if (comparisonVideos) {
         for (const comparisonVideo of comparisonVideos) {
           // Ensure we have the related videos and they have valid URLs
-          if (comparisonVideo.video_a && comparisonVideo.video_b) {
-            const videoAValid = this.isVideoValid(comparisonVideo.video_a);
-            const videoBValid = this.isVideoValid(comparisonVideo.video_b);
+          if (comparisonVideo.videoA && comparisonVideo.videoB) {
+            const videoAValid = this.isVideoValid(comparisonVideo.videoA);
+            const videoBValid = this.isVideoValid(comparisonVideo.videoB);
 
             if (videoAValid && videoBValid) {
               projects.push({
                 id: comparisonVideo.id,
-                project_type: 'dual',
+                projectType: 'dual',
                 title: comparisonVideo.title,
-                thumbnail_url: comparisonVideo.thumbnail_url,
-                created_at: comparisonVideo.created_at,
-                video_a: comparisonVideo.video_a,
-                video_b: comparisonVideo.video_b,
-                comparison_video: comparisonVideo,
+                thumbnailUrl: comparisonVideo.thumbnailUrl,
+                createdAt: comparisonVideo.createdAt,
+                videoA: comparisonVideo.videoA,
+                videoB: comparisonVideo.videoB,
+                comparisonVideo: comparisonVideo,
               });
             } else {
               console.warn(
@@ -109,10 +109,10 @@ export class ProjectService {
         }
       }
 
-      // Sort projects by created_at in descending order (newest first)
+      // Sort projects by createdAt in descending order (newest first)
       projects.sort(
         (a, b) =>
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
 
       console.log(
@@ -137,10 +137,10 @@ export class ProjectService {
         '🗑️ [ProjectService] Deleting project:',
         project.title,
         'Type:',
-        project.project_type
+        project.projectType
       );
 
-      if (project.project_type === 'single') {
+      if (project.projectType === 'single') {
         // Delete single video project
         await VideoService.deleteVideo(project.video.id);
         console.log(
@@ -149,7 +149,7 @@ export class ProjectService {
       } else {
         // Delete dual video comparison project
         await ComparisonVideoService.deleteComparisonVideo(
-          project.comparison_video.id
+          project.comparisonVideo.id
         );
         console.log(
           '✅ [ProjectService] Dual video project deleted successfully'

@@ -142,18 +142,18 @@ export class VideoUploadService {
     metadata: VideoMetadata
   ): Promise<any> {
     const videoData: VideoInsert = {
-      owner_id: userId,
+      ownerId: userId,
       title: file.name.replace(/\.[^/.]+$/, ''), // Remove file extension
       url: url,
-      video_id: `upload_${Date.now()}`,
+      videoId: `upload_${Date.now()}`,
       fps: metadata.fps,
       duration: metadata.duration,
-      total_frames: metadata.totalFrames,
-      video_type: 'upload',
-      file_path: filePath,
-      file_size: file.size,
-      original_filename: file.name,
-      is_public: false,
+      totalFrames: metadata.totalFrames,
+      videoType: 'upload',
+      filePath: filePath,
+      fileSize: file.size,
+      originalFilename: file.name,
+      isPublic: false,
     };
 
     const { data, error } = await supabase

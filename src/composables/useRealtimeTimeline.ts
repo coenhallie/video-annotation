@@ -18,24 +18,23 @@ export function useRealtimeTimeline(videoId, currentTime, isPlaying) {
     // Listen for timeline updates from other users
     timelineChannel
       .on('broadcast', { event: 'timeline_update' }, (payload) => {
-        const { user_id, current_time, is_playing, timestamp } =
-          payload.payload;
+        const { userId, currentTime, isPlaying, timestamp } = payload.payload;
 
-        if (user_id !== toValue(user).id) {
-          connectedUsers.value.set(user_id, {
-            current_time,
-            is_playing,
+        if (userId !== toValue(user).id) {
+          connectedUsers.value.set(userId, {
+            currentTime,
+            isPlaying,
             timestamp,
-            last_seen: new Date(),
+            lastSeen: new Date(),
           });
         }
       })
       .on('broadcast', { event: 'follow_request' }, (payload) => {
-        const { from_user_id, to_user_id } = payload.payload;
+        const { fromUserId, toUserId } = payload.payload;
 
-        if (to_user_id === toValue(user).id) {
+        if (toUserId === toValue(user).id) {
           // Handle follow request
-          console.log(`User ${from_user_id} wants to follow your timeline`);
+          console.log(`User ${fromUserId} wants to follow your timeline`);
         }
       })
       .subscribe();
@@ -48,9 +47,9 @@ export function useRealtimeTimeline(videoId, currentTime, isPlaying) {
       type: 'broadcast',
       event: 'timeline_update',
       payload: {
-        user_id: toValue(user).id,
-        current_time: toValue(currentTime),
-        is_playing: toValue(isPlaying),
+        userId: toValue(user).id,
+        currentTime: toValue(currentTime),
+        isPlaying: toValue(isPlaying),
         timestamp: Date.now(),
       },
     });
@@ -65,8 +64,8 @@ export function useRealtimeTimeline(videoId, currentTime, isPlaying) {
         type: 'broadcast',
         event: 'follow_request',
         payload: {
-          from_user_id: toValue(user).id,
-          to_user_id: userId,
+          fromUserId: toValue(user).id,
+          toUserId: userId,
         },
       });
     }

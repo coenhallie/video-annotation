@@ -7,19 +7,14 @@ import type {
   AnonymousSessionInsert,
   AnonymousSessionUpdate,
 } from '../types/database';
-import {
-  transformDatabaseCommentToApp,
-  transformAppCommentToDatabase,
-  transformDatabaseAnonymousSessionToApp,
-} from '../types/database';
 
 export interface CreateCommentParams {
-  annotation_id: string;
+  annotationId: string;
   content: string;
-  user_id?: string;
-  session_id?: string;
-  user_display_name?: string;
-  is_anonymous?: boolean;
+  userId?: string;
+  sessionId?: string;
+  userDisplayName?: string;
+  isAnonymous?: boolean;
 }
 
 export interface UpdateCommentParams {
@@ -27,9 +22,9 @@ export interface UpdateCommentParams {
 }
 
 export interface CreateAnonymousSessionParams {
-  display_name: string;
-  video_id?: string;
-  comparison_video_id?: string;
+  displayName: string;
+  videoId?: string;
+  comparisonVideoId?: string;
 }
 
 export interface CommentPermissions {
@@ -49,8 +44,8 @@ export class CommentService {
 
     try {
       // Validate required parameters
-      if (!params.annotation_id || !params.content) {
-        throw new Error('annotation_id and content are required');
+      if (!params.annotationId || !params.content) {
+        throw new Error('annotationId and content are required');
       }
 
       // Validate content length
@@ -62,32 +57,32 @@ export class CommentService {
 
       // Determine if this is an anonymous comment
       const isAnonymous = Boolean(
-        params.is_anonymous || (!params.user_id && params.session_id)
+        params.isAnonymous || (!params.userId && params.sessionId)
       );
 
       // Validate user identification
-      if (!params.user_id && !params.session_id) {
-        throw new Error('Either user_id or session_id must be provided');
+      if (!params.userId && !params.sessionId) {
+        throw new Error('Either userId or sessionId must be provided');
       }
 
-      if (isAnonymous && !params.user_display_name) {
-        throw new Error('user_display_name is required for anonymous comments');
+      if (isAnonymous && !params.userDisplayName) {
+        throw new Error('userDisplayName is required for anonymous comments');
       }
 
       // Set session context for anonymous users
-      if (params.session_id) {
+      if (params.sessionId) {
         await supabase.rpc('set_session_context', {
-          session_id: params.session_id,
+          sessionId: params.sessionId,
         });
       }
 
       const commentData: CommentInsert = {
-        annotation_id: params.annotation_id,
+        annotationId: params.annotationId,
         content: params.content,
-        user_id: params.user_id || null,
-        session_id: params.session_id || null,
-        user_display_name: params.user_display_name || null,
-        is_anonymous: isAnonymous,
+        userId: params.userId || null,
+        sessionId: params.sessionId || null,
+        userDisplayName: params.userDisplayName || null,
+        isAnonymous: isAnonymous,
       };
 
       const { data, error } = await supabase
@@ -96,7 +91,7 @@ export class CommentService {
         .select(
           `
           *,
-          user:users(id, email, full_name, avatar_url)
+          user:users(id, email, fullName, avatarUrl)
         `
         )
         .single();
@@ -107,7 +102,7 @@ export class CommentService {
       }
 
       console.log('✅ [CommentService] Successfully created comment:', data);
-      return transformDatabaseCommentToApp(data);
+      return data;
     } catch (error) {
       console.error('❌ [CommentService] Error creating comment:', error);
       throw error;
@@ -129,11 +124,11 @@ export class CommentService {
         .select(
           `
           *,
-          user:users(id, email, full_name, avatar_url)
+          user:users(id, email, fullName, avatarUrl)
         `
         )
-        .eq('annotation_id', annotationId)
-        .order('created_at', { ascending: true });
+        .eq('annotationId', annotationId)
+        .order('createdAt', { ascending: true });
 
       if (error) {
         console.error('❌ [CommentService] Error getting comments:', error);
@@ -141,7 +136,7 @@ export class CommentService {
       }
 
       console.log('✅ [CommentService] Retrieved comments:', data?.length || 0);
-      return data?.map(transformDatabaseCommentToApp) || [];
+      return data || [];
     } catch (error) {
       console.error(
         '❌ [CommentService] Error getting annotation comments:',
@@ -176,7 +171,7 @@ export class CommentService {
           {
             comment_id: commentId,
             new_content: params.content,
-            user_session_id: sessionId,
+            user_sessionId: sessionId,
           }
         );
 
@@ -195,7 +190,7 @@ export class CommentService {
           .select(
             `
             *,
-            user:users(id, email, full_name, avatar_url)
+            user:users(id, email, fullName, avatarUrl)
           `
           )
           .eq('id', commentId)
@@ -213,7 +208,7 @@ export class CommentService {
           '✅ [CommentService] Successfully updated comment:',
           commentWithUser
         );
-        return transformDatabaseCommentToApp(commentWithUser);
+        return commentWithUser;
       } else {
         // For authenticated users, use regular update
         const updates: CommentUpdate = {
@@ -227,7 +222,7 @@ export class CommentService {
           .select(
             `
             *,
-            user:users(id, email, full_name, avatar_url)
+            user:users(id, email, fullName, avatarUrl)
           `
           )
           .single();
@@ -238,7 +233,7 @@ export class CommentService {
         }
 
         console.log('✅ [CommentService] Successfully updated comment:', data);
-        return transformDatabaseCommentToApp(data);
+        return data;
       }
     } catch (error) {
       console.error('❌ [CommentService] Error updating comment:', error);
@@ -260,7 +255,7 @@ export class CommentService {
     try {
       // Set session context for anonymous users
       if (sessionId) {
-        await supabase.rpc('set_session_context', { session_id: sessionId });
+        await supabase.rpc('set_session_context', { sessionId: sessionId });
       }
 
       const { error } = await supabase
@@ -291,12 +286,12 @@ export class CommentService {
     console.log('🔍 [CommentService] Creating anonymous session:', params);
 
     try {
-      if (!params.display_name) {
-        throw new Error('display_name is required');
+      if (!params.displayName) {
+        throw new Error('displayName is required');
       }
 
-      if (!params.video_id && !params.comparison_video_id) {
-        throw new Error('Either video_id or comparison_video_id is required');
+      if (!params.videoId && !params.comparisonVideoId) {
+        throw new Error('Either videoId or comparisonVideoId is required');
       }
 
       // Generate a unique session ID
@@ -305,10 +300,10 @@ export class CommentService {
         .substr(2, 9)}`;
 
       const sessionData: AnonymousSessionInsert = {
-        session_id: sessionId,
-        display_name: params.display_name,
-        video_id: params.video_id || null,
-        comparison_video_id: params.comparison_video_id || null,
+        sessionId: sessionId,
+        displayName: params.displayName,
+        videoId: params.videoId || null,
+        comparisonVideoId: params.comparisonVideoId || null,
       };
 
       const { data, error } = await supabase
@@ -329,7 +324,7 @@ export class CommentService {
         '✅ [CommentService] Successfully created anonymous session:',
         data
       );
-      return transformDatabaseAnonymousSessionToApp(data);
+      return data;
     } catch (error) {
       console.error(
         '❌ [CommentService] Error creating anonymous session:',
@@ -351,7 +346,7 @@ export class CommentService {
       const { data, error } = await supabase
         .from('anonymous_sessions')
         .select('*')
-        .eq('session_id', sessionId)
+        .eq('sessionId', sessionId)
         .single();
 
       if (error) {
@@ -367,7 +362,7 @@ export class CommentService {
       }
 
       console.log('✅ [CommentService] Retrieved anonymous session:', data);
-      return transformDatabaseAnonymousSessionToApp(data);
+      return data;
     } catch (error) {
       console.error(
         '❌ [CommentService] Error getting anonymous session:',
@@ -387,12 +382,12 @@ export class CommentService {
 
     try {
       // Set session context
-      await supabase.rpc('set_session_context', { session_id: sessionId });
+      await supabase.rpc('set_session_context', { sessionId: sessionId });
 
       const { error } = await supabase
         .from('anonymous_sessions')
-        .update({ last_active: new Date().toISOString() })
-        .eq('session_id', sessionId);
+        .update({ lastActive: new Date().toISOString() })
+        .eq('sessionId', sessionId);
 
       if (error) {
         console.error(
@@ -430,7 +425,7 @@ export class CommentService {
       // First, get the annotation to determine if it's individual or comparison
       const { data: annotation, error: annotationError } = await supabase
         .from('annotations')
-        .select('id, user_id, video_id, comparison_video_id')
+        .select('id, userId, videoId, comparisonVideoId')
         .eq('id', annotationId)
         .single();
 
@@ -446,17 +441,17 @@ export class CommentService {
         };
       }
 
-      let videoData: { is_public: boolean; owner_id: string } | null = null;
+      let videoData: { isPublic: boolean; ownerId: string } | null = null;
 
       // Check if it's a comparison annotation
-      if (annotation.comparison_video_id) {
+      if (annotation.comparisonVideoId) {
         console.log(
           '🔍 [CommentService] Checking comparison video permissions'
         );
         const { data: comparisonVideo, error: comparisonError } = await supabase
           .from('comparison_videos')
-          .select('is_public, user_id')
-          .eq('id', annotation.comparison_video_id)
+          .select('isPublic, userId')
+          .eq('id', annotation.comparisonVideoId)
           .single();
 
         if (comparisonError) {
@@ -472,17 +467,17 @@ export class CommentService {
         }
 
         videoData = {
-          is_public: comparisonVideo.is_public,
-          owner_id: comparisonVideo.user_id,
+          isPublic: comparisonVideo.isPublic,
+          ownerId: comparisonVideo.userId,
         };
-      } else if (annotation.video_id) {
+      } else if (annotation.videoId) {
         console.log(
           '🔍 [CommentService] Checking individual video permissions'
         );
         const { data: video, error: videoError } = await supabase
           .from('videos')
-          .select('is_public, owner_id')
-          .eq('id', annotation.video_id)
+          .select('isPublic, ownerId')
+          .eq('id', annotation.videoId)
           .single();
 
         if (videoError) {
@@ -495,12 +490,12 @@ export class CommentService {
         }
 
         videoData = {
-          is_public: video.is_public,
-          owner_id: video.owner_id,
+          isPublic: video.isPublic,
+          ownerId: video.ownerId,
         };
       } else {
         console.error(
-          '❌ [CommentService] Annotation has neither video_id nor comparison_video_id'
+          '❌ [CommentService] Annotation has neither videoId nor comparisonVideoId'
         );
         return {
           canComment: false,
@@ -519,17 +514,17 @@ export class CommentService {
 
       // Check if user can comment
       const canComment =
-        videoData.is_public || // Public video/comparison
-        (userId && videoData.owner_id === userId) || // Video/comparison owner
-        (userId && annotation.user_id === userId); // Annotation owner
+        videoData.isPublic || // Public video/comparison
+        (userId && videoData.ownerId === userId) || // Video/comparison owner
+        (userId && annotation.userId === userId); // Annotation owner
 
       // Check if user can moderate (annotation owner)
-      const canModerate = userId && annotation.user_id === userId;
+      const canModerate = userId && annotation.userId === userId;
 
       console.log('✅ [CommentService] Permission check result:', {
         canComment,
         canModerate,
-        annotationType: annotation.comparison_video_id
+        annotationType: annotation.comparisonVideoId
           ? 'comparison'
           : 'individual',
       });
@@ -564,9 +559,9 @@ export class CommentService {
         .select(
           `
           id,
-          user_id,
-          session_id,
-          annotations!inner(id, user_id)
+          userId,
+          sessionId,
+          annotations!inner(id, userId)
         `
         )
         .eq('id', commentId)
@@ -585,9 +580,9 @@ export class CommentService {
         ? comment.annotations[0]
         : comment.annotations;
       const canModerate =
-        (userId && comment.user_id === userId) || // Comment author (authenticated)
-        (sessionId && comment.session_id === sessionId) || // Comment author (anonymous)
-        (userId && annotation?.user_id === userId); // Annotation owner
+        (userId && comment.userId === userId) || // Comment author (authenticated)
+        (sessionId && comment.sessionId === sessionId) || // Comment author (anonymous)
+        (userId && annotation?.userId === userId); // Annotation owner
 
       console.log('✅ [CommentService] Moderation check result:', canModerate);
       return canModerate;
@@ -648,7 +643,7 @@ export class CommentService {
       const { count, error } = await supabase
         .from('annotation_comments')
         .select('*', { count: 'exact', head: true })
-        .eq('annotation_id', annotationId);
+        .eq('annotationId', annotationId);
 
       if (error) {
         console.error(
@@ -683,7 +678,7 @@ export class CommentService {
         const { data: annotations, error: annotationsError } = await supabase
           .from('annotations')
           .select('id')
-          .eq('video_id', project.video.id);
+          .eq('videoId', project.video.id);
 
         if (annotationsError) {
           console.error(
@@ -703,7 +698,7 @@ export class CommentService {
         const { count, error } = await supabase
           .from('annotation_comments')
           .select('*', { count: 'exact', head: true })
-          .in('annotation_id', annotationIds);
+          .in('annotationId', annotationIds);
 
         if (error) {
           console.error(
@@ -724,7 +719,7 @@ export class CommentService {
           const { data: annotations, error: annotationsError } = await supabase
             .from('annotations')
             .select('id')
-            .in('video_id', [videoAId, videoBId]);
+            .in('videoId', [videoAId, videoBId]);
 
           if (annotationsError) {
             console.error(
@@ -744,7 +739,7 @@ export class CommentService {
           const { count, error } = await supabase
             .from('annotation_comments')
             .select('*', { count: 'exact', head: true })
-            .in('annotation_id', annotationIds);
+            .in('annotationId', annotationIds);
 
           if (error) {
             console.error(
@@ -866,11 +861,11 @@ export class CommentService {
         .select(
           `
           *,
-          user:users(id, email, full_name, avatar_url)
+          user:users(id, email, fullName, avatarUrl)
         `
         )
-        .in('annotation_id', annotationIds)
-        .order('created_at', { ascending: true });
+        .in('annotationId', annotationIds)
+        .order('createdAt', { ascending: true });
 
       if (error) {
         console.error(
@@ -880,7 +875,7 @@ export class CommentService {
         throw error;
       }
 
-      // Group comments by annotation_id
+      // Group comments by annotationId
       const commentsByAnnotation: Record<string, Comment[]> = {};
 
       annotationIds.forEach((id) => {
@@ -888,11 +883,11 @@ export class CommentService {
       });
 
       data?.forEach((comment) => {
-        const transformedComment = transformDatabaseCommentToApp(comment);
-        if (!commentsByAnnotation[comment.annotation_id]) {
-          commentsByAnnotation[comment.annotation_id] = [];
+        const transformedComment = comment;
+        if (!commentsByAnnotation[comment.annotationId]) {
+          commentsByAnnotation[comment.annotationId] = [];
         }
-        commentsByAnnotation[comment.annotation_id].push(transformedComment);
+        commentsByAnnotation[comment.annotationId].push(transformedComment);
       });
 
       console.log(
@@ -920,7 +915,7 @@ export class CommentService {
       const { error } = await supabase
         .from('annotation_comments')
         .delete()
-        .eq('annotation_id', annotationId);
+        .eq('annotationId', annotationId);
 
       if (error) {
         console.error(
@@ -958,7 +953,7 @@ export class CommentService {
 
       const payload = {
         event,
-        annotation_id: annotationId,
+        annotationId: annotationId,
         comment,
         old_comment: oldComment,
         timestamp: new Date().toISOString(),
@@ -997,9 +992,9 @@ export class CommentService {
 
       const event = isTyping ? 'typing_start' : 'typing_stop';
       const payload = {
-        user_id: userId,
-        user_name: userName,
-        annotation_id: annotationId,
+        userId: userId,
+        userName: userName,
+        annotationId: annotationId,
         typing: isTyping,
         timestamp: new Date().toISOString(),
       };
@@ -1049,11 +1044,11 @@ export class CommentService {
           event: 'INSERT',
           schema: 'public',
           table: 'annotation_comments',
-          filter: `annotation_id=eq.${annotationId}`,
+          filter: `annotationId=eq.${annotationId}`,
         },
         (payload) => {
           if (callbacks.onInsert) {
-            const comment = transformDatabaseCommentToApp(payload.new);
+            const comment = payload.new;
             callbacks.onInsert(comment);
           }
         }
@@ -1064,14 +1059,12 @@ export class CommentService {
           event: 'UPDATE',
           schema: 'public',
           table: 'annotation_comments',
-          filter: `annotation_id=eq.${annotationId}`,
+          filter: `annotationId=eq.${annotationId}`,
         },
         (payload) => {
           if (callbacks.onUpdate) {
-            const comment = transformDatabaseCommentToApp(payload.new);
-            const oldComment = payload.old
-              ? transformDatabaseCommentToApp(payload.old)
-              : undefined;
+            const comment = payload.new;
+            const oldComment = payload.old ? payload.old : undefined;
             callbacks.onUpdate(comment, oldComment);
           }
         }
@@ -1082,11 +1075,11 @@ export class CommentService {
           event: 'DELETE',
           schema: 'public',
           table: 'annotation_comments',
-          filter: `annotation_id=eq.${annotationId}`,
+          filter: `annotationId=eq.${annotationId}`,
         },
         (payload) => {
           if (callbacks.onDelete) {
-            const comment = transformDatabaseCommentToApp(payload.old);
+            const comment = payload.old;
             callbacks.onDelete(comment);
           }
         }
@@ -1146,21 +1139,21 @@ export class CommentService {
         }
       })
       .on('broadcast', { event: 'typing_start' }, ({ payload }) => {
-        if (payload.user_id !== userId && callbacks.onTypingStart) {
-          callbacks.onTypingStart(payload.user_id, payload.user_name);
+        if (payload.userId !== userId && callbacks.onTypingStart) {
+          callbacks.onTypingStart(payload.userId, payload.userName);
         }
       })
       .on('broadcast', { event: 'typing_stop' }, ({ payload }) => {
-        if (payload.user_id !== userId && callbacks.onTypingStop) {
-          callbacks.onTypingStop(payload.user_id);
+        if (payload.userId !== userId && callbacks.onTypingStop) {
+          callbacks.onTypingStop(payload.userId);
         }
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
           await channel.track({
-            user_id: userId,
-            user_name: userName,
-            annotation_id: annotationId,
+            userId: userId,
+            userName: userName,
+            annotationId: annotationId,
             typing: false,
             online_at: new Date().toISOString(),
           });
@@ -1233,7 +1226,7 @@ export class CommentService {
       const comment = await this.createComment(params);
 
       // Broadcast the event to real-time subscribers
-      await this.broadcastCommentEvent('INSERT', params.annotation_id, comment);
+      await this.broadcastCommentEvent('INSERT', params.annotationId, comment);
 
       return comment;
     } catch (error) {
@@ -1261,9 +1254,7 @@ export class CommentService {
         .eq('id', commentId)
         .single();
 
-      const oldComment = oldCommentData
-        ? transformDatabaseCommentToApp(oldCommentData)
-        : undefined;
+      const oldComment = oldCommentData ? oldCommentData : undefined;
 
       // Update comment using existing method
       const updatedComment = await this.updateComment(
@@ -1276,7 +1267,7 @@ export class CommentService {
       if (oldComment) {
         await this.broadcastCommentEvent(
           'UPDATE',
-          updatedComment.annotation_id,
+          updatedComment.annotationId,
           updatedComment,
           oldComment
         );
@@ -1311,17 +1302,13 @@ export class CommentService {
         throw new Error('Comment not found');
       }
 
-      const comment = transformDatabaseCommentToApp(commentData);
+      const comment = commentData;
 
       // Delete comment using existing method
       await this.deleteComment(commentId, sessionId);
 
       // Broadcast the event to real-time subscribers
-      await this.broadcastCommentEvent(
-        'DELETE',
-        comment.annotation_id,
-        comment
-      );
+      await this.broadcastCommentEvent('DELETE', comment.annotationId, comment);
     } catch (error) {
       console.error(
         '❌ [CommentService] Error deleting comment with real-time:',

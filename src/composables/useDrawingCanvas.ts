@@ -181,7 +181,9 @@ export function useDrawingCanvas() {
       frame: drawing.frame,
       annotationType: 'drawing',
       drawingData: drawing,
-      user_id: userId,
+      userId: userId,
+      duration: 0,
+      durationFrames: 0,
     };
   };
 
@@ -305,17 +307,83 @@ export function useDrawingCanvas() {
   // Get current frame drawing data (merges all drawings on current frame)
   const getCurrentFrameDrawing = (): DrawingData | null => {
     const frameDrawings = getDrawingsForFrame(currentFrame.value);
-    if (frameDrawings.length === 0) return null;
+    const allPaths: DrawingPath[] = [];
 
-    // Merge all drawings on current frame into single DrawingData
-    const allPaths = frameDrawings.flatMap((drawing) => drawing.paths);
+    // Add paths from committed drawings
+    frameDrawings.forEach((drawing) => {
+      allPaths.push(...drawing.paths);
+    });
 
+    // CRITICAL: Also check for active drawing that hasn't been committed yet
+    if (
+      state.value.activeDrawing &&
+      state.value.activeDrawing.paths.length > 0
+    ) {
+      console.log(
+        '🎨 [DEBUG] Found active drawing with paths:',
+        state.value.activeDrawing.paths.length
+      );
+      allPaths.push(...state.value.activeDrawing.paths);
+    }
+
+    console.log('🎨 [DEBUG] getCurrentFrameDrawing detailed check:', {
+      frame: currentFrame.value,
+      committedDrawings: frameDrawings.length,
+      activeDrawing: !!state.value.activeDrawing,
+      activeDrawingPaths: state.value.activeDrawing?.paths?.length || 0,
+      totalPaths: allPaths.length,
+      drawingsMapSize: state.value.drawings.size,
+      drawingsMapKeys: Array.from(state.value.drawings.keys()),
+      isDrawingMode: state.value.isDrawingMode,
+      canvasSize: state.value.canvasSize,
+    });
+
+    if (allPaths.length === 0) {
+      console.log(
+        '🎨 [DEBUG] No drawings found for frame:',
+        currentFrame.value
+      );
+      return null;
+    }
+
+    console.log(
+      '🎨 [DEBUG] Returning drawing data with paths:',
+      allPaths.length
+    );
     return {
       paths: allPaths,
       canvasWidth: state.value.canvasSize.width,
       canvasHeight: state.value.canvasSize.height,
       frame: currentFrame.value,
     };
+  };
+
+  const getCurrentDrawingSession = (): DrawingData | null => {
+    if (state.value.activeDrawing) {
+      return {
+        ...state.value.activeDrawing,
+        frame: currentFrame.value,
+      };
+    }
+    return null;
+  };
+
+  // Complete drawing session - compatibility method for AnnotationPanel
+  const completeDrawingSession = () => {
+    console.log('🎨 [useDrawingCanvas] completeDrawingSession called');
+
+    // If there's an active drawing, commit it to the drawings Map
+    if (
+      state.value.activeDrawing &&
+      state.value.activeDrawing.paths.length > 0
+    ) {
+      console.log(
+        '🎨 [DEBUG] Committing active drawing to frame:',
+        currentFrame.value
+      );
+      addDrawing(state.value.activeDrawing);
+      state.value.activeDrawing = null;
+    }
   };
 
   // Export interface
@@ -346,6 +414,7 @@ export function useDrawingCanvas() {
     clearCurrentFrameDrawings,
     clearAllDrawings,
     getDrawingsForFrame,
+    completeDrawingSession,
 
     // Data conversion
     convertDrawingToAnnotation,

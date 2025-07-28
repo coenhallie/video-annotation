@@ -18,15 +18,15 @@ export class VideoService {
 
     console.log('🐛 [DEBUG] VideoService.createVideo called with:', {
       url: videoData.url,
-      video_id: videoData.video_id,
-      video_type: videoData.video_type,
-      owner_id: videoData.owner_id,
+      videoId: videoData.videoId,
+      videoType: videoData.videoType,
+      ownerId: videoData.ownerId,
       title: videoData.title,
     });
 
     // Validate video data before proceeding
     if (
-      videoData.video_type === 'url' &&
+      videoData.videoType === 'url' &&
       (!videoData.url || videoData.url.trim() === '')
     ) {
       const error = new Error('URL is required for URL-type videos');
@@ -35,31 +35,31 @@ export class VideoService {
     }
 
     if (
-      videoData.video_type === 'upload' &&
+      videoData.videoType === 'upload' &&
       (!videoData.url || videoData.url.trim() === '') &&
-      (!videoData.file_path || videoData.file_path.trim() === '')
+      (!videoData.filePath || videoData.filePath.trim() === '')
     ) {
       const error = new Error(
-        'Either URL or file_path is required for upload-type videos'
+        'Either URL or filePath is required for upload-type videos'
       );
       console.error('❌ [VideoService] Validation failed:', error.message);
       throw error;
     }
 
-    // For uploaded videos without URL, generate URL from file_path
+    // For uploaded videos without URL, generate URL from filePath
     if (
-      videoData.video_type === 'upload' &&
+      videoData.videoType === 'upload' &&
       (!videoData.url || videoData.url.trim() === '') &&
-      videoData.file_path &&
-      videoData.file_path.trim() !== ''
+      videoData.filePath &&
+      videoData.filePath.trim() !== ''
     ) {
       console.log(
-        '🔧 [VideoService] Generating URL from file_path for uploaded video'
+        '🔧 [VideoService] Generating URL from filePath for uploaded video'
       );
       try {
         const { data: urlData } = supabase.storage
           .from('videos')
-          .getPublicUrl(videoData.file_path);
+          .getPublicUrl(videoData.filePath);
 
         if (urlData?.publicUrl) {
           videoData.url = urlData.publicUrl;
@@ -67,15 +67,15 @@ export class VideoService {
         }
       } catch (urlError) {
         console.warn(
-          '⚠️ [VideoService] Failed to generate URL from file_path:',
+          '⚠️ [VideoService] Failed to generate URL from filePath:',
           urlError
         );
-        // Continue without URL - the video player will handle file_path directly
+        // Continue without URL - the video player will handle filePath directly
       }
     }
 
     // For uploaded videos, always create new records (no deduplication)
-    if (videoData.video_type === 'upload') {
+    if (videoData.videoType === 'upload') {
       console.log('🔍 [VideoService] Creating new uploaded video record');
       const { data, error } = await supabase
         .from('videos')
@@ -100,16 +100,16 @@ export class VideoService {
     // For URL videos, check for existing videos by URL and owner
     console.log('🐛 [DEBUG] Checking for existing URL video with:', {
       url: videoData.url,
-      owner_id: videoData.owner_id,
-      video_type: 'url',
+      ownerId: videoData.ownerId,
+      videoType: 'url',
     });
 
     const { data: existingVideo, error: queryError } = await supabase
       .from('videos')
       .select('*')
       .eq('url', videoData.url)
-      .eq('owner_id', videoData.owner_id)
-      .eq('video_type', 'url')
+      .eq('ownerId', videoData.ownerId)
+      .eq('videoType', 'url')
       .maybeSingle();
 
     if (queryError) {
@@ -125,8 +125,8 @@ export class VideoService {
       console.log('🐛 [DEBUG] Existing video details:', {
         id: existingVideo.id,
         url: existingVideo.url,
-        video_id: existingVideo.video_id,
-        video_type: existingVideo.video_type,
+        videoId: existingVideo.videoId,
+        videoType: existingVideo.videoType,
       });
 
       // Update existing video with new data
@@ -136,8 +136,7 @@ export class VideoService {
           title: videoData.title,
           fps: videoData.fps,
           duration: videoData.duration,
-          total_frames: videoData.total_frames,
-          updated_at: new Date().toISOString(),
+          totalFrames: videoData.totalFrames,
         })
         .eq('id', existingVideo.id)
         .select()
@@ -151,8 +150,8 @@ export class VideoService {
       console.log('🐛 [DEBUG] Updated video details:', {
         id: data.id,
         url: data.url,
-        video_id: data.video_id,
-        video_type: data.video_type,
+        videoId: data.videoId,
+        videoType: data.videoType,
       });
       return data;
     }
@@ -181,8 +180,8 @@ export class VideoService {
     console.log('🐛 [DEBUG] New video details:', {
       id: data.id,
       url: data.url,
-      video_id: data.video_id,
-      video_type: data.video_type,
+      videoId: data.videoId,
+      videoType: data.videoType,
     });
     return data;
   }
@@ -191,8 +190,8 @@ export class VideoService {
     const { data, error } = await supabase
       .from('videos')
       .select('*')
-      .eq('owner_id', userId)
-      .order('created_at', { ascending: false });
+      .eq('ownerId', userId)
+      .order('createdAt', { ascending: false });
 
     if (error) throw error;
     return data;
@@ -202,8 +201,8 @@ export class VideoService {
     const { data, error } = await supabase
       .from('videos')
       .select('*')
-      .eq('owner_id', userId)
-      .order('created_at', { ascending: false })
+      .eq('ownerId', userId)
+      .order('createdAt', { ascending: false })
       .limit(1)
       .single();
 
@@ -238,15 +237,15 @@ export class VideoService {
     // First get the video to check if it's an uploaded video
     const { data: video, error: fetchError } = await supabase
       .from('videos')
-      .select('video_type, file_path')
+      .select('videoType, filePath')
       .eq('id', videoId)
       .single();
 
     if (fetchError) throw fetchError;
 
     // If it's an uploaded video, use the upload service to delete it
-    if (video && video.video_type === 'upload' && video.file_path) {
-      await VideoUploadService.deleteUploadedVideo(videoId, video.file_path);
+    if (video && video.videoType === 'upload' && video.filePath) {
+      await VideoUploadService.deleteUploadedVideo(videoId, video.filePath);
     } else {
       // For URL videos, just delete the database record
       const { error } = await supabase
@@ -280,12 +279,12 @@ export class VideoService {
         .select(
           `
           *,
-          video_a:videos!comparison_videos_video_a_id_fkey(*),
-          video_b:videos!comparison_videos_video_b_id_fkey(*)
+          videoA:videos!comparison_videos_videoAId_fkey(*),
+          videoB:videos!comparison_videos_videoBId_fkey(*)
         `
         )
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false });
+        .eq('userId', userId)
+        .order('createdAt', { ascending: false });
 
       if (comparisonError) {
         console.error(
@@ -301,17 +300,12 @@ export class VideoService {
       );
 
       // Transform comparison videos to app format
-      const { transformDatabaseComparisonVideoToApp } = await import(
-        '../types/database'
-      );
       const comparisonVideos =
-        comparisonData?.map((item) =>
-          transformDatabaseComparisonVideoToApp(
-            item,
-            item.video_a,
-            item.video_b
-          )
-        ) || [];
+        comparisonData?.map((item) => ({
+          ...item,
+          videoA: item.videoA,
+          videoB: item.videoB,
+        })) || [];
 
       // Deduplicate individual videos (in case of duplicates)
       const uniqueIndividualVideos =
@@ -326,7 +320,7 @@ export class VideoService {
         ...comparisonVideos,
       ].sort(
         (a, b) =>
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
 
       console.log(
@@ -403,16 +397,16 @@ export class VideoService {
         // Load comparison video with all related annotations
         const [annotationsA, annotationsB, comparisonAnnotations] =
           await Promise.all([
-            AnnotationService.getVideoAnnotations(entity.video_a_id),
-            AnnotationService.getVideoAnnotations(entity.video_b_id),
+            AnnotationService.getVideoAnnotations(entity.videoAId),
+            AnnotationService.getVideoAnnotations(entity.videoBId),
             AnnotationService.getComparisonVideoAnnotations(entity.id),
           ]);
 
         return {
           type: 'comparison' as const,
           comparisonVideo: entity,
-          videoA: entity.video_a,
-          videoB: entity.video_b,
+          videoA: entity.videoA,
+          videoB: entity.videoB,
           annotationsA: annotationsA || [],
           annotationsB: annotationsB || [],
           comparisonAnnotations: comparisonAnnotations || [],
@@ -429,11 +423,11 @@ export class VideoService {
           annotations: annotations || [],
           videoMetadata: {
             existingVideo: entity,
-            videoType: entity.video_type,
+            videoType: entity.videoType,
             title: entity.title,
             fps: entity.fps,
             duration: entity.duration,
-            totalFrames: entity.total_frames,
+            totalFrames: entity.totalFrames,
           },
         };
       }

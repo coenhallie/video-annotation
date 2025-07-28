@@ -488,8 +488,8 @@ export function useDualVideoPlayer() {
     );
 
     // Set video IDs and project context
-    videoAId.value = videoAData.videoId || videoAData.video_id || 'video-a';
-    videoBId.value = videoBData.videoId || videoBData.video_id || 'video-b';
+    videoAId.value = videoAData.videoId || videoAData.videoId || 'video-a';
+    videoBId.value = videoBData.videoId || videoBData.videoId || 'video-b';
     projectId.value = projectIdValue;
     comparisonVideoId.value = comparisonVideoIdValue;
 
@@ -756,6 +756,75 @@ export function useDualVideoPlayer() {
   const currentDrawingSession = ref(null);
   const drawingSessionTimeout = ref(null);
 
+  // Session persistence key
+  const SESSION_STORAGE_KEY = 'dual-video-drawing-session';
+
+  // Load drawing session from localStorage on initialization
+  const loadDrawingSessionFromStorage = () => {
+    try {
+      const stored = localStorage.getItem(SESSION_STORAGE_KEY);
+      if (stored) {
+        const sessionData = JSON.parse(stored);
+        // Only restore if the session is recent (within 5 minutes)
+        const now = Date.now();
+        if (now - sessionData.timestamp < 5 * 60 * 1000) {
+          currentDrawingSession.value = sessionData.session;
+          console.log(
+            '🔄 [DualVideoPlayer] Restored drawing session from storage:',
+            sessionData.session
+          );
+          return true;
+        } else {
+          // Clear expired session
+          localStorage.removeItem(SESSION_STORAGE_KEY);
+          console.log(
+            '⏰ [DualVideoPlayer] Expired drawing session cleared from storage'
+          );
+        }
+      }
+    } catch (error) {
+      console.error(
+        '❌ [DualVideoPlayer] Error loading drawing session from storage:',
+        error
+      );
+      localStorage.removeItem(SESSION_STORAGE_KEY);
+    }
+    return false;
+  };
+
+  // Save drawing session to localStorage
+  const saveDrawingSessionToStorage = () => {
+    try {
+      if (currentDrawingSession.value) {
+        const sessionData = {
+          session: currentDrawingSession.value,
+          timestamp: Date.now(),
+        };
+        localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessionData));
+        console.log(
+          '💾 [DualVideoPlayer] Saved drawing session to storage:',
+          currentDrawingSession.value
+        );
+      } else {
+        localStorage.removeItem(SESSION_STORAGE_KEY);
+        console.log(
+          '🗑️ [DualVideoPlayer] Cleared drawing session from storage'
+        );
+      }
+    } catch (error) {
+      console.error(
+        '❌ [DualVideoPlayer] Error saving drawing session to storage:',
+        error
+      );
+    }
+  };
+
+  // Clear drawing session from storage
+  const clearDrawingSessionFromStorage = () => {
+    localStorage.removeItem(SESSION_STORAGE_KEY);
+    console.log('🗑️ [DualVideoPlayer] Cleared drawing session from storage');
+  };
+
   // Sync comparison annotations to drawing canvases
   const syncAnnotationsToCanvases = () => {
     if (!comparisonAnnotations?.annotations?.value) return;
@@ -969,122 +1038,183 @@ export function useDualVideoPlayer() {
       // Note: Removed premature update logic for existing annotation context
       // Updates should only happen when the user clicks 'Save'
 
+      // Store the drawing data in memory without saving to database yet
+      // This implements the deferred save pattern like text annotations
       if (
         currentDrawingSession.value &&
         currentDrawingSession.value.frame === drawing.frame &&
         currentDrawingSession.value.videoContext === videoContext
       ) {
-        // Add to existing drawing session (for continuous drawing)
+        // Add to existing drawing session (accumulate strokes)
         console.log(
-          `🎨 [DualVideoPlayer] Adding stroke to existing drawing session for video ${videoContext}`
+          `🎨 [DualVideoPlayer] Adding strokes to existing drawing session for video ${videoContext}`
         );
 
         // Merge paths into the session drawing
         currentDrawingSession.value.drawing.paths.push(...drawing.paths);
 
-        // Update the annotation in database
-        const drawingKey = videoContext === 'A' ? 'drawingA' : 'drawingB';
-        const updatedAnnotation = { ...currentDrawingSession.value.annotation };
-        if (!updatedAnnotation.drawingData) {
-          updatedAnnotation.drawingData = {};
-        }
-        updatedAnnotation.drawingData[drawingKey] =
-          currentDrawingSession.value.drawing;
-
-        await AnnotationService.updateAnnotation(
-          currentDrawingSession.value.annotation.id,
-          updatedAnnotation
-        );
+        // Save updated session to storage
+        saveDrawingSessionToStorage();
 
         console.log(
-          `✅ [DualVideoPlayer] Updated drawing session for video ${videoContext}`
+          `✅ [DualVideoPlayer] Accumulated ${currentDrawingSession.value.drawing.paths.length} strokes for video ${videoContext}`
         );
       } else {
-        // Start new drawing session (create new annotation)
+        // Start new drawing session (in memory only)
         console.log(
           `🎨 [DualVideoPlayer] Starting new drawing session for video ${videoContext}`
         );
 
-        // Create annotation data with drawing for the specific video
-        const drawingCanvas =
-          videoContext === 'A' ? drawingCanvasA : drawingCanvasB;
-        const drawingKey = videoContext === 'A' ? 'drawingA' : 'drawingB';
-
-        // Use the drawing canvas to convert drawing to annotation format
-        const baseAnnotation = drawingCanvas.convertDrawingToAnnotation(
-          drawing,
-          null, // No individual video_id for comparison annotations
-          userId || 'user', // Use provided userId or fallback
-          'Drawing Annotation',
-          `Drawing on frame ${drawing.frame} - Video ${videoContext}`
-        );
-
-        // Modify the annotation to use dual video format
-        const annotation = {
-          ...baseAnnotation,
-          drawingData: {
-            [drawingKey]: drawing,
-          },
-        };
-
-        // Create comparison annotation
-        const dbVideoContext =
-          videoContext === 'A'
-            ? 'video_a'
-            : videoContext === 'B'
-            ? 'video_b'
-            : 'comparison';
-
-        const createdAnnotation =
-          await AnnotationService.createComparisonAnnotation(
-            comparisonVideoId.value,
-            annotation,
-            userId || 'user',
-            dbVideoContext,
-            drawing.frame,
-            projectId.value
-          );
-
-        // Start new session
+        // Start new session with the drawing data
         currentDrawingSession.value = {
           id: Date.now(),
-          annotation: createdAnnotation,
           drawing: { ...drawing }, // Copy the drawing
           frame: drawing.frame,
           videoContext: videoContext,
         };
+
+        // Save new session to storage
+        saveDrawingSessionToStorage();
 
         console.log(
           `✅ [DualVideoPlayer] New drawing session started for video ${videoContext}`
         );
       }
 
-      // Set timeout to end session after 2 seconds of inactivity
+      // Clear any existing timeout
+      if (drawingSessionTimeout.value) {
+        clearTimeout(drawingSessionTimeout.value);
+      }
+
+      // Set timeout to end session after 3 seconds of inactivity
+      // This gives users time to continue drawing without losing their session
       drawingSessionTimeout.value = setTimeout(() => {
         console.log(
           `🎨 [DualVideoPlayer] Ending drawing session due to inactivity`
         );
         currentDrawingSession.value = null;
         drawingSessionTimeout.value = null;
-      }, 2000);
+        // Clear from storage when session ends
+        clearDrawingSessionFromStorage();
+      }, 3000);
 
-      // Add drawing to canvas for immediate visual feedback
-      const canvasRef =
-        videoContext === 'A'
-          ? drawingCanvasARef.value
-          : drawingCanvasBRef.value;
-      if (canvasRef && canvasRef.$el) {
-        // The drawing should already be visible since it was created on the canvas
-        console.log(
-          `🎨 [DualVideoPlayer] Drawing should be visible on canvas ${videoContext}`
-        );
-      }
+      // The drawing is already visible on the canvas since it was created there
+      console.log(
+        `🎨 [DualVideoPlayer] Drawing session active for video ${videoContext}, ${
+          currentDrawingSession.value?.drawing?.paths?.length || 0
+        } strokes accumulated`
+      );
     } catch (error) {
       console.error(
         `❌ [DualVideoPlayer] Error handling drawing creation for video ${videoContext}:`,
         error
       );
       showError('Failed to save drawing', error.message);
+    }
+  };
+
+  // Get current drawing session for annotation capture
+  const getCurrentDrawingSession = () => {
+    return currentDrawingSession.value;
+  };
+
+  // Function to save the current drawing session to the database
+  const saveCurrentDrawingSession = async () => {
+    if (!currentDrawingSession.value) {
+      console.log('🎨 [DualVideoPlayer] No active drawing session to save');
+      return null;
+    }
+
+    try {
+      const { drawing, videoContext, frame } = currentDrawingSession.value;
+
+      console.log(
+        `💾 [DualVideoPlayer] Saving drawing session for video ${videoContext} with ${drawing.paths.length} strokes`
+      );
+
+      // Create annotation data with drawing for the specific video
+      const drawingCanvas =
+        videoContext === 'A' ? drawingCanvasA : drawingCanvasB;
+      const drawingKey = videoContext === 'A' ? 'drawingA' : 'drawingB';
+
+      // Use the drawing canvas to convert drawing to annotation format
+      const baseAnnotation = drawingCanvas.convertDrawingToAnnotation(
+        drawing,
+        null, // No individual video_id for comparison annotations
+        userId || 'user', // Use provided userId or fallback
+        'Drawing Annotation',
+        `Drawing on frame ${frame} - Video ${videoContext}`
+      );
+
+      console.log(
+        '🔍 [DEBUG] Base annotation from convertDrawingToAnnotation:',
+        {
+          annotationType: baseAnnotation.annotationType,
+          hasDrawingData: !!baseAnnotation.drawingData,
+          drawingDataPaths: baseAnnotation.drawingData?.paths?.length || 0,
+          drawingDataStructure: baseAnnotation.drawingData
+            ? Object.keys(baseAnnotation.drawingData)
+            : null,
+        }
+      );
+
+      // FIX: Use the correct flat drawingData structure from baseAnnotation
+      // The baseAnnotation already has the correct structure with drawingData and annotationType
+      const annotation = {
+        ...baseAnnotation,
+        // Keep the original flat drawingData structure from convertDrawingToAnnotation
+        // Don't override with nested structure
+      };
+
+      console.log('🔍 [DEBUG] Final annotation before save:', {
+        annotationType: annotation.annotationType,
+        hasDrawingData: !!annotation.drawingData,
+        drawingDataStructure: annotation.drawingData
+          ? Object.keys(annotation.drawingData)
+          : null,
+        nestedDrawingPaths:
+          annotation.drawingData?.[drawingKey]?.paths?.length || 0,
+      });
+
+      // Create comparison annotation
+      const dbVideoContext =
+        videoContext === 'A'
+          ? 'video_a'
+          : videoContext === 'B'
+          ? 'video_b'
+          : 'comparison';
+
+      const createdAnnotation =
+        await AnnotationService.createComparisonAnnotation(
+          comparisonVideoId.value,
+          annotation,
+          userId || 'user',
+          dbVideoContext,
+          frame,
+          projectId.value
+        );
+
+      console.log(
+        `✅ [DualVideoPlayer] Drawing session saved successfully for video ${videoContext}`
+      );
+
+      // Clear the session after successful save
+      currentDrawingSession.value = null;
+      if (drawingSessionTimeout.value) {
+        clearTimeout(drawingSessionTimeout.value);
+        drawingSessionTimeout.value = null;
+      }
+      // Clear from storage after successful save
+      clearDrawingSessionFromStorage();
+
+      return createdAnnotation;
+    } catch (error) {
+      console.error(
+        `❌ [DualVideoPlayer] Error saving drawing session:`,
+        error
+      );
+      showError('Failed to save drawing', error.message);
+      return null;
     }
   };
 
@@ -1190,6 +1320,8 @@ export function useDualVideoPlayer() {
     updateAnnotation,
     deleteAnnotation,
     handleDrawingCreated,
+    getCurrentDrawingSession,
+    saveCurrentDrawingSession,
     updateAnnotationWithDrawing,
     setCurrentAnnotationContext,
     clearCurrentAnnotationContext,
@@ -1198,6 +1330,11 @@ export function useDualVideoPlayer() {
     setVideoSize,
     getAnnotations,
     getDrawingCanvas,
+
+    // Session management
+    loadDrawingSessionFromStorage,
+    saveDrawingSessionToStorage,
+    clearDrawingSessionFromStorage,
 
     // Utility functions
     setupVideoEventListeners,

@@ -124,8 +124,8 @@ export function useComparisonVideoWorkflow() {
         await ComparisonVideoService.createComparisonVideo({
           title: comparisonTitle.value.trim(),
           description: comparisonDescription.value.trim() || undefined,
-          video_a_id: selectedVideoA.value!.id,
-          video_b_id: selectedVideoB.value!.id,
+          videoAId: selectedVideoA.value!.id,
+          videoBId: selectedVideoB.value!.id,
           video_a: selectedVideoA.value!,
           video_b: selectedVideoB.value!,
         });
@@ -207,13 +207,13 @@ export function useComparisonVideoWorkflow() {
 
       // Set current comparison
       currentComparison.value = comparisonVideo;
-      selectedVideoA.value = comparisonVideo.video_a!;
-      selectedVideoB.value = comparisonVideo.video_b!;
+      selectedVideoA.value = comparisonVideo.videoA!;
+      selectedVideoB.value = comparisonVideo.videoB!;
 
       // Load all annotations
       const [annotationsA, annotationsB, compAnnotations] = await Promise.all([
-        AnnotationService.getVideoAnnotations(comparisonVideo.video_a_id),
-        AnnotationService.getVideoAnnotations(comparisonVideo.video_b_id),
+        AnnotationService.getVideoAnnotations(comparisonVideo.videoAId),
+        AnnotationService.getVideoAnnotations(comparisonVideo.videoBId),
         AnnotationService.getComparisonVideoAnnotations(comparisonVideo.id),
       ]);
 
@@ -243,8 +243,8 @@ export function useComparisonVideoWorkflow() {
 
     // Load all annotations
     const [annotationsA, annotationsB, compAnnotations] = await Promise.all([
-      AnnotationService.getVideoAnnotations(comparisonVideo.video_a_id),
-      AnnotationService.getVideoAnnotations(comparisonVideo.video_b_id),
+      AnnotationService.getVideoAnnotations(comparisonVideo.videoAId),
+      AnnotationService.getVideoAnnotations(comparisonVideo.videoBId),
       AnnotationService.getComparisonVideoAnnotations(comparisonVideo.id),
     ]);
 
@@ -277,41 +277,49 @@ export function useComparisonVideoWorkflow() {
           user.value.id,
           'comparison'
         );
+        console.log(
+          'Annotation data being sent to createComparisonAnnotation:',
+          annotation
+        );
         comparisonAnnotations.value.push(newAnnotation);
         comparisonAnnotations.value.sort((a, b) => a.frame - b.frame);
       } else if (context === 'video_a' && selectedVideoA.value) {
         // Create annotation for Video A
         newAnnotation = await AnnotationService.createAnnotation({
-          video_id: selectedVideoA.value.id,
-          user_id: user.value.id,
+          videoId: selectedVideoA.value.id,
+          userId: user.value.id,
           content: annotation.content,
           title: annotation.title,
           severity: annotation.severity,
           color: annotation.color,
           timestamp: annotation.timestamp,
           frame: annotation.frame,
-          start_frame: annotation.frame,
-          end_frame: annotation.frame,
-          annotation_type: annotation.annotationType,
-          drawing_data: annotation.drawingData,
+          startFrame: annotation.frame,
+          endFrame: annotation.frame,
+          duration: annotation.duration || 0,
+          durationFrames: annotation.durationFrames || 0,
+          annotationType: annotation.annotationType,
+          drawingData: annotation.drawingData,
         });
         videoAAnnotations.value.push(newAnnotation);
         videoAAnnotations.value.sort((a, b) => a.frame - b.frame);
       } else if (context === 'video_b' && selectedVideoB.value) {
         // Create annotation for Video B
         newAnnotation = await AnnotationService.createAnnotation({
-          video_id: selectedVideoB.value.id,
-          user_id: user.value.id,
+          videoId: selectedVideoB.value.id,
+          userId: user.value.id,
           content: annotation.content,
           title: annotation.title,
           severity: annotation.severity,
           color: annotation.color,
           timestamp: annotation.timestamp,
           frame: annotation.frame,
-          start_frame: annotation.frame,
-          end_frame: annotation.frame,
-          annotation_type: annotation.annotationType,
-          drawing_data: annotation.drawingData,
+          startFrame: annotation.frame,
+          endFrame: annotation.frame,
+          duration: annotation.duration || 0,
+          durationFrames: annotation.durationFrames || 0,
+          annotationType: annotation.annotationType,
+          drawingData: annotation.drawingData,
         });
         videoBAnnotations.value.push(newAnnotation);
         videoBAnnotations.value.sort((a, b) => a.frame - b.frame);

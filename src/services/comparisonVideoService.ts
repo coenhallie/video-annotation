@@ -6,10 +6,6 @@ import type {
   ComparisonVideo,
   Video,
 } from '../types/database';
-import {
-  transformDatabaseComparisonVideoToApp,
-  transformAppComparisonVideoToDatabase,
-} from '../types/database';
 import { VideoService } from './videoService';
 
 export class ComparisonVideoService {
@@ -19,8 +15,8 @@ export class ComparisonVideoService {
   static async createComparisonVideo(comparisonData: {
     title: string;
     description?: string;
-    video_a_id: string;
-    video_b_id: string;
+    videoAId: string;
+    videoBId: string;
     video_a?: Video;
     video_b?: Video;
     owner_id?: string;
@@ -39,30 +35,30 @@ export class ComparisonVideoService {
     // Fetch video details if not provided
     const [videoA, videoB] = await Promise.all([
       comparisonData.video_a ||
-        VideoService.getVideoById(comparisonData.video_a_id),
+        VideoService.getVideoById(comparisonData.videoAId),
       comparisonData.video_b ||
-        VideoService.getVideoById(comparisonData.video_b_id),
+        VideoService.getVideoById(comparisonData.videoBId),
     ]);
 
     // Validate that both videos exist and have valid data
     if (!videoA) {
-      throw new Error(`Video A with ID ${comparisonData.video_a_id} not found`);
+      throw new Error(`Video A with ID ${comparisonData.videoAId} not found`);
     }
     if (!videoB) {
-      throw new Error(`Video B with ID ${comparisonData.video_b_id} not found`);
+      throw new Error(`Video B with ID ${comparisonData.videoBId} not found`);
     }
 
     // Validate video URLs/paths
     const isVideoAValid =
-      (videoA.video_type === 'url' && videoA.url && videoA.url.trim() !== '') ||
-      (videoA.video_type === 'upload' &&
+      (videoA.videoType === 'url' && videoA.url && videoA.url.trim() !== '') ||
+      (videoA.videoType === 'upload' &&
         ((videoA.url && videoA.url.trim() !== '') ||
-          (videoA.file_path && videoA.file_path.trim() !== '')));
+          (videoA.filePath && videoA.filePath.trim() !== '')));
     const isVideoBValid =
-      (videoB.video_type === 'url' && videoB.url && videoB.url.trim() !== '') ||
-      (videoB.video_type === 'upload' &&
+      (videoB.videoType === 'url' && videoB.url && videoB.url.trim() !== '') ||
+      (videoB.videoType === 'upload' &&
         ((videoB.url && videoB.url.trim() !== '') ||
-          (videoB.file_path && videoB.file_path.trim() !== '')));
+          (videoB.filePath && videoB.filePath.trim() !== '')));
 
     if (!isVideoAValid) {
       throw new Error(`Video A (${videoA.title}) has invalid URL or file path`);
@@ -74,13 +70,13 @@ export class ComparisonVideoService {
     // Calculate comparison metadata
     const duration = Math.max(videoA.duration, videoB.duration);
     const fps = videoA.fps; // Use Video A's FPS as primary
-    const totalFrames = Math.max(videoA.total_frames, videoB.total_frames);
+    const totalFrames = Math.max(videoA.totalFrames, videoB.totalFrames);
 
     // Check for existing comparison (prevent duplicates)
     const existingComparison = await this.findExistingComparison(
       user.id,
-      comparisonData.video_a_id,
-      comparisonData.video_b_id
+      comparisonData.videoAId,
+      comparisonData.videoBId
     );
 
     if (existingComparison) {
@@ -96,12 +92,13 @@ export class ComparisonVideoService {
 
     // Create new comparison video
     const insertData: ComparisonVideoInsert = {
-      user_id: user.id,
+      userId: user.id,
       title: comparisonData.title,
       description: comparisonData.description,
-      video_a_id: comparisonData.video_a_id,
-      video_b_id: comparisonData.video_b_id,
-      thumbnail_layout: 'side-by-side',
+      videoAId: comparisonData.videoAId,
+      videoBId: comparisonData.videoBId,
+      thumbnailLayout: 'side-by-side',
+      isPublic: false,
     };
 
     const { data, error } = await supabase
@@ -132,9 +129,9 @@ export class ComparisonVideoService {
       );
       if (thumbnailUrl) {
         await this.updateComparisonVideo(data.id, {
-          thumbnail_url: thumbnailUrl,
+          thumbnailUrl: thumbnailUrl,
         });
-        data.thumbnail_url = thumbnailUrl;
+        data.thumbnailUrl = thumbnailUrl;
       }
     } catch (thumbnailError) {
       console.warn(
@@ -143,7 +140,11 @@ export class ComparisonVideoService {
       );
     }
 
-    return transformDatabaseComparisonVideoToApp(data, videoA, videoB);
+    return {
+      ...data,
+      videoA,
+      videoB,
+    } as ComparisonVideo;
   }
 
   /**
@@ -161,14 +162,19 @@ export class ComparisonVideoService {
         video_b:videos!fk_comparison_videos_video_b(*)
       `
       )
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
+      .eq('userId', userId)
+      .order('createdAt', { ascending: false });
 
     if (error) throw error;
 
     return (
-      data?.map((item) =>
-        transformDatabaseComparisonVideoToApp(item, item.video_a, item.video_b)
+      data?.map(
+        (item) =>
+          ({
+            ...item,
+            videoA: item.video_a,
+            videoB: item.video_b,
+          } as ComparisonVideo)
       ) || []
     );
   }
@@ -193,11 +199,11 @@ export class ComparisonVideoService {
 
     if (error) throw error;
 
-    return transformDatabaseComparisonVideoToApp(
-      data,
-      data.video_a,
-      data.video_b
-    );
+    return {
+      ...data,
+      videoA: data.video_a,
+      videoB: data.video_b,
+    } as ComparisonVideo;
   }
 
   /**
@@ -211,7 +217,7 @@ export class ComparisonVideoService {
       .from('comparison_videos')
       .update({
         ...updates,
-        updated_at: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       })
       .eq('id', comparisonVideoId)
       .select(
@@ -225,11 +231,11 @@ export class ComparisonVideoService {
 
     if (error) throw error;
 
-    return transformDatabaseComparisonVideoToApp(
-      data,
-      data.video_a,
-      data.video_b
-    );
+    return {
+      ...data,
+      videoA: data.video_a,
+      videoB: data.video_b,
+    } as ComparisonVideo;
   }
 
   /**
@@ -239,7 +245,7 @@ export class ComparisonVideoService {
     // First get the comparison video to check for thumbnails
     const { data: comparisonVideo } = await supabase
       .from('comparison_videos')
-      .select('thumbnail_url')
+      .select('thumbnailUrl')
       .eq('id', comparisonVideoId)
       .single();
 
@@ -252,9 +258,9 @@ export class ComparisonVideoService {
     if (error) throw error;
 
     // Clean up thumbnail if it exists
-    if (comparisonVideo?.thumbnail_url) {
+    if (comparisonVideo?.thumbnailUrl) {
       try {
-        await this.deleteThumbnail(comparisonVideo.thumbnail_url);
+        await this.deleteThumbnail(comparisonVideo.thumbnailUrl);
       } catch (thumbnailError) {
         console.warn(
           '⚠️ [ComparisonVideoService] Failed to delete thumbnail:',
@@ -276,9 +282,9 @@ export class ComparisonVideoService {
     const { data } = await supabase
       .from('comparison_videos')
       .select('*')
-      .eq('user_id', userId)
+      .eq('userId', userId)
       .or(
-        `and(video_a_id.eq.${videoAId},video_b_id.eq.${videoBId}),and(video_a_id.eq.${videoBId},video_b_id.eq.${videoAId})`
+        `and(videoAId.eq.${videoAId},videoBId.eq.${videoBId}),and(videoAId.eq.${videoBId},videoBId.eq.${videoAId})`
       )
       .single();
 
@@ -342,14 +348,19 @@ export class ComparisonVideoService {
         video_b:videos!fk_comparison_videos_video_b(*)
       `
       )
-      .or(`video_a_id.eq.${videoId},video_b_id.eq.${videoId}`)
-      .order('created_at', { ascending: false });
+      .or(`videoAId.eq.${videoId},videoBId.eq.${videoId}`)
+      .order('createdAt', { ascending: false });
 
     if (error) throw error;
 
     return (
-      data?.map((item) =>
-        transformDatabaseComparisonVideoToApp(item, item.video_a, item.video_b)
+      data?.map(
+        (item) =>
+          ({
+            ...item,
+            videoA: item.video_a,
+            videoB: item.video_b,
+          } as ComparisonVideo)
       ) || []
     );
   }
@@ -369,7 +380,7 @@ export class ComparisonVideoService {
         const { count: comparisonCount } = await supabase
           .from('annotations')
           .select('*', { count: 'exact', head: true })
-          .eq('video_id', comparison.id);
+          .eq('videoId', comparison.id);
 
         // Get individual video annotation counts
         const [{ count: videoACount }, { count: videoBCount }] =
@@ -377,22 +388,22 @@ export class ComparisonVideoService {
             supabase
               .from('annotations')
               .select('*', { count: 'exact', head: true })
-              .eq('video_id', comparison.video_a_id),
+              .eq('videoId', comparison.videoAId),
             supabase
               .from('annotations')
               .select('*', { count: 'exact', head: true })
-              .eq('video_id', comparison.video_b_id),
+              .eq('videoId', comparison.videoBId),
           ]);
 
-        comparison.comparison_annotation_count = comparisonCount || 0;
-        comparison.annotation_count = (videoACount || 0) + (videoBCount || 0);
+        comparison.comparisonAnnotationCount = comparisonCount || 0;
+        comparison.annotationCount = (videoACount || 0) + (videoBCount || 0);
       } catch (error) {
         console.warn(
           `Failed to load annotation counts for comparison ${comparison.id}:`,
           error
         );
-        comparison.comparison_annotation_count = 0;
-        comparison.annotation_count = 0;
+        comparison.comparisonAnnotationCount = 0;
+        comparison.annotationCount = 0;
       }
     }
 

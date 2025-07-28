@@ -28,11 +28,11 @@ const getVideoUrl = (video) => {
     return video.url;
   }
 
-  // If it's an uploaded video with a file_path, generate the public URL
-  if (video.video_type === 'upload' && video.file_path) {
+  // If it's an uploaded video with a filePath, generate the public URL
+  if (video.videoType === 'upload' && video.filePath) {
     const { data } = supabase.storage
       .from('videos')
-      .getPublicUrl(video.file_path);
+      .getPublicUrl(video.filePath);
     return data.publicUrl;
   }
 
@@ -705,11 +705,11 @@ const handleProjectSelected = async (project) => {
     '🎬 [App] Project selected:',
     project.title,
     'Type:',
-    project.project_type
+    project.projectType
   );
 
   try {
-    if (project.project_type === 'single') {
+    if (project.projectType === 'single') {
       // Handle single video project
       const video = project.video;
 
@@ -722,7 +722,7 @@ const handleProjectSelected = async (project) => {
         annotations: annotations || [],
         videoMetadata: {
           existingVideo: video,
-          videoType: video.video_type,
+          videoType: video.videoType,
           title: video.title,
           fps: video.fps,
           duration: video.duration,
@@ -732,30 +732,30 @@ const handleProjectSelected = async (project) => {
 
       // Call the existing single video handler
       await handleVideoSelected(videoData);
-    } else if (project.project_type === 'dual') {
+    } else if (project.projectType === 'dual') {
       // Handle dual video project
-      const videoA = project.video_a;
-      const videoB = project.video_b;
+      const videoA = project.videoA;
+      const videoB = project.videoB;
 
       // DEBUG: Log the project structure and video objects
       console.log('🐛 [DEBUG] Dual project selected:', {
         id: project.id,
         title: project.title,
-        project_type: project.project_type,
+        projectType: project.projectType,
       });
       console.log('🐛 [DEBUG] project.video_a:', {
         id: videoA?.id,
         title: videoA?.title,
         url: videoA?.url,
-        video_type: videoA?.video_type,
-        file_path: videoA?.file_path,
+        videoType: videoA?.videoType,
+        filePath: videoA?.filePath,
       });
       console.log('🐛 [DEBUG] project.video_b:', {
         id: videoB?.id,
         title: videoB?.title,
         url: videoB?.url,
-        video_type: videoB?.video_type,
-        file_path: videoB?.file_path,
+        videoType: videoB?.videoType,
+        filePath: videoB?.filePath,
       });
 
       // Load annotations for both videos
@@ -766,7 +766,7 @@ const handleProjectSelected = async (project) => {
 
       // Create the data structure expected by handleComparisonVideoSelected
       const comparisonData = {
-        comparisonVideo: project.comparison_video,
+        comparisonVideo: project.comparisonVideo,
         videoA,
         videoB,
         annotationsA: annotationsA || [],
@@ -791,10 +791,10 @@ const handleVideoSelected = async (data) => {
     id: video.id,
     title: video.title,
     url: video.url,
-    video_id: video.video_id,
-    video_type: video.video_type,
-    file_path: video.file_path,
-    original_filename: video.original_filename,
+    videoId: video.videoId,
+    videoType: video.videoType,
+    filePath: video.filePath,
+    originalFilename: video.originalFilename,
   });
   console.log('🐛 [DEBUG] Video metadata:', videoMetadata);
 
@@ -814,20 +814,20 @@ const handleVideoSelected = async (data) => {
       '🐛 [DEBUG] Setting videoId from:',
       videoId.value,
       'to:',
-      video.video_id
+      video.videoId
     );
 
     videoUrl.value = video.url;
     urlInput.value = video.url;
-    videoId.value = video.video_id;
+    videoId.value = video.videoId;
 
     // Update video metadata
     fps.value = video.fps;
     duration.value = video.duration;
-    totalFrames.value = video.total_frames;
+    totalFrames.value = video.totalFrames;
 
     // Store the video type for use in handleLoaded
-    currentVideoType.value = videoMetadata?.videoType || video.video_type;
+    currentVideoType.value = videoMetadata?.videoType || video.videoType;
 
     console.log(
       '🐛 [DEBUG] About to call initializeVideo with videoUrl:',
@@ -845,7 +845,7 @@ const handleVideoSelected = async (data) => {
       const videoRecord = await initializeVideo({
         fps: video.fps,
         duration: video.duration,
-        totalFrames: video.total_frames,
+        totalFrames: video.totalFrames,
         // Pass the video metadata to preserve type and existing record
         ...videoMetadata,
       });
@@ -853,7 +853,7 @@ const handleVideoSelected = async (data) => {
       console.log('🐛 [DEBUG] initializeVideo returned:', {
         id: videoRecord?.id,
         url: videoRecord?.url,
-        video_type: videoRecord?.video_type,
+        videoType: videoRecord?.videoType,
       });
 
       // Track the current video ID for sharing
@@ -877,7 +877,7 @@ const handleSharedVideoSelected = async (data) => {
   // Handle both old and new data structures
   const video = data.video || data;
   const loadedAnnotations = data.annotations || [];
-  const canCommentOnVideo = data.can_comment || false;
+  const canCommentOnVideo = data.canComment || false;
 
   console.log('🔗 [App] Loading shared video:', video.title || video.id);
   console.log('🔗 [App] With annotations:', loadedAnnotations.length);
@@ -896,7 +896,7 @@ const handleSharedVideoSelected = async (data) => {
     // Update video metadata
     fps.value = video.fps;
     duration.value = video.duration;
-    totalFrames.value = video.total_frames;
+    totalFrames.value = video.totalFrames;
 
     // Load annotations directly without authentication
     loadExistingAnnotations(loadedAnnotations);
@@ -928,17 +928,17 @@ const handleDualVideosSelected = async (data) => {
     id: videoA.id,
     title: videoA.title,
     url: videoA.url,
-    video_type: videoA.video_type,
-    file_path: videoA.file_path,
-    original_filename: videoA.original_filename,
+    videoType: videoA.videoType,
+    filePath: videoA.filePath,
+    originalFilename: videoA.originalFilename,
   });
   console.log('🐛 [DEBUG] VideoB object:', {
     id: videoB.id,
     title: videoB.title,
     url: videoB.url,
-    video_type: videoB.video_type,
-    file_path: videoB.file_path,
-    original_filename: videoB.original_filename,
+    videoType: videoB.videoType,
+    filePath: videoB.filePath,
+    originalFilename: videoB.originalFilename,
   });
 
   try {
@@ -957,24 +957,24 @@ const handleDualVideosSelected = async (data) => {
     // Initialize annotation system for dual videos
     console.log('🎯 [App] Initializing annotation system for dual videos');
     const videoAData = {
-      videoId: videoA.video_id,
-      video_id: videoA.video_id,
+      videoId: videoA.videoId,
+      videoId: videoA.videoId,
       url: videoA.url,
       fps: videoA.fps,
       duration: videoA.duration,
-      totalFrames: videoA.total_frames,
-      videoType: videoA.video_type,
+      totalFrames: videoA.totalFrames,
+      videoType: videoA.videoType,
       title: videoA.title,
     };
 
     const videoBData = {
-      videoId: videoB.video_id,
-      video_id: videoB.video_id,
+      videoId: videoB.videoId,
+      videoId: videoB.videoId,
       url: videoB.url,
       fps: videoB.fps,
       duration: videoB.duration,
-      totalFrames: videoB.total_frames,
-      videoType: videoB.video_type,
+      totalFrames: videoB.totalFrames,
+      videoType: videoB.videoType,
       title: videoB.title,
     };
 
@@ -986,8 +986,8 @@ const handleDualVideosSelected = async (data) => {
     console.log('🎯 [App] Initializing annotations with context:', {
       projectId: projectIdForAnnotations,
       comparisonVideoId: comparisonVideoIdForAnnotations,
-      videoAId: videoA.video_id,
-      videoBId: videoB.video_id,
+      videoAId: videoA.videoId,
+      videoBId: videoB.videoId,
     });
 
     dualVideoPlayer.initializeAnnotations(
@@ -1008,7 +1008,7 @@ const handleDualVideosSelected = async (data) => {
     );
 
     // Set current video in session to represent dual session
-    videoId.value = `dual-${videoA.video_id}-${videoB.video_id}`;
+    videoId.value = `dual-${videoA.videoId}-${videoB.videoId}`;
 
     // Use the longer duration for the timeline
     const maxDuration = Math.max(videoA.duration, videoB.duration);
@@ -1112,13 +1112,27 @@ const handleComparisonVideoSelected = async (data) => {
     comparisonAnnotations,
   } = data;
 
+  // Debug: Log the data structure
+  console.log('🐛 [DEBUG] handleComparisonVideoSelected data:', data);
+  console.log('🐛 [DEBUG] comparisonVideo:', comparisonVideo);
+  console.log('🐛 [DEBUG] videoA:', videoA);
+  console.log('🐛 [DEBUG] videoB:', videoB);
+
+  // Check if comparisonVideo is defined before accessing its properties
+  if (!comparisonVideo) {
+    console.error(
+      '❌ [App] comparisonVideo is undefined in handleComparisonVideoSelected'
+    );
+    return;
+  }
+
   console.log(
-    '🔄 [App] Loading comparison video:',
+    '� [App] Loading comparison video:',
     comparisonVideo.title,
     'with videos:',
-    videoA.title,
+    videoA?.title || 'Unknown',
     'and',
-    videoB.title
+    videoB?.title || 'Unknown'
   );
 
   try {
@@ -1142,24 +1156,24 @@ const handleComparisonVideoSelected = async (data) => {
     // Initialize annotation system for comparison mode
     console.log('🎯 [App] Initializing annotation system for comparison mode');
     const videoAData = {
-      videoId: videoA.video_id,
-      video_id: videoA.video_id,
+      videoId: videoA.videoId,
+      videoId: videoA.videoId,
       url: videoAUrl,
       fps: videoA.fps,
       duration: videoA.duration,
-      totalFrames: videoA.total_frames,
-      videoType: videoA.video_type,
+      totalFrames: videoA.totalFrames,
+      videoType: videoA.videoType,
       title: videoA.title,
     };
 
     const videoBData = {
-      videoId: videoB.video_id,
-      video_id: videoB.video_id,
+      videoId: videoB.videoId,
+      videoId: videoB.videoId,
       url: videoBUrl,
       fps: videoB.fps,
       duration: videoB.duration,
-      totalFrames: videoB.total_frames,
-      videoType: videoB.video_type,
+      totalFrames: videoB.totalFrames,
+      videoType: videoB.videoType,
       title: videoB.title,
     };
 
@@ -1215,18 +1229,11 @@ const handleComparisonVideoSelected = async (data) => {
       fps.value = newFps;
     });
 
-    // Initialize video session for comparison mode
+    // For comparison mode, we don't need to initialize a video record
+    // since the individual videos already exist and the comparison video
+    // record is managed separately. Just track the comparison ID for sharing.
     if (user.value) {
-      const video = await initializeVideo({
-        fps: maxFps,
-        duration: maxDuration,
-        totalFrames: totalFrames.value,
-      });
-
-      // Track the current video ID for sharing
-      if (video && video.id) {
-        currentVideoId.value = video.id;
-      }
+      currentVideoId.value = comparisonVideo.id;
 
       // Initialize video annotations for both videos in dual mode
       if (dualVideoPlayer && dualVideoPlayer.initializeVideoAnnotations) {
@@ -1588,11 +1595,11 @@ const initializeSharedComparison = async (comparisonId) => {
       id: comparisonId,
       title: sharedComparison.title,
       description: sharedComparison.description,
-      video_a_id: sharedComparison.video_a?.id,
-      video_b_id: sharedComparison.video_b?.id,
-      video_a: videoAData,
-      video_b: videoBData,
-      is_public: sharedComparison.is_public,
+      videoAId: sharedComparison.videoA?.id,
+      videoBId: sharedComparison.videoB?.id,
+      videoA: videoAData,
+      videoB: videoBData,
+      isPublic: sharedComparison.isPublic,
     };
 
     // Use the proper workflow method to load the comparison
@@ -1854,6 +1861,9 @@ const initializeSharedComparison = async (comparisonId) => {
           :anonymous-session="anonymousSession"
           :is-shared-video="isSharedVideo || isSharedComparison"
           :comment-context="getCommentContext()"
+          :drawing-canvas-ref="unifiedVideoPlayerRef?.singleDrawingCanvasRef"
+          :drawing-canvas-a-ref="unifiedVideoPlayerRef?.drawingCanvasARef"
+          :drawing-canvas-b-ref="unifiedVideoPlayerRef?.drawingCanvasBRef"
           @add-annotation="handleAddAnnotation"
           @update-annotation="updateAnnotation"
           @delete-annotation="deleteAnnotation"

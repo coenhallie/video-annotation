@@ -10,10 +10,10 @@ export interface SharedVideoWithCommentPermissions {
   title: string;
   description?: string;
   url?: string;
-  file_path?: string;
-  video_type: string;
-  is_public: boolean;
-  can_comment: boolean;
+  filePath?: string;
+  videoType: string;
+  isPublic: boolean;
+  canComment: boolean;
   annotations: any[];
 }
 
@@ -29,9 +29,12 @@ export class ShareService {
   static async createShareableLink(videoId: string): Promise<string> {
     try {
       // First, make the video public
+      console.log(
+        '✅ [DEBUG] ShareService - Using camelCase column: isPublic (not is_public)'
+      );
       await supabase
         .from('videos')
-        .update({ is_public: true })
+        .update({ isPublic: true })
         .eq('id', videoId);
 
       // Generate the shareable URL with video ID
@@ -56,12 +59,11 @@ export class ShareService {
       );
 
       // Get the video (must be public)
-      const { data: video, error: videoError } = await supabase
+      const { data: videos, error: videoError } = await supabase
         .from('videos')
         .select('*')
         .eq('id', videoId)
-        .eq('is_public', true)
-        .single();
+        .eq('isPublic', true);
 
       if (videoError) {
         console.error(
@@ -71,6 +73,7 @@ export class ShareService {
         throw videoError;
       }
 
+      const video = videos && videos.length > 0 ? videos[0] : null;
       if (!video) {
         throw new Error('Video not found or not public');
       }
@@ -79,7 +82,7 @@ export class ShareService {
       const { data: annotations, error: annotationsError } = await supabase
         .from('annotations')
         .select('*')
-        .eq('video_id', videoId)
+        .eq('videoId', videoId)
         .order('timestamp', { ascending: true });
 
       if (annotationsError) {
@@ -106,10 +109,10 @@ export class ShareService {
         title: video.title,
         description: video.description,
         url: video.url,
-        file_path: video.file_path,
-        video_type: video.video_type,
-        is_public: video.is_public,
-        can_comment: canComment,
+        filePath: video.filePath,
+        videoType: video.videoType,
+        isPublic: video.isPublic,
+        canComment: canComment,
         annotations: mappedAnnotations,
       };
     } catch (error) {
@@ -130,9 +133,9 @@ export class ShareService {
         title: result.title,
         description: result.description,
         url: result.url,
-        file_path: result.file_path,
-        video_type: result.video_type,
-        is_public: result.is_public,
+        filePath: result.filePath,
+        videoType: result.videoType,
+        isPublic: result.isPublic,
       },
       annotations: result.annotations,
     };
@@ -143,7 +146,7 @@ export class ShareService {
     try {
       await supabase
         .from('videos')
-        .update({ is_public: false })
+        .update({ isPublic: false })
         .eq('id', videoId);
     } catch (error) {
       console.error('❌ [ShareService] Error making video private:', error);
@@ -214,7 +217,7 @@ export class ShareService {
       // Make the comparison video public
       await supabase
         .from('comparison_videos')
-        .update({ is_public: true })
+        .update({ isPublic: true })
         .eq('id', comparisonId);
 
       // Generate the shareable URL
@@ -239,40 +242,63 @@ export class ShareService {
   ): Promise<SharedComparisonVideoWithCommentPermissions> {
     try {
       // Get the comparison video (must be public)
-      const { data: comparison, error: comparisonError } = await supabase
+      const { data: comparisons, error: comparisonError } = await supabase
         .from('comparison_videos')
         .select('*')
         .eq('id', comparisonId)
-        .eq('is_public', true)
-        .single();
+        .eq('isPublic', true);
 
-      if (comparisonError || !comparison) {
+      if (comparisonError) {
+        console.error(
+          '❌ [ShareService] Error loading shared comparison video:',
+          comparisonError
+        );
+        throw comparisonError;
+      }
+
+      const comparison =
+        comparisons && comparisons.length > 0 ? comparisons[0] : null;
+      if (!comparison) {
         throw new Error('Comparison video not found or not public');
       }
 
       // Get both videos (may be public or private)
       const [videoAResult, videoBResult] = await Promise.all([
-        supabase
-          .from('videos')
-          .select('*')
-          .eq('id', comparison.video_a_id)
-          .single(),
-        supabase
-          .from('videos')
-          .select('*')
-          .eq('id', comparison.video_b_id)
-          .single(),
+        supabase.from('videos').select('*').eq('id', comparison.videoAId),
+        supabase.from('videos').select('*').eq('id', comparison.videoBId),
       ]);
 
+      // Transform results to handle arrays and maintain compatibility with createVideoForComparison
+      const videoATransformed = {
+        data:
+          videoAResult.data && videoAResult.data.length > 0
+            ? videoAResult.data[0]
+            : null,
+        error: videoAResult.error,
+      };
+      const videoBTransformed = {
+        data:
+          videoBResult.data && videoBResult.data.length > 0
+            ? videoBResult.data[0]
+            : null,
+        error: videoBResult.error,
+      };
+
       // Handle missing videos (but allow private videos in comparison context)
-      const videoA = this.createVideoForComparison(videoAResult, 'Video A');
-      const videoB = this.createVideoForComparison(videoBResult, 'Video B');
+      const videoA = this.createVideoForComparison(
+        videoATransformed,
+        'Video A'
+      );
+      const videoB = this.createVideoForComparison(
+        videoBTransformed,
+        'Video B'
+      );
 
       // Get annotations for the comparison context
       const { data: annotations } = await supabase
         .from('annotations')
         .select('*')
-        .eq('comparison_video_id', comparisonId)
+        .eq('comparisonVideoId', comparisonId)
         .order('timestamp', { ascending: true });
 
       const mappedAnnotations =
@@ -283,21 +309,21 @@ export class ShareService {
         })) || [];
 
       // Comment permissions for comparison videos
-      const canComment = comparison.is_public;
+      const canComment = comparison.isPublic;
 
       return {
         id: comparison.id,
         title: comparison.title,
         description: comparison.description,
-        video_a: videoA,
-        video_b: videoB,
-        is_public: comparison.is_public,
-        can_comment: canComment,
+        videoA: videoA,
+        videoB: videoB,
+        isPublic: comparison.isPublic,
+        canComment: canComment,
         annotations: mappedAnnotations,
-        thumbnail_url: comparison.thumbnail_url,
+        thumbnailUrl: comparison.thumbnailUrl,
         duration: comparison.duration,
         fps: comparison.fps,
-        total_frames: comparison.total_frames,
+        totalFrames: comparison.totalFrames,
       };
     } catch (error) {
       console.error(
@@ -323,10 +349,10 @@ export class ShareService {
         title: `${fallbackTitle} (Unavailable)`,
         description: 'This video is no longer available or has been deleted',
         url: '',
-        file_path: '',
-        video_type: 'placeholder',
-        is_public: false,
-        can_comment: false,
+        filePath: '',
+        videoType: 'placeholder',
+        isPublic: false,
+        canComment: false,
         annotations: [],
       };
     }
@@ -338,10 +364,10 @@ export class ShareService {
       title: video.title,
       description: video.description,
       url: video.url,
-      file_path: video.file_path,
-      video_type: video.video_type,
-      is_public: video.is_public,
-      can_comment: false, // Comments are handled at comparison level
+      filePath: video.filePath,
+      videoType: video.videoType,
+      isPublic: video.isPublic,
+      canComment: false, // Comments are handled at comparison level
       annotations: [], // Will be loaded separately if needed
     };
   }
@@ -362,26 +388,26 @@ export class ShareService {
         description:
           'This video is no longer available or has been made private',
         url: '',
-        file_path: '',
-        video_type: 'placeholder',
-        is_public: false,
-        can_comment: false,
+        filePath: '',
+        videoType: 'placeholder',
+        isPublic: false,
+        canComment: false,
         annotations: [],
       };
     }
 
     // Check if video is public for shared access
-    if (!video.is_public) {
+    if (!video.isPublic) {
       return {
         id: 'placeholder',
         title: `${video.title} (Private)`,
         description:
           'This video has been made private and is no longer accessible',
         url: '',
-        file_path: '',
-        video_type: 'placeholder',
-        is_public: false,
-        can_comment: false,
+        filePath: '',
+        videoType: 'placeholder',
+        isPublic: false,
+        canComment: false,
         annotations: [],
       };
     }
@@ -392,10 +418,10 @@ export class ShareService {
       title: video.title,
       description: video.description,
       url: video.url,
-      file_path: video.file_path,
-      video_type: video.video_type,
-      is_public: video.is_public,
-      can_comment: this.canCommentOnSharedVideo(video),
+      filePath: video.filePath,
+      videoType: video.videoType,
+      isPublic: video.isPublic,
+      canComment: this.canCommentOnSharedVideo(video),
       annotations: [], // Will be loaded separately if needed
     };
   }
@@ -407,7 +433,7 @@ export class ShareService {
     try {
       await supabase
         .from('comparison_videos')
-        .update({ is_public: false })
+        .update({ isPublic: false })
         .eq('id', comparisonId);
     } catch (error) {
       console.error(
@@ -427,7 +453,7 @@ export class ShareService {
     try {
       // For now, all public shared videos allow commenting
       // This can be extended to check specific video settings or user permissions
-      return video.is_public === true;
+      return video.isPublic === true;
     } catch (error) {
       console.error(
         '❌ [ShareService] Error checking comment permissions:',
@@ -451,14 +477,22 @@ export class ShareService {
       });
 
       // Get the video to check if it's public
-      const { data: video, error: videoError } = await supabase
+      const { data: videos, error: videoError } = await supabase
         .from('videos')
-        .select('id, is_public')
+        .select('id, isPublic')
         .eq('id', videoId)
-        .eq('is_public', true)
-        .single();
+        .eq('isPublic', true);
 
-      if (videoError || !video) {
+      if (videoError) {
+        return {
+          canComment: false,
+          isAnonymous: false,
+          reason: 'Database error checking video',
+        };
+      }
+
+      const video = videos && videos.length > 0 ? videos[0] : null;
+      if (!video) {
         return {
           canComment: false,
           isAnonymous: false,
@@ -511,8 +545,8 @@ export class ShareService {
 
       // Create the anonymous session using the comment service
       const session = await CommentService.createAnonymousSession({
-        display_name: displayName.trim(),
-        video_id: videoId,
+        displayName: displayName.trim(),
+        videoId: videoId,
       });
 
       console.log(
@@ -539,12 +573,11 @@ export class ShareService {
         return false;
       }
 
-      const { data: video, error } = await supabase
+      const { data: videos, error } = await supabase
         .from('videos')
-        .select('id, is_public')
+        .select('id, isPublic')
         .eq('id', videoId)
-        .eq('is_public', true)
-        .single();
+        .eq('isPublic', true);
 
       if (error) {
         console.error(
@@ -554,6 +587,7 @@ export class ShareService {
         return false;
       }
 
+      const video = videos && videos.length > 0 ? videos[0] : null;
       const isValid = !!video;
       console.log('🔍 [ShareService] Video access validation result:', {
         videoId,
@@ -632,14 +666,23 @@ export class ShareService {
   ): Promise<CommentPermissionContext> {
     try {
       // Get the comparison video to check if it's public
-      const { data: comparison, error } = await supabase
+      const { data: comparisons, error } = await supabase
         .from('comparison_videos')
-        .select('id, is_public')
+        .select('id, isPublic')
         .eq('id', comparisonId)
-        .eq('is_public', true)
-        .single();
+        .eq('isPublic', true);
 
-      if (error || !comparison) {
+      if (error) {
+        return {
+          canComment: false,
+          isAnonymous: false,
+          reason: 'Database error checking comparison video',
+        };
+      }
+
+      const comparison =
+        comparisons && comparisons.length > 0 ? comparisons[0] : null;
+      if (!comparison) {
         return {
           canComment: false,
           isAnonymous: false,
@@ -647,7 +690,7 @@ export class ShareService {
         };
       }
 
-      const canComment = comparison.is_public;
+      const canComment = comparison.isPublic;
       const isAnonymous = !sessionId ? false : true;
 
       return {
@@ -693,8 +736,8 @@ export class ShareService {
 
       // Create the anonymous session using the comment service
       const session = await CommentService.createAnonymousSession({
-        display_name: displayName.trim(),
-        comparison_video_id: comparisonId,
+        displayName: displayName.trim(),
+        comparisonVideoId: comparisonId,
       });
 
       console.log(
@@ -726,12 +769,11 @@ export class ShareService {
         return false;
       }
 
-      const { data: comparison, error } = await supabase
+      const { data: comparisons, error } = await supabase
         .from('comparison_videos')
-        .select('id, is_public')
+        .select('id, isPublic')
         .eq('id', comparisonId)
-        .eq('is_public', true)
-        .single();
+        .eq('isPublic', true);
 
       if (error) {
         console.error(
@@ -741,6 +783,8 @@ export class ShareService {
         return false;
       }
 
+      const comparison =
+        comparisons && comparisons.length > 0 ? comparisons[0] : null;
       const isValid = !!comparison;
       console.log('🔍 [ShareService] Comparison access validation result:', {
         comparisonId,

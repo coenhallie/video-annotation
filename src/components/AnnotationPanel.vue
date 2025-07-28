@@ -56,6 +56,19 @@ const props = defineProps({
     type: Object,
     default: null,
   },
+  // Component refs for accessing drawing data
+  drawingCanvasRef: {
+    type: Object,
+    default: null,
+  },
+  drawingCanvasARef: {
+    type: Object,
+    default: null,
+  },
+  drawingCanvasBRef: {
+    type: Object,
+    default: null,
+  },
 });
 
 const emit = defineEmits([
@@ -140,7 +153,7 @@ const severityColors = {
 // Computed
 const isSaveDisabled = computed(() => {
   const hasContent = newAnnotation.value.content.trim();
-  const hasDrawing = hasDrawingData.value && newAnnotation.value.drawingData;
+  const hasDrawing = hasDrawingData.value;
   return !hasContent && !hasDrawing;
 });
 
@@ -175,31 +188,54 @@ const getSeverityInfo = (severity) => {
 
 // Methods
 const startAddAnnotation = () => {
-  emit('pause');
+  // emit('pause'); // This was the cause of the race condition
   newAnnotation.value = {
     content: '',
     severity: 'medium',
     color: '#fbbf24',
     frame: props.currentFrame,
+    startFrame: props.currentFrame,
+    endFrame: props.currentFrame,
+    duration: 1 / props.fps,
+    durationFrames: 1,
     annotationType: 'text',
     drawingData: null,
   };
   showAddForm.value = true;
   editingAnnotation.value = null;
   showDrawingSection.value = false;
-  hasDrawingData.value = false;
-  if (props.isDualMode) {
-    // In dual mode, disable drawing on both canvases and clear existing drawings for new annotation
-    if (props.drawingCanvasA) props.drawingCanvasA.disableDrawingMode();
-    if (props.drawingCanvasB) props.drawingCanvasB.disableDrawingMode();
-    // Clear drawings from both canvases to provide clean slate for new annotation
-    if (props.drawingCanvasA) props.drawingCanvasA.clearCurrentFrameDrawings();
-    if (props.drawingCanvasB) props.drawingCanvasB.clearCurrentFrameDrawings();
+
+  // Check if there are existing drawings on the current frame
+  const hasExistingDrawings = props.isDualMode
+    ? props.drawingCanvasA?.hasDrawingsOnCurrentFrame() ||
+      props.drawingCanvasB?.hasDrawingsOnCurrentFrame()
+    : primaryDrawingCanvas.value?.hasDrawingsOnCurrentFrame();
+
+  if (hasExistingDrawings) {
+    // If there are existing drawings, preserve them and set hasDrawingData to true
+    hasDrawingData.value = true;
+    console.log(
+      '🎨 [DEBUG] Preserving existing drawings when starting annotation'
+    );
   } else {
-    primaryDrawingCanvas.value.disableDrawingMode();
-    // Clear drawings to provide clean slate for new annotation
-    primaryDrawingCanvas.value.clearCurrentFrameDrawings();
+    // Only clear and reset if there are no existing drawings
+    hasDrawingData.value = false;
+    if (props.isDualMode) {
+      // In dual mode, disable drawing on both canvases and clear existing drawings for new annotation
+      if (props.drawingCanvasA) props.drawingCanvasA.disableDrawingMode();
+      if (props.drawingCanvasB) props.drawingCanvasB.disableDrawingMode();
+      // Clear drawings from both canvases to provide clean slate for new annotation
+      if (props.drawingCanvasA)
+        props.drawingCanvasA.clearCurrentFrameDrawings();
+      if (props.drawingCanvasB)
+        props.drawingCanvasB.clearCurrentFrameDrawings();
+    } else {
+      primaryDrawingCanvas.value.disableDrawingMode();
+      // Clear drawings to provide clean slate for new annotation
+      primaryDrawingCanvas.value.clearCurrentFrameDrawings();
+    }
   }
+
   emit('form-show');
 };
 
@@ -251,292 +287,121 @@ const startEditAnnotation = (annotation) => {
 };
 
 const saveAnnotation = async () => {
-  console.log('🔍 [DEBUG] AnnotationPanel.saveAnnotation called');
-  console.log('🔍 [DEBUG] Props received:', {
-    isDualMode: props.isDualMode,
-    dualVideoPlayer: !!props.dualVideoPlayer,
-    drawingCanvasA: !!props.drawingCanvasA,
-    drawingCanvasB: !!props.drawingCanvasB,
-    currentFrame: props.currentFrame,
-    fps: props.fps,
-  });
-  console.log('🔍 [DEBUG] Current state:', {
-    newAnnotation: newAnnotation.value,
-    editingAnnotation: editingAnnotation.value,
+  emit('pause'); // Pause the video when saving the annotation
+
+  // Complete any active drawing session before saving
+  if (props.isDualMode) {
+    if (props.drawingCanvasARef)
+      props.drawingCanvasARef.completeDrawingSession();
+    if (props.drawingCanvasBRef)
+      props.drawingCanvasBRef.completeDrawingSession();
+  } else {
+    if (props.drawingCanvasRef) {
+      props.drawingCanvasRef.completeDrawingSession();
+    }
+  }
+
+  // CRITICAL: Capture drawing data FIRST, before any clearing operations
+  let currentDrawingData = newAnnotation.value.drawingData;
+
+  // Always try to capture drawing data from the canvas, regardless of hasDrawingData flag
+  if (!currentDrawingData) {
+    if (props.isDualMode) {
+      // In dual mode, capture from both canvas component refs
+      const drawingA = props.drawingCanvasARef?.getCurrentDrawingSession();
+      const drawingB = props.drawingCanvasBRef?.getCurrentDrawingSession();
+
+      console.log(
+        '🎨 [DEBUG] Capturing dual mode drawings from component refs:',
+        {
+          drawingCanvasARef: !!props.drawingCanvasARef,
+          drawingCanvasBRef: !!props.drawingCanvasBRef,
+          drawingA: !!drawingA,
+          drawingB: !!drawingB,
+          drawingAPaths: drawingA?.paths?.length || 0,
+          drawingBPaths: drawingB?.paths?.length || 0,
+        }
+      );
+
+      if (drawingA || drawingB) {
+        currentDrawingData = {};
+        if (drawingA) currentDrawingData.drawingA = drawingA;
+        if (drawingB) currentDrawingData.drawingB = drawingB;
+      }
+    } else {
+      // In single mode, capture from the single canvas component ref
+      currentDrawingData = props.drawingCanvasRef?.getCurrentDrawingSession();
+
+      console.log(
+        '🎨 [DEBUG] Capturing single mode drawing from component ref:',
+        {
+          drawingCanvasRef: !!props.drawingCanvasRef,
+          hasDrawing: !!currentDrawingData,
+          paths: currentDrawingData?.paths?.length || 0,
+        }
+      );
+    }
+  }
+
+  // Update hasDrawingData flag based on actual drawing data found
+  if (currentDrawingData && !hasDrawingData.value) {
+    hasDrawingData.value = true;
+  }
+
+  const hasDrawing = hasDrawingData.value && !!currentDrawingData;
+  const hasContent = newAnnotation.value.content.trim().length > 0;
+
+  console.log('🔍 [DEBUG] saveAnnotation - Drawing state:', {
+    hasDrawing,
     hasDrawingData: hasDrawingData.value,
-    showDrawingSection: showDrawingSection.value,
-  });
-
-  // Check if we have either content or drawing data
-  const hasContent = newAnnotation.value.content.trim();
-  const hasDrawing = hasDrawingData.value && newAnnotation.value.drawingData;
-
-  console.log('🔍 [DEBUG] Content validation:', {
-    hasContent: !!hasContent,
-    hasDrawing: hasDrawing,
-    contentLength: newAnnotation.value.content.trim().length,
-    drawingDataExists: !!newAnnotation.value.drawingData,
+    currentDrawingData: currentDrawingData,
+    drawingDataExists: !!currentDrawingData,
+    drawingDataPaths: currentDrawingData?.paths?.length || 0,
+    isDualMode: props.isDualMode,
   });
 
   if (!hasContent && !hasDrawing) {
-    console.log('❌ [DEBUG] No content or drawing data, returning early');
-    return;
+    return; // Nothing to save
   }
 
+  // 2. Prepare annotation data
   const severityInfo = getSeverityInfo(newAnnotation.value.severity);
-
-  // Generate title based on content type
-  let title = '';
-  if (hasContent) {
-    title =
-      newAnnotation.value.content.trim().substring(0, 50) +
-      (newAnnotation.value.content.trim().length > 50 ? '...' : '');
-  } else {
-    title = 'Drawing Annotation';
-  }
+  const title = hasContent
+    ? newAnnotation.value.content.trim().substring(0, 50) +
+      (newAnnotation.value.content.trim().length > 50 ? '...' : '')
+    : 'Drawing Annotation';
 
   const annotationData = {
     ...newAnnotation.value,
     color: severityInfo.color,
     title,
-    content: newAnnotation.value.content.trim() || 'Drawing annotation',
+    content: hasContent
+      ? newAnnotation.value.content.trim()
+      : 'Drawing annotation',
     frame: newAnnotation.value.frame,
     timestamp: newAnnotation.value.frame / props.fps,
     annotationType: hasDrawing ? 'drawing' : 'text',
-    drawingData: hasDrawing ? newAnnotation.value.drawingData : null,
+    drawingData: hasDrawing ? currentDrawingData : null,
   };
 
-  console.log('🔍 [DEBUG] Prepared annotationData:', {
-    annotationData: annotationData,
+  console.log('🔍 [DEBUG] saveAnnotation - Final annotation data:', {
+    annotationType: annotationData.annotationType,
     hasDrawingData: !!annotationData.drawingData,
-    drawingDataKeys: annotationData.drawingData
-      ? Object.keys(annotationData.drawingData)
-      : null,
+    drawingDataPaths: annotationData.drawingData?.paths?.length || 0,
   });
 
-  // Check if we're in dual mode and have an annotation context for updating
-  const isDualModeUpdate =
-    props.isDualMode &&
-    props.dualVideoPlayer &&
-    editingAnnotation.value &&
-    props.dualVideoPlayer.currentAnnotationContext?.value;
-
-  console.log('🔍 [DEBUG] Update path decision:', {
-    isDualMode: props.isDualMode,
-    hasDualVideoPlayer: !!props.dualVideoPlayer,
-    isEditing: !!editingAnnotation.value,
-    hasAnnotationContext:
-      !!props.dualVideoPlayer?.currentAnnotationContext?.value,
-    willUseDualModeUpdate: isDualModeUpdate,
-    currentContextId:
-      props.dualVideoPlayer?.currentAnnotationContext?.value?.id,
-  });
-
-  if (isDualModeUpdate) {
-    console.log('🔍 [DEBUG] ENTERING dual video player update path');
-    console.log('🔍 [DEBUG] Current annotation context before update:', {
-      context: props.dualVideoPlayer.currentAnnotationContext.value,
-      contextId: props.dualVideoPlayer.currentAnnotationContext.value?.id,
-    });
-
-    try {
-      // Update the annotation context with the new data
-      const updatedContext = {
-        ...props.dualVideoPlayer.currentAnnotationContext.value,
-        ...annotationData,
-      };
-
-      console.log('🔍 [DEBUG] Setting updated context:', {
-        originalContext: props.dualVideoPlayer.currentAnnotationContext.value,
-        annotationData: annotationData,
-        mergedContext: updatedContext,
-      });
-
-      props.dualVideoPlayer.setCurrentAnnotationContext(updatedContext);
-
-      console.log('🔍 [DEBUG] About to call updateAnnotationWithDrawing');
-
-      // Get drawing data from both canvases
-      const drawingDataA = props.drawingCanvasA
-        ? props.drawingCanvasA.getCurrentFrameDrawing()
-        : null;
-      const drawingDataB = props.drawingCanvasB
-        ? props.drawingCanvasB.getCurrentFrameDrawing()
-        : null;
-
-      console.log('🔍 [DEBUG] Retrieved drawing data for update:', {
-        drawingDataA: drawingDataA,
-        drawingDataB: drawingDataB,
-        hasDrawingA: !!drawingDataA,
-        hasDrawingB: !!drawingDataB,
-      });
-
-      // CANVAS STATE TRACKING: Log canvas state before save
-      console.log('🎨 [CANVAS-STATE] Canvas state BEFORE save operation:', {
-        canvasAHasDrawings: props.drawingCanvasA
-          ? props.drawingCanvasA.hasDrawingsOnCurrentFrame()
-          : false,
-        canvasBHasDrawings: props.drawingCanvasB
-          ? props.drawingCanvasB.hasDrawingsOnCurrentFrame()
-          : false,
-        canvasADrawingCount: drawingDataA?.paths?.length || 0,
-        canvasBDrawingCount: drawingDataB?.paths?.length || 0,
-        currentFrame: props.currentFrame,
-        timestamp: Date.now(),
-      });
-
-      // Use the dual video player's update method with drawing data
-      const result = await props.dualVideoPlayer.updateAnnotationWithDrawing(
-        drawingDataA,
-        drawingDataB
-      );
-
-      console.log('🔍 [DEBUG] updateAnnotationWithDrawing completed:', {
-        result: result,
-        success: !!result,
-      });
-
-      // CANVAS STATE TRACKING: Log canvas state immediately after save
-      console.log(
-        '🎨 [CANVAS-STATE] Canvas state IMMEDIATELY AFTER save operation:',
-        {
-          canvasAHasDrawings: props.drawingCanvasA
-            ? props.drawingCanvasA.hasDrawingsOnCurrentFrame()
-            : false,
-          canvasBHasDrawings: props.drawingCanvasB
-            ? props.drawingCanvasB.hasDrawingsOnCurrentFrame()
-            : false,
-          canvasAVisible: props.drawingCanvasA
-            ? props.drawingCanvasA.isDrawingMode
-            : false,
-          canvasBVisible: props.drawingCanvasB
-            ? props.drawingCanvasB.isDrawingMode
-            : false,
-          currentFrame: props.currentFrame,
-          timestamp: Date.now(),
-        }
-      );
-    } catch (error) {
-      console.error('🔍 [DEBUG] Error in dual video player update path:', {
-        error: error,
-        errorMessage: error.message,
-        errorStack: error.stack,
-      });
-      // Fall back to regular update method
-      console.log('🔍 [DEBUG] Falling back to regular update method');
-      emit('update-annotation', {
-        ...annotationData,
-        id: editingAnnotation.value.id,
-      });
-    }
-  } else if (editingAnnotation.value) {
-    console.log(
-      '🔍 [DEBUG] ENTERING regular update path - emitting update-annotation'
-    );
+  // 3. Emit event
+  if (editingAnnotation.value) {
     emit('update-annotation', {
       ...annotationData,
       id: editingAnnotation.value.id,
     });
   } else {
-    console.log(
-      '🔍 [DEBUG] ENTERING add new annotation path - emitting add-annotation'
-    );
     emit('add-annotation', annotationData);
   }
 
-  // Always close the drawing section when saving/updating
-  showDrawingSection.value = false;
-
-  // Don't clear context immediately if we have drawing data and are editing
-  // The context will be cleared after drawing processing is complete
-  if (editingAnnotation.value && hasDrawingData.value) {
-    console.log('🔍 [DEBUG] Handling post-save cleanup for drawing annotation');
-
-    // CANVAS STATE TRACKING: Log canvas state during cleanup
-    console.log(
-      '🎨 [CANVAS-STATE] Canvas state DURING cleanup (before disabling drawing mode):',
-      {
-        canvasAHasDrawings: props.drawingCanvasA
-          ? props.drawingCanvasA.hasDrawingsOnCurrentFrame()
-          : false,
-        canvasBHasDrawings: props.drawingCanvasB
-          ? props.drawingCanvasB.hasDrawingsOnCurrentFrame()
-          : false,
-        canvasADrawingMode: props.drawingCanvasA
-          ? props.drawingCanvasA.isDrawingMode
-          : false,
-        canvasBDrawingMode: props.drawingCanvasB
-          ? props.drawingCanvasB.isDrawingMode
-          : false,
-        currentFrame: props.currentFrame,
-        timestamp: Date.now(),
-      }
-    );
-
-    // For drawing annotations in dual mode, preserve the drawings after save
-    console.log(
-      '🔍 [DEBUG] Handling post-save cleanup for drawing annotation in dual mode'
-    );
-
-    // Use the preserving cleanup method
-    cancelFormButPreserveDrawings();
-
-    // DRAWING PERSISTENCE FIX: Do NOT clear annotation context after saving
-    // when we have drawing data, as this causes drawings to disappear
-    setTimeout(() => {
-      console.log(
-        '🔍 [DEBUG] Post-save cleanup completed - drawings preserved'
-      );
-
-      // CANVAS STATE TRACKING: Log final canvas state after timeout
-      console.log(
-        '🎨 [CANVAS-STATE] Canvas state AFTER timeout (final state):',
-        {
-          canvasAHasDrawings: props.drawingCanvasA
-            ? props.drawingCanvasA.hasDrawingsOnCurrentFrame()
-            : false,
-          canvasBHasDrawings: props.drawingCanvasB
-            ? props.drawingCanvasB.hasDrawingsOnCurrentFrame()
-            : false,
-          currentFrame: props.currentFrame,
-          timestamp: Date.now(),
-        }
-      );
-
-      // DO NOT emit annotation-edit with null here as it clears the context
-      // and causes drawings to disappear. The context will be cleared when
-      // the user clicks elsewhere or starts a new annotation.
-      console.log(
-        '🎨 [DRAWING-PERSISTENCE] Skipping context clear to preserve drawings'
-      );
-    }, 100);
-  } else {
-    console.log(
-      '🔍 [DEBUG] Normal cleanup flow - determining cleanup strategy'
-    );
-
-    // Check if this is a successful save in dual-video mode with drawings
-    // DRAWING PERSISTENCE FIX: Preserve drawings for BOTH new and edited annotations
-    const isSuccessfulSaveWithDrawings =
-      props.isDualMode && hasDrawingData.value;
-
-    console.log('🔍 [DEBUG] Cleanup strategy decision:', {
-      isDualMode: props.isDualMode,
-      isEditing: !!editingAnnotation.value,
-      hasDrawingData: hasDrawingData.value,
-      willPreserveDrawings: isSuccessfulSaveWithDrawings,
-    });
-
-    if (isSuccessfulSaveWithDrawings) {
-      console.log(
-        '🔍 [DEBUG] Successful save with drawings in dual mode - preserving drawings'
-      );
-      cancelFormButPreserveDrawings();
-    } else {
-      console.log('🔍 [DEBUG] Normal cleanup - clearing drawings');
-      cancelForm();
-    }
-  }
+  // 4. Reset form state
+  cancelForm();
 };
 
 const cancelForm = () => {
@@ -549,12 +414,24 @@ const cancelForm = () => {
   showDrawingSection.value = false;
   hasDrawingData.value = false;
   if (props.isDualMode) {
+    // Complete any active drawing session before disabling
+    if (props.dualVideoPlayer) {
+      // Complete any active drawing session by calling the canvas completion method
+      if (props.drawingCanvasA) props.drawingCanvasA.completeDrawingSession();
+      if (props.drawingCanvasB) props.drawingCanvasB.completeDrawingSession();
+    }
+
     // In dual mode, disable drawing on both canvases and clear drawings
     if (props.drawingCanvasA) props.drawingCanvasA.disableDrawingMode();
     if (props.drawingCanvasB) props.drawingCanvasB.disableDrawingMode();
     if (props.drawingCanvasA) props.drawingCanvasA.clearCurrentFrameDrawings();
     if (props.drawingCanvasB) props.drawingCanvasB.clearCurrentFrameDrawings();
   } else {
+    // In single mode, complete drawing session for the primary canvas
+    if (primaryDrawingCanvas.value) {
+      primaryDrawingCanvas.value.completeDrawingSession();
+    }
+
     primaryDrawingCanvas.value.disableDrawingMode();
     primaryDrawingCanvas.value.clearCurrentFrameDrawings();
   }
@@ -563,6 +440,10 @@ const cancelForm = () => {
     severity: 'medium',
     color: '#fbbf24',
     frame: 0,
+    startFrame: 0,
+    endFrame: 0,
+    duration: 1 / props.fps,
+    durationFrames: 1,
     annotationType: 'text',
     drawingData: null,
   };
@@ -595,6 +476,18 @@ const cancelFormButPreserveDrawings = () => {
   showDrawingSection.value = false;
   hasDrawingData.value = false;
 
+  // Complete any active drawing session before disabling (but preserve drawings)
+  if (props.isDualMode && props.dualVideoPlayer) {
+    // Complete any active drawing session by calling the canvas completion method
+    if (props.drawingCanvasA) props.drawingCanvasA.completeDrawingSession();
+    if (props.drawingCanvasB) props.drawingCanvasB.completeDrawingSession();
+  } else {
+    // In single mode, complete drawing session for the primary canvas
+    if (primaryDrawingCanvas.value) {
+      primaryDrawingCanvas.value.completeDrawingSession();
+    }
+  }
+
   // Disable drawing mode but DO NOT clear the drawings
   if (props.isDualMode) {
     if (props.drawingCanvasA) props.drawingCanvasA.disableDrawingMode();
@@ -611,6 +504,10 @@ const cancelFormButPreserveDrawings = () => {
     severity: 'medium',
     color: '#fbbf24',
     frame: 0,
+    startFrame: 0,
+    endFrame: 0,
+    duration: 1 / props.fps,
+    durationFrames: 1,
     annotationType: 'text',
     drawingData: null,
   };
@@ -716,6 +613,14 @@ const toggleDrawingSection = () => {
 };
 
 const onDrawingCreated = (drawingData, videoContext = null) => {
+  console.log('🎨 [DEBUG] onDrawingCreated called:', {
+    drawingData,
+    videoContext,
+    isDualMode: props.isDualMode,
+    hasExistingDrawingData: !!newAnnotation.value.drawingData,
+    currentFrame: props.currentFrame,
+  });
+
   if (props.isDualMode) {
     // In dual mode, we need to handle drawings from both canvases
     if (!newAnnotation.value.drawingData) {
@@ -725,11 +630,17 @@ const onDrawingCreated = (drawingData, videoContext = null) => {
     // Store drawing data based on video context
     if (videoContext === 'A') {
       newAnnotation.value.drawingData.drawingA = drawingData;
+      console.log('🎨 [DEBUG] Stored drawing for video A:', drawingData);
     } else if (videoContext === 'B') {
       newAnnotation.value.drawingData.drawingB = drawingData;
+      console.log('🎨 [DEBUG] Stored drawing for video B:', drawingData);
     } else {
       // If no context specified, treat as drawing A for backward compatibility
       newAnnotation.value.drawingData.drawingA = drawingData;
+      console.log(
+        '🎨 [DEBUG] Stored drawing for video A (default):',
+        drawingData
+      );
     }
   } else {
     // Single mode logic - always merge drawing paths for multiple shapes in one annotation
@@ -744,14 +655,25 @@ const onDrawingCreated = (drawingData, videoContext = null) => {
         canvasHeight: drawingData.canvasHeight,
       };
 
+      console.log('🎨 [DEBUG] Merging drawing data:', {
+        existingPaths: existingDrawing.paths.length,
+        newPaths: drawingData.paths.length,
+        totalPaths: mergedDrawing.paths.length,
+      });
+
       newAnnotation.value.drawingData = mergedDrawing;
     } else {
       // For the very first drawing in a new annotation, initialize with the drawing data
+      console.log('🎨 [DEBUG] Initializing first drawing data:', drawingData);
       newAnnotation.value.drawingData = drawingData;
     }
   }
 
   hasDrawingData.value = true;
+  console.log('🎨 [DEBUG] Drawing data stored, hasDrawingData set to true:', {
+    hasDrawingData: hasDrawingData.value,
+    finalDrawingData: newAnnotation.value.drawingData,
+  });
   // Removed emit('drawing-created', drawingData) to prevent infinite loop
   // The AnnotationPanel should only receive drawing events, not emit them
 };
@@ -818,19 +740,19 @@ const getCommentCount = (annotation) => {
 
 const handleCommentAdded = (comment) => {
   // Update comment count for the annotation
-  const currentCount = commentCounts.value.get(comment.annotation_id) || 0;
-  commentCounts.value.set(comment.annotation_id, currentCount + 1);
+  const currentCount = commentCounts.value.get(comment.annotationId) || 0;
+  commentCounts.value.set(comment.annotationId, currentCount + 1);
 
   // Add visual indicator for new comment
   const annotation = props.annotations.find(
-    (a) => a.id === comment.annotation_id
+    (a) => a.id === comment.annotationId
   );
   if (annotation) {
     // Add a temporary highlight class or indicator
     setTimeout(() => {
       // Auto-expand comments if not already expanded
-      if (!expandedComments.value.has(comment.annotation_id)) {
-        expandedComments.value.add(comment.annotation_id);
+      if (!expandedComments.value.has(comment.annotationId)) {
+        expandedComments.value.add(comment.annotationId);
       }
     }, 100);
   }
@@ -846,8 +768,8 @@ const handleCommentUpdated = (comment) => {
 
 const handleCommentDeleted = (comment) => {
   // Update comment count for the annotation
-  const currentCount = commentCounts.value.get(comment.annotation_id) || 0;
-  commentCounts.value.set(comment.annotation_id, Math.max(0, currentCount - 1));
+  const currentCount = commentCounts.value.get(comment.annotationId) || 0;
+  commentCounts.value.set(comment.annotationId, Math.max(0, currentCount - 1));
 
   // Emit to parent
   emit('comment-deleted', comment);
@@ -921,7 +843,6 @@ defineExpose({
   toggleComments,
 });
 </script>
-
 <template>
   <div class="h-full w-full bg-white overflow-y-auto overflow-x-hidden">
     <!-- Header -->
@@ -1133,7 +1054,7 @@ defineExpose({
                     >
                       <polyline points="20,6 9,17 4,12" />
                     </svg>
-                    Drawing added
+                    Drawing saved
                   </div>
                 </div>
               </div>

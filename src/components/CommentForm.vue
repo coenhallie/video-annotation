@@ -89,7 +89,7 @@ const initializeForm = () => {
   }
 
   if (props.anonymousSession) {
-    displayName.value = props.anonymousSession.display_name;
+    displayName.value = props.anonymousSession.displayName;
   } else {
     displayName.value = '';
   }

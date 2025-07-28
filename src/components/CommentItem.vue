@@ -27,18 +27,18 @@ const showActions = ref(false);
 
 // Computed
 const authorName = computed(() => {
-  if (props.comment.is_anonymous) {
-    return props.comment.user_display_name || 'Anonymous';
+  if (props.comment.isAnonymous) {
+    return props.comment.userDisplayName || 'Anonymous';
   }
 
   // For authenticated users, try to get name from user object first
   if (props.comment.user) {
-    return props.comment.user.full_name || props.comment.user.email || 'User';
+    return props.comment.user.fullName || props.comment.user.email || 'User';
   }
 
-  // Fallback: if user object is missing but we have user_display_name, use it
-  if (props.comment.user_display_name) {
-    return props.comment.user_display_name;
+  // Fallback: if user object is missing but we have userDisplayName, use it
+  if (props.comment.userDisplayName) {
+    return props.comment.userDisplayName;
   }
 
   // Final fallback
@@ -59,7 +59,7 @@ const authorInitials = computed(() => {
 });
 
 const formattedDate = computed(() => {
-  const date = new Date(props.comment.created_at);
+  const date = new Date(props.comment.createdAt);
   const now = new Date();
   const diffInSeconds = Math.floor((now - date) / 1000);
 
@@ -80,7 +80,7 @@ const formattedDate = computed(() => {
 });
 
 const isEdited = computed(() => {
-  return props.comment.updated_at !== props.comment.created_at;
+  return props.comment.updatedAt !== props.comment.createdAt;
 });
 
 const hasActions = computed(() => {
@@ -118,11 +118,11 @@ const closeActions = () => {
       <!-- Avatar -->
       <div class="flex-shrink-0">
         <div
-          v-if="comment.user?.avatar_url && !comment.is_anonymous"
+          v-if="comment.user?.avatarUrl && !comment.isAnonymous"
           class="avatar"
         >
           <img
-            :src="comment.user.avatar_url"
+            :src="comment.user.avatarUrl"
             :alt="authorName"
             class="w-8 h-8 rounded-full object-cover"
           />
@@ -142,7 +142,7 @@ const closeActions = () => {
             <h5 class="text-sm font-medium text-gray-900 truncate">
               {{ authorName }}
             </h5>
-            <span v-if="comment.is_anonymous" class="anonymous-badge">
+            <span v-if="comment.isAnonymous" class="anonymous-badge">
               Anonymous
             </span>
           </div>
@@ -150,7 +150,7 @@ const closeActions = () => {
           <div class="flex items-center space-x-2">
             <time
               class="text-xs text-gray-500"
-              :title="new Date(comment.created_at).toLocaleString()"
+              :title="new Date(comment.createdAt).toLocaleString()"
             >
               {{ formattedDate }}
               <span
