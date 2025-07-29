@@ -671,7 +671,7 @@ defineExpose({
         v-else-if="!isAuthenticated"
         class="text-sm font-medium text-gray-600"
       >
-        Annotations (Login to Create)
+        Annotations (Comments Enabled)
       </h3>
       <div v-else class="flex-1"></div>
       <button
@@ -895,7 +895,7 @@ defineExpose({
     <!-- Annotations List -->
     <div class="p-2">
       <!-- Loading Skeleton -->
-      <AnnotationSkeleton v-if="loading" :skeleton-count="5" />
+      <AnnotationSkeleton v-if="loading" :skeleton-count="3" />
 
       <!-- Empty State -->
       <div
@@ -1137,15 +1137,17 @@ defineExpose({
           v-show="isCommentsExpanded(annotation.id)"
           class="mt-2 border-t border-gray-200 pt-2"
         >
-          <CommentSection
-            :annotation-id="annotation.id"
-            :read-only="readOnly"
-            :current-user="user"
-            :video-id="videoId"
-            @comment-added="handleCommentAdded"
-            @comment-updated="handleCommentUpdated"
-            @comment-deleted="handleCommentDeleted"
-          />
+          <div @click.stop>
+            <CommentSection
+              :annotation-id="annotation.id"
+              :read-only="readOnly"
+              :current-user="user"
+              :video-id="videoId"
+              @comment-added="handleCommentAdded"
+              @comment-updated="handleCommentUpdated"
+              @comment-deleted="handleCommentDeleted"
+            />
+          </div>
         </div>
 
         <!-- Hidden Comment Section for real-time subscriptions when not expanded -->
@@ -1156,6 +1158,12 @@ defineExpose({
           :read-only="true"
           :current-user="user"
           :video-id="videoId"
+          style="
+            pointer-events: none;
+            position: absolute;
+            visibility: hidden;
+            z-index: -1;
+          "
           @comment-added="handleCommentAdded"
           @comment-updated="handleCommentUpdated"
           @comment-deleted="handleCommentDeleted"

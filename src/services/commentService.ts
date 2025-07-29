@@ -169,9 +169,9 @@ export class CommentService {
         const { data, error } = await supabase.rpc(
           'update_comment_with_session',
           {
-            comment_id: commentId,
-            new_content: params.content,
-            user_sessionId: sessionId,
+            commentId: commentId,
+            newContent: params.content,
+            userSessionId: sessionId,
           }
         );
 
@@ -513,8 +513,10 @@ export class CommentService {
       }
 
       // Check if user can comment
+      // For public videos/comparisons, anyone can comment (including anonymous users)
+      // For private videos/comparisons, only owners and annotation owners can comment
       const canComment =
-        videoData.isPublic || // Public video/comparison
+        videoData.isPublic || // Public video/comparison - allows anyone including anonymous users
         (userId && videoData.ownerId === userId) || // Video/comparison owner
         (userId && annotation.userId === userId); // Annotation owner
 
@@ -600,26 +602,37 @@ export class CommentService {
    */
   static async moderateComment(
     commentId: string,
-    userId: string,
+    userId?: string,
+    sessionId?: string,
     reason?: string
   ): Promise<void> {
     console.log('🔍 [CommentService] Moderating comment:', {
       commentId,
       userId,
+      sessionId,
       reason,
     });
 
     try {
       // Check if user can moderate
-      const canModerate = await this.canUserModerateComment(commentId, userId);
+      console.log('🔍 [CommentService] Checking moderation permissions...');
+      const canModerate = await this.canUserModerateComment(
+        commentId,
+        userId,
+        sessionId
+      );
+      console.log('🔍 [CommentService] Can moderate result:', canModerate);
+
       if (!canModerate) {
-        throw new Error(
-          'User does not have permission to moderate this comment'
-        );
+        const errorMsg =
+          'User does not have permission to moderate this comment';
+        console.error('❌ [CommentService]', errorMsg);
+        throw new Error(errorMsg);
       }
 
       // Delete the comment
-      await this.deleteComment(commentId);
+      console.log('🔍 [CommentService] Deleting comment...');
+      await this.deleteComment(commentId, sessionId);
 
       console.log('✅ [CommentService] Successfully moderated comment');
     } catch (error) {

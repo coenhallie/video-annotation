@@ -56,7 +56,7 @@
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300',
             ]"
           >
-            Load Video
+            Upload Video
           </button>
           <button
             @click="setActiveTab('create')"
@@ -216,7 +216,10 @@
             <h3 class="text-lg font-medium text-gray-900 mb-2">
               No projects found
             </h3>
-            <p class="text-gray-600">You haven't created any projects yet.</p>
+            <p class="text-gray-600">
+              You haven't created any projects yet. Go to Upload Video to get
+              started!
+            </p>
           </div>
 
           <!-- Projects List -->

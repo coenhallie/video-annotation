@@ -610,7 +610,9 @@ export class ShareService {
       }
 
       const canComment = this.canCommentOnSharedVideo(video);
-      const isAnonymous = !sessionId ? false : true;
+      // For shared public videos, anonymous users can comment even without a session yet
+      // They will create a session when they actually post a comment
+      const isAnonymous = sessionId ? true : false;
 
       return {
         canComment,
@@ -800,7 +802,9 @@ export class ShareService {
       }
 
       const canComment = comparison.isPublic;
-      const isAnonymous = !sessionId ? false : true;
+      // For shared public comparison videos, anonymous users can comment even without a session yet
+      // They will create a session when they actually post a comment
+      const isAnonymous = sessionId ? true : false;
 
       return {
         canComment,

@@ -436,20 +436,6 @@ watch(
     }
 
     if (newUser) {
-      // Check if user has any previous videos
-      try {
-        const userVideos = await VideoService.getUserVideos(newUser.id);
-
-        if (userVideos && userVideos.length > 0) {
-          // User has previous videos, show the load modal automatically
-          isLoadModalVisible.value = true;
-        } else {
-          // No previous videos, user will see the default screen with URL input
-        }
-      } catch (error) {
-        // On error, just show the default screen
-      }
-
       // If we already have a video URL (e.g., from shared video), initialize it
       if (videoUrl.value) {
         // If we have a video URL but no video player yet, we need to wait for it to load
@@ -466,6 +452,9 @@ watch(
           } catch (error) {}
         } else {
         }
+      } else {
+        // No project is currently selected, show the projects modal
+        isLoadModalVisible.value = true;
       }
     }
   },
@@ -682,14 +671,25 @@ const handleSharedVideoSelected = async (data) => {
     sharedVideoData.value = data;
 
     // Update video state - handle both old and new data structures
-    videoUrl.value = video.url;
+    const generatedVideoUrl = getVideoUrl(video);
+    console.log('🔗 [App] Generated video URL:', generatedVideoUrl);
+    console.log('🔗 [App] Video object details:', {
+      url: video.url,
+      filePath: video.filePath,
+      videoType: video.videoType,
+      fps: video.fps,
+      duration: video.duration,
+      totalFrames: video.totalFrames,
+    });
+
+    videoUrl.value = generatedVideoUrl; // Use helper function to handle URL/filePath
     videoId.value = video.id; // Use video.id for shared videos
     currentVideoId.value = video.id;
 
     // Update video metadata
-    fps.value = video.fps;
-    duration.value = video.duration;
-    totalFrames.value = video.totalFrames;
+    fps.value = video.fps || 30;
+    duration.value = video.duration || 0;
+    totalFrames.value = video.totalFrames || 0;
 
     console.log(
       '📝 [App] About to call loadExistingAnnotations with:',
@@ -1221,6 +1221,9 @@ const initializeSharedComparison = async (comparisonId) => {
 
     isSharedComparison.value = true;
 
+    // Set current video ID for session tracking (needed for comment permissions)
+    currentVideoId.value = comparisonId;
+
     // Get shared comparison data
     console.log(
       '🔄 [App] Calling ShareService.getSharedComparisonVideoWithCommentPermissions'
@@ -1401,6 +1404,9 @@ const initializeSharedComparison = async (comparisonId) => {
     } else {
       console.log('🔄 [App] Dual video player not ready or not initialized');
     }
+
+    // Start session for shared comparison (this will initialize comment permissions)
+    await startSession();
   } catch (error) {
     console.error('❌ [App] Error in initializeSharedComparison:', error);
     throw error;
@@ -1431,7 +1437,7 @@ const initializeSharedComparison = async (comparisonId) => {
     <header class="bg-white border-b border-gray-200 px-6 py-4">
       <div class="flex items-center justify-between">
         <h1 class="text-xl font-medium text-gray-900">
-          Accio Video Annotation
+          ACCIO Video Annotation
         </h1>
 
         <!-- Action Buttons (only for authenticated users) -->
@@ -1443,7 +1449,7 @@ const initializeSharedComparison = async (comparisonId) => {
           <button
             @click="openLoadModal"
             class="p-2 text-gray-600 hover:text-green-600 hover:bg-gray-50 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-            title="Load video"
+            title="Upload video"
           >
             <svg
               class="w-5 h-5"

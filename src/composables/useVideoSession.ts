@@ -180,27 +180,48 @@ export function useVideoSession(videoId) {
    */
   const initializeCommentPermissions = async (currentVideoId: string) => {
     try {
-      // Check if this is a shared video by trying to validate shared access
-      const isShared = await ShareService.validateSharedVideoAccess(
-        currentVideoId
-      );
-      isSharedVideo.value = isShared;
+      // First check if this is a shared comparison video
+      let isSharedComparison = false;
+      try {
+        isSharedComparison = await ShareService.validateSharedComparisonAccess(
+          currentVideoId
+        );
+      } catch (comparisonError) {
+        // Not a comparison video, continue with regular video check
+      }
 
-      if (isShared) {
-        // Get comment permission context for shared video
+      if (isSharedComparison) {
+        // Handle shared comparison video
+        isSharedVideo.value = true;
         const permissionContext =
-          await ShareService.getCommentPermissionContext(
+          await ShareService.getComparisonCommentPermissionContext(
             currentVideoId,
             anonymousSession.value?.sessionId
           );
         commentPermissions.value = permissionContext;
       } else {
-        // For non-shared videos, set default permissions based on authentication
-        const currentUser = toValue(user);
-        commentPermissions.value = {
-          canComment: !!currentUser,
-          isAnonymous: false,
-        };
+        // Check if this is a shared individual video
+        const isShared = await ShareService.validateSharedVideoAccess(
+          currentVideoId
+        );
+        isSharedVideo.value = isShared;
+
+        if (isShared) {
+          // Get comment permission context for shared video
+          const permissionContext =
+            await ShareService.getCommentPermissionContext(
+              currentVideoId,
+              anonymousSession.value?.sessionId
+            );
+          commentPermissions.value = permissionContext;
+        } else {
+          // For non-shared videos, set default permissions based on authentication
+          const currentUser = toValue(user);
+          commentPermissions.value = {
+            canComment: !!currentUser,
+            isAnonymous: false,
+          };
+        }
       }
     } catch (error) {
       // Set safe defaults
@@ -222,10 +243,30 @@ export function useVideoSession(videoId) {
         throw new Error('No video ID available');
       }
 
-      const session = await ShareService.createAnonymousSessionForSharedVideo(
-        currentVideoId,
-        displayName
-      );
+      // Check if this is a comparison video first
+      let session;
+      try {
+        const isSharedComparison =
+          await ShareService.validateSharedComparisonAccess(currentVideoId);
+        if (isSharedComparison) {
+          session =
+            await ShareService.createAnonymousSessionForSharedComparison(
+              currentVideoId,
+              displayName
+            );
+        } else {
+          session = await ShareService.createAnonymousSessionForSharedVideo(
+            currentVideoId,
+            displayName
+          );
+        }
+      } catch (comparisonError) {
+        // If comparison check fails, try as regular video
+        session = await ShareService.createAnonymousSessionForSharedVideo(
+          currentVideoId,
+          displayName
+        );
+      }
 
       anonymousSession.value = session;
 

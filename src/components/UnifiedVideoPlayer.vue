@@ -44,8 +44,7 @@
           </svg>
           <h3 class="placeholder-title">No Video Loaded</h3>
           <p class="placeholder-description">
-            Please load a video using the URL input field in the header above to
-            start annotating.
+            Please upload a MP4 video to start annotating.
           </p>
         </div>
 

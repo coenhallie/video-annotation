@@ -85,8 +85,30 @@ export function useAuth() {
 
       // Listen for auth changes
       supabase.auth.onAuthStateChange((event, newSession) => {
+        console.log('🔐 [useAuth] Auth state change:', {
+          event,
+          newSession: newSession
+            ? {
+                user: newSession.user
+                  ? {
+                      id: newSession.user.id,
+                      email: newSession.user.email,
+                    }
+                  : null,
+                access_token: newSession.access_token ? 'present' : 'missing',
+              }
+            : null,
+          userAgent: navigator.userAgent,
+        });
+
         session.value = newSession;
         user.value = newSession?.user ?? null;
+
+        console.log('🔐 [useAuth] Updated state:', {
+          userId: user.value?.id,
+          isAuthenticated: !!user.value,
+          userAgent: navigator.userAgent,
+        });
 
         // Handle specific events
         if (event === 'SIGNED_OUT') {

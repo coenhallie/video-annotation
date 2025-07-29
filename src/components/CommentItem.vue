@@ -107,8 +107,12 @@ const toggleActions = () => {
   showActions.value = !showActions.value;
 };
 
-const closeActions = () => {
-  showActions.value = false;
+const closeActions = (event) => {
+  // Check if the new focused element is still within the action menu.
+  // If not, close the menu.
+  if (!event.currentTarget.contains(event.relatedTarget)) {
+    showActions.value = false;
+  }
 };
 </script>
 
@@ -166,8 +170,7 @@ const closeActions = () => {
             <div v-if="hasActions" class="relative">
               <button
                 class="action-menu-trigger"
-                @click="toggleActions"
-                @blur="closeActions"
+                @click.stop="toggleActions"
                 :aria-expanded="showActions"
                 aria-label="Comment actions"
               >
@@ -178,11 +181,16 @@ const closeActions = () => {
                 </svg>
               </button>
 
-              <div v-if="showActions" class="action-menu">
+              <div
+                v-show="showActions"
+                class="action-menu"
+                tabindex="-1"
+                @focusout="closeActions"
+              >
                 <button
                   v-if="canEdit"
                   class="action-menu-item"
-                  @click="handleEdit"
+                  @click.stop="handleEdit"
                 >
                   <svg class="icon icon-xs" viewBox="0 0 24 24">
                     <path
@@ -198,7 +206,7 @@ const closeActions = () => {
                 <button
                   v-if="canEdit"
                   class="action-menu-item text-red-600 hover:bg-red-50"
-                  @click="handleDelete"
+                  @click.stop="handleDelete"
                 >
                   <svg class="icon icon-xs" viewBox="0 0 24 24">
                     <polyline points="3,6 5,6 21,6"></polyline>
@@ -212,7 +220,7 @@ const closeActions = () => {
                 <button
                   v-if="canModerate && !canEdit"
                   class="action-menu-item text-red-600 hover:bg-red-50"
-                  @click="handleModerate"
+                  @click.stop="handleModerate"
                 >
                   <svg class="icon icon-xs" viewBox="0 0 24 24">
                     <circle cx="12" cy="12" r="10"></circle>
@@ -261,7 +269,10 @@ const closeActions = () => {
 }
 
 .action-menu {
-  @apply absolute right-0 top-full mt-1 w-32 bg-white rounded-md shadow-lg border border-gray-200 py-1 z-10;
+  @apply absolute right-0 top-full mt-1 w-32 bg-white rounded-md shadow-lg border border-gray-200 py-1 z-50;
+  /* Chrome-specific fixes */
+  position: absolute !important;
+  pointer-events: auto;
 }
 
 .action-menu-item {
@@ -295,12 +306,25 @@ const closeActions = () => {
 }
 
 .action-menu-trigger {
-  @apply opacity-0 transition-opacity duration-150;
+  @apply opacity-60 transition-opacity duration-150;
 }
 
 .comment-item:hover .action-menu-trigger,
-.action-menu-trigger:focus {
+.action-menu-trigger:focus,
+.action-menu-trigger:active {
   @apply opacity-100;
+}
+
+/* Chrome-specific fix: ensure action menu trigger is always visible when user can edit */
+.comment-item .action-menu-trigger {
+  @apply opacity-60;
+}
+
+/* Better visibility for touch devices and Chrome */
+@media (hover: none) {
+  .action-menu-trigger {
+    @apply opacity-100;
+  }
 }
 
 /* Focus management for accessibility */

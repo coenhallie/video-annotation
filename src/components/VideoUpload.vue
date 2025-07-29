@@ -40,9 +40,7 @@
         <p class="upload-description">
           Drag and drop your video file here, or click to browse
         </p>
-        <p class="upload-formats">
-          Supported formats: MP4, WebM, OGG, MOV, AVI (max 200MB)
-        </p>
+        <p class="upload-formats">Supported formats: MP4 (max 200MB)</p>
       </div>
 
       <!-- Upload Progress -->

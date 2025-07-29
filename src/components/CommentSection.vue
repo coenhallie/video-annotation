@@ -357,14 +357,12 @@ const handleCommentModerate = async (comment) => {
   if (!confirm('Are you sure you want to delete this comment?')) return;
 
   try {
-    if (isAuthenticated.value) {
-      await CommentService.moderateComment(comment.id, currentUserId.value);
-    } else {
-      await CommentService.deleteComment(
-        comment.id,
-        anonymousSession.value?.sessionId
-      );
-    }
+    // Use the updated moderateComment method that handles both authenticated and anonymous users
+    await CommentService.moderateComment(
+      comment.id,
+      currentUserId.value,
+      anonymousSession.value?.sessionId
+    );
 
     // Remove comment from local array
     const index = comments.value.findIndex((c) => c.id === comment.id);
@@ -383,10 +381,29 @@ const handleCommentModerate = async (comment) => {
 const canEditComment = (comment) => {
   if (props.readOnly) return false;
 
+  console.log('🔍 [CommentSection] canEditComment check:', {
+    commentId: comment.id,
+    commentUserId: comment.userId,
+    currentUserId: currentUserId.value,
+    isAuthenticated: isAuthenticated.value,
+    userValue: user.value,
+    commentUserIdType: typeof comment.userId,
+    currentUserIdType: typeof currentUserId.value,
+    strictEqual: comment.userId === currentUserId.value,
+    looseEqual: comment.userId == currentUserId.value,
+  });
+
   if (isAuthenticated.value) {
-    return comment.userId === currentUserId.value;
+    const canEdit = comment.userId === currentUserId.value;
+    console.log(
+      '🔍 [CommentSection] Authenticated user canEdit result:',
+      canEdit
+    );
+    return canEdit;
   } else {
-    return comment.sessionId === anonymousSession.value?.sessionId;
+    const canEdit = comment.sessionId === anonymousSession.value?.sessionId;
+    console.log('🔍 [CommentSection] Anonymous user canEdit result:', canEdit);
+    return canEdit;
   }
 };
 

@@ -170,7 +170,7 @@ import { defineProps } from 'vue';
 const props = defineProps({
   skeletonCount: {
     type: Number,
-    default: 3,
+    default: 2,
   },
 });
 </script>
