@@ -78,6 +78,7 @@ const {
   loadAnnotations,
   loadExistingAnnotations,
   isComparisonContext,
+  isLoading: annotationsLoading,
 } = useVideoAnnotations(
   videoUrl,
   videoId,
@@ -1003,19 +1004,33 @@ const closeShareModal = () => {
 const handleDrawingCreated = async (drawing, videoContext = null) => {
   // Handle dual video mode - call the dual video player's drawing handler
   if (playerMode.value === 'dual' && dualVideoPlayer) {
+    // CRITICAL FIX: Use the detected video context from UnifiedVideoPlayer
+    // Convert 'A'/'B' to the expected format for the dual video player
+    const dualVideoContext = videoContext === 'B' ? 'B' : 'A';
+
+    console.log(
+      `🎨 [App.vue] Drawing created on video ${dualVideoContext}:`,
+      drawing
+    );
+
     // Also notify the AnnotationPanel if the form is open so it can capture drawing data
     if (isAnnotationFormVisible.value && annotationPanelRef.value) {
-      annotationPanelRef.value.onDrawingCreated(drawing, videoContext);
+      annotationPanelRef.value.onDrawingCreated(drawing, dualVideoContext);
     }
 
     // Call the dual video player's handleDrawingCreated method which will check annotation context
     try {
       await dualVideoPlayer.handleDrawingCreated(
         drawing,
-        videoContext,
+        dualVideoContext,
         user.value?.id
       );
-    } catch (error) {}
+    } catch (error) {
+      console.error(
+        'Failed to handle drawing creation in dual video mode:',
+        error
+      );
+    }
     return;
   }
 
@@ -1054,12 +1069,41 @@ const handleDrawingCreated = async (drawing, videoContext = null) => {
   }
 };
 
-const handleDrawingUpdated = (drawing) => {
-  // Handle drawing updates if needed
+const handleDrawingUpdated = (drawing, videoContext = null) => {
+  // Handle dual video mode
+  if (playerMode.value === 'dual' && dualVideoPlayer) {
+    // CRITICAL FIX: Use the detected video context from UnifiedVideoPlayer
+    const dualVideoContext = videoContext === 'B' ? 'B' : 'A';
+
+    console.log(
+      `🎨 [App.vue] Drawing updated on video ${dualVideoContext}:`,
+      drawing
+    );
+
+    // For dual video mode, we don't automatically save updates
+    // Updates are handled through the annotation panel when user clicks save
+    return;
+  }
+
+  // Handle single video mode drawing updates if needed
 };
 
-const handleDrawingDeleted = (drawingId) => {
-  // Handle drawing deletion if needed
+const handleDrawingDeleted = (drawingId, videoContext = null) => {
+  // Handle dual video mode
+  if (playerMode.value === 'dual' && dualVideoPlayer) {
+    // CRITICAL FIX: Use the detected video context from UnifiedVideoPlayer
+    const dualVideoContext = videoContext === 'B' ? 'B' : 'A';
+
+    console.log(
+      `🎨 [App.vue] Drawing deleted on video ${dualVideoContext}:`,
+      drawingId
+    );
+
+    // For dual video mode, handle deletion if needed
+    return;
+  }
+
+  // Handle single video mode drawing deletion if needed
 };
 
 // Handle dual video loaded events
@@ -1444,6 +1488,7 @@ const initializeSharedComparison = async (comparisonId) => {
           :drawing-canvas="drawingCanvas"
           :read-only="(isSharedVideo || isSharedComparison) && !canComment()"
           :video-id="currentVideoId"
+          :loading="annotationsLoading"
           :is-dual-mode="playerMode === 'dual'"
           :drawing-canvas-a="dualVideoPlayer?.drawingCanvasA"
           :drawing-canvas-b="dualVideoPlayer?.drawingCanvasB"

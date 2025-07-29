@@ -184,6 +184,7 @@ export function useVideoAnnotations(
     }
 
     try {
+      isLoading.value = true;
       let dbAnnotations;
 
       if (isComparisonContext.value && toValue(comparisonVideoId)) {
@@ -280,6 +281,8 @@ export function useVideoAnnotations(
       }
     } catch (err) {
       error.value = err.message;
+    } finally {
+      isLoading.value = false;
     }
   };
 

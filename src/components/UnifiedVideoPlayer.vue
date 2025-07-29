@@ -325,9 +325,9 @@ interface Emits {
   (e: 'error', error: string): void;
   (e: 'loaded'): void;
   (e: 'video-click'): void;
-  (e: 'drawing-created', drawing: DrawingData): void;
-  (e: 'drawing-updated', drawing: DrawingData): void;
-  (e: 'drawing-deleted', drawingId: string): void;
+  (e: 'drawing-created', drawing: DrawingData, videoContext?: string): void;
+  (e: 'drawing-updated', drawing: DrawingData, videoContext?: string): void;
+  (e: 'drawing-deleted', drawingId: string, videoContext?: string): void;
   (e: 'video-a-loaded'): void;
   (e: 'video-b-loaded'): void;
 }
@@ -647,7 +647,9 @@ const handleDrawingCreated = (drawing: DrawingData, event?: Event) => {
       `🎨 [UnifiedVideoPlayer] Drawing created on video ${videoContext}:`,
       drawing
     );
-    emit('drawing-created', drawing);
+
+    // CRITICAL FIX: Pass the detected video context to the parent
+    emit('drawing-created', drawing, videoContext);
   } else {
     emit('drawing-created', drawing);
   }
@@ -669,7 +671,9 @@ const handleDrawingUpdated = (drawing: DrawingData, event?: Event) => {
       `🎨 [UnifiedVideoPlayer] Drawing updated on video ${videoContext}:`,
       drawing
     );
-    emit('drawing-updated', drawing);
+
+    // CRITICAL FIX: Pass the detected video context to the parent
+    emit('drawing-updated', drawing, videoContext);
   } else {
     emit('drawing-updated', drawing);
   }
@@ -691,7 +695,9 @@ const handleDrawingDeleted = (drawingId: string, event?: Event) => {
       `🎨 [UnifiedVideoPlayer] Drawing deleted on video ${videoContext}:`,
       drawingId
     );
-    emit('drawing-deleted', drawingId);
+
+    // CRITICAL FIX: Pass the detected video context to the parent
+    emit('drawing-deleted', drawingId, videoContext);
   } else {
     emit('drawing-deleted', drawingId);
   }

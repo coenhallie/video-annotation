@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, watch, onUnmounted } from 'vue';
 import CommentSection from './CommentSection.vue';
 import CommentForm from './CommentForm.vue';
+import AnnotationSkeleton from './AnnotationSkeleton.vue';
 import { useAuth } from '../composables/useAuth';
 import { useGlobalComments } from '../composables/useGlobalComments';
 
@@ -37,6 +38,10 @@ const props = defineProps({
   videoId: {
     type: String,
     default: null,
+  },
+  loading: {
+    type: Boolean,
+    default: false,
   },
   // Dual video mode props
   isDualMode: {
@@ -889,8 +894,12 @@ defineExpose({
 
     <!-- Annotations List -->
     <div class="p-2">
+      <!-- Loading Skeleton -->
+      <AnnotationSkeleton v-if="loading" :skeleton-count="5" />
+
+      <!-- Empty State -->
       <div
-        v-if="sortedAnnotations.length === 0"
+        v-else-if="sortedAnnotations.length === 0"
         class="text-center py-8 px-3 text-gray-500"
       >
         <svg
@@ -913,7 +922,9 @@ defineExpose({
         </p>
       </div>
 
+      <!-- Annotations -->
       <div
+        v-else
         v-for="annotation in sortedAnnotations"
         :key="annotation.id"
         class="card card-hover mb-2 p-2 cursor-pointer transition-all duration-200 relative group"

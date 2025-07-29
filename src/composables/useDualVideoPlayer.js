@@ -576,9 +576,12 @@ export function useDualVideoPlayer() {
 
     const annotations = comparisonAnnotations.annotations.value;
 
-    // Filter drawing annotations
+    // Filter drawing annotations - check both 'type' and 'annotationType' fields
     const drawingAnnotations = annotations.filter(
-      (annotation) => annotation.type === 'drawing' && annotation.drawingData
+      (annotation) =>
+        (annotation.type === 'drawing' ||
+          annotation.annotationType === 'drawing') &&
+        annotation.drawingData
     );
 
     // Create separate annotation arrays for Video A and Video B
@@ -586,23 +589,41 @@ export function useDualVideoPlayer() {
     const annotationsB = [];
 
     drawingAnnotations.forEach((annotation) => {
-      // Create annotation for Video A if it has drawingA data
+      // FIX: Handle both nested structure (legacy) and flat structure with videoContext
       if (annotation.drawingData?.drawingA) {
+        // Legacy nested structure
         annotationsA.push({
           ...annotation,
           drawingData: annotation.drawingData.drawingA,
           annotationType: 'drawing',
         });
-      }
-
-      // Create annotation for Video B if it has drawingB data
-      if (annotation.drawingData?.drawingB) {
+      } else if (annotation.drawingData?.drawingB) {
+        // Legacy nested structure
         annotationsB.push({
           ...annotation,
           drawingData: annotation.drawingData.drawingB,
           annotationType: 'drawing',
         });
+      } else if (annotation.drawingData && annotation.videoContext) {
+        // Current flat structure with videoContext
+        if (annotation.videoContext === 'video_a') {
+          annotationsA.push({
+            ...annotation,
+            annotationType: 'drawing',
+          });
+        } else if (annotation.videoContext === 'video_b') {
+          annotationsB.push({
+            ...annotation,
+            annotationType: 'drawing',
+          });
+        }
       }
+    });
+
+    console.log('🎨 [syncAnnotationsToCanvases] Syncing drawings:', {
+      totalDrawingAnnotations: drawingAnnotations.length,
+      videoADrawings: annotationsA.length,
+      videoBDrawings: annotationsB.length,
     });
 
     // Load drawings into canvas instances
