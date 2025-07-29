@@ -1,7 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, watch, onUnmounted } from 'vue';
 import CommentSection from './CommentSection.vue';
-import CommentItem from './CommentItem.vue';
 import CommentForm from './CommentForm.vue';
 import { useAuth } from '../composables/useAuth';
 import { useGlobalComments } from '../composables/useGlobalComments';
@@ -214,9 +213,6 @@ const startAddAnnotation = () => {
   if (hasExistingDrawings) {
     // If there are existing drawings, preserve them and set hasDrawingData to true
     hasDrawingData.value = true;
-    console.log(
-      '🎨 [DEBUG] Preserving existing drawings when starting annotation'
-    );
   } else {
     // Only clear and reset if there are no existing drawings
     hasDrawingData.value = false;
@@ -311,18 +307,6 @@ const saveAnnotation = async () => {
       const drawingA = props.drawingCanvasARef?.getCurrentDrawingSession();
       const drawingB = props.drawingCanvasBRef?.getCurrentDrawingSession();
 
-      console.log(
-        '🎨 [DEBUG] Capturing dual mode drawings from component refs:',
-        {
-          drawingCanvasARef: !!props.drawingCanvasARef,
-          drawingCanvasBRef: !!props.drawingCanvasBRef,
-          drawingA: !!drawingA,
-          drawingB: !!drawingB,
-          drawingAPaths: drawingA?.paths?.length || 0,
-          drawingBPaths: drawingB?.paths?.length || 0,
-        }
-      );
-
       if (drawingA || drawingB) {
         currentDrawingData = {};
         if (drawingA) currentDrawingData.drawingA = drawingA;
@@ -331,15 +315,6 @@ const saveAnnotation = async () => {
     } else {
       // In single mode, capture from the single canvas component ref
       currentDrawingData = props.drawingCanvasRef?.getCurrentDrawingSession();
-
-      console.log(
-        '🎨 [DEBUG] Capturing single mode drawing from component ref:',
-        {
-          drawingCanvasRef: !!props.drawingCanvasRef,
-          hasDrawing: !!currentDrawingData,
-          paths: currentDrawingData?.paths?.length || 0,
-        }
-      );
     }
   }
 
@@ -350,15 +325,6 @@ const saveAnnotation = async () => {
 
   const hasDrawing = hasDrawingData.value && !!currentDrawingData;
   const hasContent = newAnnotation.value.content.trim().length > 0;
-
-  console.log('🔍 [DEBUG] saveAnnotation - Drawing state:', {
-    hasDrawing,
-    hasDrawingData: hasDrawingData.value,
-    currentDrawingData: currentDrawingData,
-    drawingDataExists: !!currentDrawingData,
-    drawingDataPaths: currentDrawingData?.paths?.length || 0,
-    isDualMode: props.isDualMode,
-  });
 
   if (!hasContent && !hasDrawing) {
     return; // Nothing to save
@@ -384,12 +350,6 @@ const saveAnnotation = async () => {
     drawingData: hasDrawing ? currentDrawingData : null,
   };
 
-  console.log('🔍 [DEBUG] saveAnnotation - Final annotation data:', {
-    annotationType: annotationData.annotationType,
-    hasDrawingData: !!annotationData.drawingData,
-    drawingDataPaths: annotationData.drawingData?.paths?.length || 0,
-  });
-
   // 3. Emit event
   if (editingAnnotation.value) {
     emit('update-annotation', {
@@ -405,10 +365,6 @@ const saveAnnotation = async () => {
 };
 
 const cancelForm = () => {
-  console.log(
-    '🔍 [DEBUG] cancelForm called - clearing drawings and form state'
-  );
-
   showAddForm.value = false;
   editingAnnotation.value = null;
   showDrawingSection.value = false;
@@ -451,121 +407,6 @@ const cancelForm = () => {
   // Clear annotation context by emitting annotation-edit with null
   emit('annotation-edit', null);
   emit('form-hide');
-};
-
-const cancelFormButPreserveDrawings = () => {
-  console.log(
-    '🔍 [DEBUG] cancelFormButPreserveDrawings called - preserving canvas drawings'
-  );
-
-  // CANVAS STATE TRACKING: Log canvas state before cleanup
-  console.log('🎨 [CANVAS-STATE] Canvas state BEFORE preserving cleanup:', {
-    canvasAHasDrawings: props.drawingCanvasA
-      ? props.drawingCanvasA.hasDrawingsOnCurrentFrame()
-      : false,
-    canvasBHasDrawings: props.drawingCanvasB
-      ? props.drawingCanvasB.hasDrawingsOnCurrentFrame()
-      : false,
-    currentFrame: props.currentFrame,
-    timestamp: Date.now(),
-  });
-
-  // Close form and reset form state
-  showAddForm.value = false;
-  editingAnnotation.value = null;
-  showDrawingSection.value = false;
-  hasDrawingData.value = false;
-
-  // Complete any active drawing session before disabling (but preserve drawings)
-  if (props.isDualMode && props.dualVideoPlayer) {
-    // Complete any active drawing session by calling the canvas completion method
-    if (props.drawingCanvasA) props.drawingCanvasA.completeDrawingSession();
-    if (props.drawingCanvasB) props.drawingCanvasB.completeDrawingSession();
-  } else {
-    // In single mode, complete drawing session for the primary canvas
-    if (primaryDrawingCanvas.value) {
-      primaryDrawingCanvas.value.completeDrawingSession();
-    }
-  }
-
-  // Disable drawing mode but DO NOT clear the drawings
-  if (props.isDualMode) {
-    if (props.drawingCanvasA) props.drawingCanvasA.disableDrawingMode();
-    if (props.drawingCanvasB) props.drawingCanvasB.disableDrawingMode();
-    // NOTE: We intentionally do NOT call clearCurrentFrameDrawings() here
-  } else {
-    primaryDrawingCanvas.value.disableDrawingMode();
-    // NOTE: We intentionally do NOT call clearCurrentFrameDrawings() here
-  }
-
-  // Reset form data
-  newAnnotation.value = {
-    content: '',
-    severity: 'medium',
-    color: '#fbbf24',
-    frame: 0,
-    startFrame: 0,
-    endFrame: 0,
-    duration: 1 / props.fps,
-    durationFrames: 1,
-    annotationType: 'text',
-    drawingData: null,
-  };
-
-  // Clear annotation context by emitting annotation-edit with null
-  emit('annotation-edit', null);
-  emit('form-hide');
-
-  // CANVAS STATE TRACKING: Log canvas state after cleanup
-  console.log('🎨 [CANVAS-STATE] Canvas state AFTER preserving cleanup:', {
-    canvasAHasDrawings: props.drawingCanvasA
-      ? props.drawingCanvasA.hasDrawingsOnCurrentFrame()
-      : false,
-    canvasBHasDrawings: props.drawingCanvasB
-      ? props.drawingCanvasB.hasDrawingsOnCurrentFrame()
-      : false,
-    currentFrame: props.currentFrame,
-    timestamp: Date.now(),
-  });
-};
-
-const reloadDrawingsFromAnnotation = (annotation) => {
-  console.log(
-    '🔍 [DEBUG] reloadDrawingsFromAnnotation called with:',
-    annotation
-  );
-
-  if (!annotation || !annotation.drawingData) {
-    console.log('🔍 [DEBUG] No drawing data to reload');
-    return;
-  }
-
-  if (props.isDualMode) {
-    // In dual mode, reload drawing data to both canvases if it exists
-    if (props.drawingCanvasA && annotation.drawingData?.drawingA) {
-      console.log('🔍 [DEBUG] Reloading drawing A to canvas');
-      props.drawingCanvasA.addDrawing(annotation.drawingData.drawingA);
-    }
-    if (props.drawingCanvasB && annotation.drawingData?.drawingB) {
-      console.log('🔍 [DEBUG] Reloading drawing B to canvas');
-      props.drawingCanvasB.addDrawing(annotation.drawingData.drawingB);
-    }
-  } else {
-    console.log('🔍 [DEBUG] Reloading drawing to primary canvas');
-    primaryDrawingCanvas.value.addDrawing(annotation.drawingData);
-  }
-
-  // CANVAS STATE TRACKING: Log canvas state after reloading
-  console.log('🎨 [CANVAS-STATE] Canvas state AFTER reloading drawings:', {
-    canvasAHasDrawings: props.drawingCanvasA
-      ? props.drawingCanvasA.hasDrawingsOnCurrentFrame()
-      : false,
-    canvasBHasDrawings: props.drawingCanvasB
-      ? props.drawingCanvasB.hasDrawingsOnCurrentFrame()
-      : false,
-    currentFrame: props.currentFrame,
-    timestamp: Date.now(),
-  });
 };
 
 const deleteAnnotation = (annotation) => {
@@ -613,14 +454,6 @@ const toggleDrawingSection = () => {
 };
 
 const onDrawingCreated = (drawingData, videoContext = null) => {
-  console.log('🎨 [DEBUG] onDrawingCreated called:', {
-    drawingData,
-    videoContext,
-    isDualMode: props.isDualMode,
-    hasExistingDrawingData: !!newAnnotation.value.drawingData,
-    currentFrame: props.currentFrame,
-  });
-
   if (props.isDualMode) {
     // In dual mode, we need to handle drawings from both canvases
     if (!newAnnotation.value.drawingData) {
@@ -630,17 +463,11 @@ const onDrawingCreated = (drawingData, videoContext = null) => {
     // Store drawing data based on video context
     if (videoContext === 'A') {
       newAnnotation.value.drawingData.drawingA = drawingData;
-      console.log('🎨 [DEBUG] Stored drawing for video A:', drawingData);
     } else if (videoContext === 'B') {
       newAnnotation.value.drawingData.drawingB = drawingData;
-      console.log('🎨 [DEBUG] Stored drawing for video B:', drawingData);
     } else {
       // If no context specified, treat as drawing A for backward compatibility
       newAnnotation.value.drawingData.drawingA = drawingData;
-      console.log(
-        '🎨 [DEBUG] Stored drawing for video A (default):',
-        drawingData
-      );
     }
   } else {
     // Single mode logic - always merge drawing paths for multiple shapes in one annotation
@@ -655,25 +482,14 @@ const onDrawingCreated = (drawingData, videoContext = null) => {
         canvasHeight: drawingData.canvasHeight,
       };
 
-      console.log('🎨 [DEBUG] Merging drawing data:', {
-        existingPaths: existingDrawing.paths.length,
-        newPaths: drawingData.paths.length,
-        totalPaths: mergedDrawing.paths.length,
-      });
-
       newAnnotation.value.drawingData = mergedDrawing;
     } else {
       // For the very first drawing in a new annotation, initialize with the drawing data
-      console.log('🎨 [DEBUG] Initializing first drawing data:', drawingData);
       newAnnotation.value.drawingData = drawingData;
     }
   }
 
   hasDrawingData.value = true;
-  console.log('🎨 [DEBUG] Drawing data stored, hasDrawingData set to true:', {
-    hasDrawingData: hasDrawingData.value,
-    finalDrawingData: newAnnotation.value.drawingData,
-  });
   // Removed emit('drawing-created', drawingData) to prevent infinite loop
   // The AnnotationPanel should only receive drawing events, not emit them
 };
@@ -778,11 +594,6 @@ const handleCommentDeleted = (comment) => {
 // Setup global comment tracking
 const setupGlobalCommentTracking = () => {
   if (props.videoId) {
-    console.log(
-      '🔄 [AnnotationPanel] Setting up global comment tracking for video:',
-      props.videoId
-    );
-
     // Initialize comment counts for existing annotations
     initializeCommentCounts(props.annotations);
 
@@ -791,7 +602,6 @@ const setupGlobalCommentTracking = () => {
 
     // Listen for new comment events
     onNewComment((event) => {
-      console.log('📥 [AnnotationPanel] New comment event received:', event);
       // The global comment system will handle the indicator automatically
     });
   }
@@ -1354,7 +1164,6 @@ defineExpose({
     </div>
   </div>
 </template>
-
 <style scoped>
 @import 'tailwindcss' reference;
 

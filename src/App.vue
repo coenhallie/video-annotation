@@ -7,15 +7,13 @@ import LoadVideoModal from './components/LoadVideoModal.vue';
 import ShareModal from './components/ShareModal.vue';
 import NotificationToast from './components/NotificationToast.vue';
 import UnifiedVideoPlayer from './components/UnifiedVideoPlayer.vue';
-import VideoContextSwitcher from './components/VideoContextSwitcher.vue';
-import DrawingTools from './components/DrawingTools.vue';
 import { useAuth } from './composables/useAuth.ts';
 import { useVideoAnnotations } from './composables/useVideoAnnotations.ts';
 import { useRealtimeAnnotations } from './composables/useRealtimeAnnotations.ts';
 import { useVideoSession } from './composables/useVideoSession.ts';
 import { useDrawingCanvas } from './composables/useDrawingCanvas.ts';
-import { useDualVideoPlayer } from './composables/useDualVideoPlayer.js';
 import { useComparisonVideoWorkflow } from './composables/useComparisonVideoWorkflow.ts';
+import { useDualVideoPlayer } from './composables/useDualVideoPlayer.js';
 import { VideoService } from './services/videoService.ts';
 import { AnnotationService } from './services/annotationService.ts';
 import { ShareService } from './services/shareService.ts';
@@ -113,7 +111,6 @@ const handleAddAnnotation = async (annotationData) => {
       return newAnnotation;
     }
   } catch (error) {
-    console.error('❌ [App] Error creating annotation:', error);
     throw error;
   }
 };
@@ -168,28 +165,13 @@ const comparisonWorkflow = useComparisonVideoWorkflow();
 watch(
   annotations,
   (newAnnotations) => {
-    console.log(
-      '🎯 [App] Annotations changed, total annotations:',
-      newAnnotations?.length || 0
-    );
-    console.log('🎯 [App] Full newAnnotations array:', newAnnotations);
-
     if (newAnnotations) {
       // Log each annotation's type for debugging
-      newAnnotations.forEach((ann, index) => {
-        console.log(
-          `🎯 [App] Annotation ${index}: type="${ann.annotationType}", id=${ann.id}`
-        );
-      });
+      newAnnotations.forEach((ann, index) => {});
 
       const drawingAnnotations = newAnnotations.filter(
         (ann) => ann.annotationType === 'drawing'
       );
-      console.log(
-        '🎯 [App] Drawing annotations found:',
-        drawingAnnotations.length
-      );
-      console.log('🎯 [App] Drawing annotations details:', drawingAnnotations);
 
       drawingCanvas.loadDrawingsFromAnnotations(newAnnotations);
     }
@@ -199,16 +181,9 @@ watch(
 
 // Event handlers for video player events
 const handleTimeUpdate = (data) => {
-  console.log('🎯 [App] handleTimeUpdate received:', {
-    currentTime: data.currentTime,
-    duration: data.duration,
-    previousCurrentTime: currentTime.value,
-    previousDuration: duration.value,
-  });
   currentTime.value = data.currentTime;
   // Also update duration if it's available and not set
   if (data.duration && data.duration > 0 && duration.value !== data.duration) {
-    console.log('🎯 [App] Updating duration from timeUpdate:', data.duration);
     duration.value = data.duration;
   }
 };
@@ -225,7 +200,6 @@ const handleFrameUpdate = (data) => {
 const handleFPSDetected = (data) => {
   fps.value = data.fps;
   totalFrames.value = data.totalFrames;
-  console.log(`FPS detected: ${data.fps}, Total frames: ${data.totalFrames}`);
 };
 
 const handlePlay = () => {
@@ -236,26 +210,9 @@ const handlePause = () => {
   isPlaying.value = false;
 };
 
-const handleDurationChange = (newDuration) => {
-  console.log('handleDurationChange called with:', newDuration);
-  duration.value = newDuration;
-  console.log('Duration updated to:', duration.value);
-};
-
-const handleError = (error) => {
-  console.error('🚨 [App] Video error received:', error);
-  console.error('🚨 [App] Current video URL:', videoUrl.value);
-  console.error('🚨 [App] Video ID:', videoId.value);
-};
+const handleError = (error) => {};
 
 const handleLoaded = async () => {
-  console.log('✅ [App] Video loaded successfully');
-  console.log('✅ [App] Video URL:', videoUrl.value);
-  console.log('✅ [App] FPS:', fps.value);
-  console.log('✅ [App] Duration:', duration.value);
-  console.log('✅ [App] Total frames:', totalFrames.value);
-  console.log('✅ [App] User:', user.value?.email || 'No user');
-
   // Get video dimensions from the video element
   const videoElement =
     playerMode.value === 'single'
@@ -267,7 +224,6 @@ const handleLoaded = async () => {
       width: videoElement.videoWidth || 1920,
       height: videoElement.videoHeight || 1080,
     };
-    console.log('✅ [App] Video dimensions:', videoDimensions.value);
 
     // Update drawing canvas with video dimensions
     drawingCanvas.setVideoSize(
@@ -277,7 +233,6 @@ const handleLoaded = async () => {
   }
 
   if (user.value) {
-    console.log('✅ [App] Initializing video with metadata...');
     const video = await initializeVideo({
       fps: fps.value,
       duration: duration.value,
@@ -290,77 +245,46 @@ const handleLoaded = async () => {
       currentVideoId.value = video.id;
     }
 
-    console.log('✅ [App] Starting session...');
     await startSession();
-    console.log('✅ [App] Setting up presence tracking...');
+
     setupPresenceTracking(user.value.id, user.value.email);
-    console.log('✅ [App] Video initialization complete');
   } else {
-    console.warn('⚠️ [App] No user found, skipping video initialization');
   }
 };
 
 // Timeline event handlers
 const handleSeekToTime = (time) => {
-  console.log('handleSeekToTime called with time:', time);
-
   if (playerMode.value === 'dual' && dualVideoPlayer) {
-    console.log('Seeking in dual mode');
     dualVideoPlayer.syncSeek(time);
   } else {
-    console.log(
-      'DEBUG - unifiedVideoPlayerRef.value:',
-      unifiedVideoPlayerRef.value
-    );
-
     if (unifiedVideoPlayerRef.value?.seekTo) {
-      console.log('Calling unifiedVideoPlayerRef.seekTo with time:', time);
       unifiedVideoPlayerRef.value.seekTo(time);
     } else {
-      console.warn('seekTo method not found on unifiedVideoPlayerRef');
     }
   }
 };
 
 // Timeline event handlers with fade transition for annotation clicks
 const handleSeekToTimeWithFade = async (time) => {
-  console.log('handleSeekToTimeWithFade called with time:', time);
-
   if (playerMode.value === 'dual' && dualVideoPlayer) {
-    console.log('Seeking in dual mode with fade');
     // For dual mode, we could implement fade transition later if needed
     dualVideoPlayer.syncSeek(time);
   } else {
-    console.log(
-      'DEBUG - unifiedVideoPlayerRef.value:',
-      unifiedVideoPlayerRef.value
-    );
-
     if (
       unifiedVideoPlayerRef.value?.performVideoFadeTransition &&
       unifiedVideoPlayerRef.value?.seekTo
     ) {
-      console.log(
-        'Calling unifiedVideoPlayerRef.performVideoFadeTransition with time:',
-        time
-      );
       await unifiedVideoPlayerRef.value.performVideoFadeTransition(() => {
         unifiedVideoPlayerRef.value.seekTo(time);
       });
     } else if (unifiedVideoPlayerRef.value?.seekTo) {
-      console.log(
-        'Fade transition not available, falling back to regular seek'
-      );
       unifiedVideoPlayerRef.value.seekTo(time);
     } else {
-      console.warn('seekTo method not found on unifiedVideoPlayerRef');
     }
   }
 };
 
 const handleAnnotationClick = async (annotation) => {
-  console.log('🎨 [App] handleAnnotationClick called with:', annotation);
-
   selectedAnnotation.value = annotation;
 
   // Seek to annotation timestamp with fade transition.
@@ -371,18 +295,12 @@ const handleAnnotationClick = async (annotation) => {
   // Add extra buffer to ensure fade transition is fully complete
   setTimeout(() => {
     if (annotation && annotation.drawingData) {
-      console.log(
-        '🎨 [App] Loading drawings from annotation click (after fade transition):',
-        annotation.drawingData
-      );
-
       if (playerMode.value === 'dual' && dualVideoPlayer) {
         // In dual mode, load drawing data to both canvases if it exists
         if (
           dualVideoPlayer.drawingCanvasA &&
           annotation.drawingData?.drawingA
         ) {
-          console.log('🎨 [App] Loading drawing A to canvas');
           dualVideoPlayer.drawingCanvasA.addDrawing(
             annotation.drawingData.drawingA
           );
@@ -391,14 +309,12 @@ const handleAnnotationClick = async (annotation) => {
           dualVideoPlayer.drawingCanvasB &&
           annotation.drawingData?.drawingB
         ) {
-          console.log('🎨 [App] Loading drawing B to canvas');
           dualVideoPlayer.drawingCanvasB.addDrawing(
             annotation.drawingData.drawingB
           );
         }
       } else if (playerMode.value === 'single') {
         // In single mode, load drawing data to the primary canvas
-        console.log('🎨 [App] Loading drawing to single canvas');
         drawingCanvas.addDrawing(annotation.drawingData);
       }
     }
@@ -408,7 +324,6 @@ const handleAnnotationClick = async (annotation) => {
 // Timeline play/pause handlers
 const handleTimelinePlay = () => {
   if (playerMode.value === 'dual' && dualVideoPlayer) {
-    console.log('Playing in dual mode');
     dualVideoPlayer.syncPlay();
   } else {
     if (unifiedVideoPlayerRef.value?.play) {
@@ -419,7 +334,6 @@ const handleTimelinePlay = () => {
 
 const handleTimelinePause = () => {
   if (playerMode.value === 'dual' && dualVideoPlayer) {
-    console.log('Pausing in dual mode');
     dualVideoPlayer.syncPause();
   } else {
     if (unifiedVideoPlayerRef.value?.pause) {
@@ -429,13 +343,7 @@ const handleTimelinePause = () => {
 };
 
 onMounted(async () => {
-  console.log('🚀 [App] Component mounted, initializing auth...');
   await initAuth();
-
-  console.log(
-    '🚀 [App] Auth initialized, user:',
-    user.value?.email || 'No user'
-  );
 
   // Check for shared video first (works without authentication)
   await checkForSharedVideo();
@@ -445,9 +353,6 @@ onMounted(async () => {
 
   // If there's already a video loaded and user is authenticated, initialize it
   if (user.value && videoUrl.value && duration.value > 0) {
-    console.log(
-      '✅ [App] User authenticated with existing video, initializing...'
-    );
     try {
       const video = await initializeVideo({
         fps: fps.value,
@@ -462,17 +367,12 @@ onMounted(async () => {
 
       await startSession();
       setupPresenceTracking(user.value.id, user.value.email);
-      console.log('✅ [App] Video initialization complete on mount');
-    } catch (error) {
-      console.error('🚨 [App] Error initializing video on mount:', error);
-    }
+    } catch (error) {}
   }
 });
 
 // Clear video state function
 const clearVideoState = () => {
-  console.log('🧹 [App] Clearing video state for clean user separation');
-
   // Reset player mode to single
   playerMode.value = 'single';
   dualVideoPlayer = null;
@@ -511,48 +411,29 @@ watch(
   async (newUser, oldUser) => {
     // If user changed (sign out or different user), clear video state
     if (oldUser && (!newUser || newUser.id !== oldUser.id)) {
-      console.log('🔄 [App] User changed, clearing video state...');
       clearVideoState();
     }
 
     if (newUser) {
-      console.log(
-        '🔄 [App] User authenticated, checking for previous videos...'
-      );
-
       // Check if user has any previous videos
       try {
         const userVideos = await VideoService.getUserVideos(newUser.id);
 
         if (userVideos && userVideos.length > 0) {
-          console.log(
-            '🔄 [App] User has previous videos, showing load modal...'
-          );
           // User has previous videos, show the load modal automatically
           isLoadModalVisible.value = true;
         } else {
-          console.log(
-            '🔄 [App] No previous videos found, showing default screen'
-          );
           // No previous videos, user will see the default screen with URL input
         }
       } catch (error) {
-        console.error('🚨 [App] Error checking user videos:', error);
         // On error, just show the default screen
       }
 
       // If we already have a video URL (e.g., from shared video), initialize it
       if (videoUrl.value) {
-        console.log(
-          '🔄 [App] Video URL available, checking if video needs initialization...'
-        );
-
         // If we have a video URL but no video player yet, we need to wait for it to load
         // The video will be initialized in the handleLoaded event
         if (unifiedVideoPlayerRef.value && duration.value > 0) {
-          console.log(
-            '✅ [App] Video already loaded, initializing annotations...'
-          );
           try {
             await initializeVideo({
               fps: fps.value,
@@ -561,17 +442,8 @@ watch(
             });
             await startSession();
             setupPresenceTracking(newUser.id, newUser.email);
-            console.log('✅ [App] Video initialization complete after auth');
-          } catch (error) {
-            console.error(
-              '🚨 [App] Error initializing video after auth:',
-              error
-            );
-          }
+          } catch (error) {}
         } else {
-          console.log(
-            '🔄 [App] Video not yet loaded, will initialize on load event'
-          );
         }
       }
     }
@@ -585,7 +457,6 @@ watch(
   (newComparison) => {
     if (newComparison && newComparison.id) {
       currentComparisonId.value = newComparison.id;
-      console.log('🔄 [App] Current comparison ID updated:', newComparison.id);
     } else {
       currentComparisonId.value = null;
     }
@@ -608,10 +479,6 @@ const handleFormHide = () => {
 
 // Handle annotation editing context
 const handleAnnotationEdit = (annotation) => {
-  console.log(
-    '🎨 [App] Setting annotation context for editing:',
-    annotation?.id || 'null'
-  );
   if (playerMode.value === 'dual' && dualVideoPlayer) {
     if (annotation) {
       dualVideoPlayer.setCurrentAnnotationContext(annotation);
@@ -626,44 +493,26 @@ const loadMostRecentVideo = async () => {
   if (!user.value) return;
 
   try {
-    console.log(
-      '🎬 [App] Loading most recent video for user:',
-      user.value.email
-    );
     const recentVideo = await VideoService.getMostRecentUserVideo(
       user.value.id
     );
 
     if (recentVideo) {
-      console.log(
-        '🎬 [App] Found recent video:',
-        recentVideo.title,
-        recentVideo.url
-      );
       videoUrl.value = recentVideo.url;
       urlInput.value = recentVideo.url;
       // Extract video ID from URL for better identification
       const urlParts = recentVideo.url.split('/');
       videoId.value =
         urlParts[urlParts.length - 1].split('.')[0] || 'sample-video-1';
-      console.log('🎬 [App] Set video ID to:', videoId.value);
     } else {
-      console.log('🎬 [App] No recent video found for user');
     }
-  } catch (error) {
-    console.error('🚨 [App] Error loading most recent video:', error);
-  }
+  } catch (error) {}
 };
 
 // URL loading functionality
 const loadVideoFromUrl = () => {
-  console.log('🎬 [App] loadVideoFromUrl called');
-  console.log('🎬 [App] urlInput.value:', urlInput.value);
-
   if (urlInput.value.trim()) {
     const newUrl = urlInput.value.trim();
-    console.log('🎬 [App] Setting new video URL:', newUrl);
-    console.log('🎬 [App] Previous video URL:', videoUrl.value);
 
     // Ensure we're in single mode
     playerMode.value = 'single';
@@ -674,18 +523,14 @@ const loadVideoFromUrl = () => {
     const urlParts = newUrl.split('/');
     videoId.value =
       urlParts[urlParts.length - 1].split('.')[0] || 'sample-video-1';
-    console.log('🎬 [App] Video URL updated to:', videoUrl.value);
-    console.log('🎬 [App] Video ID updated to:', videoId.value);
+
     // The new video will be initialized on the 'loaded' event
   } else {
-    console.warn('🎬 [App] URL input is empty, not loading video');
   }
 };
 
 const handleUrlKeyPress = (event) => {
-  console.log('🎬 [App] Key pressed in URL input:', event.key);
   if (event.key === 'Enter') {
-    console.log('🎬 [App] Enter key detected, calling loadVideoFromUrl');
     loadVideoFromUrl();
   }
 };
@@ -701,13 +546,6 @@ const closeLoadModal = () => {
 
 // Handle project selection (unified handler for single and dual video projects)
 const handleProjectSelected = async (project) => {
-  console.log(
-    '🎬 [App] Project selected:',
-    project.title,
-    'Type:',
-    project.projectType
-  );
-
   try {
     if (project.projectType === 'single') {
       // Handle single video project
@@ -738,25 +576,6 @@ const handleProjectSelected = async (project) => {
       const videoB = project.videoB;
 
       // DEBUG: Log the project structure and video objects
-      console.log('🐛 [DEBUG] Dual project selected:', {
-        id: project.id,
-        title: project.title,
-        projectType: project.projectType,
-      });
-      console.log('🐛 [DEBUG] project.video_a:', {
-        id: videoA?.id,
-        title: videoA?.title,
-        url: videoA?.url,
-        videoType: videoA?.videoType,
-        filePath: videoA?.filePath,
-      });
-      console.log('🐛 [DEBUG] project.video_b:', {
-        id: videoB?.id,
-        title: videoB?.title,
-        url: videoB?.url,
-        videoType: videoB?.videoType,
-        filePath: videoB?.filePath,
-      });
 
       // Load annotations for both videos
       const [annotationsA, annotationsB] = await Promise.all([
@@ -777,26 +596,11 @@ const handleProjectSelected = async (project) => {
       // Call the existing comparison video handler
       await handleComparisonVideoSelected(comparisonData);
     }
-  } catch (err) {
-    console.error('❌ [App] Error handling project selection:', err);
-  }
+  } catch (err) {}
 };
 
 const handleVideoSelected = async (data) => {
   const { video, annotations: loadedAnnotations, videoMetadata } = data;
-
-  console.log('🎬 [App] Loading selected video:', video.title);
-  console.log('🎬 [App] With annotations:', loadedAnnotations.length);
-  console.log('🐛 [DEBUG] Selected video object:', {
-    id: video.id,
-    title: video.title,
-    url: video.url,
-    videoId: video.videoId,
-    videoType: video.videoType,
-    filePath: video.filePath,
-    originalFilename: video.originalFilename,
-  });
-  console.log('🐛 [DEBUG] Video metadata:', videoMetadata);
 
   try {
     // Ensure we're in single mode
@@ -804,18 +608,6 @@ const handleVideoSelected = async (data) => {
     dualVideoPlayer = null;
 
     // Update video state
-    console.log(
-      '🐛 [DEBUG] Setting videoUrl from:',
-      videoUrl.value,
-      'to:',
-      video.url
-    );
-    console.log(
-      '🐛 [DEBUG] Setting videoId from:',
-      videoId.value,
-      'to:',
-      video.videoId
-    );
 
     videoUrl.value = video.url;
     urlInput.value = video.url;
@@ -829,17 +621,6 @@ const handleVideoSelected = async (data) => {
     // Store the video type for use in handleLoaded
     currentVideoType.value = videoMetadata?.videoType || video.videoType;
 
-    console.log(
-      '🐛 [DEBUG] About to call initializeVideo with videoUrl:',
-      videoUrl.value,
-      'videoId:',
-      videoId.value,
-      'videoMetadata:',
-      videoMetadata,
-      'currentVideoType:',
-      currentVideoType.value
-    );
-
     // Initialize video with loaded data and metadata
     if (user.value) {
       const videoRecord = await initializeVideo({
@@ -850,12 +631,6 @@ const handleVideoSelected = async (data) => {
         ...videoMetadata,
       });
 
-      console.log('🐛 [DEBUG] initializeVideo returned:', {
-        id: videoRecord?.id,
-        url: videoRecord?.url,
-        videoType: videoRecord?.videoType,
-      });
-
       // Track the current video ID for sharing
       currentVideoId.value = video.id;
 
@@ -864,12 +639,8 @@ const handleVideoSelected = async (data) => {
 
       await startSession();
       setupPresenceTracking(user.value.id, user.value.email);
-
-      console.log('✅ [App] Successfully loaded video and annotations');
     }
-  } catch (error) {
-    console.error('❌ [App] Error loading selected video:', error);
-  }
+  } catch (error) {}
 };
 
 // Handle shared video selection (for unauthenticated users)
@@ -878,10 +649,6 @@ const handleSharedVideoSelected = async (data) => {
   const video = data.video || data;
   const loadedAnnotations = data.annotations || [];
   const canCommentOnVideo = data.canComment || false;
-
-  console.log('🔗 [App] Loading shared video:', video.title || video.id);
-  console.log('🔗 [App] With annotations:', loadedAnnotations.length);
-  console.log('🔗 [App] Comment permissions:', canCommentOnVideo);
 
   try {
     // Set shared video state
@@ -903,43 +670,14 @@ const handleSharedVideoSelected = async (data) => {
 
     // Start session for shared video (this will initialize comment permissions)
     await startSession();
-
-    console.log(
-      '✅ [App] Successfully loaded shared video with comment support'
-    );
-  } catch (error) {
-    console.error('❌ [App] Error loading shared video:', error);
-  }
+  } catch (error) {}
 };
 
 // Handle dual video selection
 const handleDualVideosSelected = async (data) => {
   const { videoA, videoB } = data;
 
-  console.log(
-    '🎬🎬 [App] Loading dual videos:',
-    videoA.title,
-    'and',
-    videoB.title
-  );
-
   // 🐛 DEBUG: Log video objects to trace URL assignment
-  console.log('🐛 [DEBUG] VideoA object:', {
-    id: videoA.id,
-    title: videoA.title,
-    url: videoA.url,
-    videoType: videoA.videoType,
-    filePath: videoA.filePath,
-    originalFilename: videoA.originalFilename,
-  });
-  console.log('🐛 [DEBUG] VideoB object:', {
-    id: videoB.id,
-    title: videoB.title,
-    url: videoB.url,
-    videoType: videoB.videoType,
-    filePath: videoB.filePath,
-    originalFilename: videoB.originalFilename,
-  });
 
   try {
     // Switch to dual mode
@@ -949,13 +687,12 @@ const handleDualVideosSelected = async (data) => {
     dualVideoPlayer = useDualVideoPlayer();
 
     // Set video URLs
-    console.log('🐛 [DEBUG] Setting videoA URL:', videoA.url);
-    console.log('🐛 [DEBUG] Setting videoB URL:', videoB.url);
+
     dualVideoPlayer.videoAUrl.value = videoA.url;
     dualVideoPlayer.videoBUrl.value = videoB.url;
 
     // Initialize annotation system for dual videos
-    console.log('🎯 [App] Initializing annotation system for dual videos');
+
     const videoAData = {
       videoId: videoA.videoId,
       videoId: videoA.videoId,
@@ -983,13 +720,6 @@ const handleDualVideosSelected = async (data) => {
     const projectIdForAnnotations = currentProject.value?.id || null;
     const comparisonVideoIdForAnnotations = `comparison-${videoA.id}-${videoB.id}`;
 
-    console.log('🎯 [App] Initializing annotations with context:', {
-      projectId: projectIdForAnnotations,
-      comparisonVideoId: comparisonVideoIdForAnnotations,
-      videoAId: videoA.videoId,
-      videoBId: videoB.videoId,
-    });
-
     dualVideoPlayer.initializeAnnotations(
       videoAData,
       videoBData,
@@ -998,14 +728,6 @@ const handleDualVideosSelected = async (data) => {
     );
 
     // 🐛 DEBUG: Verify URLs were set correctly
-    console.log(
-      '🐛 [DEBUG] VideoA URL after assignment:',
-      dualVideoPlayer.videoAUrl.value
-    );
-    console.log(
-      '🐛 [DEBUG] VideoB URL after assignment:',
-      dualVideoPlayer.videoBUrl.value
-    );
 
     // Set current video in session to represent dual session
     videoId.value = `dual-${videoA.videoId}-${videoB.videoId}`;
@@ -1056,26 +778,18 @@ const handleDualVideosSelected = async (data) => {
       try {
         // For dual mode, we don't need to create a new video record
         // Instead, we'll use the comparison video ID for session tracking
-        console.log('🎯 [App] Starting session for dual video mode');
 
         // Set up the video metadata for session
         videoUrl.value = `dual:${videoA.url}|${videoB.url}`;
 
         // Initialize video annotations for both videos in dual mode
         if (dualVideoPlayer && dualVideoPlayer.initializeVideoAnnotations) {
-          console.log('🎯 [App] Initializing video annotations for dual mode');
           try {
             await dualVideoPlayer.initializeVideoAnnotations(
               videoAData,
               videoBData
             );
-            console.log('✅ [App] Video annotations initialized for dual mode');
-          } catch (error) {
-            console.error(
-              '❌ [App] Error initializing video annotations for dual mode:',
-              error
-            );
-          }
+          } catch (error) {}
         }
 
         // Start session with dual video context
@@ -1083,10 +797,7 @@ const handleDualVideosSelected = async (data) => {
 
         // Set up presence tracking for dual mode
         setupPresenceTracking(user.value.id, user.value.email);
-
-        console.log('✅ [App] Dual video session started successfully');
       } catch (error) {
-        console.error('❌ [App] Error starting dual video session:', error);
         // Continue without session - annotation functionality should still work
       }
       setupPresenceTracking(user.value.id, user.value.email);
@@ -1094,11 +805,7 @@ const handleDualVideosSelected = async (data) => {
 
     // Close the modal
     closeLoadModal();
-
-    console.log('✅ [App] Successfully loaded dual videos');
-  } catch (error) {
-    console.error('❌ [App] Error loading dual videos:', error);
-  }
+  } catch (error) {}
 };
 
 // Handle comparison video selection
@@ -1113,27 +820,11 @@ const handleComparisonVideoSelected = async (data) => {
   } = data;
 
   // Debug: Log the data structure
-  console.log('🐛 [DEBUG] handleComparisonVideoSelected data:', data);
-  console.log('🐛 [DEBUG] comparisonVideo:', comparisonVideo);
-  console.log('🐛 [DEBUG] videoA:', videoA);
-  console.log('🐛 [DEBUG] videoB:', videoB);
 
   // Check if comparisonVideo is defined before accessing its properties
   if (!comparisonVideo) {
-    console.error(
-      '❌ [App] comparisonVideo is undefined in handleComparisonVideoSelected'
-    );
     return;
   }
-
-  console.log(
-    '� [App] Loading comparison video:',
-    comparisonVideo.title,
-    'with videos:',
-    videoA?.title || 'Unknown',
-    'and',
-    videoB?.title || 'Unknown'
-  );
 
   try {
     // Load the comparison video using the workflow
@@ -1149,12 +840,21 @@ const handleComparisonVideoSelected = async (data) => {
     const videoAUrl = getVideoUrl(videoA);
     const videoBUrl = getVideoUrl(videoB);
 
+    console.log('🔍 [App] Setting video URLs:', { videoAUrl, videoBUrl });
+    console.log('🔍 [App] VideoA object:', videoA);
+    console.log('🔍 [App] VideoB object:', videoB);
+
     // Set video URLs
     dualVideoPlayer.videoAUrl.value = videoAUrl;
     dualVideoPlayer.videoBUrl.value = videoBUrl;
 
+    console.log('🔍 [App] After setting URLs:', {
+      videoAUrlValue: dualVideoPlayer.videoAUrl.value,
+      videoBUrlValue: dualVideoPlayer.videoBUrl.value,
+    });
+
     // Initialize annotation system for comparison mode
-    console.log('🎯 [App] Initializing annotation system for comparison mode');
+
     const videoAData = {
       videoId: videoA.videoId,
       videoId: videoA.videoId,
@@ -1237,23 +937,12 @@ const handleComparisonVideoSelected = async (data) => {
 
       // Initialize video annotations for both videos in dual mode
       if (dualVideoPlayer && dualVideoPlayer.initializeVideoAnnotations) {
-        console.log(
-          '🎯 [App] Initializing video annotations for comparison mode'
-        );
         try {
           await dualVideoPlayer.initializeVideoAnnotations(
             videoAData,
             videoBData
           );
-          console.log(
-            '✅ [App] Video annotations initialized for comparison mode'
-          );
-        } catch (error) {
-          console.error(
-            '❌ [App] Error initializing video annotations for comparison mode:',
-            error
-          );
-        }
+        } catch (error) {}
       }
 
       await startSession();
@@ -1263,25 +952,15 @@ const handleComparisonVideoSelected = async (data) => {
     // In comparison mode, annotations are handled by the comparison workflow
     // The useVideoAnnotations composable will automatically load comparison-specific annotations
     // when isComparisonContext is true, so we don't need to manually load them here
-    console.log(
-      '🔍 [App] Comparison context detected, annotations will be loaded by useVideoAnnotations'
-    );
 
     // Explicitly load annotations to ensure they appear in the UI
     try {
       await loadAnnotations();
-      console.log('✅ [App] Comparison annotations loaded into UI');
-    } catch (error) {
-      console.error('❌ [App] Error loading comparison annotations:', error);
-    }
+    } catch (error) {}
 
     // Close the modal
     closeLoadModal();
-
-    console.log('✅ [App] Successfully loaded comparison video');
-  } catch (error) {
-    console.error('❌ [App] Error loading comparison video:', error);
-  }
+  } catch (error) {}
 };
 
 // Share modal handlers
@@ -1291,7 +970,6 @@ const openShareModal = () => {
   } else if (playerMode.value === 'single' && currentVideoId.value) {
     isShareModalVisible.value = true;
   } else {
-    console.warn('⚠️ [App] No video or comparison loaded to share');
   }
 };
 
@@ -1323,20 +1001,10 @@ const closeShareModal = () => {
 
 // Drawing event handlers
 const handleDrawingCreated = async (drawing, videoContext = null) => {
-  console.log(
-    '🎨 [App] Drawing created:',
-    drawing,
-    'Video context:',
-    videoContext
-  );
-
   // Handle dual video mode - call the dual video player's drawing handler
   if (playerMode.value === 'dual' && dualVideoPlayer) {
-    console.log('🎨 [App] Handling drawing in dual video mode (unified)');
-
     // Also notify the AnnotationPanel if the form is open so it can capture drawing data
     if (isAnnotationFormVisible.value && annotationPanelRef.value) {
-      console.log('🎨 [App] Notifying AnnotationPanel of drawing creation');
       annotationPanelRef.value.onDrawingCreated(drawing, videoContext);
     }
 
@@ -1347,13 +1015,7 @@ const handleDrawingCreated = async (drawing, videoContext = null) => {
         videoContext,
         user.value?.id
       );
-      console.log('✅ [App] Drawing handled by dual video player');
-    } catch (error) {
-      console.error(
-        '❌ [App] Error handling drawing in dual video mode:',
-        error
-      );
-    }
+    } catch (error) {}
     return;
   }
 
@@ -1364,9 +1026,6 @@ const handleDrawingCreated = async (drawing, videoContext = null) => {
   // If this drawing was created from the annotation panel, forward it to the annotation panel
   // and DO NOT create a separate annotation - let the annotation panel handle it
   if (isAnnotationFormVisible.value && annotationPanelRef.value) {
-    console.log(
-      '🎨 [App] Forwarding drawing to annotation panel - no auto-save'
-    );
     // Forward the drawing to the annotation panel
     if (annotationPanelRef.value.onDrawingCreated) {
       annotationPanelRef.value.onDrawingCreated(drawing);
@@ -1375,7 +1034,7 @@ const handleDrawingCreated = async (drawing, videoContext = null) => {
     return;
   } else {
     // Convert drawing to annotation and save it to Supabase (only when drawing outside annotation form)
-    console.log('🎨 [App] Auto-creating annotation for drawing outside form');
+
     try {
       const annotation = drawingCanvas.convertDrawingToAnnotation(
         drawing,
@@ -1387,60 +1046,42 @@ const handleDrawingCreated = async (drawing, videoContext = null) => {
 
       // Save to Supabase via addAnnotation
       await addAnnotation(annotation);
-      console.log('🎨 [App] Drawing annotation saved to Supabase successfully');
 
       // Reload annotations to ensure the UI shows the latest data from Supabase
-      console.log('🎨 [App] Reloading annotations to refresh UI');
+
       await loadAnnotations();
-      console.log('🎨 [App] Annotations reloaded successfully');
-    } catch (error) {
-      console.error(
-        '🎨 [App] Error saving drawing annotation to Supabase:',
-        error
-      );
-    }
+    } catch (error) {}
   }
 };
 
 const handleDrawingUpdated = (drawing) => {
-  console.log('Drawing updated:', drawing);
   // Handle drawing updates if needed
 };
 
 const handleDrawingDeleted = (drawingId) => {
-  console.log('Drawing deleted:', drawingId);
   // Handle drawing deletion if needed
 };
 
 // Handle dual video loaded events
 const handleDualVideoLoaded = () => {
-  console.log('✅ [App] Dual video loaded');
   // Additional logic if needed when dual videos are loaded
 };
 
 // Handle video context changes
 const handleVideoContextChanged = (context) => {
-  console.log('🔄 [App] Video context changed to:', context);
   activeVideoContext.value = context;
 };
 
 // Handle creating anonymous session for shared video commenting
 const handleCreateAnonymousSession = async (displayName) => {
   try {
-    console.log(
-      '🔗 [App] Creating anonymous session for shared video commenting:',
-      displayName
-    );
-
     const session = await createAnonymousSession(displayName);
 
     // Refresh comment permissions after creating session
     await refreshCommentPermissions();
 
-    console.log('✅ [App] Anonymous session created successfully');
     return session;
   } catch (error) {
-    console.error('❌ [App] Error creating anonymous session:', error);
     throw error;
   }
 };
@@ -1455,7 +1096,6 @@ const checkForSharedVideo = async () => {
 
   try {
     if (shareData.type === 'video') {
-      console.log('🔗 [App] Loading shared video:', shareData.id);
       // Use the enhanced method that includes comment permissions
       const sharedData =
         await ShareService.getSharedVideoWithCommentPermissions(shareData.id);
@@ -1465,25 +1105,15 @@ const checkForSharedVideo = async () => {
       const url = new URL(window.location);
       url.searchParams.delete('share');
       window.history.replaceState({}, document.title, url.toString());
-
-      console.log(
-        '✅ [App] Successfully loaded shared video with comment permissions'
-      );
     } else if (shareData.type === 'comparison') {
-      console.log('🔗 [App] Loading shared comparison:', shareData.id);
       await initializeSharedComparison(shareData.id);
 
       // Clear the shareComparison parameter from URL without reloading
       const url = new URL(window.location);
       url.searchParams.delete('shareComparison');
       window.history.replaceState({}, document.title, url.toString());
-
-      console.log(
-        '✅ [App] Successfully loaded shared comparison with comment permissions'
-      );
     }
   } catch (error) {
-    console.error('❌ [App] Error loading shared content:', error);
     // Could show a toast notification here
   }
 };
@@ -1518,51 +1148,19 @@ const initializeSharedComparison = async (comparisonId) => {
         }
       : null;
 
-    console.log('🔄 [App] Setting up shared comparison videos:', {
-      videoA: videoAData?.title,
-      videoB: videoBData?.title,
-      videoAUrl: videoAData?.url,
-      videoBUrl: videoBData?.url,
-    });
-
-    console.log('🔍 [App] Video A Data Details:', {
-      exists: !!videoAData,
-      id: videoAData?.id,
-      title: videoAData?.title,
-      url: videoAData?.url,
-      fullData: videoAData,
-    });
-
-    console.log('🔍 [App] Video B Data Details:', {
-      exists: !!videoBData,
-      id: videoBData?.id,
-      title: videoBData?.title,
-      url: videoBData?.url,
-      fullData: videoBData,
-    });
-
     // Select videos in the comparison workflow (this sets selectedVideoA and selectedVideoB)
     if (videoAData && videoAData.id !== 'placeholder') {
-      console.log('🔄 [App] Selecting Video A:', videoAData);
       comparisonWorkflow.selectVideoA(videoAData);
-      console.log('✅ [App] Video A selected in workflow');
     } else {
-      console.warn('⚠️ [App] Video A not selected - invalid data:', videoAData);
     }
 
     if (videoBData && videoBData.id !== 'placeholder') {
-      console.log('🔄 [App] Selecting Video B:', videoBData);
       comparisonWorkflow.selectVideoB(videoBData);
-      console.log('✅ [App] Video B selected in workflow');
     } else {
-      console.warn('⚠️ [App] Video B not selected - invalid data:', videoBData);
     }
 
     // Ensure dual video player is initialized
     if (!dualVideoPlayer) {
-      console.log(
-        '🔄 [App] Initializing dual video player for shared comparison...'
-      );
       dualVideoPlayer = useDualVideoPlayer();
     }
 
@@ -1570,12 +1168,10 @@ const initializeSharedComparison = async (comparisonId) => {
     if (videoAData?.url) {
       dualVideoPlayer.videoAUrl.value = videoAData.url;
       dualVideoPlayer.videoAId.value = videoAData.id;
-      console.log('✅ [App] Video A URL and ID set in dual player');
     }
     if (videoBData?.url) {
       dualVideoPlayer.videoBUrl.value = videoBData.url;
       dualVideoPlayer.videoBId.value = videoBData.id;
-      console.log('✅ [App] Video B URL and ID set in dual player');
     }
 
     // Initialize video states to prevent undefined errors
@@ -1587,8 +1183,6 @@ const initializeSharedComparison = async (comparisonId) => {
       dualVideoPlayer.videoBState.isLoaded = false;
       dualVideoPlayer.videoBState.hasError = false;
     }
-
-    console.log('✅ [App] Dual video player states initialized');
 
     // Create a proper comparison object for the workflow
     const comparisonObject = {
@@ -1603,7 +1197,7 @@ const initializeSharedComparison = async (comparisonId) => {
     };
 
     // Use the proper workflow method to load the comparison
-    console.log('🔄 [App] Loading comparison via workflow...');
+
     await comparisonWorkflow.loadComparisonVideo(comparisonObject);
 
     // Load annotations
@@ -1613,10 +1207,7 @@ const initializeSharedComparison = async (comparisonId) => {
     ) {
       annotations.value = sharedComparison.annotations;
     }
-
-    console.log('✅ [App] Shared comparison initialized successfully');
   } catch (error) {
-    console.error('❌ [App] Error initializing shared comparison:', error);
     throw error;
   }
 };

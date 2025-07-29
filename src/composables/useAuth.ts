@@ -70,7 +70,6 @@ export function useAuth() {
   const initAuth = async () => {
     try {
       isLoading.value = true;
-      console.log('🔐 [Auth] Initializing authentication...');
 
       const {
         data: { session: currentSession },
@@ -78,41 +77,24 @@ export function useAuth() {
       } = await supabase.auth.getSession();
 
       if (error) {
-        console.error('🚨 [Auth] Error getting session:', error);
         throw error;
       }
 
       session.value = currentSession;
       user.value = currentSession?.user ?? null;
 
-      console.log('🔐 [Auth] Session retrieved:', {
-        hasSession: !!currentSession,
-        userId: currentSession?.user?.id,
-        userEmail: currentSession?.user?.email,
-      });
-
       // Listen for auth changes
       supabase.auth.onAuthStateChange((event, newSession) => {
-        console.log('🔐 [Auth] Auth state changed:', event, {
-          hasSession: !!newSession,
-          userId: newSession?.user?.id,
-          userEmail: newSession?.user?.email,
-        });
-
         session.value = newSession;
         user.value = newSession?.user ?? null;
 
         // Handle specific events
         if (event === 'SIGNED_OUT') {
-          console.log('🔐 [Auth] User signed out');
         } else if (event === 'SIGNED_IN') {
-          console.log('🔐 [Auth] User signed in');
         } else if (event === 'TOKEN_REFRESHED') {
-          console.log('🔐 [Auth] Token refreshed');
         }
       });
     } catch (error) {
-      console.error('🚨 [Auth] Failed to initialize auth:', error);
       session.value = null;
       user.value = null;
     } finally {

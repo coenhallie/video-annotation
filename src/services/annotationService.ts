@@ -9,11 +9,6 @@ import { CommentService, type CommentPermissions } from './commentService';
 
 export class AnnotationService {
   static async createAnnotation(annotationData: AnnotationInsert) {
-    console.log(
-      '🔍 [AnnotationService] Creating annotation with data:',
-      annotationData
-    );
-
     const { data, error } = await supabase
       .from('annotations')
       .insert(annotationData)
@@ -21,23 +16,9 @@ export class AnnotationService {
       .single();
 
     if (error) {
-      console.error(
-        '❌ [AnnotationService] Failed to create annotation:',
-        error
-      );
-      console.error('❌ [AnnotationService] Error details:', {
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        code: error.code,
-      });
       throw error;
     }
 
-    console.log(
-      '✅ [AnnotationService] Successfully created annotation:',
-      data
-    );
     return data;
   }
 
@@ -46,15 +27,8 @@ export class AnnotationService {
     projectId?: string,
     includeCommentCounts?: boolean
   ) {
-    console.log('🔍 [AnnotationService] Getting video annotations:', {
-      videoId,
-      projectId,
-      includeCommentCounts,
-    });
-
     // Validate videoId to prevent undefined queries
     if (!videoId || videoId === 'undefined') {
-      console.warn('⚠️ [AnnotationService] Invalid videoId provided:', videoId);
       return [];
     }
 
@@ -68,17 +42,8 @@ export class AnnotationService {
     const { data, error } = await query.order('timestamp', { ascending: true });
 
     if (error) {
-      console.error(
-        '❌ [AnnotationService] Error getting video annotations:',
-        error
-      );
       throw error;
     }
-
-    console.log(
-      '✅ [AnnotationService] Retrieved annotations:',
-      data?.length || 0
-    );
 
     // If comment counts are requested, fetch them for all annotations
     if (includeCommentCounts && data && data.length > 0) {
@@ -94,10 +59,6 @@ export class AnnotationService {
           commentCount: commentCounts[index] || 0,
         }));
       } catch (commentError) {
-        console.warn(
-          '⚠️ [AnnotationService] Failed to fetch comment counts, returning annotations without counts:',
-          commentError
-        );
         // Return annotations without comment counts if comment service fails
         return data;
       }
@@ -110,33 +71,9 @@ export class AnnotationService {
     annotationId: string,
     updates: AnnotationUpdate
   ) {
-    console.log('🔍 [DEBUG] AnnotationService.updateAnnotation called with:', {
-      annotationId: annotationId,
-      updates: updates,
-      hasDrawingData: !!(updates as any).drawingData,
-      drawingDataKeys: (updates as any).drawingData
-        ? Object.keys((updates as any).drawingData)
-        : null,
-      updateKeys: Object.keys(updates),
-    });
-
-    console.log('🔍 [DEBUG] Drawing data payload details:', {
-      drawingData: (updates as any).drawingData,
-      drawingDataType: typeof (updates as any).drawingData,
-      drawingDataStringified: (updates as any).drawingData
-        ? JSON.stringify((updates as any).drawingData)
-        : null,
-    });
-
     // Remove annotationType from updates object as it should not be included in update requests
     const updatesAny = updates as any;
     const { annotationType, ...cleanUpdates } = updatesAny;
-
-    console.log('🔍 [DEBUG] Cleaned updates object (removed annotationType):', {
-      originalKeys: Object.keys(updates),
-      cleanedKeys: Object.keys(cleanUpdates),
-      removedAnnotationType: !!annotationType,
-    });
 
     const { data, error } = await supabase
       .from('annotations')
@@ -145,29 +82,10 @@ export class AnnotationService {
       .select()
       .single();
 
-    console.log('🔍 [DEBUG] Supabase update result:', {
-      success: !error,
-      error: error,
-      data: data,
-      returnedDrawingData: data?.drawingData,
-      dataId: data?.id,
-    });
-
     if (error) {
-      console.error('🔍 [DEBUG] Supabase update error details:', {
-        error: error,
-        errorMessage: error.message,
-        errorCode: error.code,
-        errorDetails: error.details,
-        errorHint: error.hint,
-      });
       throw error;
     }
 
-    console.log(
-      '🔍 [DEBUG] AnnotationService.updateAnnotation returning:',
-      data
-    );
     return data;
   }
 
@@ -176,10 +94,6 @@ export class AnnotationService {
       // First, delete all associated comments
       await CommentService.deleteAnnotationComments(annotationId);
     } catch (commentError) {
-      console.warn(
-        '⚠️ [AnnotationService] Failed to delete associated comments, proceeding with annotation deletion:',
-        commentError
-      );
       // Continue with annotation deletion even if comment cleanup fails
     }
 
@@ -225,10 +139,6 @@ export class AnnotationService {
           commentCount: (commentsMap[annotation.id] || []).length,
         }));
       } catch (commentError) {
-        console.warn(
-          '⚠️ [AnnotationService] Failed to fetch comments for frame annotations:',
-          commentError
-        );
         // Return annotations without comments if comment service fails
         return data;
       }
@@ -243,11 +153,6 @@ export class AnnotationService {
    * Get a single annotation with all its comments
    */
   static async getAnnotationWithComments(annotationId: string) {
-    console.log(
-      '🔍 [AnnotationService] Getting annotation with comments:',
-      annotationId
-    );
-
     try {
       // Get the annotation
       const { data: annotation, error } = await supabase
@@ -257,23 +162,11 @@ export class AnnotationService {
         .single();
 
       if (error) {
-        console.error(
-          '❌ [AnnotationService] Error getting annotation:',
-          error
-        );
         throw error;
       }
 
       // Get comments for the annotation
       const comments = await CommentService.getAnnotationComments(annotationId);
-
-      console.log(
-        '✅ [AnnotationService] Retrieved annotation with comments:',
-        {
-          annotationId,
-          commentCount: comments.length,
-        }
-      );
 
       return {
         ...annotation,
@@ -281,10 +174,6 @@ export class AnnotationService {
         comment_count: comments.length,
       };
     } catch (error) {
-      console.error(
-        '❌ [AnnotationService] Error getting annotation with comments:',
-        error
-      );
       throw error;
     }
   }
@@ -296,14 +185,6 @@ export class AnnotationService {
     videoId: string,
     projectId?: string
   ) {
-    console.log(
-      '🔍 [AnnotationService] Getting annotations with comment counts:',
-      {
-        videoId,
-        projectId,
-      }
-    );
-
     try {
       // Get annotations first
       const annotations = await this.getVideoAnnotations(videoId, projectId);
@@ -324,20 +205,8 @@ export class AnnotationService {
         comment_count: commentCounts[index] || 0,
       }));
 
-      console.log(
-        '✅ [AnnotationService] Retrieved annotations with comment counts:',
-        {
-          annotationCount: annotationsWithCounts.length,
-          totalComments: commentCounts.reduce((sum, count) => sum + count, 0),
-        }
-      );
-
       return annotationsWithCounts;
     } catch (error) {
-      console.error(
-        '❌ [AnnotationService] Error getting annotations with comment counts:',
-        error
-      );
       throw error;
     }
   }
@@ -346,11 +215,6 @@ export class AnnotationService {
    * Delete annotation and cascade to all associated comments
    */
   static async deleteAnnotationWithComments(annotationId: string) {
-    console.log(
-      '🔍 [AnnotationService] Deleting annotation with comments:',
-      annotationId
-    );
-
     try {
       // Delete all associated comments first
       await CommentService.deleteAnnotationComments(annotationId);
@@ -362,21 +226,9 @@ export class AnnotationService {
         .eq('id', annotationId);
 
       if (error) {
-        console.error(
-          '❌ [AnnotationService] Error deleting annotation:',
-          error
-        );
         throw error;
       }
-
-      console.log(
-        '✅ [AnnotationService] Successfully deleted annotation with comments'
-      );
     } catch (error) {
-      console.error(
-        '❌ [AnnotationService] Error deleting annotation with comments:',
-        error
-      );
       throw error;
     }
   }
@@ -388,21 +240,12 @@ export class AnnotationService {
     annotationId: string,
     userId?: string
   ): Promise<CommentPermissions> {
-    console.log('🔍 [AnnotationService] Checking comment permissions:', {
-      annotationId,
-      userId,
-    });
-
     try {
       return await CommentService.canUserCommentOnAnnotation(
         annotationId,
         userId
       );
     } catch (error) {
-      console.error(
-        '❌ [AnnotationService] Error checking comment permissions:',
-        error
-      );
       return {
         canComment: false,
         canModerate: false,
@@ -418,11 +261,6 @@ export class AnnotationService {
     annotationId: string,
     userId?: string
   ): Promise<boolean> {
-    console.log('🔍 [AnnotationService] Checking moderation permissions:', {
-      annotationId,
-      userId,
-    });
-
     try {
       // Get annotation to check if user is the owner
       const { data: annotation, error } = await supabase
@@ -432,26 +270,14 @@ export class AnnotationService {
         .single();
 
       if (error) {
-        console.error(
-          '❌ [AnnotationService] Error getting annotation for moderation check:',
-          error
-        );
         return false;
       }
 
       // User can moderate if they are the annotation owner
       const canModerate = userId && annotation.userId === userId;
 
-      console.log(
-        '✅ [AnnotationService] Moderation check result:',
-        canModerate
-      );
       return canModerate;
     } catch (error) {
-      console.error(
-        '❌ [AnnotationService] Error checking moderation permissions:',
-        error
-      );
       return false;
     }
   }
@@ -462,13 +288,6 @@ export class AnnotationService {
    * Get annotations for a comparison video (comparison-specific only)
    */
   static async getComparisonVideoAnnotations(comparisonVideoId: string) {
-    console.log(
-      '🔍 [AnnotationService] Getting comparison video annotations:',
-      {
-        comparisonVideoId,
-      }
-    );
-
     const { data, error } = await supabase
       .from('annotations')
       .select('*')
@@ -476,17 +295,9 @@ export class AnnotationService {
       .order('timestamp', { ascending: true });
 
     if (error) {
-      console.error(
-        '❌ [AnnotationService] Error getting comparison annotations:',
-        error
-      );
       throw error;
     }
 
-    console.log(
-      '✅ [AnnotationService] Retrieved comparison annotations:',
-      data?.length || 0
-    );
     return data || [];
   }
 
@@ -529,15 +340,6 @@ export class AnnotationService {
     synchronizedFrame?: number,
     projectId?: string
   ) {
-    console.log('🔍 [AnnotationService] Creating comparison annotation:', {
-      comparisonVideoId,
-      userId,
-      videoContext,
-      synchronizedFrame,
-      projectId,
-      annotationType: annotation.annotationType,
-    });
-
     // Create annotation data directly without transformation
     const annotationData: AnnotationInsert = {
       videoId: null, // videoId should be null for comparison annotations
@@ -562,11 +364,6 @@ export class AnnotationService {
       synchronizedFrame: synchronizedFrame || null,
     };
 
-    console.log(
-      '🔍 [AnnotationService] Transformed annotation data for DB:',
-      annotationData
-    );
-
     const { data, error } = await supabase
       .from('annotations')
       .insert(annotationData)
@@ -574,27 +371,9 @@ export class AnnotationService {
       .single();
 
     if (error) {
-      console.error(
-        '❌ [AnnotationService] Failed to create comparison annotation:',
-        error
-      );
-      console.error('❌ [AnnotationService] Error details:', {
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        code: error.code,
-      });
-      console.error(
-        '❌ [AnnotationService] Failed annotation data:',
-        annotationData
-      );
       throw error;
     }
 
-    console.log(
-      '✅ [AnnotationService] Successfully created comparison annotation:',
-      data
-    );
     return data;
   }
 
@@ -647,10 +426,6 @@ export class AnnotationService {
       if (error) throw error;
       return data;
     } catch (error) {
-      console.warn(
-        'Database function not available, falling back to individual queries'
-      );
-
       // Fallback: Get annotations individually
       const [comparisonAnnotations, videoAAnnotations, videoBAnnotations] =
         await Promise.all([
@@ -679,10 +454,6 @@ export class AnnotationService {
         .eq('videoId', comparisonVideoId);
 
       if (fetchError) {
-        console.error(
-          '❌ [AnnotationService] Error fetching comparison annotations:',
-          fetchError
-        );
         throw fetchError;
       }
 
@@ -691,13 +462,7 @@ export class AnnotationService {
         await Promise.all(
           annotations.map((annotation) =>
             CommentService.deleteAnnotationComments(annotation.id).catch(
-              (error) => {
-                console.warn(
-                  '⚠️ [AnnotationService] Failed to delete comments for annotation:',
-                  annotation.id,
-                  error
-                );
-              }
+              (error) => {}
             )
           )
         );
@@ -711,10 +476,6 @@ export class AnnotationService {
 
       if (error) throw error;
     } catch (error) {
-      console.error(
-        '❌ [AnnotationService] Error deleting comparison video annotations:',
-        error
-      );
       throw error;
     }
   }

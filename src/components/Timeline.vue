@@ -72,9 +72,6 @@ const progressPercentage = computed(() => {
     ? (props.currentTime / props.duration) * 100
     : 0;
   if (!props.duration) {
-    console.warn(
-      '🎯 [Timeline] Duration is 0 or undefined, progress will be 0'
-    );
     return 0;
   }
   return percentage;
@@ -95,33 +92,14 @@ const formatFrame = (frameNumber) => {
 
 // Debounced timeline interaction for smooth scrubbing
 const debouncedSeek = (time, immediate = false) => {
-  console.log('🎯 [Timeline] debouncedSeek called:', {
-    time,
-    immediate,
-    duration: props.duration,
-    playerMode: props.playerMode,
-    currentTime: props.currentTime,
-    hasTimeout: !!seekTimeout,
-  });
-
   if (seekTimeout) {
     clearTimeout(seekTimeout);
-    console.log('🎯 [Timeline] Cleared existing seek timeout');
   }
 
   if (immediate) {
-    console.log('🎯 [Timeline] Immediate seek to:', time);
     emit('seek-to-time', time);
   } else {
-    console.log(
-      '🎯 [Timeline] Debounced seek scheduled for:',
-      time,
-      'in',
-      SEEK_DEBOUNCE_MS,
-      'ms'
-    );
     seekTimeout = setTimeout(() => {
-      console.log('🎯 [Timeline] Executing debounced seek to:', time);
       emit('seek-to-time', time);
     }, SEEK_DEBOUNCE_MS);
   }
@@ -129,21 +107,7 @@ const debouncedSeek = (time, immediate = false) => {
 
 // Simplified timeline interaction - use time-based seeking for consistency
 const handleTimelineClick = (event, immediate = false) => {
-  console.log('🎯 [Timeline] handleTimelineClick called:', {
-    immediate,
-    hasTimelineRef: !!timelineRef.value,
-    duration: props.duration,
-    playerMode: props.playerMode,
-  });
-
   if (!timelineRef.value || !props.duration) {
-    console.warn(
-      '🎯 [Timeline] Timeline click ignored: missing timelineRef or duration',
-      {
-        timelineRef: !!timelineRef.value,
-        duration: props.duration,
-      }
-    );
     return;
   }
 
@@ -152,56 +116,27 @@ const handleTimelineClick = (event, immediate = false) => {
   const percentage = Math.max(0, Math.min(clickX / rect.width, 1));
   const newTime = percentage * props.duration;
 
-  console.log('🎯 [Timeline] Timeline click calculation:', {
-    clickX,
-    rectWidth: rect.width,
-    percentage,
-    newTime,
-    duration: props.duration,
-    immediate,
-  });
-
   // Use debounced seeking for smooth scrubbing, immediate for clicks
   debouncedSeek(newTime, immediate);
 };
 
 const handleTimelineMouseDown = (event) => {
-  console.log('🎯 [Timeline] handleTimelineMouseDown called:', {
-    duration: props.duration,
-    playerMode: props.playerMode,
-    isDragging: isDragging.value,
-    eventType: event.type,
-  });
-
   if (!props.duration) {
-    console.warn('🎯 [Timeline] Timeline mousedown ignored: missing duration', {
-      duration: props.duration,
-      playerMode: props.playerMode,
-    });
     return;
   }
 
   isDragging.value = true;
-  console.log('🎯 [Timeline] Starting drag operation, calling immediate seek');
+
   handleTimelineClick(event, true); // Immediate seek on initial click
 
   const handleMouseMove = (e) => {
     if (isDragging.value) {
-      console.log(
-        '🎯 [Timeline] Mouse move during drag, calling debounced seek'
-      );
       handleTimelineClick(e, false); // Debounced seek during drag
     }
   };
 
   const handleMouseUp = (e) => {
-    console.log('🎯 [Timeline] Mouse up, ending drag operation:', {
-      isDragging: isDragging.value,
-      hasPendingTimeout: !!seekTimeout,
-    });
-
     if (isDragging.value) {
-      console.log('🎯 [Timeline] Final seek on mouse up');
       handleTimelineClick(e, true); // Immediate seek on release
     }
     isDragging.value = false;
@@ -210,13 +145,11 @@ const handleTimelineMouseDown = (event) => {
 
     // Clear any pending debounced seeks
     if (seekTimeout) {
-      console.log('🎯 [Timeline] Clearing pending seek timeout on mouse up');
       clearTimeout(seekTimeout);
       seekTimeout = null;
     }
   };
 
-  console.log('🎯 [Timeline] Adding mouse event listeners');
   document.addEventListener('mousemove', handleMouseMove);
   document.addEventListener('mouseup', handleMouseUp);
 };

@@ -87,7 +87,6 @@ export function useVideoPlayer() {
     } catch (err) {
       const errorMsg = `Failed to play video: ${err.message}`;
       error.value = errorMsg;
-      console.error('Play error:', err);
     }
   };
 
@@ -102,7 +101,6 @@ export function useVideoPlayer() {
     } catch (err) {
       const errorMsg = `Failed to pause video: ${err.message}`;
       error.value = errorMsg;
-      console.error('Pause error:', err);
     }
   };
 
@@ -139,30 +137,15 @@ export function useVideoPlayer() {
       // Ensure time is within valid range
       const clampedTime = Math.max(0, Math.min(time, videoDuration));
 
-      // Add diagnostic logging for frame navigation debugging
-      const beforeSeekTime = playerRef.value.currentTime;
-      const beforeSeekFrame = timeToFrame(beforeSeekTime);
-
       playerRef.value.currentTime = clampedTime;
 
       // Immediately update our reactive values to ensure Timeline updates
       currentTime.value = clampedTime;
       updateFrameFromTime();
 
-      // Log the seek operation for debugging
-      console.log('seekTo operation:', {
-        requestedTime: time,
-        clampedTime,
-        beforeSeekTime,
-        beforeSeekFrame,
-        afterSeekFrame: timeToFrame(clampedTime),
-        actualVideoCurrentTime: playerRef.value.currentTime,
-      });
-
       // currentTime and frame will also be updated by timeupdate event
     } catch (err) {
       error.value = `Failed to seek: ${err.message}`;
-      console.error('Seek error:', err);
     }
   };
 
@@ -181,7 +164,6 @@ export function useVideoPlayer() {
       }
     } catch (err) {
       error.value = `Failed to set volume: ${err.message}`;
-      console.error('Volume error:', err);
     }
   };
 
@@ -198,7 +180,6 @@ export function useVideoPlayer() {
       }
     } catch (err) {
       error.value = `Failed to toggle mute: ${err.message}`;
-      console.error('Mute error:', err);
     }
   };
 
@@ -213,7 +194,6 @@ export function useVideoPlayer() {
       playbackSpeed.value = clampedSpeed;
     } catch (err) {
       error.value = `Failed to set playback speed: ${err.message}`;
-      console.error('Playback speed error:', err);
     }
   };
 
@@ -252,14 +232,6 @@ export function useVideoPlayer() {
     const nextFrame = Math.min(currentFrame.value + 1, totalFrames.value - 1);
     const nextTime = frameToTime(nextFrame);
 
-    // Add diagnostic logging
-    console.log('seekToNextFrame:', {
-      currentFrame: currentFrame.value,
-      nextFrame,
-      nextTime,
-      nextTimeWithOffset: nextTime + 0.00001,
-    });
-
     // Add small offset to prevent floating-point precision issues
     const offsetTime = nextTime + 0.00001;
     seekTo(offsetTime);
@@ -278,14 +250,6 @@ export function useVideoPlayer() {
 
     const previousFrame = Math.max(currentFrame.value - 1, 0);
     const previousTime = frameToTime(previousFrame);
-
-    // Add diagnostic logging
-    console.log('seekToPreviousFrame:', {
-      currentFrame: currentFrame.value,
-      previousFrame,
-      previousTime,
-      previousTimeWithOffset: previousTime + 0.00001,
-    });
 
     // Add small offset to prevent floating-point precision issues
     const offsetTime = previousTime + 0.00001;
@@ -316,12 +280,10 @@ export function useVideoPlayer() {
         break;
       case 'ArrowLeft':
         event.preventDefault();
-        console.log('ArrowLeft pressed, calling seekToPreviousFrame()');
         seekToPreviousFrame();
         break;
       case 'ArrowRight':
         event.preventDefault();
-        console.log('ArrowRight pressed, calling seekToNextFrame()');
         seekToNextFrame();
         break;
       case 'ArrowUp':
@@ -353,12 +315,10 @@ export function useVideoPlayer() {
 
   // Event listener management functions
   const startListening = () => {
-    console.log('Starting keyboard event listener');
     document.addEventListener('keydown', handleKeydown);
   };
 
   const stopListening = () => {
-    console.log('Stopping keyboard event listener');
     document.removeEventListener('keydown', handleKeydown);
   };
 

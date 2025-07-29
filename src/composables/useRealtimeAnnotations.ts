@@ -23,7 +23,6 @@ export function useRealtimeAnnotations(videoId, annotations) {
           filter: `videoId=eq.${toValue(videoId)}`,
         },
         (payload) => {
-          console.log('New annotation:', payload.new);
           const newAnnotation = payload.new as Annotation;
 
           // Add to annotations if not already present
@@ -42,7 +41,6 @@ export function useRealtimeAnnotations(videoId, annotations) {
           filter: `videoId=eq.${toValue(videoId)}`,
         },
         (payload) => {
-          console.log('Updated annotation:', payload.new);
           const updatedAnnotation = payload.new as Annotation;
 
           const index = annotations.value.findIndex(
@@ -62,14 +60,12 @@ export function useRealtimeAnnotations(videoId, annotations) {
           filter: `videoId=eq.${toValue(videoId)}`,
         },
         (payload) => {
-          console.log('Deleted annotation:', payload.old);
           annotations.value = annotations.value.filter(
             (a) => a.id !== payload.old.id
           );
         }
       )
       .subscribe((status) => {
-        console.log('Subscription status:', status);
         isConnected.value = status === 'SUBSCRIBED';
       });
   };
@@ -89,14 +85,9 @@ export function useRealtimeAnnotations(videoId, annotations) {
       .on('presence', { event: 'sync' }, () => {
         const state = presenceChannel.presenceState();
         activeUsers.value = new Set(Object.keys(state));
-        console.log('Active users:', Array.from(activeUsers.value));
       })
-      .on('presence', { event: 'join' }, ({ key, newPresences }) => {
-        console.log('User joined:', key, newPresences);
-      })
-      .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
-        console.log('User left:', key, leftPresences);
-      })
+      .on('presence', { event: 'join' }, ({ key, newPresences }) => {})
+      .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {})
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
           await presenceChannel.track({

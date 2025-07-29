@@ -170,7 +170,7 @@
           <div class="video-wrapper">
             <!-- Loading indicator for Video A -->
             <div
-              v-if="!videoAState.isLoaded && videoAUrl"
+              v-if="!videoAState?.isLoaded && videoAUrl"
               class="loading-overlay"
             >
               <div class="loading-spinner"></div>
@@ -221,7 +221,7 @@
           <div class="video-wrapper">
             <!-- Loading indicator for Video B -->
             <div
-              v-if="!videoBState.isLoaded && videoBUrl"
+              v-if="!videoBState?.isLoaded && videoBUrl"
               class="loading-overlay"
             >
               <div class="loading-spinner"></div>
@@ -503,7 +503,9 @@ watch(
   videoAElement,
   (video) => {
     if (video && props.mode === 'dual') {
-      setupVideoEventListeners(video, props.videoAState, 'A');
+      if (props.videoAState) {
+        setupVideoEventListeners(video, props.videoAState, 'A');
+      }
       if (props.dualVideoPlayer) {
         props.dualVideoPlayer.videoARef.value = video;
       }
@@ -516,7 +518,9 @@ watch(
   videoBElement,
   (video) => {
     if (video && props.mode === 'dual') {
-      setupVideoEventListeners(video, props.videoBState, 'B');
+      if (props.videoBState) {
+        setupVideoEventListeners(video, props.videoBState, 'B');
+      }
       if (props.dualVideoPlayer) {
         props.dualVideoPlayer.videoBRef.value = video;
       }
@@ -551,6 +555,40 @@ watch(
     }
   },
   { flush: 'post' }
+);
+
+// Watch for dual video URL changes
+watch(
+  () => [props.videoAUrl, props.videoBUrl],
+  ([newVideoAUrl, newVideoBUrl]) => {
+    console.log('🔍 [UnifiedVideoPlayer] Video URLs changed:', {
+      mode: props.mode,
+      videoAUrl: newVideoAUrl,
+      videoBUrl: newVideoBUrl,
+      videoAElement: !!videoAElement.value,
+      videoBElement: !!videoBElement.value,
+    });
+
+    if (props.mode === 'dual') {
+      if (newVideoAUrl && videoAElement.value) {
+        console.log(
+          '🔍 [UnifiedVideoPlayer] Setting Video A src:',
+          newVideoAUrl
+        );
+        videoAElement.value.src = newVideoAUrl;
+        videoAElement.value.load();
+      }
+      if (newVideoBUrl && videoBElement.value) {
+        console.log(
+          '🔍 [UnifiedVideoPlayer] Setting Video B src:',
+          newVideoBUrl
+        );
+        videoBElement.value.src = newVideoBUrl;
+        videoBElement.value.load();
+      }
+    }
+  },
+  { flush: 'post', immediate: true }
 );
 
 // Volume control
@@ -609,7 +647,7 @@ const handleDrawingCreated = (drawing: DrawingData, event?: Event) => {
       `🎨 [UnifiedVideoPlayer] Drawing created on video ${videoContext}:`,
       drawing
     );
-    emit('drawing-created', drawing, videoContext);
+    emit('drawing-created', drawing);
   } else {
     emit('drawing-created', drawing);
   }
@@ -631,7 +669,7 @@ const handleDrawingUpdated = (drawing: DrawingData, event?: Event) => {
       `🎨 [UnifiedVideoPlayer] Drawing updated on video ${videoContext}:`,
       drawing
     );
-    emit('drawing-updated', drawing, videoContext);
+    emit('drawing-updated', drawing);
   } else {
     emit('drawing-updated', drawing);
   }
@@ -653,7 +691,7 @@ const handleDrawingDeleted = (drawingId: string, event?: Event) => {
       `🎨 [UnifiedVideoPlayer] Drawing deleted on video ${videoContext}:`,
       drawingId
     );
-    emit('drawing-deleted', drawingId, videoContext);
+    emit('drawing-deleted', drawingId);
   } else {
     emit('drawing-deleted', drawingId);
   }

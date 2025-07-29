@@ -258,20 +258,11 @@ const generateShareLink = async () => {
     error.value = null;
 
     try {
-      console.log(
-        '🔗 [ShareModal] Generating share link for comparison:',
-        props.comparisonId
-      );
       const url = await ShareService.createComparisonShareableLink(
         props.comparisonId
       );
       shareUrl.value = url;
-      console.log('✅ [ShareModal] Comparison share link generated:', url);
     } catch (err) {
-      console.error(
-        '❌ [ShareModal] Error generating comparison share link:',
-        err
-      );
       error.value =
         'Failed to generate comparison share link. Please try again.';
     } finally {
@@ -287,15 +278,9 @@ const generateShareLink = async () => {
     error.value = null;
 
     try {
-      console.log(
-        '🔗 [ShareModal] Generating share link for video:',
-        props.videoId
-      );
       const url = await ShareService.createShareableLink(props.videoId);
       shareUrl.value = url;
-      console.log('✅ [ShareModal] Share link generated:', url);
     } catch (err) {
-      console.error('❌ [ShareModal] Error generating share link:', err);
       error.value = 'Failed to generate share link. Please try again.';
     } finally {
       isGenerating.value = false;
@@ -313,7 +298,6 @@ const copyShareUrl = async () => {
       copied.value = false;
     }, 2000);
   } catch (err) {
-    console.error('❌ [ShareModal] Error copying to clipboard:', err);
     // Fallback: select the text for manual copying
     if (shareUrlInput.value) {
       shareUrlInput.value.select();

@@ -30,16 +30,8 @@ export function useGlobalComments() {
     currentUserId?: string
   ) => {
     if (isGlobalSubscriptionActive.value) {
-      console.log('🔄 [GlobalComments] Global subscription already active');
       return;
     }
-
-    console.log(
-      '🔄 [GlobalComments] Setting up global comment subscription for video:',
-      videoId,
-      'user:',
-      currentUserId || 'anonymous'
-    );
 
     const subscription = supabase
       .channel(`video_comments:${videoId}`)
@@ -51,7 +43,6 @@ export function useGlobalComments() {
           table: 'annotation_comments',
         },
         (payload) => {
-          console.log('📥 [GlobalComments] New comment detected:', payload.new);
           handleGlobalCommentInsert(payload.new, currentUserId, videoId);
         }
       )
@@ -63,10 +54,6 @@ export function useGlobalComments() {
           table: 'annotation_comments',
         },
         (payload) => {
-          console.log(
-            '📝 [GlobalComments] Comment update detected:',
-            payload.new
-          );
           handleGlobalCommentUpdate(
             payload.new,
             payload.old,
@@ -83,15 +70,10 @@ export function useGlobalComments() {
           table: 'annotation_comments',
         },
         (payload) => {
-          console.log(
-            '🗑️ [GlobalComments] Comment delete detected:',
-            payload.old
-          );
           handleGlobalCommentDelete(payload.old, currentUserId, videoId);
         }
       )
       .subscribe((status) => {
-        console.log('🔌 [GlobalComments] Global subscription status:', status);
         isGlobalSubscriptionActive.value = status === 'SUBSCRIBED';
       });
 
@@ -114,17 +96,10 @@ export function useGlobalComments() {
       if (videoId) {
         // We'll need to verify the annotation belongs to this video
         // For now, we'll process all comments and let the individual annotation handlers filter
-        console.log(
-          '📥 [GlobalComments] Processing comment for video:',
-          videoId,
-          'annotation:',
-          comment.annotationId
-        );
       }
 
       // Don't show indicator for comments from the current user
       if (currentUserId && comment.userId === currentUserId) {
-        console.log('🔇 [GlobalComments] Skipping indicator for own comment');
         return;
       }
 
@@ -149,17 +124,7 @@ export function useGlobalComments() {
         annotationId: comment.annotationId,
       };
       eventHandlers.onNewComment.forEach((handler) => handler(event));
-
-      console.log(
-        '✅ [GlobalComments] New comment indicator added for annotation:',
-        comment.annotationId
-      );
-    } catch (error) {
-      console.error(
-        '❌ [GlobalComments] Error handling comment insert:',
-        error
-      );
-    }
+    } catch (error) {}
   };
 
   /**
@@ -181,12 +146,7 @@ export function useGlobalComments() {
         annotationId: comment.annotationId,
       };
       eventHandlers.onCommentUpdate.forEach((handler) => handler(event));
-    } catch (error) {
-      console.error(
-        '❌ [GlobalComments] Error handling comment update:',
-        error
-      );
-    }
+    } catch (error) {}
   };
 
   /**
@@ -222,22 +182,13 @@ export function useGlobalComments() {
         annotationId: comment.annotationId,
       };
       eventHandlers.onCommentDelete.forEach((handler) => handler(event));
-    } catch (error) {
-      console.error(
-        '❌ [GlobalComments] Error handling comment delete:',
-        error
-      );
-    }
+    } catch (error) {}
   };
 
   /**
    * Mark comments as viewed for an annotation
    */
   const markCommentsAsViewed = (annotationId: string) => {
-    console.log(
-      '👁️ [GlobalComments] Marking comments as viewed for annotation:',
-      annotationId
-    );
     newCommentsByAnnotation.value.delete(annotationId);
   };
 
@@ -284,8 +235,6 @@ export function useGlobalComments() {
    * Cleanup global subscriptions
    */
   const cleanup = () => {
-    console.log('🧹 [GlobalComments] Cleaning up global subscriptions');
-
     globalCommentSubscriptions.value.forEach((subscription) => {
       supabase.removeChannel(subscription);
     });

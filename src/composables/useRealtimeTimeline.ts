@@ -34,7 +34,6 @@ export function useRealtimeTimeline(videoId, currentTime, isPlaying) {
 
         if (toUserId === toValue(user).id) {
           // Handle follow request
-          console.log(`User ${fromUserId} wants to follow your timeline`);
         }
       })
       .subscribe();
@@ -84,15 +83,11 @@ export function useRealtimeTimeline(videoId, currentTime, isPlaying) {
   };
 
   // Watch for timeline changes and broadcast if enabled
-  watch(
-    [currentTime, isPlaying],
-    () => {
-      if (isBroadcasting.value) {
-        broadcastTimelineUpdate();
-      }
-    },
-    { throttle: 1000 }
-  ); // Throttle to 1 update per second
+  watch([currentTime, isPlaying], () => {
+    if (isBroadcasting.value) {
+      broadcastTimelineUpdate();
+    }
+  });
 
   // Follow another user's timeline
   watch(isFollowingUser, (userId) => {

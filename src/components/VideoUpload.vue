@@ -228,11 +228,9 @@ const startUpload = async () => {
       }
     );
 
-    console.log('✅ [VideoUpload] Upload successful:', videoRecord);
     emit('upload-success', videoRecord);
     resetUpload();
   } catch (error) {
-    console.error('❌ [VideoUpload] Upload failed:', error);
     uploadError.value = error.message || 'Upload failed. Please try again.';
     emit('upload-error', error);
   } finally {

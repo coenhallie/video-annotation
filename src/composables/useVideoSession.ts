@@ -28,18 +28,10 @@ export function useVideoSession(videoId) {
     const currentUser = toValue(user);
 
     if (!currentVideoId) {
-      console.warn(
-        '🎬 [useVideoSession] Cannot start session: missing video ID'
-      );
       return;
     }
 
     try {
-      console.log('🎬 [useVideoSession] Starting session for:', {
-        videoId: currentVideoId,
-        userId: currentUser?.id || 'anonymous',
-      });
-
       // Check if this is a shared video and initialize comment permissions
       await initializeCommentPermissions(currentVideoId);
 
@@ -52,24 +44,11 @@ export function useVideoSession(videoId) {
         });
 
         if (error) {
-          console.error(
-            '🎬 [useVideoSession] Failed to start session - RPC error:',
-            error
-          );
           // Continue without session tracking if RPC fails
         } else {
-          console.log('🎬 [useVideoSession] Session started successfully');
         }
       } else if (!currentUser) {
-        console.log(
-          '🎬 [useVideoSession] Starting anonymous session for shared video:',
-          currentVideoId
-        );
       } else {
-        console.log(
-          '🎬 [useVideoSession] Skipping RPC for non-UUID video ID:',
-          currentVideoId
-        );
       }
 
       isSessionActive.value = true;
@@ -79,7 +58,6 @@ export function useVideoSession(videoId) {
       setupActivityTracking();
       setupHeartbeat();
     } catch (error) {
-      console.error('🎬 [useVideoSession] Failed to start session:', error);
       // Continue without session tracking if it fails
       isSessionActive.value = true;
       lastActivity.value = new Date();
@@ -102,9 +80,7 @@ export function useVideoSession(videoId) {
 
       isSessionActive.value = false;
       cleanup();
-    } catch (error) {
-      console.error('Failed to end session:', error);
-    }
+    } catch (error) {}
   };
 
   const isValidUUID = (str: string) => {
@@ -120,43 +96,28 @@ export function useVideoSession(videoId) {
     const currentUser = toValue(user);
 
     if (!currentVideoId || !currentUser?.id) {
-      console.warn(
-        '🎬 [useVideoSession] Cannot update activity: missing video ID or user ID'
-      );
       return;
     }
 
     // Skip session activity for non-UUID video IDs (like upload IDs)
     if (!isValidUUID(currentVideoId)) {
-      console.log(
-        '🎬 [useVideoSession] Skipping session activity for non-UUID video ID:',
-        currentVideoId
-      );
       lastActivity.value = new Date();
       return;
     }
 
     try {
-      console.log('🎬 [useVideoSession] Updating session activity for:', {
-        videoId: currentVideoId,
-        userId: currentUser.id,
-      });
-
       const { data, error } = await supabase.rpc('update_session_activity', {
         p_video_id: currentVideoId,
         p_user_id: currentUser.id,
       });
 
       if (error) {
-        console.error('🎬 [useVideoSession] RPC error:', error);
         // Don't throw error to prevent disrupting the app
         return;
       }
 
       lastActivity.value = new Date();
-      console.log('🎬 [useVideoSession] Activity updated successfully');
     } catch (error) {
-      console.error('🎬 [useVideoSession] Failed to update activity:', error);
       // Don't throw error to prevent disrupting the app
     }
   };
@@ -219,11 +180,6 @@ export function useVideoSession(videoId) {
    */
   const initializeCommentPermissions = async (currentVideoId: string) => {
     try {
-      console.log(
-        '🔍 [useVideoSession] Initializing comment permissions for:',
-        currentVideoId
-      );
-
       // Check if this is a shared video by trying to validate shared access
       const isShared = await ShareService.validateSharedVideoAccess(
         currentVideoId
@@ -238,11 +194,6 @@ export function useVideoSession(videoId) {
             anonymousSession.value?.sessionId
           );
         commentPermissions.value = permissionContext;
-
-        console.log(
-          '✅ [useVideoSession] Comment permissions initialized for shared video:',
-          permissionContext
-        );
       } else {
         // For non-shared videos, set default permissions based on authentication
         const currentUser = toValue(user);
@@ -250,16 +201,8 @@ export function useVideoSession(videoId) {
           canComment: !!currentUser,
           isAnonymous: false,
         };
-
-        console.log(
-          '✅ [useVideoSession] Comment permissions initialized for regular video'
-        );
       }
     } catch (error) {
-      console.error(
-        '❌ [useVideoSession] Error initializing comment permissions:',
-        error
-      );
       // Set safe defaults
       commentPermissions.value = {
         canComment: false,
@@ -279,11 +222,6 @@ export function useVideoSession(videoId) {
         throw new Error('No video ID available');
       }
 
-      console.log('🔍 [useVideoSession] Creating anonymous session:', {
-        displayName,
-        videoId: currentVideoId,
-      });
-
       const session = await ShareService.createAnonymousSessionForSharedVideo(
         currentVideoId,
         displayName
@@ -294,15 +232,8 @@ export function useVideoSession(videoId) {
       // Update comment permissions with the new session
       await initializeCommentPermissions(currentVideoId);
 
-      console.log(
-        '✅ [useVideoSession] Anonymous session created successfully'
-      );
       return session;
     } catch (error) {
-      console.error(
-        '❌ [useVideoSession] Error creating anonymous session:',
-        error
-      );
       throw error;
     }
   };

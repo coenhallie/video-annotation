@@ -24,7 +24,6 @@ const handleAuth = async () => {
     }
   } catch (error) {
     // Error notifications are handled in useAuth
-    console.error('Authentication error:', error);
   }
 };
 </script>

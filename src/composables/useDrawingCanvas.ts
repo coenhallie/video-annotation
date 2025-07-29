@@ -106,53 +106,12 @@ export function useDrawingCanvas() {
     const frameDrawings = state.value.drawings.get(frame) || [];
     frameDrawings.push(drawing);
     state.value.drawings.set(frame, frameDrawings);
-
-    // CANVAS STATE TRACKING: Log when drawings are added
-    console.log('🎨 [CANVAS-STATE] Drawing added to canvas:', {
-      frame: frame,
-      pathCount: drawing.paths?.length || 0,
-      totalDrawingsOnFrame: frameDrawings.length,
-      timestamp: Date.now(),
-    });
-  };
-
-  // Update drawing
-  const updateDrawing = (
-    frame: number,
-    drawingIndex: number,
-    drawing: DrawingData
-  ) => {
-    const frameDrawings = state.value.drawings.get(frame);
-    if (frameDrawings && frameDrawings[drawingIndex]) {
-      frameDrawings[drawingIndex] = drawing;
-      state.value.drawings.set(frame, frameDrawings);
-    }
-  };
-
-  // Remove drawing
-  const removeDrawing = (frame: number, drawingIndex: number) => {
-    const frameDrawings = state.value.drawings.get(frame);
-    if (frameDrawings && frameDrawings[drawingIndex]) {
-      frameDrawings.splice(drawingIndex, 1);
-      state.value.drawings.set(frame, frameDrawings);
-    }
   };
 
   // Clear drawings for current frame
   const clearCurrentFrameDrawings = () => {
     const frame = currentFrame.value;
-    const hadDrawings = state.value.drawings.has(frame);
-    const drawingCount = state.value.drawings.get(frame)?.length || 0;
-
     state.value.drawings.delete(frame);
-
-    // CANVAS STATE TRACKING: Log when drawings are cleared
-    console.log('🎨 [CANVAS-STATE] Drawings cleared from canvas:', {
-      frame: frame,
-      hadDrawings: hadDrawings,
-      clearedDrawingCount: drawingCount,
-      timestamp: Date.now(),
-    });
   };
 
   // Clear all drawings
@@ -217,68 +176,6 @@ export function useDrawingCanvas() {
     }, 100); // Reduced delay to prevent race conditions with video transitions
   };
 
-  // Serialize drawings for storage
-  const serializeDrawings = (): Record<number, DrawingData[]> => {
-    const serialized: Record<number, DrawingData[]> = {};
-    state.value.drawings.forEach((drawings, frame) => {
-      serialized[frame] = drawings;
-    });
-    return serialized;
-  };
-
-  // Deserialize drawings from storage
-  const deserializeDrawings = (serialized: Record<number, DrawingData[]>) => {
-    state.value.drawings.clear();
-    Object.entries(serialized).forEach(([frame, drawings]) => {
-      state.value.drawings.set(parseInt(frame), drawings);
-    });
-  };
-
-  // Normalize coordinates from canvas to video dimensions
-  const normalizeCoordinates = (
-    x: number,
-    y: number
-  ): { x: number; y: number } => {
-    return {
-      x: x / state.value.canvasSize.width,
-      y: y / state.value.canvasSize.height,
-    };
-  };
-
-  // Denormalize coordinates from video to canvas dimensions
-  const denormalizeCoordinates = (
-    x: number,
-    y: number
-  ): { x: number; y: number } => {
-    return {
-      x: x * state.value.canvasSize.width,
-      y: y * state.value.canvasSize.height,
-    };
-  };
-
-  // Scale drawing data to different canvas size
-  const scaleDrawingData = (
-    drawing: DrawingData,
-    newCanvasSize: { width: number; height: number }
-  ): DrawingData => {
-    const scaleX = newCanvasSize.width / drawing.canvasWidth;
-    const scaleY = newCanvasSize.height / drawing.canvasHeight;
-
-    return {
-      ...drawing,
-      canvasWidth: newCanvasSize.width,
-      canvasHeight: newCanvasSize.height,
-      paths: drawing.paths.map((path) => ({
-        ...path,
-        points: path.points.map((point) => ({
-          x: point.x, // Keep normalized coordinates
-          y: point.y,
-        })),
-        strokeWidth: path.strokeWidth * Math.min(scaleX, scaleY), // Scale stroke width proportionally
-      })),
-    };
-  };
-
   // Get total number of drawings
   const getTotalDrawingsCount = computed(() => {
     let count = 0;
@@ -319,37 +216,13 @@ export function useDrawingCanvas() {
       state.value.activeDrawing &&
       state.value.activeDrawing.paths.length > 0
     ) {
-      console.log(
-        '🎨 [DEBUG] Found active drawing with paths:',
-        state.value.activeDrawing.paths.length
-      );
       allPaths.push(...state.value.activeDrawing.paths);
     }
 
-    console.log('🎨 [DEBUG] getCurrentFrameDrawing detailed check:', {
-      frame: currentFrame.value,
-      committedDrawings: frameDrawings.length,
-      activeDrawing: !!state.value.activeDrawing,
-      activeDrawingPaths: state.value.activeDrawing?.paths?.length || 0,
-      totalPaths: allPaths.length,
-      drawingsMapSize: state.value.drawings.size,
-      drawingsMapKeys: Array.from(state.value.drawings.keys()),
-      isDrawingMode: state.value.isDrawingMode,
-      canvasSize: state.value.canvasSize,
-    });
-
     if (allPaths.length === 0) {
-      console.log(
-        '🎨 [DEBUG] No drawings found for frame:',
-        currentFrame.value
-      );
       return null;
     }
 
-    console.log(
-      '🎨 [DEBUG] Returning drawing data with paths:',
-      allPaths.length
-    );
     return {
       paths: allPaths,
       canvasWidth: state.value.canvasSize.width,
@@ -370,17 +243,11 @@ export function useDrawingCanvas() {
 
   // Complete drawing session - compatibility method for AnnotationPanel
   const completeDrawingSession = () => {
-    console.log('🎨 [useDrawingCanvas] completeDrawingSession called');
-
     // If there's an active drawing, commit it to the drawings Map
     if (
       state.value.activeDrawing &&
       state.value.activeDrawing.paths.length > 0
     ) {
-      console.log(
-        '🎨 [DEBUG] Committing active drawing to frame:',
-        currentFrame.value
-      );
       addDrawing(state.value.activeDrawing);
       state.value.activeDrawing = null;
     }
@@ -409,8 +276,6 @@ export function useDrawingCanvas() {
 
     // Drawing management
     addDrawing,
-    updateDrawing,
-    removeDrawing,
     clearCurrentFrameDrawings,
     clearAllDrawings,
     getDrawingsForFrame,
@@ -419,13 +284,6 @@ export function useDrawingCanvas() {
     // Data conversion
     convertDrawingToAnnotation,
     loadDrawingsFromAnnotations,
-    serializeDrawings,
-    deserializeDrawings,
-
-    // Coordinate utilities
-    normalizeCoordinates,
-    denormalizeCoordinates,
-    scaleDrawingData,
 
     // Computed properties
     getTotalDrawingsCount,

@@ -112,7 +112,6 @@ export class VideoUploadService {
         });
 
       if (error) {
-        console.error('Upload error:', error);
         throw new Error(`Upload failed: ${error.message}`);
       }
 
@@ -126,7 +125,6 @@ export class VideoUploadService {
         url: urlData.publicUrl,
       };
     } catch (error) {
-      console.error('Video upload failed:', error);
       throw error;
     }
   }
@@ -163,7 +161,6 @@ export class VideoUploadService {
       .single();
 
     if (error) {
-      console.error('Database insert error:', error);
       // Clean up uploaded file if database insert fails
       await supabase.storage.from('videos').remove([filePath]);
       throw new Error(`Failed to save video record: ${error.message}`);
@@ -198,7 +195,6 @@ export class VideoUploadService {
 
       return videoRecord;
     } catch (error) {
-      console.error('Video upload failed:', error);
       throw error;
     }
   }
@@ -228,15 +224,10 @@ export class VideoUploadService {
           .remove([filePath]);
 
         if (storageError) {
-          console.warn(
-            'Failed to delete video file from storage:',
-            storageError
-          );
           // Don't throw error for storage deletion failure
         }
       }
     } catch (error) {
-      console.error('Failed to delete uploaded video:', error);
       throw error;
     }
   }
