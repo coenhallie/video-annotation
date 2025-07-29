@@ -166,15 +166,35 @@ const comparisonWorkflow = useComparisonVideoWorkflow();
 watch(
   annotations,
   (newAnnotations) => {
+    console.log('👀 [App] Annotations watcher triggered with:', newAnnotations);
+    console.log('👀 [App] Annotations count:', newAnnotations?.length || 0);
+
     if (newAnnotations) {
       // Log each annotation's type for debugging
-      newAnnotations.forEach((ann, index) => {});
+      newAnnotations.forEach((ann, index) => {
+        console.log(`👀 [App] Annotation ${index}:`, {
+          id: ann.id,
+          type: ann.annotationType,
+          hasDrawingData: !!ann.drawingData,
+          frame: ann.frame,
+        });
+      });
 
       const drawingAnnotations = newAnnotations.filter(
         (ann) => ann.annotationType === 'drawing'
       );
 
+      console.log(
+        '👀 [App] Drawing annotations found:',
+        drawingAnnotations.length
+      );
+      console.log(
+        '👀 [App] About to call drawingCanvas.loadDrawingsFromAnnotations'
+      );
+
       drawingCanvas.loadDrawingsFromAnnotations(newAnnotations);
+    } else {
+      console.log('👀 [App] No annotations to process');
     }
   },
   { immediate: true, deep: true }
@@ -651,6 +671,11 @@ const handleSharedVideoSelected = async (data) => {
   const loadedAnnotations = data.annotations || [];
   const canCommentOnVideo = data.canComment || false;
 
+  console.log('🎬 [App] handleSharedVideoSelected called with data:', data);
+  console.log('📹 [App] Video object:', video);
+  console.log('📝 [App] Loaded annotations:', loadedAnnotations);
+  console.log('📝 [App] Annotations count:', loadedAnnotations.length);
+
   try {
     // Set shared video state
     isSharedVideo.value = true;
@@ -666,12 +691,24 @@ const handleSharedVideoSelected = async (data) => {
     duration.value = video.duration;
     totalFrames.value = video.totalFrames;
 
+    console.log(
+      '📝 [App] About to call loadExistingAnnotations with:',
+      loadedAnnotations
+    );
+
     // Load annotations directly without authentication
     loadExistingAnnotations(loadedAnnotations);
 
+    console.log(
+      '📝 [App] After loadExistingAnnotations, annotations.value:',
+      annotations.value
+    );
+
     // Start session for shared video (this will initialize comment permissions)
     await startSession();
-  } catch (error) {}
+  } catch (error) {
+    console.error('❌ [App] Error in handleSharedVideoSelected:', error);
+  }
 };
 
 // Handle dual video selection
@@ -1132,17 +1169,27 @@ const handleCreateAnonymousSession = async (displayName) => {
 
 // Check for shared video or comparison on load
 const checkForSharedVideo = async () => {
+  console.log('🔗 [App] checkForSharedVideo called');
+  console.log('🔗 [App] Current URL:', window.location.href);
+
   const shareData = ShareService.parseShareUrl();
+  console.log('🔗 [App] Parsed share data:', shareData);
 
   if (!shareData.type || !shareData.id) {
+    console.log('🔗 [App] No share data found, returning');
     return;
   }
 
   try {
     if (shareData.type === 'video') {
+      console.log('🔗 [App] Loading shared video:', shareData.id);
+
       // Use the enhanced method that includes comment permissions
       const sharedData =
         await ShareService.getSharedVideoWithCommentPermissions(shareData.id);
+
+      console.log('🔗 [App] Got shared data from service:', sharedData);
+
       await handleSharedVideoSelected(sharedData);
 
       // Clear the share parameter from URL without reloading
@@ -1150,6 +1197,7 @@ const checkForSharedVideo = async () => {
       url.searchParams.delete('share');
       window.history.replaceState({}, document.title, url.toString());
     } else if (shareData.type === 'comparison') {
+      console.log('🔗 [App] Loading shared comparison:', shareData.id);
       await initializeSharedComparison(shareData.id);
 
       // Clear the shareComparison parameter from URL without reloading
@@ -1158,6 +1206,7 @@ const checkForSharedVideo = async () => {
       window.history.replaceState({}, document.title, url.toString());
     }
   } catch (error) {
+    console.error('❌ [App] Error in checkForSharedVideo:', error);
     // Could show a toast notification here
   }
 };
@@ -1165,42 +1214,65 @@ const checkForSharedVideo = async () => {
 // Initialize shared comparison video
 const initializeSharedComparison = async (comparisonId) => {
   try {
+    console.log(
+      '🔄 [App] initializeSharedComparison called with:',
+      comparisonId
+    );
+
     isSharedComparison.value = true;
 
     // Get shared comparison data
+    console.log(
+      '🔄 [App] Calling ShareService.getSharedComparisonVideoWithCommentPermissions'
+    );
     const sharedComparison =
       await ShareService.getSharedComparisonVideoWithCommentPermissions(
         comparisonId
       );
+
+    console.log('🔄 [App] Got shared comparison data:', sharedComparison);
+    console.log(
+      '🔄 [App] Shared comparison annotations:',
+      sharedComparison.annotations
+    );
+    console.log(
+      '🔄 [App] Shared comparison annotations count:',
+      sharedComparison.annotations?.length || 0
+    );
 
     // Set up dual mode
     playerMode.value = 'dual';
     currentComparisonId.value = comparisonId;
 
     // Prepare video objects with URLs for the comparison workflow
-    const videoAData = sharedComparison.video_a
+    const videoAData = sharedComparison.videoA
       ? {
-          ...sharedComparison.video_a,
-          url: getVideoUrl(sharedComparison.video_a),
+          ...sharedComparison.videoA,
+          url: getVideoUrl(sharedComparison.videoA),
         }
       : null;
 
-    const videoBData = sharedComparison.video_b
+    const videoBData = sharedComparison.videoB
       ? {
-          ...sharedComparison.video_b,
-          url: getVideoUrl(sharedComparison.video_b),
+          ...sharedComparison.videoB,
+          url: getVideoUrl(sharedComparison.videoB),
         }
       : null;
+
+    console.log('🔄 [App] Video A data:', videoAData);
+    console.log('🔄 [App] Video B data:', videoBData);
 
     // Select videos in the comparison workflow (this sets selectedVideoA and selectedVideoB)
     if (videoAData && videoAData.id !== 'placeholder') {
       comparisonWorkflow.selectVideoA(videoAData);
     } else {
+      console.log('🔄 [App] Video A is placeholder or missing');
     }
 
     if (videoBData && videoBData.id !== 'placeholder') {
       comparisonWorkflow.selectVideoB(videoBData);
     } else {
+      console.log('🔄 [App] Video B is placeholder or missing');
     }
 
     // Ensure dual video player is initialized
@@ -1240,18 +1312,97 @@ const initializeSharedComparison = async (comparisonId) => {
       isPublic: sharedComparison.isPublic,
     };
 
-    // Use the proper workflow method to load the comparison
+    console.log('🔄 [App] Comparison object:', comparisonObject);
 
+    // Use the proper workflow method to load the comparison
+    // This will automatically load all annotations (comparison + individual video annotations)
+    console.log('🔄 [App] Loading comparison video in workflow');
     await comparisonWorkflow.loadComparisonVideo(comparisonObject);
 
-    // Load annotations
-    if (
-      sharedComparison.annotations &&
-      sharedComparison.annotations.length > 0
-    ) {
-      annotations.value = sharedComparison.annotations;
+    console.log(
+      '🔄 [App] Comparison workflow loaded, isReady:',
+      comparisonWorkflow.isReady.value
+    );
+
+    // Load drawings for comparison mode
+    if (dualVideoPlayer && comparisonWorkflow.isReady.value) {
+      // Get all annotations from the comparison workflow
+      const allAnnotations = [
+        ...comparisonWorkflow.comparisonAnnotations.value,
+        ...comparisonWorkflow.videoAAnnotations.value,
+        ...comparisonWorkflow.videoBAnnotations.value,
+      ];
+
+      console.log('🔄 [App] All annotations from workflow:', allAnnotations);
+      console.log('🔄 [App] All annotations count:', allAnnotations.length);
+
+      // Load drawings into the appropriate canvases
+      setTimeout(() => {
+        console.log('🔄 [App] Processing annotations for drawings');
+        allAnnotations.forEach((annotation, index) => {
+          console.log(`🔄 [App] Processing annotation ${index}:`, annotation);
+          if (
+            annotation.annotationType === 'drawing' &&
+            annotation.drawingData
+          ) {
+            console.log(
+              `🔄 [App] Found drawing annotation ${index}:`,
+              annotation.drawingData
+            );
+
+            // Handle comparison-specific drawings (drawingA and drawingB)
+            if (
+              annotation.drawingData.drawingA &&
+              dualVideoPlayer.drawingCanvasA
+            ) {
+              console.log('🔄 [App] Adding drawing to canvas A');
+              dualVideoPlayer.drawingCanvasA.addDrawing(
+                annotation.drawingData.drawingA
+              );
+            }
+            if (
+              annotation.drawingData.drawingB &&
+              dualVideoPlayer.drawingCanvasB
+            ) {
+              console.log('🔄 [App] Adding drawing to canvas B');
+              dualVideoPlayer.drawingCanvasB.addDrawing(
+                annotation.drawingData.drawingB
+              );
+            }
+
+            // Handle individual video drawings
+            if (
+              !annotation.drawingData.drawingA &&
+              !annotation.drawingData.drawingB
+            ) {
+              console.log('🔄 [App] Processing individual video drawing');
+              // This is a regular drawing annotation, determine which canvas based on videoId
+              if (
+                annotation.videoId === comparisonObject.videoAId &&
+                dualVideoPlayer.drawingCanvasA
+              ) {
+                console.log('🔄 [App] Adding individual drawing to canvas A');
+                dualVideoPlayer.drawingCanvasA.addDrawing(
+                  annotation.drawingData
+                );
+              } else if (
+                annotation.videoId === comparisonObject.videoBId &&
+                dualVideoPlayer.drawingCanvasB
+              ) {
+                console.log('🔄 [App] Adding individual drawing to canvas B');
+                dualVideoPlayer.drawingCanvasB.addDrawing(
+                  annotation.drawingData
+                );
+              }
+            }
+          }
+        });
+      }, 150); // Small delay to ensure canvases are ready
+    } else {
+      console.log('🔄 [App] Dual video player not ready or not initialized');
     }
   } catch (error) {
+    console.error('❌ [App] Error in initializeSharedComparison:', error);
     throw error;
   }
 };

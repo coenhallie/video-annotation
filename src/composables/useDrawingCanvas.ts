@@ -60,6 +60,19 @@ export function useDrawingCanvas() {
     return getDrawingsForFrame(currentFrame.value);
   });
 
+  // Get all drawings (for passing to DrawingCanvas component)
+  const allDrawings = computed(() => {
+    const drawings: DrawingData[] = [];
+    if (state.value.drawings && state.value.drawings.size > 0) {
+      state.value.drawings.forEach((frameDrawings) => {
+        if (frameDrawings && Array.isArray(frameDrawings)) {
+          drawings.push(...frameDrawings);
+        }
+      });
+    }
+    return drawings;
+  });
+
   // Toggle drawing mode
   const toggleDrawingMode = () => {
     state.value.isDrawingMode = !state.value.isDrawingMode;
@@ -100,12 +113,16 @@ export function useDrawingCanvas() {
     state.value.videoSize = { width, height };
   };
 
-  // Add drawing to current frame
+  // Add drawing to the frame specified in the drawing data
   const addDrawing = (drawing: DrawingData) => {
-    const frame = currentFrame.value;
+    const frame = drawing.frame; // Use the frame from the drawing data, not currentFrame
     const frameDrawings = state.value.drawings.get(frame) || [];
     frameDrawings.push(drawing);
     state.value.drawings.set(frame, frameDrawings);
+    console.log(
+      `🎨 [useDrawingCanvas] Added drawing to frame ${frame}:`,
+      drawing
+    );
   };
 
   // Clear drawings for current frame
@@ -148,6 +165,12 @@ export function useDrawingCanvas() {
 
   // Load drawings from annotations
   const loadDrawingsFromAnnotations = (annotations: Annotation[]) => {
+    console.log(
+      '🎨 [useDrawingCanvas] loadDrawingsFromAnnotations called with:',
+      annotations
+    );
+    console.log('🎨 [useDrawingCanvas] Annotations count:', annotations.length);
+
     // Set loading state
     state.value.isLoadingDrawings = true;
 
@@ -159,6 +182,15 @@ export function useDrawingCanvas() {
         annotation.annotationType === 'drawing' && annotation.drawingData
     );
 
+    console.log(
+      '🎨 [useDrawingCanvas] Drawing annotations found:',
+      drawingAnnotations
+    );
+    console.log(
+      '🎨 [useDrawingCanvas] Drawing annotations count:',
+      drawingAnnotations.length
+    );
+
     // TIMING FIX: Reduce delay to prevent interference with video fade transition timing
     // The 300ms delay was causing race conditions with the 350ms video fade transition
     setTimeout(() => {
@@ -168,8 +200,21 @@ export function useDrawingCanvas() {
           const frameDrawings = state.value.drawings.get(frame) || [];
           frameDrawings.push(annotation.drawingData);
           state.value.drawings.set(frame, frameDrawings);
+          console.log(
+            `🎨 [useDrawingCanvas] Added drawing for frame ${frame}:`,
+            annotation.drawingData
+          );
         }
       });
+
+      console.log(
+        '🎨 [useDrawingCanvas] Final drawings map:',
+        state.value.drawings
+      );
+      console.log(
+        '🎨 [useDrawingCanvas] Total frames with drawings:',
+        state.value.drawings.size
+      );
 
       // Clear loading state
       state.value.isLoadingDrawings = false;
@@ -261,6 +306,7 @@ export function useDrawingCanvas() {
     currentTool,
     currentFrame,
     currentFrameDrawings,
+    allDrawings,
     severityColors,
     isLoadingDrawings: computed(() => state.value.isLoadingDrawings),
 

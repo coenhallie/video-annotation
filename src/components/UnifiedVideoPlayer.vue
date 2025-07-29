@@ -74,7 +74,7 @@
           :selected-tool="drawingCanvas.currentTool.value.type"
           :stroke-width="drawingCanvas.currentTool.value.strokeWidth"
           :severity="drawingCanvas.currentTool.value.severity"
-          :existing-drawings="drawingCanvas.currentFrameDrawings.value"
+          :existing-drawings="drawingCanvas.allDrawings.value"
           :is-loading-drawings="drawingCanvas.isLoadingDrawings.value"
           @drawing-created="handleDrawingCreated"
           @drawing-updated="handleDrawingUpdated"
@@ -200,7 +200,7 @@
               :selected-tool="drawingCanvasA.currentTool.value.type"
               :stroke-width="drawingCanvasA.currentTool.value.strokeWidth"
               :severity="drawingCanvasA.currentTool.value.severity"
-              :existing-drawings="drawingCanvasA.currentFrameDrawings.value"
+              :existing-drawings="drawingCanvasA.allDrawings.value"
               :is-loading-drawings="drawingCanvasA.isLoadingDrawings.value"
               @drawing-created="
                 (drawing, event) => handleDrawingCreated(drawing, event)
@@ -251,7 +251,7 @@
               :selected-tool="drawingCanvasB.currentTool.value.type"
               :stroke-width="drawingCanvasB.currentTool.value.strokeWidth"
               :severity="drawingCanvasB.currentTool.value.severity"
-              :existing-drawings="drawingCanvasB.currentFrameDrawings.value"
+              :existing-drawings="drawingCanvasB.allDrawings.value"
               :is-loading-drawings="drawingCanvasB.isLoadingDrawings.value"
               @drawing-created="
                 (drawing, event) => handleDrawingCreated(drawing, event)

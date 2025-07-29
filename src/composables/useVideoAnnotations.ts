@@ -45,7 +45,8 @@ export function useVideoAnnotations(
         isComparisonContext.value = !!newComparisonVideoId;
 
         // Reload annotations when comparison video ID changes
-        if (toValue(user)) {
+        // Allow loading for shared comparison videos even without authentication
+        if (toValue(user) || newComparisonVideoId) {
           await loadAnnotations();
         }
       }
@@ -175,8 +176,13 @@ export function useVideoAnnotations(
       return;
     }
 
-    // Allow loading annotations if user is authenticated OR if video is public
-    if (!toValue(user) && currentVideo.value && !currentVideo.value.isPublic) {
+    // Allow loading annotations if user is authenticated OR if video is public OR if in comparison context (for shared comparisons)
+    if (
+      !toValue(user) &&
+      !isComparisonContext.value &&
+      currentVideo.value &&
+      !currentVideo.value.isPublic
+    ) {
       console.log(
         '🔍 [useVideoAnnotations] Skipping - no user and video not public'
       );

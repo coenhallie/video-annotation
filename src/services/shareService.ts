@@ -74,6 +74,8 @@ export class ShareService {
       }
 
       const video = videos && videos.length > 0 ? videos[0] : null;
+      console.log('📹 [ShareService] Found video:', video);
+
       if (!video) {
         throw new Error('Video not found or not public');
       }
@@ -93,18 +95,25 @@ export class ShareService {
         throw annotationsError;
       }
 
-      // Map database field names to application field names
-      const mappedAnnotations =
-        annotations?.map((annotation) => ({
-          ...annotation,
-          annotationType: annotation.annotation_type,
-          drawingData: annotation.drawing_data,
-        })) || [];
+      console.log('📝 [ShareService] Raw annotations from DB:', annotations);
+      console.log(
+        '📝 [ShareService] Annotations count:',
+        annotations?.length || 0
+      );
+
+      // Database columns are already in camelCase, no mapping needed
+      const mappedAnnotations = annotations || [];
+
+      console.log('📝 [ShareService] Mapped annotations:', mappedAnnotations);
+      console.log(
+        '📝 [ShareService] Drawing annotations:',
+        mappedAnnotations.filter((ann) => ann.annotationType === 'drawing')
+      );
 
       // Determine comment permissions for shared videos
       const canComment = this.canCommentOnSharedVideo(video);
 
-      return {
+      const result = {
         id: video.id,
         title: video.title,
         description: video.description,
@@ -115,6 +124,9 @@ export class ShareService {
         canComment: canComment,
         annotations: mappedAnnotations,
       };
+
+      console.log('✅ [ShareService] Returning shared video data:', result);
+      return result;
     } catch (error) {
       console.error(
         '❌ [ShareService] Error getting shared video with comment permissions:',
@@ -241,6 +253,11 @@ export class ShareService {
     comparisonId: string
   ): Promise<SharedComparisonVideoWithCommentPermissions> {
     try {
+      console.log(
+        '🔍 [ShareService] Loading shared comparison video with comment permissions:',
+        comparisonId
+      );
+
       // Get the comparison video (must be public)
       const { data: comparisons, error: comparisonError } = await supabase
         .from('comparison_videos')
@@ -258,6 +275,8 @@ export class ShareService {
 
       const comparison =
         comparisons && comparisons.length > 0 ? comparisons[0] : null;
+      console.log('📹 [ShareService] Found comparison:', comparison);
+
       if (!comparison) {
         throw new Error('Comparison video not found or not public');
       }
@@ -267,6 +286,9 @@ export class ShareService {
         supabase.from('videos').select('*').eq('id', comparison.videoAId),
         supabase.from('videos').select('*').eq('id', comparison.videoBId),
       ]);
+
+      console.log('📹 [ShareService] Video A result:', videoAResult);
+      console.log('📹 [ShareService] Video B result:', videoBResult);
 
       // Transform results to handle arrays and maintain compatibility with createVideoForComparison
       const videoATransformed = {
@@ -294,24 +316,105 @@ export class ShareService {
         'Video B'
       );
 
-      // Get annotations for the comparison context
-      const { data: annotations } = await supabase
-        .from('annotations')
-        .select('*')
-        .eq('comparisonVideoId', comparisonId)
-        .order('timestamp', { ascending: true });
+      console.log('📹 [ShareService] Processed Video A:', videoA);
+      console.log('📹 [ShareService] Processed Video B:', videoB);
 
-      const mappedAnnotations =
-        annotations?.map((annotation) => ({
-          ...annotation,
-          annotationType: annotation.annotation_type,
-          drawingData: annotation.drawing_data,
-        })) || [];
+      // Get all annotations for the comparison context (comparison-specific + individual video annotations)
+      const [
+        comparisonAnnotationsResult,
+        videoAAnnotationsResult,
+        videoBAnnotationsResult,
+      ] = await Promise.all([
+        supabase
+          .from('annotations')
+          .select('*')
+          .eq('comparisonVideoId', comparisonId)
+          .order('timestamp', { ascending: true }),
+        supabase
+          .from('annotations')
+          .select('*')
+          .eq('videoId', comparison.videoAId)
+          .order('timestamp', { ascending: true }),
+        supabase
+          .from('annotations')
+          .select('*')
+          .eq('videoId', comparison.videoBId)
+          .order('timestamp', { ascending: true }),
+      ]);
+
+      console.log('📝 [ShareService] Querying annotations with IDs:', {
+        comparisonId,
+        videoAId: comparison.videoAId,
+        videoBId: comparison.videoBId,
+      });
+
+      console.log(
+        '📝 [ShareService] Comparison annotations result:',
+        comparisonAnnotationsResult
+      );
+      console.log(
+        '📝 [ShareService] Video A annotations result:',
+        videoAAnnotationsResult
+      );
+      console.log(
+        '📝 [ShareService] Video B annotations result:',
+        videoBAnnotationsResult
+      );
+
+      console.log(
+        '📝 [ShareService] Comparison annotations:',
+        comparisonAnnotationsResult.data
+      );
+      console.log(
+        '📝 [ShareService] Video A annotations:',
+        videoAAnnotationsResult.data
+      );
+      console.log(
+        '📝 [ShareService] Video B annotations:',
+        videoBAnnotationsResult.data
+      );
+
+      console.log(
+        '📝 [ShareService] Comparison annotations error:',
+        comparisonAnnotationsResult.error
+      );
+      console.log(
+        '📝 [ShareService] Video A annotations error:',
+        videoAAnnotationsResult.error
+      );
+      console.log(
+        '📝 [ShareService] Video B annotations error:',
+        videoBAnnotationsResult.error
+      );
+
+      // Combine all annotations
+      const allAnnotations = [
+        ...(comparisonAnnotationsResult.data || []),
+        ...(videoAAnnotationsResult.data || []),
+        ...(videoBAnnotationsResult.data || []),
+      ];
+
+      console.log(
+        '📝 [ShareService] All combined annotations:',
+        allAnnotations
+      );
+      console.log(
+        '📝 [ShareService] Total annotations count:',
+        allAnnotations.length
+      );
+
+      // Database columns are already in camelCase, no mapping needed
+      const mappedAnnotations = allAnnotations || [];
+
+      console.log(
+        '📝 [ShareService] Drawing annotations:',
+        mappedAnnotations.filter((ann) => ann.annotationType === 'drawing')
+      );
 
       // Comment permissions for comparison videos
       const canComment = comparison.isPublic;
 
-      return {
+      const result = {
         id: comparison.id,
         title: comparison.title,
         description: comparison.description,
@@ -325,6 +428,12 @@ export class ShareService {
         fps: comparison.fps,
         totalFrames: comparison.totalFrames,
       };
+
+      console.log(
+        '✅ [ShareService] Returning shared comparison data:',
+        result
+      );
+      return result;
     } catch (error) {
       console.error(
         '❌ [ShareService] Error getting shared comparison video:',
