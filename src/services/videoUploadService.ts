@@ -103,17 +103,19 @@ export class VideoUploadService {
     const filePath = `${userId}/${timestamp}_${sanitizedFileName}`;
 
     try {
-      // Upload file to Supabase storage
-      const { data, error } = await supabase.storage
+      // Get upload URL from Supabase
+      const { data: uploadData, error: uploadError } = await supabase.storage
         .from('videos')
-        .upload(filePath, file, {
-          cacheControl: '3600',
+        .createSignedUploadUrl(filePath, {
           upsert: false,
         });
 
-      if (error) {
-        throw new Error(`Upload failed: ${error.message}`);
+      if (uploadError) {
+        throw new Error(`Failed to get upload URL: ${uploadError.message}`);
       }
+
+      // Upload with progress tracking using XMLHttpRequest
+      await this.uploadWithProgress(file, uploadData.signedUrl, onProgress);
 
       // Get public URL
       const { data: urlData } = supabase.storage
@@ -127,6 +129,62 @@ export class VideoUploadService {
     } catch (error) {
       throw error;
     }
+  }
+
+  /**
+   * Upload file with progress tracking using XMLHttpRequest
+   */
+  private static uploadWithProgress(
+    file: File,
+    signedUrl: string,
+    onProgress?: (progress: UploadProgress) => void
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+
+      // Track upload progress
+      xhr.upload.addEventListener('progress', (event) => {
+        if (event.lengthComputable && onProgress) {
+          const progress: UploadProgress = {
+            loaded: event.loaded,
+            total: event.total,
+            percentage: (event.loaded / event.total) * 100,
+          };
+          onProgress(progress);
+        }
+      });
+
+      // Handle completion
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          // Final progress update
+          if (onProgress) {
+            onProgress({
+              loaded: file.size,
+              total: file.size,
+              percentage: 100,
+            });
+          }
+          resolve();
+        } else {
+          reject(new Error(`Upload failed with status: ${xhr.status}`));
+        }
+      });
+
+      // Handle errors
+      xhr.addEventListener('error', () => {
+        reject(new Error('Upload failed due to network error'));
+      });
+
+      xhr.addEventListener('abort', () => {
+        reject(new Error('Upload was aborted'));
+      });
+
+      // Start upload
+      xhr.open('PUT', signedUrl);
+      xhr.setRequestHeader('Content-Type', file.type);
+      xhr.send(file);
+    });
   }
 
   /**

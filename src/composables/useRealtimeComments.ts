@@ -76,7 +76,7 @@ export function useRealtimeComments(annotationId: string | Ref<string>) {
     );
 
     commentSubscription = supabase
-      .channel(`annotation_comments:${currentId}`)
+      .channel(`realtime_comments:${currentId}`)
       .on(
         'postgres_changes',
         {
@@ -143,7 +143,7 @@ export function useRealtimeComments(annotationId: string | Ref<string>) {
       annotationId: currentId,
     });
 
-    presenceChannel = supabase.channel(`presence:annotation:${currentId}`, {
+    presenceChannel = supabase.channel(`presence:comments:${currentId}`, {
       config: {
         presence: {
           key: userId,

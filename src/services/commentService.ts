@@ -686,7 +686,7 @@ export class CommentService {
     try {
       let totalCount = 0;
 
-      if (project.project_type === 'single') {
+      if (project.projectType === 'single') {
         // For single video projects, first get all annotation IDs for the video
         const { data: annotations, error: annotationsError } = await supabase
           .from('annotations')
@@ -722,48 +722,69 @@ export class CommentService {
         }
 
         totalCount = count || 0;
-      } else if (project.project_type === 'dual') {
-        // For dual video projects, get comments for annotations of both videos
-        const videoAId = project.video_a?.id;
-        const videoBId = project.video_b?.id;
+      } else if (project.projectType === 'dual') {
+        // For dual video projects, get comments for annotations of the comparison video
+        // and also annotations of the individual videos that make up the comparison
+        const videoAId = project.videoA?.id;
+        const videoBId = project.videoB?.id;
+        const comparisonVideoId = project.comparisonVideo?.id;
 
+        let allAnnotationIds: string[] = [];
+
+        // Get annotations for the comparison video itself
+        if (comparisonVideoId) {
+          const { data: comparisonAnnotations, error: comparisonError } =
+            await supabase
+              .from('annotations')
+              .select('id')
+              .eq('comparisonVideoId', comparisonVideoId);
+
+          if (comparisonError) {
+            console.error(
+              '❌ [CommentService] Error getting comparison annotations:',
+              comparisonError
+            );
+          } else if (comparisonAnnotations) {
+            allAnnotationIds.push(...comparisonAnnotations.map((a) => a.id));
+          }
+        }
+
+        // Get annotations for both individual videos
         if (videoAId && videoBId) {
-          // First get all annotation IDs for both videos
-          const { data: annotations, error: annotationsError } = await supabase
+          const { data: videoAnnotations, error: videoError } = await supabase
             .from('annotations')
             .select('id')
             .in('videoId', [videoAId, videoBId]);
 
-          if (annotationsError) {
+          if (videoError) {
             console.error(
-              '❌ [CommentService] Error getting annotations:',
-              annotationsError
+              '❌ [CommentService] Error getting video annotations:',
+              videoError
             );
-            return 0;
+          } else if (videoAnnotations) {
+            allAnnotationIds.push(...videoAnnotations.map((a) => a.id));
           }
-
-          if (!annotations || annotations.length === 0) {
-            return 0;
-          }
-
-          const annotationIds = annotations.map((a) => a.id);
-
-          // Then get comment count for those annotations
-          const { count, error } = await supabase
-            .from('annotation_comments')
-            .select('*', { count: 'exact', head: true })
-            .in('annotationId', annotationIds);
-
-          if (error) {
-            console.error(
-              '❌ [CommentService] Error getting dual project comment count:',
-              error
-            );
-            return 0;
-          }
-
-          totalCount = count || 0;
         }
+
+        if (allAnnotationIds.length === 0) {
+          return 0;
+        }
+
+        // Then get comment count for all those annotations
+        const { count, error } = await supabase
+          .from('annotation_comments')
+          .select('*', { count: 'exact', head: true })
+          .in('annotationId', allAnnotationIds);
+
+        if (error) {
+          console.error(
+            '❌ [CommentService] Error getting dual project comment count:',
+            error
+          );
+          return 0;
+        }
+
+        totalCount = count || 0;
       }
 
       console.log('✅ [CommentService] Project comment count:', totalCount);
@@ -953,238 +974,6 @@ export class CommentService {
   // ===== REAL-TIME BROADCASTING =====
 
   /**
-   * Broadcast comment event to real-time subscribers
-   */
-  static async broadcastCommentEvent(
-    event: 'INSERT' | 'UPDATE' | 'DELETE',
-    annotationId: string,
-    comment: Comment,
-    oldComment?: Comment
-  ): Promise<void> {
-    try {
-      const channel = supabase.channel(`annotation_comments:${annotationId}`);
-
-      const payload = {
-        event,
-        annotationId: annotationId,
-        comment,
-        old_comment: oldComment,
-        timestamp: new Date().toISOString(),
-      };
-
-      await channel.send({
-        type: 'broadcast',
-        event: `comment_${event.toLowerCase()}`,
-        payload,
-      });
-
-      console.log(
-        `📡 [CommentService] Broadcasted ${event} event for comment:`,
-        comment.id
-      );
-    } catch (error) {
-      console.error(
-        '❌ [CommentService] Error broadcasting comment event:',
-        error
-      );
-      // Don't throw error to avoid breaking the main operation
-    }
-  }
-
-  /**
-   * Broadcast typing status to real-time subscribers
-   */
-  static async broadcastTypingStatus(
-    annotationId: string,
-    userId: string,
-    userName: string,
-    isTyping: boolean
-  ): Promise<void> {
-    try {
-      const channel = supabase.channel(`presence:annotation:${annotationId}`);
-
-      const event = isTyping ? 'typing_start' : 'typing_stop';
-      const payload = {
-        userId: userId,
-        userName: userName,
-        annotationId: annotationId,
-        typing: isTyping,
-        timestamp: new Date().toISOString(),
-      };
-
-      await channel.send({
-        type: 'broadcast',
-        event,
-        payload,
-      });
-
-      console.log(
-        `⌨️ [CommentService] Broadcasted typing ${
-          isTyping ? 'start' : 'stop'
-        } for user:`,
-        userId
-      );
-    } catch (error) {
-      console.error(
-        '❌ [CommentService] Error broadcasting typing status:',
-        error
-      );
-      // Don't throw error to avoid breaking the main operation
-    }
-  }
-
-  /**
-   * Subscribe to real-time comment changes for an annotation
-   */
-  static subscribeToCommentChanges(
-    annotationId: string,
-    callbacks: {
-      onInsert?: (comment: Comment) => void;
-      onUpdate?: (comment: Comment, oldComment?: Comment) => void;
-      onDelete?: (comment: Comment) => void;
-    }
-  ) {
-    console.log(
-      '🔄 [CommentService] Subscribing to comment changes for annotation:',
-      annotationId
-    );
-
-    const channel = supabase
-      .channel(`annotation_comments:${annotationId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'annotation_comments',
-          filter: `annotationId=eq.${annotationId}`,
-        },
-        (payload) => {
-          if (callbacks.onInsert) {
-            const comment = payload.new;
-            callbacks.onInsert(comment);
-          }
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'annotation_comments',
-          filter: `annotationId=eq.${annotationId}`,
-        },
-        (payload) => {
-          if (callbacks.onUpdate) {
-            const comment = payload.new;
-            const oldComment = payload.old ? payload.old : undefined;
-            callbacks.onUpdate(comment, oldComment);
-          }
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'DELETE',
-          schema: 'public',
-          table: 'annotation_comments',
-          filter: `annotationId=eq.${annotationId}`,
-        },
-        (payload) => {
-          if (callbacks.onDelete) {
-            const comment = payload.old;
-            callbacks.onDelete(comment);
-          }
-        }
-      )
-      .subscribe();
-
-    return {
-      unsubscribe: () => {
-        console.log('🔌 [CommentService] Unsubscribing from comment changes');
-        supabase.removeChannel(channel);
-      },
-    };
-  }
-
-  /**
-   * Subscribe to user presence for an annotation
-   */
-  static subscribeToUserPresence(
-    annotationId: string,
-    userId: string,
-    userName: string,
-    callbacks: {
-      onUserJoin?: (userId: string, presence: any) => void;
-      onUserLeave?: (userId: string, presence: any) => void;
-      onTypingStart?: (userId: string, userName: string) => void;
-      onTypingStop?: (userId: string) => void;
-    }
-  ) {
-    console.log(
-      '👥 [CommentService] Subscribing to user presence for annotation:',
-      annotationId
-    );
-
-    const channel = supabase.channel(`presence:annotation:${annotationId}`, {
-      config: {
-        presence: {
-          key: userId,
-        },
-      },
-    });
-
-    channel
-      .on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState();
-        console.log('👥 [CommentService] Presence synced:', Object.keys(state));
-      })
-      .on('presence', { event: 'join' }, ({ key, newPresences }) => {
-        console.log('👋 [CommentService] User joined:', key);
-        if (callbacks.onUserJoin) {
-          callbacks.onUserJoin(key, newPresences[0]);
-        }
-      })
-      .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
-        console.log('👋 [CommentService] User left:', key);
-        if (callbacks.onUserLeave) {
-          callbacks.onUserLeave(key, leftPresences[0]);
-        }
-      })
-      .on('broadcast', { event: 'typing_start' }, ({ payload }) => {
-        if (payload.userId !== userId && callbacks.onTypingStart) {
-          callbacks.onTypingStart(payload.userId, payload.userName);
-        }
-      })
-      .on('broadcast', { event: 'typing_stop' }, ({ payload }) => {
-        if (payload.userId !== userId && callbacks.onTypingStop) {
-          callbacks.onTypingStop(payload.userId);
-        }
-      })
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          await channel.track({
-            userId: userId,
-            userName: userName,
-            annotationId: annotationId,
-            typing: false,
-            online_at: new Date().toISOString(),
-          });
-        }
-      });
-
-    return {
-      unsubscribe: () => {
-        console.log('🔌 [CommentService] Unsubscribing from user presence');
-        supabase.removeChannel(channel);
-      },
-      updateTypingStatus: (isTyping: boolean) => {
-        this.broadcastTypingStatus(annotationId, userId, userName, isTyping);
-      },
-    };
-  }
-
-  /**
    * Get real-time permission validation for comment operations
    */
   static async validateRealtimePermissions(
@@ -1229,18 +1018,15 @@ export class CommentService {
   }
 
   /**
-   * Enhanced create comment with real-time broadcasting
+   * Enhanced create comment with real-time (uses postgres_changes)
    */
   static async createCommentWithRealtime(
     params: CreateCommentParams
   ): Promise<Comment> {
     try {
       // Create comment using existing method
+      // Real-time events will be automatically triggered by postgres_changes
       const comment = await this.createComment(params);
-
-      // Broadcast the event to real-time subscribers
-      await this.broadcastCommentEvent('INSERT', params.annotationId, comment);
-
       return comment;
     } catch (error) {
       console.error(
@@ -1252,7 +1038,7 @@ export class CommentService {
   }
 
   /**
-   * Enhanced update comment with real-time broadcasting
+   * Enhanced update comment with real-time (uses postgres_changes)
    */
   static async updateCommentWithRealtime(
     commentId: string,
@@ -1260,32 +1046,13 @@ export class CommentService {
     sessionId?: string
   ): Promise<Comment> {
     try {
-      // Get the old comment for broadcasting
-      const { data: oldCommentData } = await supabase
-        .from('annotation_comments')
-        .select('*')
-        .eq('id', commentId)
-        .single();
-
-      const oldComment = oldCommentData ? oldCommentData : undefined;
-
       // Update comment using existing method
+      // Real-time events will be automatically triggered by postgres_changes
       const updatedComment = await this.updateComment(
         commentId,
         params,
         sessionId
       );
-
-      // Broadcast the event to real-time subscribers
-      if (oldComment) {
-        await this.broadcastCommentEvent(
-          'UPDATE',
-          updatedComment.annotationId,
-          updatedComment,
-          oldComment
-        );
-      }
-
       return updatedComment;
     } catch (error) {
       console.error(
@@ -1297,31 +1064,16 @@ export class CommentService {
   }
 
   /**
-   * Enhanced delete comment with real-time broadcasting
+   * Enhanced delete comment with real-time (uses postgres_changes)
    */
   static async deleteCommentWithRealtime(
     commentId: string,
     sessionId?: string
   ): Promise<void> {
     try {
-      // Get the comment before deletion for broadcasting
-      const { data: commentData } = await supabase
-        .from('annotation_comments')
-        .select('*')
-        .eq('id', commentId)
-        .single();
-
-      if (!commentData) {
-        throw new Error('Comment not found');
-      }
-
-      const comment = commentData;
-
       // Delete comment using existing method
+      // Real-time events will be automatically triggered by postgres_changes
       await this.deleteComment(commentId, sessionId);
-
-      // Broadcast the event to real-time subscribers
-      await this.broadcastCommentEvent('DELETE', comment.annotationId, comment);
     } catch (error) {
       console.error(
         '❌ [CommentService] Error deleting comment with real-time:',

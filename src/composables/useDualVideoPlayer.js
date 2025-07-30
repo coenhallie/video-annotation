@@ -110,8 +110,30 @@ export function useDualVideoPlayer() {
       },
 
       loadedmetadata: () => {
-        videoState.duration = videoElement.duration;
-        videoState.isLoaded = true;
+        console.log(`🎬 [${videoId}] loadedmetadata event fired`);
+        console.log(
+          `🎬 [${videoId}] readyState: ${videoElement.readyState}, duration: ${videoElement.duration}`
+        );
+
+        // Safari fix: Check if duration is valid (not NaN or Infinity)
+        const isValidDuration =
+          videoElement.duration &&
+          isFinite(videoElement.duration) &&
+          videoElement.duration > 0;
+
+        if (isValidDuration) {
+          videoState.duration = videoElement.duration;
+          videoState.isLoaded = true;
+          console.log(
+            `🎬 [${videoId}] Video loaded - duration: ${videoElement.duration}, isLoaded: ${videoState.isLoaded}`
+          );
+        } else {
+          console.log(
+            `🎬 [${videoId}] Invalid duration detected, waiting for loadeddata event`
+          );
+          videoState.isLoaded = false;
+          return; // Don't proceed with duration calculations yet
+        }
 
         // Detect FPS for this specific video
         // Default to 30 FPS but try to detect actual FPS
@@ -123,6 +145,9 @@ export function useDualVideoPlayer() {
         // Update shared duration to the shorter of the two videos to keep them in sync
         // Only update if both videos have loaded their metadata
         if (videoAState.duration > 0 && videoBState.duration > 0) {
+          console.log(
+            '🎬 [loadedmetadata] Both videos loaded, setting shared duration'
+          );
           const minDuration = Math.min(
             videoAState.duration,
             videoBState.duration
@@ -136,6 +161,7 @@ export function useDualVideoPlayer() {
           totalFrames.value = Math.round(minDuration * fps.value);
         } else if (videoAState.duration > 0 && videoBState.duration === 0) {
           // Only video A has loaded, use its duration temporarily
+          console.log('🎬 [loadedmetadata] Only Video A loaded');
           duration.value = videoAState.duration;
           fps.value = videoAState.fps;
           totalFrames.value = Math.round(
@@ -143,6 +169,7 @@ export function useDualVideoPlayer() {
           );
         } else if (videoBState.duration > 0 && videoAState.duration === 0) {
           // Only video B has loaded, use its duration temporarily
+          console.log('🎬 [loadedmetadata] Only Video B loaded');
           duration.value = videoBState.duration;
           fps.value = videoBState.fps;
           totalFrames.value = Math.round(
@@ -151,11 +178,57 @@ export function useDualVideoPlayer() {
         }
       },
 
+      loadeddata: () => {
+        console.log(`🎬 [${videoId}] loadeddata event fired`);
+        console.log(
+          `🎬 [${videoId}] readyState: ${videoElement.readyState}, duration: ${videoElement.duration}`
+        );
+
+        // Safari fallback: If metadata didn't load properly, try again here
+        if (!videoState.isLoaded) {
+          const isValidDuration =
+            videoElement.duration &&
+            isFinite(videoElement.duration) &&
+            videoElement.duration > 0;
+
+          if (isValidDuration) {
+            console.log(
+              `🎬 [${videoId}] Duration now available in loadeddata: ${videoElement.duration}`
+            );
+            videoState.duration = videoElement.duration;
+            videoState.isLoaded = true;
+
+            // Detect FPS for this specific video
+            videoState.fps = 30;
+            videoState.totalFrames = Math.round(
+              videoState.duration * videoState.fps
+            );
+
+            // Update shared duration calculations
+            if (videoAState.duration > 0 && videoBState.duration > 0) {
+              console.log(
+                '🎬 [loadeddata] Both videos now loaded, setting shared duration'
+              );
+              const minDuration = Math.min(
+                videoAState.duration,
+                videoBState.duration
+              );
+              duration.value = minDuration;
+              checkFpsCompatibility();
+              totalFrames.value = Math.round(minDuration * fps.value);
+            }
+          }
+        }
+      },
+
       play: () => {
+        console.log(`🎬 [${videoId}] play event fired`);
         isPlaying.value = true;
       },
 
       pause: () => {
+        console.log(`🎬 [${videoId}] pause event fired - Stack trace:`);
+        console.trace(`🎬 [${videoId}] Pause event stack trace`);
         isPlaying.value = false;
       },
 
@@ -212,19 +285,33 @@ export function useDualVideoPlayer() {
 
   // Watch for video ref changes and setup/cleanup listeners
   watch(videoARef, (newVideo, oldVideo) => {
+    console.log(
+      '🎬 [videoARef] Watch triggered - old:',
+      !!oldVideo,
+      'new:',
+      !!newVideo
+    );
     if (oldVideo) {
       removeVideoEventListeners(oldVideo);
     }
     if (newVideo) {
+      console.log('🎬 [videoARef] Setting up event listeners for Video A');
       setupVideoEventListeners(newVideo, videoAState, 'A');
     }
   });
 
   watch(videoBRef, (newVideo, oldVideo) => {
+    console.log(
+      '🎬 [videoBRef] Watch triggered - old:',
+      !!oldVideo,
+      'new:',
+      !!newVideo
+    );
     if (oldVideo) {
       removeVideoEventListeners(oldVideo);
     }
     if (newVideo) {
+      console.log('🎬 [videoBRef] Setting up event listeners for Video B');
       setupVideoEventListeners(newVideo, videoBState, 'B');
     }
   });
@@ -295,23 +382,217 @@ export function useDualVideoPlayer() {
 
   const syncPlay = async () => {
     try {
+      console.log('🎬 [syncPlay] Starting dual video playback...');
+      console.log('🎬 [syncPlay] Video A ref:', !!videoARef.value);
+      console.log('🎬 [syncPlay] Video A loaded:', videoAState.isLoaded);
+      console.log('🎬 [syncPlay] Video B ref:', !!videoBRef.value);
+      console.log('🎬 [syncPlay] Video B loaded:', videoBState.isLoaded);
+      console.log('🎬 [syncPlay] Video A URL:', videoAUrl.value);
+      console.log('🎬 [syncPlay] Video B URL:', videoBUrl.value);
+
       if (!videoARef.value && !videoBRef.value) {
+        console.log('🎬 [syncPlay] No video refs available');
         return;
       }
 
+      // Safari fix: Additional readiness checks
+      const isVideoAReady =
+        videoARef.value &&
+        videoAState.isLoaded &&
+        videoARef.value.readyState >= 3 && // HAVE_FUTURE_DATA
+        isFinite(videoARef.value.duration);
+
+      const isVideoBReady =
+        videoBRef.value &&
+        videoBState.isLoaded &&
+        videoBRef.value.readyState >= 3 && // HAVE_FUTURE_DATA
+        isFinite(videoBRef.value.duration);
+
+      console.log(
+        '🎬 [syncPlay] Video A ready:',
+        isVideoAReady,
+        'readyState:',
+        videoARef.value?.readyState
+      );
+      console.log(
+        '🎬 [syncPlay] Video B ready:',
+        isVideoBReady,
+        'readyState:',
+        videoBRef.value?.readyState
+      );
+
       const promises = [];
-      if (videoARef.value && videoAState.isLoaded) {
+      if (isVideoAReady) {
+        console.log('🎬 [syncPlay] Adding Video A to play promises');
         promises.push(videoARef.value.play());
+      } else {
+        console.log(
+          '🎬 [syncPlay] Video A not ready - ref:',
+          !!videoARef.value,
+          'loaded:',
+          videoAState.isLoaded,
+          'readyState:',
+          videoARef.value?.readyState
+        );
       }
-      if (videoBRef.value && videoBState.isLoaded) {
+
+      if (isVideoBReady) {
+        console.log('🎬 [syncPlay] Adding Video B to play promises');
         promises.push(videoBRef.value.play());
+      } else {
+        console.log(
+          '🎬 [syncPlay] Video B not ready - ref:',
+          !!videoBRef.value,
+          'loaded:',
+          videoBState.isLoaded,
+          'readyState:',
+          videoBRef.value?.readyState
+        );
       }
+
+      console.log('🎬 [syncPlay] Total promises:', promises.length);
 
       if (promises.length > 0) {
         await Promise.all(promises);
         isPlaying.value = true;
+        console.log('🎬 [syncPlay] All videos started playing successfully');
+
+        // Check actual video element states after play
+        if (videoARef.value) {
+          console.log(
+            '🎬 [syncPlay] Video A actual state - paused:',
+            videoARef.value.paused,
+            'currentTime:',
+            videoARef.value.currentTime,
+            'readyState:',
+            videoARef.value.readyState
+          );
+        }
+        if (videoBRef.value) {
+          console.log(
+            '🎬 [syncPlay] Video B actual state - paused:',
+            videoBRef.value.paused,
+            'currentTime:',
+            videoBRef.value.currentTime,
+            'readyState:',
+            videoBRef.value.readyState
+          );
+        }
+
+        // Enhanced Safari fix: Handle immediate pause behavior with aggressive retries
+        let retryAttempt = 1;
+        const maxRetries = 5;
+        const retryDelays = [50, 100, 150, 200, 250];
+
+        // Track pause events during retries
+        let pauseDetected = false;
+        const pauseHandler = (event) => {
+          pauseDetected = true;
+          console.log(
+            `🎬 [syncPlay] Immediate pause detected on ${
+              event.target === videoARef.value ? 'Video A' : 'Video B'
+            }`
+          );
+        };
+
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          pauseDetected = false;
+
+          // Add temporary pause listeners to detect immediate pausing
+          if (videoARef.value)
+            videoARef.value.addEventListener('pause', pauseHandler);
+          if (videoBRef.value)
+            videoBRef.value.addEventListener('pause', pauseHandler);
+
+          await new Promise((resolve) =>
+            setTimeout(resolve, retryDelays[attempt - 1])
+          );
+
+          console.log(
+            `🎬 [syncPlay] Safari retry check ${attempt}/${maxRetries}`
+          );
+          console.log(
+            `🎬 [syncPlay] Video A paused: ${videoARef.value?.paused}, Video B paused: ${videoBRef.value?.paused}`
+          );
+
+          const retryPromises = [];
+
+          // Retry both videos if either is paused
+          if (videoBRef.value && videoBRef.value.paused && isVideoBReady) {
+            console.log(`🎬 [syncPlay] Retrying Video B on attempt ${attempt}`);
+            retryPromises.push(
+              videoBRef.value.play().catch((err) => {
+                console.error(
+                  `🎬 [syncPlay] Video B retry ${attempt} failed:`,
+                  err
+                );
+                return Promise.resolve();
+              })
+            );
+          }
+
+          if (videoARef.value && videoARef.value.paused && isVideoAReady) {
+            console.log(`🎬 [syncPlay] Retrying Video A on attempt ${attempt}`);
+            retryPromises.push(
+              videoARef.value.play().catch((err) => {
+                console.error(
+                  `🎬 [syncPlay] Video A retry ${attempt} failed:`,
+                  err
+                );
+                return Promise.resolve();
+              })
+            );
+          }
+
+          if (retryPromises.length > 0) {
+            await Promise.all(retryPromises);
+            console.log(`🎬 [syncPlay] Retry attempt ${attempt} completed`);
+
+            // Wait to see if immediate pause events fire
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+
+          // Remove temporary pause listeners
+          if (videoARef.value)
+            videoARef.value.removeEventListener('pause', pauseHandler);
+          if (videoBRef.value)
+            videoBRef.value.removeEventListener('pause', pauseHandler);
+
+          // Check if both videos are playing and no immediate pause was detected
+          const bothPlaying =
+            (!videoARef.value || !videoARef.value.paused) &&
+            (!videoBRef.value || !videoBRef.value.paused);
+
+          if (bothPlaying && !pauseDetected) {
+            console.log(
+              `🎬 [syncPlay] Both videos playing successfully on attempt ${attempt}`
+            );
+            break;
+          } else if (pauseDetected) {
+            console.log(
+              `🎬 [syncPlay] Immediate pause detected on attempt ${attempt}, will retry`
+            );
+          } else {
+            console.log(
+              `🎬 [syncPlay] Videos still paused on attempt ${attempt}, will retry`
+            );
+          }
+
+          // If this was the last attempt, log final status
+          if (attempt === maxRetries) {
+            console.warn(
+              `🎬 [syncPlay] After ${maxRetries} retries - Video A paused: ${videoARef.value?.paused}, Video B paused: ${videoBRef.value?.paused}`
+            );
+            console.warn(
+              '🎬 [syncPlay] Safari autoplay restrictions may be preventing playback. User interaction may be required.'
+            );
+          }
+        }
+      } else {
+        console.log('🎬 [syncPlay] No videos ready to play');
       }
     } catch (error) {
+      console.error('🎬 [syncPlay] Error during playback:', error);
       isPlaying.value = false;
       showError(
         'Failed to synchronize video playback',

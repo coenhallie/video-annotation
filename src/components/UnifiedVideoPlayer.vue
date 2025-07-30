@@ -625,7 +625,19 @@ const performVideoFadeTransition = async (seekFunction: () => void) => {
 
 // Handle video click
 const handleVideoClick = () => {
-  pause();
+  console.log(
+    '🎬 [UnifiedVideoPlayer] Video click detected, isPlaying:',
+    isPlaying.value
+  );
+
+  // Only pause if currently playing to avoid interfering with play button
+  if (isPlaying.value) {
+    console.log('🎬 [UnifiedVideoPlayer] Pausing video due to click');
+    pause();
+  } else {
+    console.log('🎬 [UnifiedVideoPlayer] Video not playing, ignoring click');
+  }
+
   emit('video-click');
 };
 

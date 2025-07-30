@@ -281,7 +281,8 @@ export function useVideoAnnotations(
         );
         dbAnnotations = await AnnotationService.getVideoAnnotations(
           currentVideo.value.id,
-          toValue(projectId)
+          toValue(projectId),
+          true // includeCommentCounts
         );
         annotations.value = dbAnnotations.map((ann) => ann as Annotation);
       }

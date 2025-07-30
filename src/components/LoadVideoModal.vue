@@ -279,6 +279,18 @@
                       </svg>
                       {{ commentCounts[project.id] || 0 }}
                     </span>
+                    <!-- New Comment Indicator -->
+                    <div
+                      v-if="newCommentIndicators.has(project.id)"
+                      class="relative inline-flex items-center"
+                    >
+                      <span
+                        class="inline-flex items-center justify-center w-3 h-3 bg-red-500 rounded-full animate-pulse"
+                        title="New comments available"
+                      >
+                        <span class="sr-only">New comments</span>
+                      </span>
+                    </div>
                   </div>
 
                   <!-- Single Video Project Details -->
@@ -786,13 +798,14 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { ProjectService } from '../services/projectService.ts';
 import { VideoService } from '../services/videoService.ts';
 import { AnnotationService } from '../services/annotationService.ts';
 import { ComparisonVideoService } from '../services/comparisonVideoService.ts';
 import { CommentService } from '../services/commentService.ts';
 import { useAuth } from '../composables/useAuth.ts';
+import { useGlobalComments } from '../composables/useGlobalComments.ts';
 import VideoUpload from './VideoUpload.vue';
 
 // Props
@@ -808,12 +821,16 @@ const emit = defineEmits(['close', 'project-selected']);
 
 // Composables
 const { user } = useAuth();
+const { subscribeToGlobalComments, unsubscribeFromGlobalComments } =
+  useGlobalComments();
 
 // State
 const projects = ref([]);
 const isLoading = ref(false);
 const error = ref(null);
 const commentCounts = ref({});
+const newCommentIndicators = ref(new Set());
+const lastViewedTimes = ref({});
 
 // Tab management
 const activeTab = ref('load');
@@ -885,6 +902,19 @@ const loadProjects = async () => {
       const counts = await CommentService.getProjectCommentCounts(userProjects);
       commentCounts.value = counts;
       console.log('🎬 [LoadVideoModal] Loaded comment counts:', counts);
+
+      // Check for new comments since last viewed
+      userProjects.forEach((project) => {
+        const lastViewed = lastViewedTimes.value[project.id];
+        if (lastViewed) {
+          // Check if there are any comments newer than last viewed time
+          // This would require checking comment timestamps, but for now we'll rely on real-time updates
+          console.log(
+            `🎬 [LoadVideoModal] Last viewed ${project.title}:`,
+            lastViewed
+          );
+        }
+      });
     }
   } catch (err) {
     console.error('❌ [LoadVideoModal] Error loading projects:', err);
@@ -903,6 +933,9 @@ const selectProject = async (project) => {
       project.projectType
     );
 
+    // Mark project as viewed (clear new comment indicator)
+    markProjectAsViewed(project.id);
+
     // Emit the project-selected event with the entire project object
     emit('project-selected', project);
 
@@ -910,6 +943,67 @@ const selectProject = async (project) => {
   } catch (err) {
     console.error('❌ [LoadVideoModal] Error selecting project:', err);
     error.value = 'Failed to select project. Please try again.';
+  }
+};
+
+// New comment indicator methods
+const markProjectAsViewed = (projectId) => {
+  lastViewedTimes.value[projectId] = new Date().toISOString();
+  newCommentIndicators.value.delete(projectId);
+
+  // Store in localStorage for persistence
+  const viewedTimes = JSON.parse(
+    localStorage.getItem('projectViewedTimes') || '{}'
+  );
+  viewedTimes[projectId] = lastViewedTimes.value[projectId];
+  localStorage.setItem('projectViewedTimes', JSON.stringify(viewedTimes));
+};
+
+const loadLastViewedTimes = () => {
+  const stored = localStorage.getItem('projectViewedTimes');
+  if (stored) {
+    lastViewedTimes.value = JSON.parse(stored);
+  }
+};
+
+const handleNewComment = (comment) => {
+  console.log('🔔 [LoadVideoModal] New comment received:', comment);
+
+  // Find which project this comment belongs to
+  const project = projects.value.find((p) => {
+    if (p.projectType === 'single') {
+      return p.annotations?.some((a) => a.id === comment.annotationId);
+    } else {
+      return p.annotations?.some((a) => a.id === comment.annotationId);
+    }
+  });
+
+  if (project) {
+    const lastViewed = lastViewedTimes.value[project.id];
+    const commentTime = new Date(comment.createdAt);
+
+    // Only show indicator if comment is newer than last viewed time
+    if (!lastViewed || commentTime > new Date(lastViewed)) {
+      newCommentIndicators.value.add(project.id);
+
+      // Update comment count
+      commentCounts.value[project.id] =
+        (commentCounts.value[project.id] || 0) + 1;
+    }
+  }
+};
+
+const setupRealtimeComments = () => {
+  if (subscribeToGlobalComments) {
+    subscribeToGlobalComments(handleNewComment);
+    console.log('🔔 [LoadVideoModal] Subscribed to global comments');
+  }
+};
+
+const cleanupRealtimeComments = () => {
+  if (unsubscribeFromGlobalComments) {
+    unsubscribeFromGlobalComments();
+    console.log('🔔 [LoadVideoModal] Unsubscribed from global comments');
   }
 };
 
@@ -1329,4 +1423,24 @@ const resetComparisonState = () => {
     error: null,
   };
 };
+
+// Lifecycle hooks
+onMounted(() => {
+  loadLastViewedTimes();
+  setupRealtimeComments();
+});
+
+onUnmounted(() => {
+  cleanupRealtimeComments();
+});
+
+// Watch for modal visibility to load projects
+watch(
+  () => props.isVisible,
+  (newValue) => {
+    if (newValue && user.value) {
+      loadProjects();
+    }
+  }
+);
 </script>

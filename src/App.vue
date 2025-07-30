@@ -452,7 +452,8 @@ watch(
           } catch (error) {}
         } else {
         }
-      } else {
+      } else if (!isSharedVideo.value && !isSharedComparison.value) {
+        // Only show the projects modal for authenticated users who are not viewing shared content
         // No project is currently selected, show the projects modal
         isLoadModalVisible.value = true;
       }

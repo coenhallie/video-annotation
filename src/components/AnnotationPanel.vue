@@ -165,6 +165,13 @@ const sortedAnnotations = computed(() => {
   return [...props.annotations].sort((a, b) => a.timestamp - b.timestamp);
 });
 
+// Stable loading state to prevent skeleton flickering
+const shouldShowSkeleton = computed(() => {
+  // Only show skeleton if loading AND we don't have any annotations yet
+  // This prevents the skeleton from showing again after annotations are loaded
+  return props.loading && props.annotations.length === 0;
+});
+
 const formatTime = (seconds) => {
   if (!seconds || isNaN(seconds)) return '0:00';
   const minutes = Math.floor(seconds / 60);
@@ -554,9 +561,7 @@ const getCommentCount = (annotation) => {
   if (globalCount > 0) {
     return globalCount;
   }
-  return (
-    annotation.comment_count || commentCounts.value.get(annotation.id) || 0
-  );
+  return annotation.commentCount || commentCounts.value.get(annotation.id) || 0;
 };
 
 const handleCommentAdded = (comment) => {
@@ -895,7 +900,7 @@ defineExpose({
     <!-- Annotations List -->
     <div class="p-2">
       <!-- Loading Skeleton -->
-      <AnnotationSkeleton v-if="loading" :skeleton-count="3" />
+      <AnnotationSkeleton v-if="shouldShowSkeleton" :skeleton-count="3" />
 
       <!-- Empty State -->
       <div
@@ -984,22 +989,26 @@ defineExpose({
             </span>
 
             <!-- Comment count indicator -->
-            <div
-              v-if="getCommentCount(annotation) > 0"
-              class="flex items-center space-x-1 ml-2 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs relative"
-            >
-              <svg
-                class="w-3 h-3"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
+            <div class="flex items-center space-x-1 ml-2 relative">
+              <span
+                class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700"
+                :title="`${getCommentCount(annotation)} comment${
+                  getCommentCount(annotation) !== 1 ? 's' : ''
+                }`"
               >
-                <path
-                  d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
-                ></path>
-              </svg>
-              <span>{{ getCommentCount(annotation) }}</span>
+                <svg
+                  class="w-3 h-3 mr-1"
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
+                  <path
+                    fill-rule="evenodd"
+                    d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z"
+                    clip-rule="evenodd"
+                  />
+                </svg>
+                {{ getCommentCount(annotation) || 0 }}
+              </span>
 
               <!-- New comments indicator (always visible when there are new comments) -->
               <div

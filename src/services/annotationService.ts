@@ -287,7 +287,10 @@ export class AnnotationService {
   /**
    * Get annotations for a comparison video (comparison-specific only)
    */
-  static async getComparisonVideoAnnotations(comparisonVideoId: string) {
+  static async getComparisonVideoAnnotations(
+    comparisonVideoId: string,
+    includeCommentCounts?: boolean
+  ) {
     const { data, error } = await supabase
       .from('annotations')
       .select('*')
@@ -296,6 +299,25 @@ export class AnnotationService {
 
     if (error) {
       throw error;
+    }
+
+    // If comment counts are requested, fetch them for all annotations
+    if (includeCommentCounts && data && data.length > 0) {
+      try {
+        const annotationIds = data.map((annotation) => annotation.id);
+        const commentCounts = await Promise.all(
+          annotationIds.map((id) => CommentService.getCommentCount(id))
+        );
+
+        // Add comment counts to annotations
+        return data.map((annotation, index) => ({
+          ...annotation,
+          commentCount: commentCounts[index] || 0,
+        }));
+      } catch (commentError) {
+        // Return annotations without comment counts if comment service fails
+        return data || [];
+      }
     }
 
     return data || [];
@@ -311,9 +333,9 @@ export class AnnotationService {
   ) {
     const [comparisonAnnotations, videoAAnnotations, videoBAnnotations] =
       await Promise.all([
-        this.getComparisonVideoAnnotations(comparisonVideoId),
-        this.getVideoAnnotations(videoAId),
-        this.getVideoAnnotations(videoBId),
+        this.getComparisonVideoAnnotations(comparisonVideoId, true), // includeCommentCounts
+        this.getVideoAnnotations(videoAId, undefined, true), // includeCommentCounts
+        this.getVideoAnnotations(videoBId, undefined, true), // includeCommentCounts
       ]);
 
     return {

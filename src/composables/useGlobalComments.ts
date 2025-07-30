@@ -219,7 +219,10 @@ export function useGlobalComments() {
    * Initialize comment counts for existing annotations
    */
   const initializeCommentCounts = (
-    annotations: Array<{ id: string; commentCount?: number }>
+    annotations: Array<{
+      id: string;
+      commentCount?: number;
+    }>
   ) => {
     annotations.forEach((annotation) => {
       if (annotation.commentCount !== undefined) {
