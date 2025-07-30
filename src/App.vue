@@ -1437,9 +1437,16 @@ const initializeSharedComparison = async (comparisonId) => {
     <!-- Header -->
     <header class="bg-white border-b border-gray-200 px-6 py-4">
       <div class="flex items-center justify-between">
-        <h1 class="text-xl font-medium text-gray-900">
-          ACCIO Video Annotation
-        </h1>
+        <div class="flex items-center space-x-3">
+          <h1 class="text-xl font-medium text-gray-900">
+            ACCIO Video Annotation
+          </h1>
+          <span
+            class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 border border-orange-200"
+          >
+            ALPHA
+          </span>
+        </div>
 
         <!-- Action Buttons (only for authenticated users) -->
         <div
