@@ -225,9 +225,9 @@ const toggleMode = () => {
               <div>
                 <button
                   type="submit"
-                  class="w-full px-4 py-3 font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700 transform hover:scale-[1.02] transition-all duration-200 shadow-lg hover:shadow-xl"
+                  class="w-full px-4 py-3 font-semibold text-white bg-black rounded-lg hover:bg-gray-700 transform hover:scale-[1.02] transition-all duration-200 shadow-lg hover:shadow-xl"
                 >
-                  Create Your Account
+                  Create your Account
                 </button>
               </div>
             </div>
@@ -236,7 +236,7 @@ const toggleMode = () => {
             <p class="text-sm text-gray-600 mb-3">Already have an account?</p>
             <button
               @click="toggleMode"
-              class="text-green-600 hover:text-green-700 font-medium text-sm hover:underline transition-colors duration-200"
+              class="text-black hover:text-gray-700 font-medium text-sm hover:underline transition-colors duration-200"
             >
               ← Sign in instead
             </button>
