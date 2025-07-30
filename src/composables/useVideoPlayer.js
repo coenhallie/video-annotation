@@ -13,7 +13,7 @@ export function useVideoPlayer() {
   const playbackSpeed = ref(1); // Default playback speed (1x)
 
   // Frame-based state
-  const fps = ref(30); // Default FPS, will be detected
+  const fps = ref(-1); // Will be detected from video, -1 means unknown
   const currentFrame = ref(0);
   const totalFrames = ref(0);
 
@@ -47,26 +47,71 @@ export function useVideoPlayer() {
     }
 
     try {
-      // Try to get FPS from video metadata if available
       const video = playerRef.value;
 
-      // For most web videos, we'll use a common detection method
-      // This is a simplified approach - in production you might want more sophisticated detection
-      if (video.videoWidth && video.videoHeight) {
+      // Try to get FPS from video metadata if available
+      if (video.videoWidth && video.videoHeight && duration.value > 0) {
         // Common frame rates for web videos
         const commonFPS = [23.976, 24, 25, 29.97, 30, 50, 59.94, 60];
 
-        // Default to 30 FPS for web videos, but this could be enhanced
-        // to actually detect the real FPS using frame sampling
-        fps.value = 30;
+        // Try to detect actual FPS using frame sampling method
+        let detectedFPS = 30; // fallback
 
-        // Calculate total frames based on duration and FPS
+        // Method 1: Try to use getVideoPlaybackQuality if available (Chrome/Edge)
+        if (video.getVideoPlaybackQuality) {
+          const quality = video.getVideoPlaybackQuality();
+          if (quality.totalVideoFrames && video.currentTime > 0) {
+            const calculatedFPS = quality.totalVideoFrames / video.currentTime;
+            // Find the closest common FPS
+            detectedFPS = commonFPS.reduce((prev, curr) =>
+              Math.abs(curr - calculatedFPS) < Math.abs(prev - calculatedFPS)
+                ? curr
+                : prev
+            );
+            console.log(
+              `🎬 [detectFPS] Detected FPS using getVideoPlaybackQuality: ${detectedFPS}`
+            );
+          }
+        }
+
+        // Method 2: Try to estimate from duration and common frame rates
+        if (detectedFPS === 30 && duration.value > 0) {
+          // Test common frame rates to see which gives the most reasonable total frame count
+          const testResults = commonFPS.map((testFPS) => {
+            const totalFrames = Math.round(duration.value * testFPS);
+            // Prefer frame rates that result in round numbers or common video lengths
+            const score =
+              totalFrames % 1000 === 0 ? 10 : totalFrames % 100 === 0 ? 5 : 1;
+            return { fps: testFPS, totalFrames, score };
+          });
+
+          // Sort by score and pick the best match
+          testResults.sort((a, b) => b.score - a.score);
+          detectedFPS = testResults[0].fps;
+          console.log(
+            `🎬 [detectFPS] Estimated FPS from duration: ${detectedFPS} (${testResults[0].totalFrames} total frames)`
+          );
+        }
+
+        fps.value = detectedFPS;
+
+        // Calculate total frames based on duration and detected FPS
         if (duration.value > 0) {
           totalFrames.value = Math.round(duration.value * fps.value);
+          console.log(
+            `🎬 [detectFPS] Final FPS: ${fps.value}, Total frames: ${totalFrames.value}, Duration: ${duration.value}s`
+          );
         }
       }
     } catch (err) {
+      console.warn(
+        '🎬 [detectFPS] Error detecting FPS, using default 30fps:',
+        err
+      );
       fps.value = 30;
+      if (duration.value > 0) {
+        totalFrames.value = Math.round(duration.value * fps.value);
+      }
     }
   };
 

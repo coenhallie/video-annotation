@@ -12,32 +12,28 @@ export function useDualVideoPlayer() {
   const videoAUrl = ref('');
   const videoBUrl = ref('');
 
-  // Shared synchronized state
-  const currentTime = ref(0);
-  const duration = ref(0); // Use longer duration of the two videos
-  const isPlaying = ref(false);
-  const currentFrame = ref(0);
-  const totalFrames = ref(0);
-  const fps = ref(30); // Primary FPS (from Video A by default)
+  // Individual video states for independent control
+  const videoACurrentTime = ref(0);
+  const videoBCurrentTime = ref(0);
+  const videoAIsPlaying = ref(false);
+  const videoBIsPlaying = ref(false);
+  const videoACurrentFrame = ref(0);
+  const videoBCurrentFrame = ref(0);
 
   // Individual video states (for metadata)
   const videoAState = reactive({
     duration: 0,
-    fps: 30,
+    fps: -1, // Will be detected from video, -1 means unknown
     totalFrames: 0,
     isLoaded: false,
   });
 
   const videoBState = reactive({
     duration: 0,
-    fps: 30,
+    fps: -1, // Will be detected from video, -1 means unknown
     totalFrames: 0,
     isLoaded: false,
   });
-
-  // FPS compatibility tracking
-  const fpsCompatible = ref(true);
-  const primaryVideo = ref('A'); // Which video drives the timeline
 
   // Annotation system integration
   const videoAId = ref('');
@@ -82,16 +78,82 @@ export function useDualVideoPlayer() {
     return frameNumber / targetFps;
   };
 
-  // FPS compatibility check
-  const checkFpsCompatibility = () => {
-    if (videoAState.isLoaded && videoBState.isLoaded) {
-      const fpsDifference = Math.abs(videoAState.fps - videoBState.fps);
-      fpsCompatible.value = fpsDifference < 0.1; // Allow small differences
+  // Individual video control methods
+  const seekVideoA = (time) => {
+    if (videoARef.value && videoAState.isLoaded) {
+      const clampedTime = Math.max(0, Math.min(time, videoAState.duration));
+      videoARef.value.currentTime = clampedTime;
+      videoACurrentTime.value = clampedTime;
+      videoACurrentFrame.value = timeToFrame(clampedTime, 'A');
+    }
+  };
 
-      // Set primary video to the one with higher FPS for better precision
-      primaryVideo.value = videoAState.fps >= videoBState.fps ? 'A' : 'B';
-      fps.value =
-        primaryVideo.value === 'A' ? videoAState.fps : videoBState.fps;
+  const seekVideoB = (time) => {
+    if (videoBRef.value && videoBState.isLoaded) {
+      const clampedTime = Math.max(0, Math.min(time, videoBState.duration));
+      videoBRef.value.currentTime = clampedTime;
+      videoBCurrentTime.value = clampedTime;
+      videoBCurrentFrame.value = timeToFrame(clampedTime, 'B');
+    }
+  };
+
+  const playVideoA = async () => {
+    if (videoARef.value && videoAState.isLoaded) {
+      try {
+        await videoARef.value.play();
+        videoAIsPlaying.value = true;
+      } catch (error) {
+        console.error('Failed to play video A:', error);
+      }
+    }
+  };
+
+  const pauseVideoA = () => {
+    if (videoARef.value) {
+      videoARef.value.pause();
+      videoAIsPlaying.value = false;
+    }
+  };
+
+  const playVideoB = async () => {
+    if (videoBRef.value && videoBState.isLoaded) {
+      try {
+        await videoBRef.value.play();
+        videoBIsPlaying.value = true;
+      } catch (error) {
+        console.error('Failed to play video B:', error);
+      }
+    }
+  };
+
+  const pauseVideoB = () => {
+    if (videoBRef.value) {
+      videoBRef.value.pause();
+      videoBIsPlaying.value = false;
+    }
+  };
+
+  const stepFrameVideoA = (direction) => {
+    if (videoARef.value && videoAState.isLoaded) {
+      const currentFrame = videoACurrentFrame.value;
+      const newFrame = Math.max(
+        0,
+        Math.min(currentFrame + direction, videoAState.totalFrames - 1)
+      );
+      const newTime = frameToTime(newFrame, 'A');
+      seekVideoA(newTime);
+    }
+  };
+
+  const stepFrameVideoB = (direction) => {
+    if (videoBRef.value && videoBState.isLoaded) {
+      const currentFrame = videoBCurrentFrame.value;
+      const newFrame = Math.max(
+        0,
+        Math.min(currentFrame + direction, videoBState.totalFrames - 1)
+      );
+      const newTime = frameToTime(newFrame, 'B');
+      seekVideoB(newTime);
     }
   };
 
@@ -103,9 +165,13 @@ export function useDualVideoPlayer() {
 
     const listeners = {
       timeupdate: () => {
-        // Update shared state from the primary video (videoA takes precedence)
+        // Update individual video states
         if (videoElement === videoARef.value) {
-          currentTime.value = videoElement.currentTime;
+          videoACurrentTime.value = videoElement.currentTime;
+          videoACurrentFrame.value = timeToFrame(videoElement.currentTime, 'A');
+        } else if (videoElement === videoBRef.value) {
+          videoBCurrentTime.value = videoElement.currentTime;
+          videoBCurrentFrame.value = timeToFrame(videoElement.currentTime, 'B');
         }
       },
 
@@ -136,46 +202,59 @@ export function useDualVideoPlayer() {
         }
 
         // Detect FPS for this specific video
-        // Default to 30 FPS but try to detect actual FPS
-        videoState.fps = 30; // Will be enhanced with actual detection
+        let detectedFPS = 30; // fallback
+
+        // Try to detect actual FPS using frame sampling method
+        const commonFPS = [23.976, 24, 25, 29.97, 30, 50, 59.94, 60];
+
+        // Method 1: Try to use getVideoPlaybackQuality if available (Chrome/Edge)
+        if (videoElement.getVideoPlaybackQuality) {
+          const quality = videoElement.getVideoPlaybackQuality();
+          if (quality.totalVideoFrames && videoElement.currentTime > 0) {
+            const calculatedFPS =
+              quality.totalVideoFrames / videoElement.currentTime;
+            // Find the closest common FPS
+            detectedFPS = commonFPS.reduce((prev, curr) =>
+              Math.abs(curr - calculatedFPS) < Math.abs(prev - calculatedFPS)
+                ? curr
+                : prev
+            );
+            console.log(
+              `🎬 [${videoId}] Detected FPS using getVideoPlaybackQuality: ${detectedFPS}`
+            );
+          }
+        }
+
+        // Method 2: Try to estimate from duration and common frame rates
+        if (detectedFPS === 30 && videoState.duration > 0) {
+          // Test common frame rates to see which gives the most reasonable total frame count
+          const testResults = commonFPS.map((testFPS) => {
+            const totalFrames = Math.round(videoState.duration * testFPS);
+            // Prefer frame rates that result in round numbers or common video lengths
+            const score =
+              totalFrames % 1000 === 0 ? 10 : totalFrames % 100 === 0 ? 5 : 1;
+            return { fps: testFPS, totalFrames, score };
+          });
+
+          // Sort by score and pick the best match
+          testResults.sort((a, b) => b.score - a.score);
+          detectedFPS = testResults[0].fps;
+          console.log(
+            `🎬 [${videoId}] Estimated FPS from duration: ${detectedFPS} (${testResults[0].totalFrames} total frames)`
+          );
+        }
+
+        videoState.fps = detectedFPS;
         videoState.totalFrames = Math.round(
           videoState.duration * videoState.fps
         );
 
-        // Update shared duration to the shorter of the two videos to keep them in sync
-        // Only update if both videos have loaded their metadata
-        if (videoAState.duration > 0 && videoBState.duration > 0) {
-          console.log(
-            '🎬 [loadedmetadata] Both videos loaded, setting shared duration'
-          );
-          const minDuration = Math.min(
-            videoAState.duration,
-            videoBState.duration
-          );
-          duration.value = minDuration;
+        console.log(
+          `🎬 [${videoId}] Final FPS: ${videoState.fps}, Total frames: ${videoState.totalFrames}, Duration: ${videoState.duration}s`
+        );
 
-          // Check FPS compatibility and set primary video
-          checkFpsCompatibility();
-
-          // Calculate total frames using primary video's FPS
-          totalFrames.value = Math.round(minDuration * fps.value);
-        } else if (videoAState.duration > 0 && videoBState.duration === 0) {
-          // Only video A has loaded, use its duration temporarily
-          console.log('🎬 [loadedmetadata] Only Video A loaded');
-          duration.value = videoAState.duration;
-          fps.value = videoAState.fps;
-          totalFrames.value = Math.round(
-            videoAState.duration * videoAState.fps
-          );
-        } else if (videoBState.duration > 0 && videoAState.duration === 0) {
-          // Only video B has loaded, use its duration temporarily
-          console.log('🎬 [loadedmetadata] Only Video B loaded');
-          duration.value = videoBState.duration;
-          fps.value = videoBState.fps;
-          totalFrames.value = Math.round(
-            videoBState.duration * videoBState.fps
-          );
-        }
+        // No need for shared duration calculations - each video is independent
+        console.log(`🎬 [${videoId}] Video loaded independently`);
       },
 
       loadeddata: () => {
@@ -199,61 +278,89 @@ export function useDualVideoPlayer() {
             videoState.isLoaded = true;
 
             // Detect FPS for this specific video
-            videoState.fps = 30;
+            let detectedFPS = 30; // fallback
+
+            // Try to detect actual FPS using frame sampling method
+            const commonFPS = [23.976, 24, 25, 29.97, 30, 50, 59.94, 60];
+
+            // Method 1: Try to use getVideoPlaybackQuality if available (Chrome/Edge)
+            if (videoElement.getVideoPlaybackQuality) {
+              const quality = videoElement.getVideoPlaybackQuality();
+              if (quality.totalVideoFrames && videoElement.currentTime > 0) {
+                const calculatedFPS =
+                  quality.totalVideoFrames / videoElement.currentTime;
+                // Find the closest common FPS
+                detectedFPS = commonFPS.reduce((prev, curr) =>
+                  Math.abs(curr - calculatedFPS) <
+                  Math.abs(prev - calculatedFPS)
+                    ? curr
+                    : prev
+                );
+                console.log(
+                  `🎬 [${videoId}] Detected FPS using getVideoPlaybackQuality: ${detectedFPS}`
+                );
+              }
+            }
+
+            // Method 2: Try to estimate from duration and common frame rates
+            if (detectedFPS === 30 && videoState.duration > 0) {
+              // Test common frame rates to see which gives the most reasonable total frame count
+              const testResults = commonFPS.map((testFPS) => {
+                const totalFrames = Math.round(videoState.duration * testFPS);
+                // Prefer frame rates that result in round numbers or common video lengths
+                const score =
+                  totalFrames % 1000 === 0
+                    ? 10
+                    : totalFrames % 100 === 0
+                    ? 5
+                    : 1;
+                return { fps: testFPS, totalFrames, score };
+              });
+
+              // Sort by score and pick the best match
+              testResults.sort((a, b) => b.score - a.score);
+              detectedFPS = testResults[0].fps;
+              console.log(
+                `🎬 [${videoId}] Estimated FPS from duration: ${detectedFPS} (${testResults[0].totalFrames} total frames)`
+              );
+            }
+
+            videoState.fps = detectedFPS;
             videoState.totalFrames = Math.round(
               videoState.duration * videoState.fps
             );
 
-            // Update shared duration calculations
-            if (videoAState.duration > 0 && videoBState.duration > 0) {
-              console.log(
-                '🎬 [loadeddata] Both videos now loaded, setting shared duration'
-              );
-              const minDuration = Math.min(
-                videoAState.duration,
-                videoBState.duration
-              );
-              duration.value = minDuration;
-              checkFpsCompatibility();
-              totalFrames.value = Math.round(minDuration * fps.value);
-            }
+            console.log(
+              `🎬 [${videoId}] Final FPS: ${videoState.fps}, Total frames: ${videoState.totalFrames}, Duration: ${videoState.duration}s`
+            );
+
+            // No shared duration calculations needed
+            console.log(`🎬 [${videoId}] Video data loaded independently`);
           }
         }
       },
 
       play: () => {
         console.log(`🎬 [${videoId}] play event fired`);
-        isPlaying.value = true;
+        if (videoElement === videoARef.value) {
+          videoAIsPlaying.value = true;
+        } else if (videoElement === videoBRef.value) {
+          videoBIsPlaying.value = true;
+        }
       },
 
       pause: () => {
-        console.log(`🎬 [${videoId}] pause event fired - Stack trace:`);
-        console.trace(`🎬 [${videoId}] Pause event stack trace`);
-        isPlaying.value = false;
+        console.log(`🎬 [${videoId}] pause event fired`);
+        if (videoElement === videoARef.value) {
+          videoAIsPlaying.value = false;
+        } else if (videoElement === videoBRef.value) {
+          videoBIsPlaying.value = false;
+        }
       },
 
       seeking: () => {
-        // Prevent infinite loop - don't sync if we're already in a sync operation
-        if (isSyncing) {
-          return;
-        }
-
-        // Sync the other video when one is seeking
-        if (videoElement === videoARef.value && videoBRef.value) {
-          isSyncing = true;
-          videoBRef.value.currentTime = videoElement.currentTime;
-          // Reset flag after a short delay to allow the seek to complete
-          setTimeout(() => {
-            isSyncing = false;
-          }, 50);
-        } else if (videoElement === videoBRef.value && videoARef.value) {
-          isSyncing = true;
-          videoARef.value.currentTime = videoElement.currentTime;
-          // Reset flag after a short delay to allow the seek to complete
-          setTimeout(() => {
-            isSyncing = false;
-          }, 50);
-        }
+        // No syncing needed - videos are independent
+        console.log(`🎬 [${videoId}] seeking independently`);
       },
 
       error: (event) => {
@@ -316,313 +423,6 @@ export function useDualVideoPlayer() {
     }
   });
 
-  // Debouncing for smooth scrubbing
-  let seekTimeout = null;
-  const SEEK_DEBOUNCE_MS = 16; // ~60fps for smooth scrubbing
-
-  // Prevent infinite loop in seeking synchronization
-  let isSyncing = false;
-
-  // Synchronization methods
-  const syncSeek = (time, immediate = false) => {
-    try {
-      if (!videoARef.value && !videoBRef.value) {
-        return;
-      }
-
-      // Clamp time to valid range - use the shorter duration to keep videos in sync
-      const minDuration = Math.min(videoAState.duration, videoBState.duration);
-      const clampedTime = Math.max(0, Math.min(time, minDuration));
-
-      // Update shared state immediately for responsive UI
-      currentTime.value = clampedTime;
-
-      // Debounce actual video seeking for smooth scrubbing
-      if (seekTimeout) {
-        clearTimeout(seekTimeout);
-      }
-
-      const performSeek = () => {
-        // Set sync flag to prevent circular synchronization
-        isSyncing = true;
-
-        // Seek both videos with frame-accurate positioning
-        if (videoARef.value && videoAState.isLoaded) {
-          // For Video A, use its specific FPS for frame accuracy
-          const frameA = timeToFrame(clampedTime, 'A');
-          const accurateTimeA = frameToTime(frameA, 'A');
-          videoARef.value.currentTime = accurateTimeA;
-        }
-
-        if (videoBRef.value && videoBState.isLoaded) {
-          // For Video B, use its specific FPS for frame accuracy
-          const frameB = timeToFrame(clampedTime, 'B');
-          const accurateTimeB = frameToTime(frameB, 'B');
-          videoBRef.value.currentTime = accurateTimeB;
-        }
-
-        // Reset sync flag after seeks complete
-        setTimeout(() => {
-          isSyncing = false;
-        }, 100);
-      };
-
-      if (immediate) {
-        performSeek();
-      } else {
-        seekTimeout = setTimeout(performSeek, SEEK_DEBOUNCE_MS);
-      }
-    } catch (error) {
-      showError(
-        'Failed to synchronize video seeking',
-        'Please try again or check your video files.'
-      );
-    }
-  };
-
-  const syncPlay = async () => {
-    try {
-      console.log('🎬 [syncPlay] Starting dual video playback...');
-      console.log('🎬 [syncPlay] Video A ref:', !!videoARef.value);
-      console.log('🎬 [syncPlay] Video A loaded:', videoAState.isLoaded);
-      console.log('🎬 [syncPlay] Video B ref:', !!videoBRef.value);
-      console.log('🎬 [syncPlay] Video B loaded:', videoBState.isLoaded);
-      console.log('🎬 [syncPlay] Video A URL:', videoAUrl.value);
-      console.log('🎬 [syncPlay] Video B URL:', videoBUrl.value);
-
-      if (!videoARef.value && !videoBRef.value) {
-        console.log('🎬 [syncPlay] No video refs available');
-        return;
-      }
-
-      // Safari fix: Additional readiness checks
-      const isVideoAReady =
-        videoARef.value &&
-        videoAState.isLoaded &&
-        videoARef.value.readyState >= 3 && // HAVE_FUTURE_DATA
-        isFinite(videoARef.value.duration);
-
-      const isVideoBReady =
-        videoBRef.value &&
-        videoBState.isLoaded &&
-        videoBRef.value.readyState >= 3 && // HAVE_FUTURE_DATA
-        isFinite(videoBRef.value.duration);
-
-      console.log(
-        '🎬 [syncPlay] Video A ready:',
-        isVideoAReady,
-        'readyState:',
-        videoARef.value?.readyState
-      );
-      console.log(
-        '🎬 [syncPlay] Video B ready:',
-        isVideoBReady,
-        'readyState:',
-        videoBRef.value?.readyState
-      );
-
-      const promises = [];
-      if (isVideoAReady) {
-        console.log('🎬 [syncPlay] Adding Video A to play promises');
-        promises.push(videoARef.value.play());
-      } else {
-        console.log(
-          '🎬 [syncPlay] Video A not ready - ref:',
-          !!videoARef.value,
-          'loaded:',
-          videoAState.isLoaded,
-          'readyState:',
-          videoARef.value?.readyState
-        );
-      }
-
-      if (isVideoBReady) {
-        console.log('🎬 [syncPlay] Adding Video B to play promises');
-        promises.push(videoBRef.value.play());
-      } else {
-        console.log(
-          '🎬 [syncPlay] Video B not ready - ref:',
-          !!videoBRef.value,
-          'loaded:',
-          videoBState.isLoaded,
-          'readyState:',
-          videoBRef.value?.readyState
-        );
-      }
-
-      console.log('🎬 [syncPlay] Total promises:', promises.length);
-
-      if (promises.length > 0) {
-        await Promise.all(promises);
-        isPlaying.value = true;
-        console.log('🎬 [syncPlay] All videos started playing successfully');
-
-        // Check actual video element states after play
-        if (videoARef.value) {
-          console.log(
-            '🎬 [syncPlay] Video A actual state - paused:',
-            videoARef.value.paused,
-            'currentTime:',
-            videoARef.value.currentTime,
-            'readyState:',
-            videoARef.value.readyState
-          );
-        }
-        if (videoBRef.value) {
-          console.log(
-            '🎬 [syncPlay] Video B actual state - paused:',
-            videoBRef.value.paused,
-            'currentTime:',
-            videoBRef.value.currentTime,
-            'readyState:',
-            videoBRef.value.readyState
-          );
-        }
-
-        // Enhanced Safari fix: Handle immediate pause behavior with aggressive retries
-        let retryAttempt = 1;
-        const maxRetries = 5;
-        const retryDelays = [50, 100, 150, 200, 250];
-
-        // Track pause events during retries
-        let pauseDetected = false;
-        const pauseHandler = (event) => {
-          pauseDetected = true;
-          console.log(
-            `🎬 [syncPlay] Immediate pause detected on ${
-              event.target === videoARef.value ? 'Video A' : 'Video B'
-            }`
-          );
-        };
-
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-          pauseDetected = false;
-
-          // Add temporary pause listeners to detect immediate pausing
-          if (videoARef.value)
-            videoARef.value.addEventListener('pause', pauseHandler);
-          if (videoBRef.value)
-            videoBRef.value.addEventListener('pause', pauseHandler);
-
-          await new Promise((resolve) =>
-            setTimeout(resolve, retryDelays[attempt - 1])
-          );
-
-          console.log(
-            `🎬 [syncPlay] Safari retry check ${attempt}/${maxRetries}`
-          );
-          console.log(
-            `🎬 [syncPlay] Video A paused: ${videoARef.value?.paused}, Video B paused: ${videoBRef.value?.paused}`
-          );
-
-          const retryPromises = [];
-
-          // Retry both videos if either is paused
-          if (videoBRef.value && videoBRef.value.paused && isVideoBReady) {
-            console.log(`🎬 [syncPlay] Retrying Video B on attempt ${attempt}`);
-            retryPromises.push(
-              videoBRef.value.play().catch((err) => {
-                console.error(
-                  `🎬 [syncPlay] Video B retry ${attempt} failed:`,
-                  err
-                );
-                return Promise.resolve();
-              })
-            );
-          }
-
-          if (videoARef.value && videoARef.value.paused && isVideoAReady) {
-            console.log(`🎬 [syncPlay] Retrying Video A on attempt ${attempt}`);
-            retryPromises.push(
-              videoARef.value.play().catch((err) => {
-                console.error(
-                  `🎬 [syncPlay] Video A retry ${attempt} failed:`,
-                  err
-                );
-                return Promise.resolve();
-              })
-            );
-          }
-
-          if (retryPromises.length > 0) {
-            await Promise.all(retryPromises);
-            console.log(`🎬 [syncPlay] Retry attempt ${attempt} completed`);
-
-            // Wait to see if immediate pause events fire
-            await new Promise((resolve) => setTimeout(resolve, 100));
-          }
-
-          // Remove temporary pause listeners
-          if (videoARef.value)
-            videoARef.value.removeEventListener('pause', pauseHandler);
-          if (videoBRef.value)
-            videoBRef.value.removeEventListener('pause', pauseHandler);
-
-          // Check if both videos are playing and no immediate pause was detected
-          const bothPlaying =
-            (!videoARef.value || !videoARef.value.paused) &&
-            (!videoBRef.value || !videoBRef.value.paused);
-
-          if (bothPlaying && !pauseDetected) {
-            console.log(
-              `🎬 [syncPlay] Both videos playing successfully on attempt ${attempt}`
-            );
-            break;
-          } else if (pauseDetected) {
-            console.log(
-              `🎬 [syncPlay] Immediate pause detected on attempt ${attempt}, will retry`
-            );
-          } else {
-            console.log(
-              `🎬 [syncPlay] Videos still paused on attempt ${attempt}, will retry`
-            );
-          }
-
-          // If this was the last attempt, log final status
-          if (attempt === maxRetries) {
-            console.warn(
-              `🎬 [syncPlay] After ${maxRetries} retries - Video A paused: ${videoARef.value?.paused}, Video B paused: ${videoBRef.value?.paused}`
-            );
-            console.warn(
-              '🎬 [syncPlay] Safari autoplay restrictions may be preventing playback. User interaction may be required.'
-            );
-          }
-        }
-      } else {
-        console.log('🎬 [syncPlay] No videos ready to play');
-      }
-    } catch (error) {
-      console.error('🎬 [syncPlay] Error during playback:', error);
-      isPlaying.value = false;
-      showError(
-        'Failed to synchronize video playback',
-        'Please try again or check your video files.'
-      );
-    }
-  };
-
-  const syncPause = () => {
-    try {
-      if (!videoARef.value && !videoBRef.value) {
-        return;
-      }
-
-      if (videoARef.value && videoAState.isLoaded) {
-        videoARef.value.pause();
-      }
-      if (videoBRef.value && videoBState.isLoaded) {
-        videoBRef.value.pause();
-      }
-
-      isPlaying.value = false;
-    } catch (error) {
-      showError(
-        'Failed to synchronize video pause',
-        'Please try again or check your video files.'
-      );
-    }
-  };
-
   // Annotation system methods
   const initializeAnnotations = (
     videoAData,
@@ -661,9 +461,12 @@ export function useDualVideoPlayer() {
       );
     }
 
-    // Setup drawing canvas frame synchronization
-    watch(currentFrame, (newFrame) => {
+    // Setup drawing canvas frame synchronization for individual videos
+    watch(videoACurrentFrame, (newFrame) => {
       drawingCanvasA.currentFrame.value = newFrame;
+    });
+
+    watch(videoBCurrentFrame, (newFrame) => {
       drawingCanvasB.currentFrame.value = newFrame;
     });
   };
@@ -1112,8 +915,14 @@ export function useDualVideoPlayer() {
     { deep: true }
   );
 
-  // Watch for frame changes and sync to canvases
-  watch(currentFrame, () => {
+  // Watch for frame changes and sync to canvases for both videos
+  watch(videoACurrentFrame, () => {
+    if (comparisonAnnotations?.annotations?.value) {
+      syncAnnotationsToCanvases();
+    }
+  });
+
+  watch(videoBCurrentFrame, () => {
     if (comparisonAnnotations?.annotations?.value) {
       syncAnnotationsToCanvases();
     }
@@ -1145,21 +954,17 @@ export function useDualVideoPlayer() {
     videoAUrl,
     videoBUrl,
 
-    // Shared state
-    currentTime,
-    duration,
-    isPlaying,
-    currentFrame,
-    totalFrames,
-    fps,
+    // Individual video states
+    videoACurrentTime,
+    videoBCurrentTime,
+    videoAIsPlaying,
+    videoBIsPlaying,
+    videoACurrentFrame,
+    videoBCurrentFrame,
 
     // Individual states
     videoAState,
     videoBState,
-
-    // FPS compatibility
-    fpsCompatible,
-    primaryVideo,
 
     // Annotation state
     videoAId,
@@ -1172,10 +977,15 @@ export function useDualVideoPlayer() {
     drawingCanvasA,
     drawingCanvasB,
 
-    // Sync methods
-    syncSeek,
-    syncPlay,
-    syncPause,
+    // Independent video control methods
+    seekVideoA,
+    seekVideoB,
+    playVideoA,
+    pauseVideoA,
+    playVideoB,
+    pauseVideoB,
+    stepFrameVideoA,
+    stepFrameVideoB,
 
     // Annotation methods
     initializeAnnotations,
@@ -1205,7 +1015,6 @@ export function useDualVideoPlayer() {
     removeVideoEventListeners,
     timeToFrame,
     frameToTime,
-    checkFpsCompatibility,
     cleanup,
   };
 }

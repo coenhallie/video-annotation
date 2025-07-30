@@ -171,8 +171,14 @@ export function useDrawingCanvas() {
     );
     console.log('🎨 [useDrawingCanvas] Annotations count:', annotations.length);
 
-    // Set loading state
-    state.value.isLoadingDrawings = true;
+    // Only show loading state for initial loads or when there are many annotations
+    // Don't show loading for frame changes during video playback
+    const shouldShowLoading =
+      annotations.length > 10 || state.value.drawings.size === 0;
+
+    if (shouldShowLoading) {
+      state.value.isLoadingDrawings = true;
+    }
 
     // Clear existing drawings
     state.value.drawings.clear();
@@ -191,34 +197,33 @@ export function useDrawingCanvas() {
       drawingAnnotations.length
     );
 
-    // TIMING FIX: Reduce delay to prevent interference with video fade transition timing
-    // The 300ms delay was causing race conditions with the 350ms video fade transition
-    setTimeout(() => {
-      drawingAnnotations.forEach((annotation) => {
-        if (annotation.drawingData) {
-          const frame = annotation.frame;
-          const frameDrawings = state.value.drawings.get(frame) || [];
-          frameDrawings.push(annotation.drawingData);
-          state.value.drawings.set(frame, frameDrawings);
-          console.log(
-            `🎨 [useDrawingCanvas] Added drawing for frame ${frame}:`,
-            annotation.drawingData
-          );
-        }
-      });
+    // Process annotations immediately without delay to prevent flashing
+    drawingAnnotations.forEach((annotation) => {
+      if (annotation.drawingData) {
+        const frame = annotation.frame;
+        const frameDrawings = state.value.drawings.get(frame) || [];
+        frameDrawings.push(annotation.drawingData);
+        state.value.drawings.set(frame, frameDrawings);
+        console.log(
+          `🎨 [useDrawingCanvas] Added drawing for frame ${frame}:`,
+          annotation.drawingData
+        );
+      }
+    });
 
-      console.log(
-        '🎨 [useDrawingCanvas] Final drawings map:',
-        state.value.drawings
-      );
-      console.log(
-        '🎨 [useDrawingCanvas] Total frames with drawings:',
-        state.value.drawings.size
-      );
+    console.log(
+      '🎨 [useDrawingCanvas] Final drawings map:',
+      state.value.drawings
+    );
+    console.log(
+      '🎨 [useDrawingCanvas] Total frames with drawings:',
+      state.value.drawings.size
+    );
 
-      // Clear loading state
+    // Clear loading state immediately if it was set
+    if (shouldShowLoading) {
       state.value.isLoadingDrawings = false;
-    }, 100); // Reduced delay to prevent race conditions with video transitions
+    }
   };
 
   // Get total number of drawings

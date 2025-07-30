@@ -49,11 +49,11 @@ const props = defineProps({
   },
   videoAState: {
     type: Object,
-    default: () => ({ fps: 30, duration: 0 }),
+    default: () => ({ fps: -1, duration: 0 }),
   },
   videoBState: {
     type: Object,
-    default: () => ({ fps: 30, duration: 0 }),
+    default: () => ({ fps: -1, duration: 0 }),
   },
 });
 
@@ -213,7 +213,7 @@ const timeMarkers = computed(() => {
 </script>
 
 <template>
-  <div class="bg-gray-900 text-white p-6">
+  <div class="bg-gray-900 text-white p-2">
     <!-- Play/Pause Controls (only show in dual mode) -->
     <div
       v-if="playerMode === 'dual'"
@@ -247,23 +247,6 @@ const timeMarkers = computed(() => {
 
     <!-- Timeline Container (moved to top for priority) -->
     <div class="relative mb-4">
-      <!-- Time Markers -->
-      <div class="relative h-5 mb-2">
-        <div
-          v-for="marker in timeMarkers"
-          :key="marker.time"
-          class="absolute top-0 transform -translate-x-1/2"
-          :style="{ left: `${marker.position}%` }"
-        >
-          <div class="w-px h-3 bg-gray-600"></div>
-          <div
-            class="text-xs text-gray-500 mt-0.5 whitespace-nowrap transform -translate-x-1/2"
-          >
-            {{ marker.label }}
-          </div>
-        </div>
-      </div>
-
       <!-- Main Timeline -->
       <div
         ref="timelineRef"

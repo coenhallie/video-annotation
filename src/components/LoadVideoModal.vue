@@ -305,7 +305,11 @@
                       </span>
                       <span>
                         <span class="font-medium">FPS:</span>
-                        {{ project.video.fps }}
+                        {{
+                          project.video.fps && parseFloat(project.video.fps) > 0
+                            ? project.video.fps
+                            : 'Detecting...'
+                        }}
                       </span>
                     </div>
                     <div class="flex items-center space-x-4">
@@ -326,7 +330,13 @@
                         </p>
                         <p class="text-xs text-gray-500">
                           {{ formatDuration(project.videoA?.duration || 0) }} •
-                          {{ project.videoA?.fps || 30 }} FPS
+                          {{
+                            project.videoA?.fps &&
+                            parseFloat(project.videoA.fps) > 0
+                              ? project.videoA.fps
+                              : 'Detecting...'
+                          }}
+                          FPS
                         </p>
                       </div>
                       <div class="space-y-1">
@@ -336,7 +346,13 @@
                         </p>
                         <p class="text-xs text-gray-500">
                           {{ formatDuration(project.videoB?.duration || 0) }} •
-                          {{ project.videoB?.fps || 30 }} FPS
+                          {{
+                            project.videoB?.fps &&
+                            parseFloat(project.videoB.fps) > 0
+                              ? project.videoB.fps
+                              : 'Detecting...'
+                          }}
+                          FPS
                         </p>
                       </div>
                     </div>
@@ -537,7 +553,12 @@
                       </h4>
                       <div class="text-sm text-gray-600 mt-1">
                         Duration: {{ formatDuration(project.video.duration) }} •
-                        FPS: {{ project.video.fps }}
+                        FPS:
+                        {{
+                          project.video.fps && parseFloat(project.video.fps) > 0
+                            ? project.video.fps
+                            : 'Detecting...'
+                        }}
                       </div>
                     </div>
                     <span
@@ -581,7 +602,12 @@
                       </h4>
                       <div class="text-sm text-gray-600 mt-1">
                         Duration: {{ formatDuration(project.video.duration) }} •
-                        FPS: {{ project.video.fps }}
+                        FPS:
+                        {{
+                          project.video.fps && parseFloat(project.video.fps) > 0
+                            ? project.video.fps
+                            : 'Detecting...'
+                        }}
                       </div>
                     </div>
                     <span
@@ -621,7 +647,14 @@
                         comparisonState.selectedVideoA.video.duration
                       )
                     }}
-                    • {{ comparisonState.selectedVideoA.video.fps }} FPS
+                    •
+                    {{
+                      comparisonState.selectedVideoA.video.fps &&
+                      parseFloat(comparisonState.selectedVideoA.video.fps) > 0
+                        ? comparisonState.selectedVideoA.video.fps
+                        : 'Detecting...'
+                    }}
+                    FPS
                   </p>
                 </div>
                 <div class="bg-green-50 border border-green-200 rounded-lg p-4">
@@ -635,7 +668,14 @@
                         comparisonState.selectedVideoB.video.duration
                       )
                     }}
-                    • {{ comparisonState.selectedVideoB.video.fps }} FPS
+                    •
+                    {{
+                      comparisonState.selectedVideoB.video.fps &&
+                      parseFloat(comparisonState.selectedVideoB.video.fps) > 0
+                        ? comparisonState.selectedVideoB.video.fps
+                        : 'Detecting...'
+                    }}
+                    FPS
                   </p>
                 </div>
               </div>
@@ -1349,8 +1389,8 @@ const loadVideoFromUrl = async () => {
         videoType: 'url',
         title: `Video from URL`,
         duration: videoMetadata.duration || 0,
-        fps: 30, // Default, will be detected when video loads in player
-        totalFrames: Math.floor((videoMetadata.duration || 0) * 30), // Estimate based on default FPS
+        fps: -1, // Will be detected when video loads in player
+        totalFrames: 0, // Will be calculated when FPS is detected
         originalFilename: trimmedUrl.split('/').pop() || 'video-from-url',
         filePath: null, // URL videos don't have file paths
       },

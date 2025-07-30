@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted, watch, computed } from 'vue';
 import Timeline from './components/Timeline.vue';
+import DualTimeline from './components/DualTimeline.vue';
 import AnnotationPanel from './components/AnnotationPanel.vue';
 import Login from './components/Login.vue';
 import LoadVideoModal from './components/LoadVideoModal.vue';
@@ -53,7 +54,7 @@ const videoId = ref('sample-video-1');
 const urlInput = ref('');
 
 // Dual video player state
-let dualVideoPlayer = null;
+const dualVideoPlayer = useDualVideoPlayer();
 const dualVideoPlayerRef = ref(null);
 
 // Video state
@@ -66,7 +67,7 @@ const currentVideoType = ref(null); // Track the current video type for proper d
 // Frame-based state
 const currentFrame = ref(0);
 const totalFrames = ref(0);
-const fps = ref(30);
+const fps = ref(-1); // Will be detected from video
 
 // Annotations data
 const {
@@ -273,23 +274,68 @@ const handleLoaded = async () => {
   }
 };
 
-// Timeline event handlers
+// Timeline event handlers for single video
 const handleSeekToTime = (time) => {
-  if (playerMode.value === 'dual' && dualVideoPlayer) {
-    dualVideoPlayer.syncSeek(time);
-  } else {
-    if (unifiedVideoPlayerRef.value?.seekTo) {
-      unifiedVideoPlayerRef.value.seekTo(time);
-    } else {
-    }
+  if (unifiedVideoPlayerRef.value?.seekTo) {
+    unifiedVideoPlayerRef.value.seekTo(time);
+  }
+};
+
+// Dual timeline event handlers
+const handleSeekVideoA = (time) => {
+  if (dualVideoPlayer) {
+    dualVideoPlayer.seekVideoA(time);
+  }
+};
+
+const handleSeekVideoB = (time) => {
+  if (dualVideoPlayer) {
+    dualVideoPlayer.seekVideoB(time);
+  }
+};
+
+const handlePlayVideoA = () => {
+  if (dualVideoPlayer) {
+    dualVideoPlayer.playVideoA();
+  }
+};
+
+const handlePauseVideoA = () => {
+  if (dualVideoPlayer) {
+    dualVideoPlayer.pauseVideoA();
+  }
+};
+
+const handlePlayVideoB = () => {
+  if (dualVideoPlayer) {
+    dualVideoPlayer.playVideoB();
+  }
+};
+
+const handlePauseVideoB = () => {
+  if (dualVideoPlayer) {
+    dualVideoPlayer.pauseVideoB();
+  }
+};
+
+const handleFrameStepVideoA = (direction) => {
+  if (dualVideoPlayer) {
+    dualVideoPlayer.stepFrameVideoA(direction);
+  }
+};
+
+const handleFrameStepVideoB = (direction) => {
+  if (dualVideoPlayer) {
+    dualVideoPlayer.stepFrameVideoB(direction);
   }
 };
 
 // Timeline event handlers with fade transition for annotation clicks
 const handleSeekToTimeWithFade = async (time) => {
   if (playerMode.value === 'dual' && dualVideoPlayer) {
-    // For dual mode, we could implement fade transition later if needed
-    dualVideoPlayer.syncSeek(time);
+    // For dual mode, seek both videos to the annotation time
+    dualVideoPlayer.seekVideoA(time);
+    dualVideoPlayer.seekVideoB(time);
   } else {
     if (
       unifiedVideoPlayerRef.value?.performVideoFadeTransition &&
@@ -300,7 +346,6 @@ const handleSeekToTimeWithFade = async (time) => {
       });
     } else if (unifiedVideoPlayerRef.value?.seekTo) {
       unifiedVideoPlayerRef.value.seekTo(time);
-    } else {
     }
   }
 };
@@ -342,24 +387,16 @@ const handleAnnotationClick = async (annotation) => {
   }, 400); // 400ms delay to ensure 350ms fade transition + buffer is complete
 };
 
-// Timeline play/pause handlers
+// Timeline play/pause handlers for single video
 const handleTimelinePlay = () => {
-  if (playerMode.value === 'dual' && dualVideoPlayer) {
-    dualVideoPlayer.syncPlay();
-  } else {
-    if (unifiedVideoPlayerRef.value?.play) {
-      unifiedVideoPlayerRef.value.play();
-    }
+  if (unifiedVideoPlayerRef.value?.play) {
+    unifiedVideoPlayerRef.value.play();
   }
 };
 
 const handleTimelinePause = () => {
-  if (playerMode.value === 'dual' && dualVideoPlayer) {
-    dualVideoPlayer.syncPause();
-  } else {
-    if (unifiedVideoPlayerRef.value?.pause) {
-      unifiedVideoPlayerRef.value.pause();
-    }
+  if (unifiedVideoPlayerRef.value?.pause) {
+    unifiedVideoPlayerRef.value.pause();
   }
 };
 
@@ -396,7 +433,13 @@ onMounted(async () => {
 const clearVideoState = () => {
   // Reset player mode to single
   playerMode.value = 'single';
-  dualVideoPlayer = null;
+
+  // Reset dual video player URLs
+  if (dualVideoPlayer) {
+    dualVideoPlayer.videoAUrl.value = '';
+    dualVideoPlayer.videoBUrl.value = '';
+    dualVideoPlayer.cleanup();
+  }
 
   // Reset comparison workflow
   comparisonWorkflow.resetWorkflow();
@@ -409,7 +452,7 @@ const clearVideoState = () => {
   isPlaying.value = false;
   currentFrame.value = 0;
   totalFrames.value = 0;
-  fps.value = 30;
+  fps.value = -1;
   selectedAnnotation.value = null;
   isAnnotationFormVisible.value = false;
   isLoadModalVisible.value = false;
@@ -616,7 +659,12 @@ const handleVideoSelected = async (data) => {
   try {
     // Ensure we're in single mode
     playerMode.value = 'single';
-    dualVideoPlayer = null;
+
+    // Clear dual video player URLs
+    if (dualVideoPlayer) {
+      dualVideoPlayer.videoAUrl.value = '';
+      dualVideoPlayer.videoBUrl.value = '';
+    }
 
     // Update video state
 
@@ -688,7 +736,7 @@ const handleSharedVideoSelected = async (data) => {
     currentVideoId.value = video.id;
 
     // Update video metadata
-    fps.value = video.fps || 30;
+    fps.value = video.fps || -1;
     duration.value = video.duration || 0;
     totalFrames.value = video.totalFrames || 0;
 
@@ -710,141 +758,6 @@ const handleSharedVideoSelected = async (data) => {
   } catch (error) {
     console.error('❌ [App] Error in handleSharedVideoSelected:', error);
   }
-};
-
-// Handle dual video selection
-const handleDualVideosSelected = async (data) => {
-  const { videoA, videoB } = data;
-
-  // 🐛 DEBUG: Log video objects to trace URL assignment
-
-  try {
-    // Switch to dual mode
-    playerMode.value = 'dual';
-
-    // Initialize dual video player composable
-    dualVideoPlayer = useDualVideoPlayer();
-
-    // Set video URLs
-
-    dualVideoPlayer.videoAUrl.value = videoA.url;
-    dualVideoPlayer.videoBUrl.value = videoB.url;
-
-    // Initialize annotation system for dual videos
-
-    const videoAData = {
-      videoId: videoA.videoId,
-      videoId: videoA.videoId,
-      url: videoA.url,
-      fps: videoA.fps,
-      duration: videoA.duration,
-      totalFrames: videoA.totalFrames,
-      videoType: videoA.videoType,
-      title: videoA.title,
-    };
-
-    const videoBData = {
-      videoId: videoB.videoId,
-      videoId: videoB.videoId,
-      url: videoB.url,
-      fps: videoB.fps,
-      duration: videoB.duration,
-      totalFrames: videoB.totalFrames,
-      videoType: videoB.videoType,
-      title: videoB.title,
-    };
-
-    // Initialize annotations for both videos with proper project context
-    // For comparison mode, we need to create a project context or use existing one
-    const projectIdForAnnotations = currentProject.value?.id || null;
-    const comparisonVideoIdForAnnotations = `comparison-${videoA.id}-${videoB.id}`;
-
-    dualVideoPlayer.initializeAnnotations(
-      videoAData,
-      videoBData,
-      projectIdForAnnotations,
-      comparisonVideoIdForAnnotations
-    );
-
-    // 🐛 DEBUG: Verify URLs were set correctly
-
-    // Set current video in session to represent dual session
-    videoId.value = `dual-${videoA.videoId}-${videoB.videoId}`;
-
-    // Use the longer duration for the timeline
-    const maxDuration = Math.max(videoA.duration, videoB.duration);
-    duration.value = maxDuration;
-    dualVideoPlayer.duration.value = maxDuration;
-
-    // Use the higher FPS for synchronization
-    const maxFps = Math.max(videoA.fps, videoB.fps);
-    fps.value = maxFps;
-    dualVideoPlayer.fps.value = maxFps;
-
-    // Calculate total frames based on max duration and FPS
-    totalFrames.value = Math.floor(maxDuration * maxFps);
-    dualVideoPlayer.totalFrames.value = totalFrames.value;
-
-    // Setup watchers to sync dual video player state with main App state
-    watch(dualVideoPlayer.currentTime, (newTime) => {
-      currentTime.value = newTime;
-    });
-
-    watch(dualVideoPlayer.currentFrame, (newFrame) => {
-      currentFrame.value = newFrame;
-    });
-
-    watch(dualVideoPlayer.isPlaying, (newIsPlaying) => {
-      isPlaying.value = newIsPlaying;
-    });
-
-    watch(dualVideoPlayer.duration, (newDuration) => {
-      if (newDuration > duration.value) {
-        duration.value = newDuration;
-      }
-    });
-
-    watch(dualVideoPlayer.totalFrames, (newTotalFrames) => {
-      totalFrames.value = newTotalFrames;
-    });
-
-    watch(dualVideoPlayer.fps, (newFps) => {
-      fps.value = newFps;
-    });
-
-    // Initialize video session for dual mode
-    if (user.value) {
-      try {
-        // For dual mode, we don't need to create a new video record
-        // Instead, we'll use the comparison video ID for session tracking
-
-        // Set up the video metadata for session
-        videoUrl.value = `dual:${videoA.url}|${videoB.url}`;
-
-        // Initialize video annotations for both videos in dual mode
-        if (dualVideoPlayer && dualVideoPlayer.initializeVideoAnnotations) {
-          try {
-            await dualVideoPlayer.initializeVideoAnnotations(
-              videoAData,
-              videoBData
-            );
-          } catch (error) {}
-        }
-
-        // Start session with dual video context
-        await startSession();
-
-        // Set up presence tracking for dual mode
-        setupPresenceTracking(user.value.id, user.value.email);
-      } catch (error) {
-        // Continue without session - annotation functionality should still work
-      }
-      setupPresenceTracking(user.value.id, user.value.email);
-    }
-
-    // Close the modal
-    closeLoadModal();
-  } catch (error) {}
 };
 
 // Handle comparison video selection
@@ -871,9 +784,6 @@ const handleComparisonVideoSelected = async (data) => {
 
     // Switch to dual mode
     playerMode.value = 'dual';
-
-    // Initialize dual video player composable
-    dualVideoPlayer = useDualVideoPlayer();
 
     // Get the correct URLs using the helper function
     const videoAUrl = getVideoUrl(videoA);
@@ -927,46 +837,8 @@ const handleComparisonVideoSelected = async (data) => {
     // Set current video in session to represent comparison session
     videoId.value = `comparison-${comparisonVideo.id}`;
 
-    // Use the longer duration for the timeline
-    const maxDuration = Math.max(videoA.duration, videoB.duration);
-    duration.value = maxDuration;
-    dualVideoPlayer.duration.value = maxDuration;
-
-    // Use the higher FPS for synchronization
-    const maxFps = Math.max(videoA.fps, videoB.fps);
-    fps.value = maxFps;
-    dualVideoPlayer.fps.value = maxFps;
-
-    // Calculate total frames based on max duration and FPS
-    totalFrames.value = Math.floor(maxDuration * maxFps);
-    dualVideoPlayer.totalFrames.value = totalFrames.value;
-
-    // Setup watchers to sync dual video player state with main App state
-    watch(dualVideoPlayer.currentTime, (newTime) => {
-      currentTime.value = newTime;
-    });
-
-    watch(dualVideoPlayer.currentFrame, (newFrame) => {
-      currentFrame.value = newFrame;
-    });
-
-    watch(dualVideoPlayer.isPlaying, (newIsPlaying) => {
-      isPlaying.value = newIsPlaying;
-    });
-
-    watch(dualVideoPlayer.duration, (newDuration) => {
-      if (newDuration > duration.value) {
-        duration.value = newDuration;
-      }
-    });
-
-    watch(dualVideoPlayer.totalFrames, (newTotalFrames) => {
-      totalFrames.value = newTotalFrames;
-    });
-
-    watch(dualVideoPlayer.fps, (newFps) => {
-      fps.value = newFps;
-    });
+    // Set video metadata for individual videos (no more syncing needed)
+    // Each video maintains its own state independently
 
     // For comparison mode, we don't need to initialize a video record
     // since the individual videos already exist and the comparison video
@@ -1597,44 +1469,68 @@ const initializeSharedComparison = async (comparisonId) => {
 
         <!-- Timeline -->
         <div class="bg-gray-900 p-4 border-t border-gray-800">
+          <!-- Single Video Timeline -->
           <Timeline
-            :current-time="
-              playerMode === 'dual' && dualVideoPlayer
-                ? dualVideoPlayer.currentTime.value
-                : currentTime
-            "
-            :duration="
-              playerMode === 'dual' && dualVideoPlayer
-                ? dualVideoPlayer.duration.value
-                : duration
-            "
-            :current-frame="
-              playerMode === 'dual' && dualVideoPlayer
-                ? dualVideoPlayer.currentFrame.value
-                : currentFrame
-            "
-            :total-frames="
-              playerMode === 'dual' && dualVideoPlayer
-                ? dualVideoPlayer.totalFrames.value
-                : totalFrames
-            "
-            :fps="
-              playerMode === 'dual' && dualVideoPlayer
-                ? dualVideoPlayer.fps.value
-                : fps
-            "
+            v-if="playerMode === 'single'"
+            :current-time="currentTime"
+            :duration="duration"
+            :current-frame="currentFrame"
+            :total-frames="totalFrames"
+            :fps="fps"
             :annotations="annotations"
             :selected-annotation="selectedAnnotation"
-            :is-playing="
-              playerMode === 'dual' && dualVideoPlayer
-                ? dualVideoPlayer.isPlaying.value
-                : isPlaying
-            "
+            :is-playing="isPlaying"
             :player-mode="playerMode"
             @seek-to-time="handleSeekToTime"
             @annotation-click="handleAnnotationClick"
             @play="handleTimelinePlay"
             @pause="handleTimelinePause"
+          />
+
+          <!-- Dual Video Timeline -->
+          <DualTimeline
+            v-else-if="playerMode === 'dual'"
+            :video-a-current-time="
+              dualVideoPlayer?.videoACurrentTime?.value || 0
+            "
+            :video-a-duration="dualVideoPlayer?.videoAState?.duration || 0"
+            :video-a-current-frame="
+              dualVideoPlayer?.videoACurrentFrame?.value || 0
+            "
+            :video-a-total-frames="
+              dualVideoPlayer?.videoAState?.totalFrames || 0
+            "
+            :video-a-fps="dualVideoPlayer?.videoAState?.fps || 30"
+            :video-a-state="
+              dualVideoPlayer?.videoAState || { fps: 30, duration: 0 }
+            "
+            :video-b-current-time="
+              dualVideoPlayer?.videoBCurrentTime?.value || 0
+            "
+            :video-b-duration="dualVideoPlayer?.videoBState?.duration || 0"
+            :video-b-current-frame="
+              dualVideoPlayer?.videoBCurrentFrame?.value || 0
+            "
+            :video-b-total-frames="
+              dualVideoPlayer?.videoBState?.totalFrames || 0
+            "
+            :video-b-fps="dualVideoPlayer?.videoBState?.fps || 30"
+            :video-b-state="
+              dualVideoPlayer?.videoBState || { fps: 30, duration: 0 }
+            "
+            :annotations="annotations"
+            :selected-annotation="selectedAnnotation"
+            :video-a-playing="dualVideoPlayer?.videoAIsPlaying?.value || false"
+            :video-b-playing="dualVideoPlayer?.videoBIsPlaying?.value || false"
+            @seek-video-a="handleSeekVideoA"
+            @seek-video-b="handleSeekVideoB"
+            @annotation-click="handleAnnotationClick"
+            @play-video-a="handlePlayVideoA"
+            @pause-video-a="handlePauseVideoA"
+            @play-video-b="handlePlayVideoB"
+            @pause-video-b="handlePauseVideoB"
+            @frame-step-video-a="handleFrameStepVideoA"
+            @frame-step-video-b="handleFrameStepVideoB"
           />
         </div>
       </section>
