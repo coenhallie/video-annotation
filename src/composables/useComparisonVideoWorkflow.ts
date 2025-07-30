@@ -8,7 +8,6 @@ import type {
   ComparisonVideo,
   Annotation,
   VideoContext,
-  ComparisonAnnotation,
 } from '../types/database';
 
 export function useComparisonVideoWorkflow() {
@@ -33,7 +32,7 @@ export function useComparisonVideoWorkflow() {
 
   // Comparison video state
   const currentComparison = ref<ComparisonVideo | null>(null);
-  const comparisonAnnotations = ref<ComparisonAnnotation[]>([]);
+  const comparisonAnnotations = ref<Annotation[]>([]);
   const videoAAnnotations = ref<Annotation[]>([]);
   const videoBAnnotations = ref<Annotation[]>([]);
 
@@ -112,8 +111,6 @@ export function useComparisonVideoWorkflow() {
     workflowStep.value = 'create';
 
     try {
-      console.log('🔄 [ComparisonWorkflow] Creating comparison video...');
-
       // Validate input
       if (!comparisonTitle.value.trim()) {
         throw new Error('Comparison title is required');
@@ -124,10 +121,8 @@ export function useComparisonVideoWorkflow() {
         await ComparisonVideoService.createComparisonVideo({
           title: comparisonTitle.value.trim(),
           description: comparisonDescription.value.trim() || undefined,
-          videoAId: selectedVideoA.value!.id,
-          videoBId: selectedVideoB.value!.id,
-          video_a: selectedVideoA.value!,
-          video_b: selectedVideoB.value!,
+          videoA: selectedVideoA.value!,
+          videoB: selectedVideoB.value!,
         });
 
       currentComparison.value = comparisonVideo;
@@ -165,8 +160,6 @@ export function useComparisonVideoWorkflow() {
     workflowStep.value = 'load';
 
     try {
-      console.log('🔄 [ComparisonWorkflow] Starting direct comparison...');
-
       // Load annotations for both videos
       const [annotationsA, annotationsB] = await Promise.all([
         AnnotationService.getVideoAnnotations(selectedVideoA.value!.id),
@@ -200,11 +193,6 @@ export function useComparisonVideoWorkflow() {
     workflowStep.value = 'load';
 
     try {
-      console.log(
-        '🔄 [ComparisonWorkflow] Loading comparison video:',
-        comparisonVideo.id
-      );
-
       // Set current comparison
       currentComparison.value = comparisonVideo;
       selectedVideoA.value = comparisonVideo.videoA!;
@@ -276,10 +264,6 @@ export function useComparisonVideoWorkflow() {
           annotation,
           user.value.id,
           'comparison'
-        );
-        console.log(
-          'Annotation data being sent to createComparisonAnnotation:',
-          annotation
         );
         comparisonAnnotations.value.push(newAnnotation);
         comparisonAnnotations.value.sort((a, b) => a.frame - b.frame);

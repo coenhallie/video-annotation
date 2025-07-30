@@ -29,9 +29,6 @@ export class ShareService {
   static async createShareableLink(videoId: string): Promise<string> {
     try {
       // First, make the video public
-      console.log(
-        '✅ [DEBUG] ShareService - Using camelCase column: isPublic (not is_public)'
-      );
       await supabase
         .from('videos')
         .update({ isPublic: true })
@@ -53,11 +50,6 @@ export class ShareService {
     videoId: string
   ): Promise<SharedVideoWithCommentPermissions> {
     try {
-      console.log(
-        '🔍 [ShareService] Loading shared video with comment permissions:',
-        videoId
-      );
-
       // Get the video (must be public)
       const { data: videos, error: videoError } = await supabase
         .from('videos')
@@ -74,7 +66,6 @@ export class ShareService {
       }
 
       const video = videos && videos.length > 0 ? videos[0] : null;
-      console.log('📹 [ShareService] Found video:', video);
 
       if (!video) {
         throw new Error('Video not found or not public');
@@ -95,20 +86,8 @@ export class ShareService {
         throw annotationsError;
       }
 
-      console.log('📝 [ShareService] Raw annotations from DB:', annotations);
-      console.log(
-        '📝 [ShareService] Annotations count:',
-        annotations?.length || 0
-      );
-
       // Database columns are already in camelCase, no mapping needed
       const mappedAnnotations = annotations || [];
-
-      console.log('📝 [ShareService] Mapped annotations:', mappedAnnotations);
-      console.log(
-        '📝 [ShareService] Drawing annotations:',
-        mappedAnnotations.filter((ann) => ann.annotationType === 'drawing')
-      );
 
       // Determine comment permissions for shared videos
       const canComment = this.canCommentOnSharedVideo(video);
@@ -125,7 +104,6 @@ export class ShareService {
         annotations: mappedAnnotations,
       };
 
-      console.log('✅ [ShareService] Returning shared video data:', result);
       return result;
     } catch (error) {
       console.error(
@@ -253,11 +231,6 @@ export class ShareService {
     comparisonId: string
   ): Promise<SharedComparisonVideoWithCommentPermissions> {
     try {
-      console.log(
-        '🔍 [ShareService] Loading shared comparison video with comment permissions:',
-        comparisonId
-      );
-
       // Get the comparison video (must be public)
       const { data: comparisons, error: comparisonError } = await supabase
         .from('comparison_videos')
@@ -275,7 +248,6 @@ export class ShareService {
 
       const comparison =
         comparisons && comparisons.length > 0 ? comparisons[0] : null;
-      console.log('📹 [ShareService] Found comparison:', comparison);
 
       if (!comparison) {
         throw new Error('Comparison video not found or not public');
@@ -286,9 +258,6 @@ export class ShareService {
         supabase.from('videos').select('*').eq('id', comparison.videoAId),
         supabase.from('videos').select('*').eq('id', comparison.videoBId),
       ]);
-
-      console.log('📹 [ShareService] Video A result:', videoAResult);
-      console.log('📹 [ShareService] Video B result:', videoBResult);
 
       // Transform results to handle arrays and maintain compatibility with createVideoForComparison
       const videoATransformed = {
@@ -316,9 +285,6 @@ export class ShareService {
         'Video B'
       );
 
-      console.log('📹 [ShareService] Processed Video A:', videoA);
-      console.log('📹 [ShareService] Processed Video B:', videoB);
-
       // Get all annotations for the comparison context (comparison-specific + individual video annotations)
       const [
         comparisonAnnotationsResult,
@@ -342,51 +308,6 @@ export class ShareService {
           .order('timestamp', { ascending: true }),
       ]);
 
-      console.log('📝 [ShareService] Querying annotations with IDs:', {
-        comparisonId,
-        videoAId: comparison.videoAId,
-        videoBId: comparison.videoBId,
-      });
-
-      console.log(
-        '📝 [ShareService] Comparison annotations result:',
-        comparisonAnnotationsResult
-      );
-      console.log(
-        '📝 [ShareService] Video A annotations result:',
-        videoAAnnotationsResult
-      );
-      console.log(
-        '📝 [ShareService] Video B annotations result:',
-        videoBAnnotationsResult
-      );
-
-      console.log(
-        '📝 [ShareService] Comparison annotations:',
-        comparisonAnnotationsResult.data
-      );
-      console.log(
-        '📝 [ShareService] Video A annotations:',
-        videoAAnnotationsResult.data
-      );
-      console.log(
-        '📝 [ShareService] Video B annotations:',
-        videoBAnnotationsResult.data
-      );
-
-      console.log(
-        '📝 [ShareService] Comparison annotations error:',
-        comparisonAnnotationsResult.error
-      );
-      console.log(
-        '📝 [ShareService] Video A annotations error:',
-        videoAAnnotationsResult.error
-      );
-      console.log(
-        '📝 [ShareService] Video B annotations error:',
-        videoBAnnotationsResult.error
-      );
-
       // Combine all annotations
       const allAnnotations = [
         ...(comparisonAnnotationsResult.data || []),
@@ -394,22 +315,8 @@ export class ShareService {
         ...(videoBAnnotationsResult.data || []),
       ];
 
-      console.log(
-        '📝 [ShareService] All combined annotations:',
-        allAnnotations
-      );
-      console.log(
-        '📝 [ShareService] Total annotations count:',
-        allAnnotations.length
-      );
-
       // Database columns are already in camelCase, no mapping needed
       const mappedAnnotations = allAnnotations || [];
-
-      console.log(
-        '📝 [ShareService] Drawing annotations:',
-        mappedAnnotations.filter((ann) => ann.annotationType === 'drawing')
-      );
 
       // Comment permissions for comparison videos
       const canComment = comparison.isPublic;
@@ -429,10 +336,6 @@ export class ShareService {
         totalFrames: comparison.totalFrames,
       };
 
-      console.log(
-        '✅ [ShareService] Returning shared comparison data:',
-        result
-      );
       return result;
     } catch (error) {
       console.error(
@@ -580,11 +483,6 @@ export class ShareService {
     sessionId?: string
   ): Promise<CommentPermissionContext> {
     try {
-      console.log('🔍 [ShareService] Getting comment permission context:', {
-        videoId,
-        sessionId,
-      });
-
       // Get the video to check if it's public
       const { data: videos, error: videoError } = await supabase
         .from('videos')
@@ -640,11 +538,6 @@ export class ShareService {
     displayName: string
   ): Promise<AnonymousSession> {
     try {
-      console.log(
-        '🔍 [ShareService] Creating anonymous session for shared video:',
-        { videoId, displayName }
-      );
-
       // Enhanced validation
       const validation = await this.validateAnonymousSessionCreation(
         videoId,
@@ -660,9 +553,6 @@ export class ShareService {
         videoId: videoId,
       });
 
-      console.log(
-        '✅ [ShareService] Successfully created anonymous session for shared video'
-      );
       return session;
     } catch (error) {
       console.error(
@@ -700,10 +590,6 @@ export class ShareService {
 
       const video = videos && videos.length > 0 ? videos[0] : null;
       const isValid = !!video;
-      console.log('🔍 [ShareService] Video access validation result:', {
-        videoId,
-        isValid,
-      });
       return isValid;
     } catch (error) {
       console.error(
@@ -832,11 +718,6 @@ export class ShareService {
     displayName: string
   ): Promise<AnonymousSession> {
     try {
-      console.log(
-        '🔍 [ShareService] Creating anonymous session for shared comparison:',
-        { comparisonId, displayName }
-      );
-
       // Enhanced validation
       const validation =
         await this.validateAnonymousSessionCreationForComparison(
@@ -853,9 +734,6 @@ export class ShareService {
         comparisonVideoId: comparisonId,
       });
 
-      console.log(
-        '✅ [ShareService] Successfully created anonymous session for shared comparison'
-      );
       return session;
     } catch (error) {
       console.error(
@@ -899,10 +777,6 @@ export class ShareService {
       const comparison =
         comparisons && comparisons.length > 0 ? comparisons[0] : null;
       const isValid = !!comparison;
-      console.log('🔍 [ShareService] Comparison access validation result:', {
-        comparisonId,
-        isValid,
-      });
       return isValid;
     } catch (error) {
       console.error(

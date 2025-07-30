@@ -15,88 +15,70 @@ export class ComparisonVideoService {
   static async createComparisonVideo(comparisonData: {
     title: string;
     description?: string;
-    videoAId: string;
-    videoBId: string;
-    video_a?: Video;
-    video_b?: Video;
+    videoA: Video;
+    videoB: Video;
     owner_id?: string;
   }): Promise<ComparisonVideo> {
-    console.log(
-      '🔍 [ComparisonVideoService] Creating comparison video:',
-      comparisonData
-    );
-
-    // Get current user
     const {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) throw new Error('User not authenticated');
 
-    // Fetch video details if not provided
+    const ensureVideoInDb = async (video: Video): Promise<Video> => {
+      // If the video already has a database ID, it's already in the database.
+      if (video.id && video.videoType !== 'url') {
+        const dbVideo = await VideoService.getVideoById(video.id);
+        if (dbVideo) return dbVideo;
+      }
+
+      // If it's a URL-based video, it might not be in our database yet.
+      // We'll try to find an existing one or create a new entry.
+      if (video.videoType === 'url' && video.url) {
+        const existingVideo = await VideoService.findVideoByUrl(video.url);
+        if (existingVideo) return existingVideo;
+
+        // If it doesn't exist, create it in the database.
+        return await VideoService.createUrlVideo(
+          user.id,
+          video.url,
+          video.title,
+          video.duration,
+          video.fps,
+          video.totalFrames,
+          video.originalFilename
+        );
+      }
+      throw new Error(
+        `Video "${video.title}" is not a valid DB entry or URL video.`
+      );
+    };
+
     const [videoA, videoB] = await Promise.all([
-      comparisonData.video_a ||
-        VideoService.getVideoById(comparisonData.videoAId),
-      comparisonData.video_b ||
-        VideoService.getVideoById(comparisonData.videoBId),
+      ensureVideoInDb(comparisonData.videoA),
+      ensureVideoInDb(comparisonData.videoB),
     ]);
-
-    // Validate that both videos exist and have valid data
-    if (!videoA) {
-      throw new Error(`Video A with ID ${comparisonData.videoAId} not found`);
+    if (!videoA || !videoB) {
+      throw new Error('One or both videos could not be processed.');
     }
-    if (!videoB) {
-      throw new Error(`Video B with ID ${comparisonData.videoBId} not found`);
-    }
-
-    // Validate video URLs/paths
-    const isVideoAValid =
-      (videoA.videoType === 'url' && videoA.url && videoA.url.trim() !== '') ||
-      (videoA.videoType === 'upload' &&
-        ((videoA.url && videoA.url.trim() !== '') ||
-          (videoA.filePath && videoA.filePath.trim() !== '')));
-    const isVideoBValid =
-      (videoB.videoType === 'url' && videoB.url && videoB.url.trim() !== '') ||
-      (videoB.videoType === 'upload' &&
-        ((videoB.url && videoB.url.trim() !== '') ||
-          (videoB.filePath && videoB.filePath.trim() !== '')));
-
-    if (!isVideoAValid) {
-      throw new Error(`Video A (${videoA.title}) has invalid URL or file path`);
-    }
-    if (!isVideoBValid) {
-      throw new Error(`Video B (${videoB.title}) has invalid URL or file path`);
-    }
-
-    // Calculate comparison metadata
-    const duration = Math.max(videoA.duration, videoB.duration);
-    const fps = videoA.fps; // Use Video A's FPS as primary
-    const totalFrames = Math.max(videoA.totalFrames, videoB.totalFrames);
-
-    // Check for existing comparison (prevent duplicates)
     const existingComparison = await this.findExistingComparison(
       user.id,
-      comparisonData.videoAId,
-      comparisonData.videoBId
+      videoA.id,
+      videoB.id
     );
 
     if (existingComparison) {
-      console.log(
-        '🔍 [ComparisonVideoService] Found existing comparison, updating:',
-        existingComparison.id
-      );
       return this.updateComparisonVideo(existingComparison.id, {
         title: comparisonData.title,
         description: comparisonData.description,
       });
     }
-
     // Create new comparison video
     const insertData: ComparisonVideoInsert = {
       userId: user.id,
       title: comparisonData.title,
       description: comparisonData.description,
-      videoAId: comparisonData.videoAId,
-      videoBId: comparisonData.videoBId,
+      videoAId: videoA.id,
+      videoBId: videoB.id,
       thumbnailLayout: 'side-by-side',
       isPublic: false,
     };
@@ -114,11 +96,6 @@ export class ComparisonVideoService {
       );
       throw error;
     }
-
-    console.log(
-      '✅ [ComparisonVideoService] Successfully created comparison video:',
-      data
-    );
 
     // Generate composite thumbnail
     try {

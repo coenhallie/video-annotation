@@ -151,6 +151,56 @@ export class VideoService {
     return data;
   }
 
+  static async findVideoByUrl(url: string): Promise<Video | null> {
+    const { data, error } = await supabase
+      .from('videos')
+      .select('*')
+      .eq('url', url)
+      .eq('videoType', 'url')
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error finding video by URL:', error);
+      return null;
+    }
+    return data;
+  }
+
+  static async createUrlVideo(
+    ownerId: string,
+    url: string,
+    title: string,
+    duration: number,
+    fps: number,
+    totalFrames: number,
+    originalFilename: string
+  ): Promise<Video> {
+    const videoData: VideoInsert = {
+      ownerId,
+      url,
+      title,
+      duration,
+      fps,
+      totalFrames,
+      originalFilename,
+      videoType: 'url',
+      videoId: '', //This will be handled by the database
+      isPublic: false,
+    };
+
+    const { data, error } = await supabase
+      .from('videos')
+      .insert(videoData)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error creating URL video:', error);
+      throw error;
+    }
+    return data;
+  }
+
   static async updateVideo(videoId: string, updates: VideoUpdate) {
     const { data, error } = await supabase
       .from('videos')

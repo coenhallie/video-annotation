@@ -31,8 +31,6 @@ export class ProjectService {
    */
   static async getUserProjects(userId: string): Promise<Project[]> {
     try {
-      console.log('🎬 [ProjectService] Loading projects for user:', userId);
-
       // Fetch all videos and comparison videos for the user
       const [videos, comparisonVideos] = await Promise.all([
         VideoService.getUserVideos(userId),

@@ -24,11 +24,6 @@ export class ThumbnailService {
     } = options;
 
     try {
-      console.log(
-        '🖼️ [ThumbnailService] Generating composite thumbnail for comparison:',
-        comparisonVideoId
-      );
-
       // Create canvas for composite thumbnail
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
@@ -51,8 +46,8 @@ export class ThumbnailService {
 
       // Load thumbnail images
       const [imageA, imageB] = await Promise.all([
-        this.loadImage(videoA.thumbnail_url),
-        this.loadImage(videoB.thumbnail_url),
+        this.loadImage(videoA.thumbnailUrl),
+        this.loadImage(videoB.thumbnailUrl),
       ]);
 
       // Draw composite based on layout
@@ -75,10 +70,6 @@ export class ThumbnailService {
       const blob = await this.canvasToBlob(canvas, quality);
       const thumbnailUrl = await this.uploadThumbnail(comparisonVideoId, blob);
 
-      console.log(
-        '✅ [ThumbnailService] Successfully generated composite thumbnail:',
-        thumbnailUrl
-      );
       return thumbnailUrl;
     } catch (error) {
       console.error(
@@ -273,7 +264,6 @@ export class ThumbnailService {
       img.crossOrigin = 'anonymous';
       img.onload = () => resolve(img);
       img.onerror = () => {
-        console.warn('Failed to load thumbnail:', url);
         // Create placeholder and resolve
         this.loadImage(undefined).then(resolve);
       };
@@ -466,7 +456,7 @@ export class ThumbnailService {
       const images = await Promise.all(
         videos
           .slice(0, maxVideos)
-          .map((video) => this.loadImage(video.thumbnail_url))
+          .map((video) => this.loadImage(video.thumbnailUrl))
       );
 
       for (let i = 0; i < images.length; i++) {

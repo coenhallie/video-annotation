@@ -40,8 +40,6 @@ export class CommentService {
    * Create a new comment (authenticated or anonymous)
    */
   static async createComment(params: CreateCommentParams): Promise<Comment> {
-    console.log('🔍 [CommentService] Creating comment:', params);
-
     try {
       // Validate required parameters
       if (!params.annotationId || !params.content) {
@@ -101,7 +99,6 @@ export class CommentService {
         throw error;
       }
 
-      console.log('✅ [CommentService] Successfully created comment:', data);
       return data;
     } catch (error) {
       console.error('❌ [CommentService] Error creating comment:', error);
@@ -113,11 +110,6 @@ export class CommentService {
    * Get all comments for a specific annotation
    */
   static async getAnnotationComments(annotationId: string): Promise<Comment[]> {
-    console.log(
-      '🔍 [CommentService] Getting comments for annotation:',
-      annotationId
-    );
-
     try {
       const { data, error } = await supabase
         .from('annotation_comments')
@@ -135,7 +127,6 @@ export class CommentService {
         throw error;
       }
 
-      console.log('✅ [CommentService] Retrieved comments:', data?.length || 0);
       return data || [];
     } catch (error) {
       console.error(
@@ -154,8 +145,6 @@ export class CommentService {
     params: UpdateCommentParams,
     sessionId?: string
   ): Promise<Comment> {
-    console.log('🔍 [CommentService] Updating comment:', { commentId, params });
-
     try {
       // Validate content
       if (!this.validateCommentContent(params.content)) {
@@ -204,10 +193,6 @@ export class CommentService {
           throw fetchError;
         }
 
-        console.log(
-          '✅ [CommentService] Successfully updated comment:',
-          commentWithUser
-        );
         return commentWithUser;
       } else {
         // For authenticated users, use regular update
@@ -232,7 +217,6 @@ export class CommentService {
           throw error;
         }
 
-        console.log('✅ [CommentService] Successfully updated comment:', data);
         return data;
       }
     } catch (error) {
@@ -250,8 +234,6 @@ export class CommentService {
     commentId: string,
     sessionId?: string
   ): Promise<void> {
-    console.log('🔍 [CommentService] Deleting comment:', commentId);
-
     try {
       // Set session context for anonymous users
       if (sessionId) {
@@ -267,8 +249,6 @@ export class CommentService {
         console.error('❌ [CommentService] Error deleting comment:', error);
         throw error;
       }
-
-      console.log('✅ [CommentService] Successfully deleted comment');
     } catch (error) {
       console.error('❌ [CommentService] Error deleting comment:', error);
       throw error;
@@ -283,8 +263,6 @@ export class CommentService {
   static async createAnonymousSession(
     params: CreateAnonymousSessionParams
   ): Promise<AnonymousSession> {
-    console.log('🔍 [CommentService] Creating anonymous session:', params);
-
     try {
       if (!params.displayName) {
         throw new Error('displayName is required');
@@ -320,10 +298,6 @@ export class CommentService {
         throw error;
       }
 
-      console.log(
-        '✅ [CommentService] Successfully created anonymous session:',
-        data
-      );
       return data;
     } catch (error) {
       console.error(
@@ -340,8 +314,6 @@ export class CommentService {
   static async getAnonymousSession(
     sessionId: string
   ): Promise<AnonymousSession | null> {
-    console.log('🔍 [CommentService] Getting anonymous session:', sessionId);
-
     try {
       const { data, error } = await supabase
         .from('anonymous_sessions')
@@ -361,7 +333,6 @@ export class CommentService {
         throw error;
       }
 
-      console.log('✅ [CommentService] Retrieved anonymous session:', data);
       return data;
     } catch (error) {
       console.error(
@@ -378,8 +349,6 @@ export class CommentService {
   static async updateAnonymousSessionActivity(
     sessionId: string
   ): Promise<void> {
-    console.log('🔍 [CommentService] Updating session activity:', sessionId);
-
     try {
       // Set session context
       await supabase.rpc('set_session_context', { sessionId: sessionId });
@@ -396,8 +365,6 @@ export class CommentService {
         );
         throw error;
       }
-
-      console.log('✅ [CommentService] Successfully updated session activity');
     } catch (error) {
       console.error(
         '❌ [CommentService] Error updating session activity:',
@@ -416,11 +383,6 @@ export class CommentService {
     annotationId: string,
     userId?: string
   ): Promise<CommentPermissions> {
-    console.log('🔍 [CommentService] Checking comment permissions:', {
-      annotationId,
-      userId,
-    });
-
     try {
       // First, get the annotation to determine if it's individual or comparison
       const { data: annotation, error: annotationError } = await supabase
@@ -445,9 +407,6 @@ export class CommentService {
 
       // Check if it's a comparison annotation
       if (annotation.comparisonVideoId) {
-        console.log(
-          '🔍 [CommentService] Checking comparison video permissions'
-        );
         const { data: comparisonVideo, error: comparisonError } = await supabase
           .from('comparison_videos')
           .select('isPublic, userId')
@@ -471,9 +430,6 @@ export class CommentService {
           ownerId: comparisonVideo.userId,
         };
       } else if (annotation.videoId) {
-        console.log(
-          '🔍 [CommentService] Checking individual video permissions'
-        );
         const { data: video, error: videoError } = await supabase
           .from('videos')
           .select('isPublic, ownerId')
@@ -523,13 +479,6 @@ export class CommentService {
       // Check if user can moderate (annotation owner)
       const canModerate = userId && annotation.userId === userId;
 
-      console.log('✅ [CommentService] Permission check result:', {
-        canComment,
-        canModerate,
-        annotationType: annotation.comparisonVideoId
-          ? 'comparison'
-          : 'individual',
-      });
       return { canComment, canModerate };
     } catch (error) {
       console.error('❌ [CommentService] Error checking permissions:', error);
@@ -549,12 +498,6 @@ export class CommentService {
     userId?: string,
     sessionId?: string
   ): Promise<boolean> {
-    console.log('🔍 [CommentService] Checking moderation permissions:', {
-      commentId,
-      userId,
-      sessionId,
-    });
-
     try {
       const { data: comment, error } = await supabase
         .from('annotation_comments')
@@ -586,7 +529,6 @@ export class CommentService {
         (sessionId && comment.sessionId === sessionId) || // Comment author (anonymous)
         (userId && annotation?.userId === userId); // Annotation owner
 
-      console.log('✅ [CommentService] Moderation check result:', canModerate);
       return canModerate;
     } catch (error) {
       console.error(
@@ -606,22 +548,13 @@ export class CommentService {
     sessionId?: string,
     reason?: string
   ): Promise<void> {
-    console.log('🔍 [CommentService] Moderating comment:', {
-      commentId,
-      userId,
-      sessionId,
-      reason,
-    });
-
     try {
       // Check if user can moderate
-      console.log('🔍 [CommentService] Checking moderation permissions...');
       const canModerate = await this.canUserModerateComment(
         commentId,
         userId,
         sessionId
       );
-      console.log('🔍 [CommentService] Can moderate result:', canModerate);
 
       if (!canModerate) {
         const errorMsg =
@@ -631,10 +564,7 @@ export class CommentService {
       }
 
       // Delete the comment
-      console.log('🔍 [CommentService] Deleting comment...');
       await this.deleteComment(commentId, sessionId);
-
-      console.log('✅ [CommentService] Successfully moderated comment');
     } catch (error) {
       console.error('❌ [CommentService] Error moderating comment:', error);
       throw error;
@@ -647,11 +577,6 @@ export class CommentService {
    * Get total comment count for an annotation
    */
   static async getCommentCount(annotationId: string): Promise<number> {
-    console.log(
-      '🔍 [CommentService] Getting comment count for annotation:',
-      annotationId
-    );
-
     try {
       const { count, error } = await supabase
         .from('annotation_comments')
@@ -666,7 +591,6 @@ export class CommentService {
         throw error;
       }
 
-      console.log('✅ [CommentService] Comment count:', count);
       return count || 0;
     } catch (error) {
       console.error('❌ [CommentService] Error getting comment count:', error);
@@ -678,11 +602,6 @@ export class CommentService {
    * Get total comment count for a project (single or dual video)
    */
   static async getProjectCommentCount(project: any): Promise<number> {
-    console.log(
-      '🔍 [CommentService] Getting comment count for project:',
-      project.id
-    );
-
     try {
       let totalCount = 0;
 
@@ -787,7 +706,6 @@ export class CommentService {
         totalCount = count || 0;
       }
 
-      console.log('✅ [CommentService] Project comment count:', totalCount);
       return totalCount;
     } catch (error) {
       console.error(
@@ -804,11 +722,6 @@ export class CommentService {
   static async getProjectCommentCounts(
     projects: any[]
   ): Promise<Record<string, number>> {
-    console.log(
-      '🔍 [CommentService] Getting comment counts for multiple projects:',
-      projects.length
-    );
-
     try {
       const commentCounts: Record<string, number> = {};
 
@@ -824,9 +737,6 @@ export class CommentService {
         commentCounts[projectId] = count;
       });
 
-      console.log(
-        '✅ [CommentService] Retrieved comment counts for all projects'
-      );
       return commentCounts;
     } catch (error) {
       console.error(
@@ -855,8 +765,6 @@ export class CommentService {
    * Cleanup old anonymous sessions (called periodically)
    */
   static async cleanupOldAnonymousSessions(): Promise<void> {
-    console.log('🔍 [CommentService] Cleaning up old anonymous sessions');
-
     try {
       const { error } = await supabase.rpc('cleanup_old_anonymous_sessions');
 
@@ -864,8 +772,6 @@ export class CommentService {
         console.error('❌ [CommentService] Error cleaning up sessions:', error);
         throw error;
       }
-
-      console.log('✅ [CommentService] Successfully cleaned up old sessions');
     } catch (error) {
       console.error('❌ [CommentService] Error cleaning up sessions:', error);
       throw error;
@@ -880,11 +786,6 @@ export class CommentService {
   static async getCommentsForAnnotations(
     annotationIds: string[]
   ): Promise<Record<string, Comment[]>> {
-    console.log(
-      '🔍 [CommentService] Getting comments for multiple annotations:',
-      annotationIds
-    );
-
     try {
       if (annotationIds.length === 0) {
         return {};
@@ -924,11 +825,6 @@ export class CommentService {
         commentsByAnnotation[comment.annotationId].push(transformedComment);
       });
 
-      console.log(
-        '✅ [CommentService] Retrieved batch comments for',
-        Object.keys(commentsByAnnotation).length,
-        'annotations'
-      );
       return commentsByAnnotation;
     } catch (error) {
       console.error('❌ [CommentService] Error getting batch comments:', error);
@@ -940,11 +836,6 @@ export class CommentService {
    * Delete all comments for an annotation (used when annotation is deleted)
    */
   static async deleteAnnotationComments(annotationId: string): Promise<void> {
-    console.log(
-      '🔍 [CommentService] Deleting all comments for annotation:',
-      annotationId
-    );
-
     try {
       const { error } = await supabase
         .from('annotation_comments')
@@ -958,10 +849,6 @@ export class CommentService {
         );
         throw error;
       }
-
-      console.log(
-        '✅ [CommentService] Successfully deleted all comments for annotation'
-      );
     } catch (error) {
       console.error(
         '❌ [CommentService] Error deleting annotation comments:',

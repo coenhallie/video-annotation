@@ -1146,8 +1146,6 @@ const createComparison = async () => {
     const comparisonVideo = await ComparisonVideoService.createComparisonVideo({
       title: comparisonState.value.title,
       description: comparisonState.value.description,
-      videoAId: comparisonState.value.selectedVideoA.video.id,
-      videoBId: comparisonState.value.selectedVideoB.video.id,
       videoA: comparisonState.value.selectedVideoA.video,
       videoB: comparisonState.value.selectedVideoB.video,
     });
