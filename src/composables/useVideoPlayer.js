@@ -34,7 +34,11 @@ export function useVideoPlayer() {
 
   // Frame calculation utilities
   const timeToFrame = (timeInSeconds) => {
-    return Math.round(timeInSeconds * fps.value);
+    // Ensure fps is positive to avoid negative frame calculations
+    const validFps = fps.value > 0 ? fps.value : 30; // Default to 30 fps if not detected
+    const calculatedFrame = Math.round(timeInSeconds * validFps);
+    // Ensure frame is never negative
+    return Math.max(0, calculatedFrame);
   };
 
   const frameToTime = (frameNumber) => {

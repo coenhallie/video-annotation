@@ -353,12 +353,45 @@ const handleSeekToTimeWithFade = async (time) => {
 const handleAnnotationClick = async (annotation) => {
   selectedAnnotation.value = annotation;
 
-  // Seek to annotation timestamp with fade transition.
-  // The drawing canvas will automatically update based on the new currentFrame.
-  await handleSeekToTimeWithFade(annotation.timestamp);
+  if (playerMode.value === 'dual' && dualVideoPlayer) {
+    // DUAL VIDEO MODE: Restore both videos to their individual frame positions
+    if (
+      annotation.videoAFrame !== undefined &&
+      annotation.videoBFrame !== undefined
+    ) {
+      // Use the stored frame numbers for each video
+      const videoATime =
+        annotation.videoATimestamp ||
+        annotation.videoAFrame / (dualVideoPlayer.videoAState?.fps || 30);
+      const videoBTime =
+        annotation.videoBTimestamp ||
+        annotation.videoBFrame / (dualVideoPlayer.videoBState?.fps || 30);
 
-  // DRAWING LOADING FIX: Load drawings AFTER fade transition completes (350ms+)
-  // Add extra buffer to ensure fade transition is fully complete
+      console.log(`🎯 [handleAnnotationClick] Restoring dual video frames:`, {
+        videoAFrame: annotation.videoAFrame,
+        videoBFrame: annotation.videoBFrame,
+        videoATime,
+        videoBTime,
+      });
+
+      // Seek both videos to their individual positions
+      dualVideoPlayer.seekVideoA(videoATime);
+      dualVideoPlayer.seekVideoB(videoBTime);
+    } else {
+      // Fallback: seek both videos to the same timestamp (legacy annotations)
+      console.log(
+        `🎯 [handleAnnotationClick] Using fallback timestamp for dual video:`,
+        annotation.timestamp
+      );
+      await handleSeekToTimeWithFade(annotation.timestamp);
+    }
+  } else {
+    // SINGLE VIDEO MODE: Use the regular timestamp
+    await handleSeekToTimeWithFade(annotation.timestamp);
+  }
+
+  // DRAWING LOADING FIX: Load drawings AFTER seek completes
+  // Add extra buffer to ensure seek operation is complete
   setTimeout(() => {
     if (annotation && annotation.drawingData) {
       if (playerMode.value === 'dual' && dualVideoPlayer) {
@@ -384,7 +417,7 @@ const handleAnnotationClick = async (annotation) => {
         drawingCanvas.addDrawing(annotation.drawingData);
       }
     }
-  }, 400); // 400ms delay to ensure 350ms fade transition + buffer is complete
+  }, 400); // 400ms delay to ensure seek operation + buffer is complete
 };
 
 // Timeline play/pause handlers for single video
@@ -1561,6 +1594,14 @@ const initializeSharedComparison = async (comparisonId) => {
           :drawing-canvas-ref="unifiedVideoPlayerRef?.singleDrawingCanvasRef"
           :drawing-canvas-a-ref="unifiedVideoPlayerRef?.drawingCanvasARef"
           :drawing-canvas-b-ref="unifiedVideoPlayerRef?.drawingCanvasBRef"
+          :video-a-current-frame="
+            dualVideoPlayer?.videoACurrentFrame?.value || 0
+          "
+          :video-b-current-frame="
+            dualVideoPlayer?.videoBCurrentFrame?.value || 0
+          "
+          :video-a-fps="dualVideoPlayer?.videoAState?.fps || 30"
+          :video-b-fps="dualVideoPlayer?.videoBState?.fps || 30"
           @add-annotation="handleAddAnnotation"
           @update-annotation="updateAnnotation"
           @delete-annotation="deleteAnnotation"

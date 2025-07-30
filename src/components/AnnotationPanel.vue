@@ -73,6 +73,23 @@ const props = defineProps({
     type: Object,
     default: null,
   },
+  // Dual video frame tracking props
+  videoACurrentFrame: {
+    type: Number,
+    default: 0,
+  },
+  videoBCurrentFrame: {
+    type: Number,
+    default: 0,
+  },
+  videoAFps: {
+    type: Number,
+    default: 30,
+  },
+  videoBFps: {
+    type: Number,
+    default: 30,
+  },
 });
 
 const emit = defineEmits([
@@ -187,10 +204,6 @@ const formatFrame = (frameNumber) => {
 // Frame calculation utilities
 const timeToFrame = (timeInSeconds) => {
   return Math.round(timeInSeconds * props.fps);
-};
-
-const frameToTime = (frameNumber) => {
-  return frameNumber / props.fps;
 };
 
 const getSeverityInfo = (severity) => {
@@ -356,10 +369,30 @@ const saveAnnotation = async () => {
     content: hasContent
       ? newAnnotation.value.content.trim()
       : 'Drawing annotation',
-    frame: newAnnotation.value.frame,
-    timestamp: newAnnotation.value.frame / props.fps,
+    frame: Math.max(0, newAnnotation.value.frame || 0), // Ensure frame is never negative
+    startFrame: Math.max(0, newAnnotation.value.frame || 0), // Ensure startFrame is never negative
+    timestamp: Math.max(
+      0,
+      (newAnnotation.value.frame || 0) / (props.fps || 30)
+    ), // Ensure timestamp is never negative
     annotationType: hasDrawing ? 'drawing' : 'text',
     drawingData: hasDrawing ? currentDrawingData : null,
+    // Ensure valid duration values to avoid constraint violations
+    duration: Math.max(newAnnotation.value.duration || 1 / 30, 1 / 30),
+    durationFrames: Math.max(newAnnotation.value.durationFrames || 1, 1),
+    // For dual video mode, store both video frame numbers
+    ...(props.isDualMode && {
+      videoAFrame: Math.max(0, props.videoACurrentFrame || 0),
+      videoBFrame: Math.max(0, props.videoBCurrentFrame || 0),
+      videoATimestamp: Math.max(
+        0,
+        (props.videoACurrentFrame || 0) / (props.videoAFps || 30)
+      ),
+      videoBTimestamp: Math.max(
+        0,
+        (props.videoBCurrentFrame || 0) / (props.videoBFps || 30)
+      ),
+    }),
   };
 
   // 3. Emit event
@@ -535,7 +568,8 @@ watch(
   (newFrame) => {
     // Only update the frame in the form if the form is open and we're not editing an existing annotation
     if (showAddForm.value && !editingAnnotation.value) {
-      newAnnotation.value.frame = newFrame;
+      // Ensure frame is never negative to avoid database constraint violations
+      newAnnotation.value.frame = Math.max(0, newFrame || 0);
     }
   }
 );
@@ -757,7 +791,8 @@ defineExpose({
             </div>
           </div>
 
-          <div>
+          <!-- Frame Position - Different UI for dual vs single mode -->
+          <div v-if="!isDualMode">
             <label class="block text-sm font-medium text-gray-700 mb-1"
               >Frame Position</label
             >
@@ -770,6 +805,53 @@ defineExpose({
               placeholder="Enter frame number"
             />
             <p class="text-xs text-gray-500 mt-1">@ {{ fps }}fps</p>
+          </div>
+
+          <!-- Dual Video Mode - Show both video frame positions -->
+          <div v-else class="space-y-3">
+            <label class="block text-sm font-medium text-gray-700 mb-1"
+              >Frame Positions</label
+            >
+
+            <div class="grid grid-cols-2 gap-3">
+              <!-- Video A Frame -->
+              <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1"
+                  >Video A Frame</label
+                >
+                <input
+                  :value="videoACurrentFrame"
+                  type="number"
+                  min="0"
+                  step="1"
+                  class="input text-sm"
+                  readonly
+                  :title="`Video A is currently at frame ${videoACurrentFrame}`"
+                />
+                <p class="text-xs text-gray-500 mt-1">@ {{ videoAFps }}fps</p>
+              </div>
+
+              <!-- Video B Frame -->
+              <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1"
+                  >Video B Frame</label
+                >
+                <input
+                  :value="videoBCurrentFrame"
+                  type="number"
+                  min="0"
+                  step="1"
+                  class="input text-sm"
+                  readonly
+                  :title="`Video B is currently at frame ${videoBCurrentFrame}`"
+                />
+                <p class="text-xs text-gray-500 mt-1">@ {{ videoBFps }}fps</p>
+              </div>
+            </div>
+
+            <p class="text-xs text-gray-500">
+              Annotation will be saved with both video positions shown above
+            </p>
           </div>
 
           <div>
@@ -1030,9 +1112,31 @@ defineExpose({
           <div
             class="font-mono text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded flex flex-col items-center"
           >
-            <!-- Show timestamp and frame for single-point annotations -->
-            <span>{{ formatTime(annotation.timestamp) }}</span>
-            <span class="text-xs opacity-75">{{
+            <!-- Dual video mode: Show both video frame numbers if available -->
+            <div
+              v-if="
+                isDualMode &&
+                (annotation.videoAFrame !== undefined ||
+                  annotation.videoBFrame !== undefined)
+              "
+              class="text-xs opacity-75 space-y-0.5"
+            >
+              <div
+                v-if="annotation.videoAFrame !== undefined"
+                class="text-blue-600"
+              >
+                A: {{ formatFrame(annotation.videoAFrame) }}
+              </div>
+              <div
+                v-if="annotation.videoBFrame !== undefined"
+                class="text-green-600"
+              >
+                B: {{ formatFrame(annotation.videoBFrame) }}
+              </div>
+            </div>
+
+            <!-- Single video mode or fallback: Show single frame -->
+            <span v-else class="text-xs opacity-75">{{
               annotation.frame !== undefined
                 ? formatFrame(annotation.frame)
                 : formatFrame(timeToFrame(annotation.timestamp))
@@ -1184,9 +1288,29 @@ defineExpose({
     <div class="p-2 border-t border-gray-200 bg-gray-50">
       <div class="flex justify-between text-xs text-gray-500 font-mono">
         <span> {{ annotations.length }} annotations </span>
-        <div class="flex flex-col items-end">
+
+        <!-- Single Video Mode -->
+        <div v-if="!isDualMode" class="flex flex-col items-end">
           <span>{{ formatTime(currentTime) }}</span>
           <span class="opacity-75">{{ formatFrame(currentFrame) }}</span>
+        </div>
+
+        <!-- Dual Video Mode -->
+        <div v-else class="flex flex-col items-end space-y-1">
+          <div class="flex space-x-3">
+            <div class="text-right">
+              <div class="text-blue-600">Video A</div>
+              <div class="opacity-75">
+                {{ formatFrame(videoACurrentFrame) }}
+              </div>
+            </div>
+            <div class="text-right">
+              <div class="text-green-600">Video B</div>
+              <div class="opacity-75">
+                {{ formatFrame(videoBCurrentFrame) }}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

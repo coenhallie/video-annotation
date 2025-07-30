@@ -77,6 +77,11 @@ export interface DatabaseAnnotation {
   drawingData?: DrawingData;
   videoContext?: VideoContext; // Context for comparison annotations
   synchronizedFrame?: number; // For synchronized comparison annotations
+  // Dual video frame tracking fields
+  videoAFrame?: number; // Frame number for video A in dual mode
+  videoBFrame?: number; // Frame number for video B in dual mode
+  videoATimestamp?: number; // Timestamp for video A in dual mode
+  videoBTimestamp?: number; // Timestamp for video B in dual mode
   metadata?: Record<string, any>;
   createdAt: string;
   updatedAt: string;

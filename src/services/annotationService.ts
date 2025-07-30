@@ -75,9 +75,26 @@ export class AnnotationService {
     const updatesAny = updates as any;
     const { annotationType, ...cleanUpdates } = updatesAny;
 
+    // Ensure dual video frame data is included in updates if provided
+    const finalUpdates = {
+      ...cleanUpdates,
+      ...(updatesAny.videoAFrame !== undefined && {
+        videoAFrame: updatesAny.videoAFrame,
+      }),
+      ...(updatesAny.videoBFrame !== undefined && {
+        videoBFrame: updatesAny.videoBFrame,
+      }),
+      ...(updatesAny.videoATimestamp !== undefined && {
+        videoATimestamp: updatesAny.videoATimestamp,
+      }),
+      ...(updatesAny.videoBTimestamp !== undefined && {
+        videoBTimestamp: updatesAny.videoBTimestamp,
+      }),
+    };
+
     const { data, error } = await supabase
       .from('annotations')
-      .update(cleanUpdates)
+      .update(finalUpdates)
       .eq('id', annotationId)
       .select()
       .single();
@@ -371,19 +388,37 @@ export class AnnotationService {
       title: annotation.title || 'Untitled Annotation',
       severity: annotation.severity || 'medium',
       color: annotation.color || '#6b7280',
-      timestamp: annotation.timestamp || 0,
-      frame: annotation.frame || null,
-      startFrame: annotation.frame || 0,
-      endFrame: annotation.frame || null,
-      duration: annotation.duration || 1 / 30, // Default to 1 frame at 30fps
-      durationFrames: annotation.durationFrames || 1,
+      timestamp: Math.max(annotation.timestamp || 0, 0), // Ensure non-negative timestamp
+      frame: annotation.frame != null ? Math.max(annotation.frame, 0) : null, // Ensure non-negative frame
+      startFrame: Math.max(annotation.frame || 0, 0), // Ensure non-negative startFrame
+      endFrame: annotation.frame != null ? Math.max(annotation.frame, 0) : null, // Ensure non-negative endFrame
+      duration: Math.max(annotation.duration || 1 / 30, 1 / 30), // Ensure positive duration
+      durationFrames: Math.max(annotation.durationFrames || 1, 1), // Ensure at least 1 frame
       annotationType:
         annotation.annotationType ||
         (annotation.drawingData ? 'drawing' : 'text'),
       drawingData: annotation.drawingData || null,
       comparisonVideoId,
       videoContext,
-      synchronizedFrame: synchronizedFrame || null,
+      synchronizedFrame:
+        synchronizedFrame != null ? Math.max(synchronizedFrame, 0) : null,
+      // Include dual video frame data if available - ensure non-negative values
+      videoAFrame:
+        (annotation as any).videoAFrame != null
+          ? Math.max((annotation as any).videoAFrame, 0)
+          : null,
+      videoBFrame:
+        (annotation as any).videoBFrame != null
+          ? Math.max((annotation as any).videoBFrame, 0)
+          : null,
+      videoATimestamp:
+        (annotation as any).videoATimestamp != null
+          ? Math.max((annotation as any).videoATimestamp, 0)
+          : null,
+      videoBTimestamp:
+        (annotation as any).videoBTimestamp != null
+          ? Math.max((annotation as any).videoBTimestamp, 0)
+          : null,
     };
 
     const { data, error } = await supabase

@@ -580,7 +580,8 @@ export function useDualVideoPlayer() {
       canvasBHasDrawings: drawingCanvasBRef.value
         ? drawingCanvasBRef.value.hasDrawingsOnCurrentFrame()
         : false,
-      currentFrame: currentFrame.value,
+      videoACurrentFrame: videoACurrentFrame.value,
+      videoBCurrentFrame: videoBCurrentFrame.value,
     };
 
     currentAnnotationContext.value = null;
@@ -594,7 +595,8 @@ export function useDualVideoPlayer() {
         canvasBHasDrawings: drawingCanvasBRef.value
           ? drawingCanvasBRef.value.hasDrawingsOnCurrentFrame()
           : false,
-        currentFrame: currentFrame.value,
+        videoACurrentFrame: videoACurrentFrame.value,
+        videoBCurrentFrame: videoBCurrentFrame.value,
       };
     }, 50);
   };
