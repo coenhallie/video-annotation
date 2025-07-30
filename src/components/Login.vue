@@ -43,12 +43,6 @@ const toggleMode = () => {
       <div class="card" :class="{ 'is-flipped': isSigningUp }">
         <!-- Front Side - Sign In -->
         <div class="card-face card-front">
-          <!-- Alpha indicator -->
-          <div
-            class="absolute top-4 right-4 bg-gray-400 text-white text-xs font-semibold px-2 py-1 rounded-full z-10"
-          >
-            ALPHA
-          </div>
           <div class="text-center space-y-2 mb-8">
             <h1 class="text-2xl font-bold text-gray-800">
               ACCIO Video Annotation
