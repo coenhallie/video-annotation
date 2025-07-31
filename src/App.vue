@@ -15,6 +15,7 @@ import { useVideoSession } from './composables/useVideoSession.ts';
 import { useDrawingCanvas } from './composables/useDrawingCanvas.ts';
 import { useComparisonVideoWorkflow } from './composables/useComparisonVideoWorkflow.ts';
 import { useDualVideoPlayer } from './composables/useDualVideoPlayer.js';
+import { useEnhancedPoseLandmarker } from './composables/useEnhancedPoseLandmarker.js';
 import { VideoService } from './services/videoService.ts';
 import { AnnotationService } from './services/annotationService.ts';
 import { ShareService } from './services/shareService.ts';
@@ -164,6 +165,39 @@ const drawingCanvas = useDrawingCanvas();
 // Comparison video workflow
 const comparisonWorkflow = useComparisonVideoWorkflow();
 
+// Enhanced Pose detection functionality with fast movements optimization
+const poseLandmarker = useEnhancedPoseLandmarker(); // For single video mode
+const poseLandmarkerA = useEnhancedPoseLandmarker(); // For dual video mode - Video A
+const poseLandmarkerB = useEnhancedPoseLandmarker(); // For dual video mode - Video B
+
+// Configure all pose landmarkers for fast movements
+const configureFastMovements = () => {
+  const landmarkers = [poseLandmarker, poseLandmarkerA, poseLandmarkerB];
+
+  landmarkers.forEach((landmarker) => {
+    landmarker.updateSettings({
+      // High performance setup for fast movements
+      roiSmoothingFactor: 0.5, // Less smoothing for responsiveness
+      motionPredictionWeight: 0.4, // Higher prediction weight
+      adaptiveROIExpansionRate: 0.08, // Faster expansion
+      frameSkip: 1, // Process every frame
+      maxFPS: 60, // Higher frame rate
+      useAdaptiveROI: true,
+      useMotionPrediction: true,
+      roiValidationEnabled: true,
+      roiValidationMinLandmarks: 5,
+      roiValidationMinConfidence: 0.4,
+    });
+  });
+
+  console.log(
+    '🚀 Enhanced ROI configured for fast movements across all pose landmarkers'
+  );
+};
+
+// Initialize fast movements configuration
+configureFastMovements();
+
 watch(
   annotations,
   (newAnnotations) => {
@@ -271,6 +305,22 @@ const handleLoaded = async () => {
 
     setupPresenceTracking(user.value.id, user.value.email);
   } else {
+  }
+
+  // Initialize pose detection for the appropriate mode
+  try {
+    if (playerMode.value === 'single') {
+      // Initialize pose detection for single video mode
+      await poseLandmarker.enablePoseDetection();
+      console.log('✅ [App] Pose detection enabled for single video mode');
+    } else if (playerMode.value === 'dual') {
+      // Initialize pose detection for dual video mode
+      await poseLandmarkerA.enablePoseDetection();
+      await poseLandmarkerB.enablePoseDetection();
+      console.log('✅ [App] Pose detection enabled for dual video mode');
+    }
+  } catch (error) {
+    console.error('❌ [App] Failed to initialize pose detection:', error);
   }
 };
 
@@ -500,6 +550,14 @@ const clearVideoState = () => {
   if (isSessionActive.value) {
     endSession();
   }
+
+  // Clean up pose detection
+  poseLandmarker.disablePoseDetection();
+  poseLandmarker.clearAllPoses();
+  poseLandmarkerA.disablePoseDetection();
+  poseLandmarkerA.clearAllPoses();
+  poseLandmarkerB.disablePoseDetection();
+  poseLandmarkerB.clearAllPoses();
 };
 
 // Watch for user authentication changes and re-initialize video if needed
@@ -1050,8 +1108,27 @@ const handleDrawingDeleted = (drawingId, videoContext = null) => {
 };
 
 // Handle dual video loaded events
-const handleDualVideoLoaded = () => {
+const handleDualVideoLoaded = async () => {
   // Additional logic if needed when dual videos are loaded
+
+  // Initialize pose detection for dual video mode if not already enabled
+  try {
+    if (playerMode.value === 'dual') {
+      if (!poseLandmarkerA.isEnabled.value) {
+        await poseLandmarkerA.enablePoseDetection();
+        console.log('✅ [App] Pose detection enabled for Video A');
+      }
+      if (!poseLandmarkerB.isEnabled.value) {
+        await poseLandmarkerB.enablePoseDetection();
+        console.log('✅ [App] Pose detection enabled for Video B');
+      }
+    }
+  } catch (error) {
+    console.error(
+      '❌ [App] Failed to initialize pose detection for dual video:',
+      error
+    );
+  }
 };
 
 // Handle video context changes
@@ -1487,6 +1564,10 @@ const initializeSharedComparison = async (comparisonId) => {
                 comparisonWorkflow.currentComparison.value?.id
               "
               :user="user"
+              :pose-landmarker="poseLandmarker"
+              :pose-landmarker-a="poseLandmarkerA"
+              :pose-landmarker-b="poseLandmarkerB"
+              :enable-pose-detection="true"
               @time-update="handleTimeUpdate"
               @frame-update="handleFrameUpdate"
               @fps-detected="handleFPSDetected"

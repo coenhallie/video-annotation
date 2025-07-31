@@ -59,6 +59,7 @@
           :poster="poster"
           :autoplay="autoplay"
           preload="metadata"
+          crossorigin="anonymous"
           @click="handleVideoClick"
         >
           Your browser does not support the video tag.
@@ -78,6 +79,45 @@
           @drawing-created="handleDrawingCreated"
           @drawing-updated="handleDrawingUpdated"
           @drawing-deleted="handleDrawingDeleted"
+        />
+
+        <!-- Pose Visualization Overlay for Single Video -->
+        <PoseVisualization
+          v-if="videoUrl && poseLandmarker"
+          :current-pose="poseLandmarker.getCurrentPose.value"
+          :canvas-width="singleVideoElement?.videoWidth || 1920"
+          :canvas-height="singleVideoElement?.videoHeight || 1080"
+          :show-pose="poseLandmarker.isEnabled.value"
+          :show-skeleton="poseVisualizationSettings.showSkeleton"
+          :show-landmarks="poseVisualizationSettings.showLandmarks"
+          :show-labels="poseVisualizationSettings.showLabels"
+          :show-confidence="poseVisualizationSettings.showConfidence"
+          :selected-keypoints="poseLandmarker?.selectedKeypoints?.value || []"
+        />
+
+        <!-- Enhanced ROI Selector Overlay for Single Video -->
+        <EnhancedROISelector
+          v-if="videoUrl && poseLandmarker && roiSettings.enabled"
+          :canvas-width="singleVideoElement?.videoWidth || 1920"
+          :canvas-height="singleVideoElement?.videoHeight || 1080"
+          :current-r-o-i="roiSettings.currentROI"
+          :predicted-r-o-i="roiSettings.predictedROI"
+          :roi-history="roiSettings.roiHistory"
+          :roi-confidence="roiSettings.roiConfidence"
+          :stability-metrics="roiSettings.stabilityMetrics"
+          :adaptive-r-o-i="roiSettings.useAdaptiveROI"
+          :motion-prediction="roiSettings.useMotionPrediction"
+          :show-roi="roiSettings.showROI"
+          :show-prediction="roiSettings.showPrediction"
+          :show-history="roiSettings.showHistory"
+          :show-instructions="roiSettings.showInstructions"
+          :show-stats="roiSettings.showStats"
+          :enabled="roiSettings.enabled"
+          @roi-selected="handleROISelected"
+          @roi-updated="handleROIUpdated"
+          @roi-cleared="handleROICleared"
+          @adaptive-roi-toggled="handleAdaptiveROIToggled"
+          @motion-prediction-toggled="handleMotionPredictionToggled"
         />
 
         <!-- Custom controls for single video -->
@@ -154,6 +194,119 @@
                   <option value="2">2x</option>
                 </select>
               </div>
+
+              <!-- Pose detection controls -->
+              <div v-if="poseLandmarker" class="pose-controls">
+                <button
+                  @click="togglePoseDetection"
+                  class="control-button"
+                  :class="{
+                    'pose-active': poseLandmarker.isEnabled.value,
+                    'pose-loading': poseLandmarker.isLoading.value,
+                  }"
+                  :disabled="poseLandmarker.isLoading.value"
+                  :aria-label="
+                    poseLandmarker.isLoading.value
+                      ? 'Loading pose detection...'
+                      : poseLandmarker.isEnabled.value
+                      ? 'Disable pose visualization'
+                      : 'Enable pose visualization'
+                  "
+                  :title="
+                    poseLandmarker.isLoading.value
+                      ? 'Loading pose detection...'
+                      : 'Toggle pose visualization'
+                  "
+                >
+                  <!-- Loading spinner -->
+                  <div
+                    v-if="poseLandmarker.isLoading.value"
+                    class="pose-loading-spinner"
+                  ></div>
+                  <!-- Pose icon -->
+                  <svg
+                    v-else
+                    class="control-icon"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                  >
+                    <circle cx="12" cy="5" r="2" />
+                    <path d="M12 7v5" />
+                    <path d="M10 12h4" />
+                    <path d="M8 17l2-5 2 5" />
+                    <path d="M16 17l-2-5-2 5" />
+                  </svg>
+                </button>
+
+                <!-- Labels toggle (only show when pose detection is enabled) -->
+                <button
+                  v-if="poseLandmarker.isEnabled.value"
+                  @click="
+                    poseVisualizationSettings.showLabels =
+                      !poseVisualizationSettings.showLabels
+                  "
+                  class="control-button"
+                  :class="{
+                    'pose-active': poseVisualizationSettings.showLabels,
+                  }"
+                  title="Toggle skeleton labels"
+                >
+                  <svg
+                    class="control-icon"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                  >
+                    <path
+                      d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+                    />
+                    <polyline points="14,2 14,8 20,8" />
+                    <line x1="16" y1="13" x2="8" y2="13" />
+                    <line x1="16" y1="17" x2="8" y2="17" />
+                    <polyline points="10,9 9,9 8,9" />
+                  </svg>
+                </button>
+
+                <!-- Keypoint Selection Button (only show when pose detection is enabled) -->
+                <button
+                  v-if="poseLandmarker.isEnabled.value"
+                  @click="openKeypointSelector"
+                  class="control-button"
+                  :class="{
+                    'pose-active': showKeypointSelector,
+                  }"
+                  title="Select keypoints to track"
+                >
+                  <svg
+                    class="control-icon"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                  >
+                    <circle cx="12" cy="12" r="3" />
+                    <circle cx="12" cy="5" r="1" />
+                    <circle cx="12" cy="19" r="1" />
+                    <circle cx="5" cy="12" r="1" />
+                    <circle cx="19" cy="12" r="1" />
+                    <circle cx="7.5" cy="7.5" r="1" />
+                    <circle cx="16.5" cy="7.5" r="1" />
+                    <circle cx="7.5" cy="16.5" r="1" />
+                    <circle cx="16.5" cy="16.5" r="1" />
+                  </svg>
+                </button>
+
+                <!-- ROI toggle (only show when pose detection is enabled) -->
+                <button
+                  v-if="poseLandmarker.isEnabled.value"
+                  @click="toggleROIMode"
+                  class="control-button"
+                  :class="{ 'pose-active': roiSettings.enabled }"
+                  title="Toggle ROI selection"
+                >
+                  ROI
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -185,6 +338,7 @@
               :style="{ opacity: videoOpacity }"
               :src="videoAUrl"
               preload="metadata"
+              crossorigin="anonymous"
               @click="handleVideoClick"
             >
               Your browser does not support the video tag.
@@ -209,6 +363,50 @@
               "
               @drawing-deleted="
                 (drawingId, event) => handleDrawingDeleted(drawingId, event)
+              "
+            />
+
+            <!-- Pose Visualization Overlay for Video A -->
+            <PoseVisualization
+              v-if="videoAUrl && poseLandmarkerA"
+              :current-pose="poseLandmarkerA.getCurrentPose.value"
+              :canvas-width="videoAElement?.videoWidth || 1920"
+              :canvas-height="videoAElement?.videoHeight || 1080"
+              :show-pose="poseLandmarkerA.isEnabled.value"
+              :show-skeleton="poseVisualizationSettings.showSkeleton"
+              :show-landmarks="poseVisualizationSettings.showLandmarks"
+              :show-labels="poseVisualizationSettings.showLabels"
+              :show-confidence="poseVisualizationSettings.showConfidence"
+              :selected-keypoints="
+                poseLandmarkerA?.selectedKeypoints?.value || []
+              "
+            />
+
+            <!-- Enhanced ROI Selector Overlay for Video A -->
+            <EnhancedROISelector
+              v-if="videoAUrl && poseLandmarkerA && roiSettingsA.enabled"
+              :canvas-width="videoAElement?.videoWidth || 1920"
+              :canvas-height="videoAElement?.videoHeight || 1080"
+              :current-r-o-i="roiSettingsA.currentROI"
+              :predicted-r-o-i="roiSettingsA.predictedROI"
+              :roi-history="roiSettingsA.roiHistory"
+              :roi-confidence="roiSettingsA.roiConfidence"
+              :stability-metrics="roiSettingsA.stabilityMetrics"
+              :adaptive-r-o-i="roiSettingsA.useAdaptiveROI"
+              :motion-prediction="roiSettingsA.useMotionPrediction"
+              :show-roi="roiSettingsA.showROI"
+              :show-prediction="roiSettingsA.showPrediction"
+              :show-history="roiSettingsA.showHistory"
+              :show-instructions="roiSettingsA.showInstructions"
+              :show-stats="false"
+              :show-confidence-in-label="false"
+              :enabled="roiSettingsA.enabled"
+              @roi-selected="(roi) => handleROISelected(roi, 'A')"
+              @roi-updated="(roi) => handleROIUpdated(roi, 'A')"
+              @roi-cleared="() => handleROICleared('A')"
+              @adaptive-roi-toggled="() => handleAdaptiveROIToggled('A')"
+              @motion-prediction-toggled="
+                () => handleMotionPredictionToggled('A')
               "
             />
           </div>
@@ -236,6 +434,7 @@
               :style="{ opacity: videoOpacity }"
               :src="videoBUrl"
               preload="metadata"
+              crossorigin="anonymous"
               @click="handleVideoClick"
             >
               Your browser does not support the video tag.
@@ -262,7 +461,361 @@
                 (drawingId, event) => handleDrawingDeleted(drawingId, event)
               "
             />
+
+            <!-- Pose Visualization Overlay for Video B -->
+            <PoseVisualization
+              v-if="videoBUrl && poseLandmarkerB"
+              :current-pose="poseLandmarkerB.getCurrentPose.value"
+              :canvas-width="videoBElement?.videoWidth || 1920"
+              :canvas-height="videoBElement?.videoHeight || 1080"
+              :show-pose="poseLandmarkerB.isEnabled.value"
+              :show-skeleton="poseVisualizationSettings.showSkeleton"
+              :show-landmarks="poseVisualizationSettings.showLandmarks"
+              :show-labels="poseVisualizationSettings.showLabels"
+              :show-confidence="poseVisualizationSettings.showConfidence"
+              :selected-keypoints="
+                poseLandmarkerB?.selectedKeypoints?.value || []
+              "
+            />
+
+            <!-- Enhanced ROI Selector Overlay for Video B -->
+            <EnhancedROISelector
+              v-if="videoBUrl && poseLandmarkerB && roiSettingsB.enabled"
+              :canvas-width="videoBElement?.videoWidth || 1920"
+              :canvas-height="videoBElement?.videoHeight || 1080"
+              :current-r-o-i="roiSettingsB.currentROI"
+              :predicted-r-o-i="roiSettingsB.predictedROI"
+              :roi-history="roiSettingsB.roiHistory"
+              :roi-confidence="roiSettingsB.roiConfidence"
+              :stability-metrics="roiSettingsB.stabilityMetrics"
+              :adaptive-r-o-i="roiSettingsB.useAdaptiveROI"
+              :motion-prediction="roiSettingsB.useMotionPrediction"
+              :show-roi="roiSettingsB.showROI"
+              :show-prediction="roiSettingsB.showPrediction"
+              :show-history="roiSettingsB.showHistory"
+              :show-instructions="roiSettingsB.showInstructions"
+              :show-stats="false"
+              :show-confidence-in-label="false"
+              :enabled="roiSettingsB.enabled"
+              @roi-selected="(roi) => handleROISelected(roi, 'B')"
+              @roi-updated="(roi) => handleROIUpdated(roi, 'B')"
+              @roi-cleared="() => handleROICleared('B')"
+              @adaptive-roi-toggled="() => handleAdaptiveROIToggled('B')"
+              @motion-prediction-toggled="
+                () => handleMotionPredictionToggled('B')
+              "
+            />
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Custom controls for dual video -->
+    <div
+      v-if="controls && (videoAUrl || videoBUrl)"
+      class="dual-video-controls"
+    >
+      <div class="controls-content">
+        <div class="controls-left">
+          <!-- Play/Pause button for both videos -->
+          <button
+            @click="toggleDualPlayPause"
+            class="control-button"
+            :aria-label="isPlaying ? 'Pause both videos' : 'Play both videos'"
+          >
+            <svg v-if="isPlaying" class="control-icon" viewBox="0 0 24 24">
+              <rect x="6" y="4" width="4" height="16"></rect>
+              <rect x="14" y="4" width="4" height="16"></rect>
+            </svg>
+            <svg v-else class="control-icon" viewBox="0 0 24 24">
+              <polygon points="5,3 19,12 5,21"></polygon>
+            </svg>
+          </button>
+
+          <!-- Volume controls -->
+          <div class="volume-controls">
+            <button
+              @click="toggleMute"
+              class="control-button"
+              :aria-label="isMuted ? 'Unmute' : 'Mute'"
+            >
+              <svg v-if="isMuted" class="control-icon" viewBox="0 0 24 24">
+                <polygon points="11,5 6,9 2,9 2,15 6,15 11,19"></polygon>
+                <line x1="23" y1="9" x2="17" y2="15"></line>
+                <line x1="17" y1="9" x2="23" y2="15"></line>
+              </svg>
+              <svg
+                v-else-if="volume < 0.5"
+                class="control-icon"
+                viewBox="0 0 24 24"
+              >
+                <polygon points="11,5 6,9 2,9 2,15 6,15 11,19"></polygon>
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+              </svg>
+              <svg v-else class="control-icon" viewBox="0 0 24 24">
+                <polygon points="11,5 6,9 2,9 2,15 6,15 11,19"></polygon>
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+              </svg>
+            </button>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.1"
+              :value="isMuted ? 0 : volume"
+              @input="handleVolumeChange"
+              class="volume-slider"
+              :aria-label="'Volume: ' + Math.round(volume * 100) + '%'"
+            />
+          </div>
+
+          <!-- Speed controls -->
+          <div class="speed-controls">
+            <select
+              :value="playbackSpeed"
+              @change="setPlaybackSpeed(parseFloat($event.target.value))"
+              class="speed-select"
+              :aria-label="'Playback speed: ' + playbackSpeed + 'x'"
+            >
+              <option value="0.1">0.1x</option>
+              <option value="0.25">0.25x</option>
+              <option value="0.5">0.5x</option>
+              <option value="1">1x</option>
+              <option value="1.25">1.25x</option>
+              <option value="1.5">1.5x</option>
+              <option value="2">2x</option>
+            </select>
+          </div>
+
+          <!-- Pose detection controls for dual video -->
+          <div v-if="poseLandmarkerA || poseLandmarkerB" class="pose-controls">
+            <!-- Video A Pose Detection -->
+            <div v-if="poseLandmarkerA" class="pose-control-group">
+              <span class="pose-label">A:</span>
+              <button
+                @click="togglePoseDetectionA"
+                class="control-button"
+                :class="{
+                  'pose-active': poseLandmarkerA.isEnabled.value,
+                  'pose-loading': poseLandmarkerA.isLoading.value,
+                }"
+                :disabled="poseLandmarkerA.isLoading.value"
+                :aria-label="
+                  poseLandmarkerA.isLoading.value
+                    ? 'Loading pose detection for Video A...'
+                    : poseLandmarkerA.isEnabled.value
+                    ? 'Disable pose visualization for Video A'
+                    : 'Enable pose visualization for Video A'
+                "
+                :title="
+                  poseLandmarkerA.isLoading.value
+                    ? 'Loading pose detection for Video A...'
+                    : 'Toggle pose visualization for Video A'
+                "
+              >
+                <!-- Loading spinner -->
+                <div
+                  v-if="poseLandmarkerA.isLoading.value"
+                  class="pose-loading-spinner"
+                ></div>
+                <!-- Pose icon -->
+                <svg
+                  v-else
+                  class="control-icon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                >
+                  <circle cx="12" cy="5" r="2" />
+                  <path d="M12 7v5" />
+                  <path d="M10 12h4" />
+                  <path d="M8 17l2-5 2 5" />
+                  <path d="M16 17l-2-5-2 5" />
+                </svg>
+              </button>
+            </div>
+
+            <!-- Video B Pose Detection -->
+            <div v-if="poseLandmarkerB" class="pose-control-group">
+              <span class="pose-label">B:</span>
+              <button
+                @click="togglePoseDetectionB"
+                class="control-button"
+                :class="{
+                  'pose-active': poseLandmarkerB.isEnabled.value,
+                  'pose-loading': poseLandmarkerB.isLoading.value,
+                }"
+                :disabled="poseLandmarkerB.isLoading.value"
+                :aria-label="
+                  poseLandmarkerB.isLoading.value
+                    ? 'Loading pose detection for Video B...'
+                    : poseLandmarkerB.isEnabled.value
+                    ? 'Disable pose visualization for Video B'
+                    : 'Enable pose visualization for Video B'
+                "
+                :title="
+                  poseLandmarkerB.isLoading.value
+                    ? 'Loading pose detection for Video B...'
+                    : 'Toggle pose visualization for Video B'
+                "
+              >
+                <!-- Loading spinner -->
+                <div
+                  v-if="poseLandmarkerB.isLoading.value"
+                  class="pose-loading-spinner"
+                ></div>
+                <!-- Pose icon -->
+                <svg
+                  v-else
+                  class="control-icon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                >
+                  <circle cx="12" cy="5" r="2" />
+                  <path d="M12 7v5" />
+                  <path d="M10 12h4" />
+                  <path d="M8 17l2-5 2 5" />
+                  <path d="M16 17l-2-5-2 5" />
+                </svg>
+              </button>
+            </div>
+
+            <!-- ROI controls for individual videos -->
+            <div
+              v-if="
+                poseLandmarkerA?.isEnabled.value ||
+                poseLandmarkerB?.isEnabled.value
+              "
+              class="roi-controls"
+            >
+              <!-- ROI toggle for Video A -->
+              <div
+                v-if="poseLandmarkerA?.isEnabled.value"
+                class="roi-control-group"
+              >
+                <span class="pose-label">A:</span>
+                <button
+                  @click="toggleROIModeA"
+                  class="control-button"
+                  :class="{ 'pose-active': roiSettingsA.enabled }"
+                  title="Toggle ROI selection for Video A"
+                >
+                  ROI
+                </button>
+              </div>
+
+              <!-- ROI toggle for Video B -->
+              <div
+                v-if="poseLandmarkerB?.isEnabled.value"
+                class="roi-control-group"
+              >
+                <span class="pose-label">B:</span>
+                <button
+                  @click="toggleROIModeB"
+                  class="control-button"
+                  :class="{ 'pose-active': roiSettingsB.enabled }"
+                  title="Toggle ROI selection for Video B"
+                >
+                  ROI
+                </button>
+              </div>
+            </div>
+
+            <!-- Shared pose visualization controls (only show when at least one pose detection is enabled) -->
+            <div
+              v-if="
+                poseLandmarkerA?.isEnabled.value ||
+                poseLandmarkerB?.isEnabled.value
+              "
+              class="shared-pose-controls"
+            >
+              <!-- Labels toggle -->
+              <button
+                @click="
+                  poseVisualizationSettings.showLabels =
+                    !poseVisualizationSettings.showLabels
+                "
+                class="control-button"
+                :class="{
+                  'pose-active': poseVisualizationSettings.showLabels,
+                }"
+                title="Toggle skeleton labels"
+              >
+                <svg
+                  class="control-icon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                >
+                  <path
+                    d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+                  />
+                  <polyline points="14,2 14,8 20,8" />
+                  <line x1="16" y1="13" x2="8" y2="13" />
+                  <line x1="16" y1="17" x2="8" y2="17" />
+                  <polyline points="10,9 9,9 8,9" />
+                </svg>
+              </button>
+
+              <!-- Keypoint Selection Button -->
+              <button
+                @click="openKeypointSelector"
+                class="control-button"
+                :class="{
+                  'pose-active': showKeypointSelector,
+                }"
+                title="Select keypoints to track"
+              >
+                <svg
+                  class="control-icon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                >
+                  <circle cx="12" cy="12" r="3" />
+                  <circle cx="12" cy="5" r="1" />
+                  <circle cx="12" cy="19" r="1" />
+                  <circle cx="5" cy="12" r="1" />
+                  <circle cx="19" cy="12" r="1" />
+                  <circle cx="7.5" cy="7.5" r="1" />
+                  <circle cx="16.5" cy="7.5" r="1" />
+                  <circle cx="7.5" cy="16.5" r="1" />
+                  <circle cx="16.5" cy="16.5" r="1" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Keypoint Selector Modal -->
+    <div
+      v-if="showKeypointSelector"
+      class="keypoint-selector-modal"
+      @click.self="showKeypointSelector = false"
+    >
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>Select Keypoints to Track</h2>
+          <button
+            @click="showKeypointSelector = false"
+            class="close-button"
+            aria-label="Close keypoint selector"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <KeypointSelector
+            :selected-keypoints="localSelectedKeypoints"
+            @update:selected-keypoints="updateSelectedKeypoints"
+          />
         </div>
       </div>
     </div>
@@ -270,9 +823,21 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, nextTick, computed } from 'vue';
+import {
+  ref,
+  onMounted,
+  onUnmounted,
+  watch,
+  nextTick,
+  computed,
+  reactive,
+} from 'vue';
 import DrawingCanvas from './DrawingCanvas.vue';
+import PoseVisualization from './PoseVisualization.vue';
+import EnhancedROISelector from './EnhancedROISelector.vue';
+import KeypointSelector from './KeypointSelector.vue';
 import { useVideoPlayer } from '../composables/useVideoPlayer.js';
+import { useEnhancedPoseLandmarker } from '../composables/useEnhancedPoseLandmarker.js';
 import type { DrawingData } from '@/types/database';
 
 interface Props {
@@ -301,6 +866,11 @@ interface Props {
   projectId?: string;
   comparisonVideoId?: string;
   user?: any;
+  // Pose detection props
+  poseLandmarker?: any;
+  poseLandmarkerA?: any;
+  poseLandmarkerB?: any;
+  enablePoseDetection?: boolean;
 }
 
 interface Emits {
@@ -329,6 +899,8 @@ interface Emits {
   (e: 'drawing-deleted', drawingId: string, videoContext?: string): void;
   (e: 'video-a-loaded'): void;
   (e: 'video-b-loaded'): void;
+  (e: 'pose-detected', poseData: any, videoContext?: string): void;
+  (e: 'pose-detection-error', error: string, videoContext?: string): void;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -390,6 +962,518 @@ const singleVideoState = ref({
 const isVideoTransitioning = ref(false);
 const videoOpacity = ref(1);
 
+// Pose visualization settings
+const poseVisualizationSettings = reactive({
+  showSkeleton: true,
+  showLandmarks: true,
+  showLabels: false,
+  showConfidence: true,
+  showNoPoseIndicator: true,
+});
+
+// Keypoint selector state
+const showKeypointSelector = ref(false);
+const localSelectedKeypoints = ref(Array.from({ length: 33 }, (_, i) => i));
+
+// Enhanced ROI state
+const roiSettings = reactive({
+  enabled: false,
+  showROI: true,
+  showInstructions: true,
+  showPrediction: true,
+  showHistory: false,
+  showStats: true,
+  currentROI: null,
+  predictedROI: null,
+  roiHistory: [],
+  roiConfidence: 0,
+  stabilityMetrics: {
+    stabilityScore: 0,
+    velocityEstimate: { x: 0, y: 0 },
+    averageSize: { width: 0, height: 0 },
+    averagePosition: { x: 0, y: 0 },
+  },
+  useAdaptiveROI: true,
+  useMotionPrediction: true,
+});
+
+// Enhanced ROI state for Video A
+const roiSettingsA = reactive({
+  enabled: false,
+  showROI: true,
+  showInstructions: true,
+  showPrediction: true,
+  showHistory: false,
+  showStats: true,
+  currentROI: null,
+  predictedROI: null,
+  roiHistory: [],
+  roiConfidence: 0,
+  stabilityMetrics: {
+    stabilityScore: 0,
+    velocityEstimate: { x: 0, y: 0 },
+    averageSize: { width: 0, height: 0 },
+    averagePosition: { x: 0, y: 0 },
+  },
+  useAdaptiveROI: true,
+  useMotionPrediction: true,
+});
+
+// Enhanced ROI state for Video B
+const roiSettingsB = reactive({
+  enabled: false,
+  showROI: true,
+  showInstructions: true,
+  showPrediction: true,
+  showHistory: false,
+  showStats: true,
+  currentROI: null,
+  predictedROI: null,
+  roiHistory: [],
+  roiConfidence: 0,
+  stabilityMetrics: {
+    stabilityScore: 0,
+    velocityEstimate: { x: 0, y: 0 },
+    averageSize: { width: 0, height: 0 },
+    averagePosition: { x: 0, y: 0 },
+  },
+  useAdaptiveROI: true,
+  useMotionPrediction: true,
+});
+
+// Optimized pose detection with requestAnimationFrame
+const processPoseDetection = async (
+  videoElement: HTMLVideoElement,
+  videoContext?: string
+) => {
+  if (!props.enablePoseDetection) return;
+
+  const poseLandmarker =
+    videoContext === 'A'
+      ? props.poseLandmarkerA
+      : videoContext === 'B'
+      ? props.poseLandmarkerB
+      : props.poseLandmarker;
+
+  if (!poseLandmarker || !poseLandmarker.isEnabled.value) return;
+
+  try {
+    const timestamp = performance.now();
+    const poseData = await poseLandmarker.detectPose(
+      videoElement,
+      timestamp,
+      currentFrame.value
+    );
+
+    if (poseData) {
+      // Update enhanced ROI state if using enhanced pose landmarker
+      if (poseLandmarker.getROIInsights) {
+        const roiInsights = poseLandmarker.getROIInsights();
+
+        // Update the appropriate ROI settings based on video context
+        const roiSettingsToUpdate =
+          videoContext === 'A'
+            ? roiSettingsA
+            : videoContext === 'B'
+            ? roiSettingsB
+            : roiSettings;
+
+        roiSettingsToUpdate.currentROI = roiInsights.currentROI;
+        roiSettingsToUpdate.predictedROI = roiInsights.predictedROI;
+        roiSettingsToUpdate.roiHistory = roiInsights.history;
+        roiSettingsToUpdate.roiConfidence = roiInsights.confidence;
+        roiSettingsToUpdate.stabilityMetrics = roiInsights.stability;
+      }
+
+      emit('pose-detected', poseData, videoContext);
+    }
+  } catch (error) {
+    console.error('❌ [UnifiedVideoPlayer] Pose detection error:', error);
+    emit('pose-detection-error', error.message, videoContext);
+  }
+};
+
+// Start RAF-based pose detection
+const startRAFPoseDetection = (
+  videoElement: HTMLVideoElement,
+  videoContext?: string
+) => {
+  if (!props.enablePoseDetection) return;
+
+  const poseLandmarker =
+    videoContext === 'A'
+      ? props.poseLandmarkerA
+      : videoContext === 'B'
+      ? props.poseLandmarkerB
+      : props.poseLandmarker;
+
+  if (!poseLandmarker || !poseLandmarker.isEnabled.value) return;
+
+  // Use RAF-based detection for smooth performance
+  poseLandmarker.detectPoseRAF(videoElement, (poseData) => {
+    // Update enhanced ROI state if using enhanced pose landmarker
+    if (poseLandmarker.getROIInsights) {
+      const roiInsights = poseLandmarker.getROIInsights();
+
+      // Update the appropriate ROI settings based on video context
+      const roiSettingsToUpdate =
+        videoContext === 'A'
+          ? roiSettingsA
+          : videoContext === 'B'
+          ? roiSettingsB
+          : roiSettings;
+
+      roiSettingsToUpdate.currentROI = roiInsights.currentROI;
+      roiSettingsToUpdate.predictedROI = roiInsights.predictedROI;
+      roiSettingsToUpdate.roiHistory = roiInsights.history;
+      roiSettingsToUpdate.roiConfidence = roiInsights.confidence;
+      roiSettingsToUpdate.stabilityMetrics = roiInsights.stability;
+    }
+
+    emit('pose-detected', poseData, videoContext);
+  });
+};
+
+// Stop RAF-based pose detection
+const stopRAFPoseDetection = (videoContext?: string) => {
+  const poseLandmarker =
+    videoContext === 'A'
+      ? props.poseLandmarkerA
+      : videoContext === 'B'
+      ? props.poseLandmarkerB
+      : props.poseLandmarker;
+
+  if (poseLandmarker) {
+    poseLandmarker.stopPoseDetectionRAF();
+  }
+};
+
+// ROI event handlers
+const handleROISelected = (roiBox: any, videoContext?: string) => {
+  const poseLandmarker =
+    videoContext === 'A'
+      ? props.poseLandmarkerA
+      : videoContext === 'B'
+      ? props.poseLandmarkerB
+      : props.poseLandmarker;
+
+  const roiSettingsToUpdate =
+    videoContext === 'A'
+      ? roiSettingsA
+      : videoContext === 'B'
+      ? roiSettingsB
+      : roiSettings;
+
+  if (poseLandmarker) {
+    poseLandmarker.setROI(roiBox.x, roiBox.y, roiBox.width, roiBox.height);
+    roiSettingsToUpdate.currentROI = roiBox;
+    roiSettingsToUpdate.showInstructions = false;
+    console.log(
+      `🎯 [UnifiedVideoPlayer] ROI selected for ${videoContext || 'single'}:`,
+      roiBox
+    );
+  }
+};
+
+const handleROIUpdated = (roiBox: any, videoContext?: string) => {
+  const poseLandmarker =
+    videoContext === 'A'
+      ? props.poseLandmarkerA
+      : videoContext === 'B'
+      ? props.poseLandmarkerB
+      : props.poseLandmarker;
+
+  const roiSettingsToUpdate =
+    videoContext === 'A'
+      ? roiSettingsA
+      : videoContext === 'B'
+      ? roiSettingsB
+      : roiSettings;
+
+  if (poseLandmarker) {
+    poseLandmarker.setROI(roiBox.x, roiBox.y, roiBox.width, roiBox.height);
+    roiSettingsToUpdate.currentROI = roiBox;
+    console.log(
+      `🎯 [UnifiedVideoPlayer] ROI updated for ${videoContext || 'single'}:`,
+      roiBox
+    );
+  }
+};
+
+const handleROICleared = (videoContext?: string) => {
+  const poseLandmarker =
+    videoContext === 'A'
+      ? props.poseLandmarkerA
+      : videoContext === 'B'
+      ? props.poseLandmarkerB
+      : props.poseLandmarker;
+
+  const roiSettingsToUpdate =
+    videoContext === 'A'
+      ? roiSettingsA
+      : videoContext === 'B'
+      ? roiSettingsB
+      : roiSettings;
+
+  if (poseLandmarker) {
+    poseLandmarker.clearROI();
+    roiSettingsToUpdate.currentROI = null;
+    roiSettingsToUpdate.showInstructions = true;
+    console.log(
+      `🎯 [UnifiedVideoPlayer] ROI cleared for ${videoContext || 'single'}`
+    );
+  }
+};
+
+// Enhanced ROI event handlers
+const handleAdaptiveROIToggled = (videoContext?: string) => {
+  const poseLandmarker =
+    videoContext === 'A'
+      ? props.poseLandmarkerA
+      : videoContext === 'B'
+      ? props.poseLandmarkerB
+      : props.poseLandmarker;
+
+  const roiSettingsToUpdate =
+    videoContext === 'A'
+      ? roiSettingsA
+      : videoContext === 'B'
+      ? roiSettingsB
+      : roiSettings;
+
+  if (poseLandmarker && poseLandmarker.updateSettings) {
+    roiSettingsToUpdate.useAdaptiveROI = !roiSettingsToUpdate.useAdaptiveROI;
+    poseLandmarker.updateSettings({
+      useAdaptiveROI: roiSettingsToUpdate.useAdaptiveROI,
+    });
+    console.log(
+      `🎯 [UnifiedVideoPlayer] Adaptive ROI toggled for ${
+        videoContext || 'single'
+      }:`,
+      roiSettingsToUpdate.useAdaptiveROI
+    );
+  }
+};
+
+const handleMotionPredictionToggled = (videoContext?: string) => {
+  const poseLandmarker =
+    videoContext === 'A'
+      ? props.poseLandmarkerA
+      : videoContext === 'B'
+      ? props.poseLandmarkerB
+      : props.poseLandmarker;
+
+  const roiSettingsToUpdate =
+    videoContext === 'A'
+      ? roiSettingsA
+      : videoContext === 'B'
+      ? roiSettingsB
+      : roiSettings;
+
+  if (poseLandmarker && poseLandmarker.updateSettings) {
+    roiSettingsToUpdate.useMotionPrediction =
+      !roiSettingsToUpdate.useMotionPrediction;
+    poseLandmarker.updateSettings({
+      useMotionPrediction: roiSettingsToUpdate.useMotionPrediction,
+    });
+    console.log(
+      `🎯 [UnifiedVideoPlayer] Motion prediction toggled for ${
+        videoContext || 'single'
+      }:`,
+      roiSettingsToUpdate.useMotionPrediction
+    );
+  }
+};
+
+const toggleROIMode = () => {
+  roiSettings.enabled = !roiSettings.enabled;
+  if (!roiSettings.enabled) {
+    handleROICleared();
+  } else {
+    // Configure enhanced ROI for fast movements when enabling
+    configureEnhancedROIForFastMovements();
+  }
+  console.log('🎯 [UnifiedVideoPlayer] ROI mode toggled:', roiSettings.enabled);
+};
+
+const toggleROIModeA = () => {
+  roiSettingsA.enabled = !roiSettingsA.enabled;
+  if (!roiSettingsA.enabled) {
+    handleROICleared('A');
+  } else {
+    // Configure enhanced ROI for fast movements when enabling
+    configureEnhancedROIForFastMovements();
+  }
+  console.log(
+    '🎯 [UnifiedVideoPlayer] ROI mode A toggled:',
+    roiSettingsA.enabled
+  );
+};
+
+const toggleROIModeB = () => {
+  roiSettingsB.enabled = !roiSettingsB.enabled;
+  if (!roiSettingsB.enabled) {
+    handleROICleared('B');
+  } else {
+    // Configure enhanced ROI for fast movements when enabling
+    configureEnhancedROIForFastMovements();
+  }
+  console.log(
+    '🎯 [UnifiedVideoPlayer] ROI mode B toggled:',
+    roiSettingsB.enabled
+  );
+};
+
+// Dual video control functions
+const toggleDualPlayPause = () => {
+  if (props.dualVideoPlayer) {
+    if (isPlaying.value) {
+      props.dualVideoPlayer.pauseVideoA();
+      props.dualVideoPlayer.pauseVideoB();
+    } else {
+      props.dualVideoPlayer.playVideoA();
+      props.dualVideoPlayer.playVideoB();
+    }
+  }
+};
+
+const togglePoseDetectionA = async () => {
+  if (!props.poseLandmarkerA) return;
+
+  try {
+    if (props.poseLandmarkerA.isEnabled.value) {
+      await props.poseLandmarkerA.disablePoseDetection();
+      stopRAFPoseDetection('A');
+      console.log(
+        '✅ [UnifiedVideoPlayer] Pose detection disabled for Video A'
+      );
+    } else {
+      await props.poseLandmarkerA.enablePoseDetection();
+      if (videoAElement.value) {
+        startRAFPoseDetection(videoAElement.value, 'A');
+      }
+      console.log('✅ [UnifiedVideoPlayer] Pose detection enabled for Video A');
+    }
+  } catch (error) {
+    console.error(
+      '❌ [UnifiedVideoPlayer] Failed to toggle pose detection for Video A:',
+      error
+    );
+  }
+};
+
+const togglePoseDetectionB = async () => {
+  if (!props.poseLandmarkerB) return;
+
+  try {
+    if (props.poseLandmarkerB.isEnabled.value) {
+      await props.poseLandmarkerB.disablePoseDetection();
+      stopRAFPoseDetection('B');
+      console.log(
+        '✅ [UnifiedVideoPlayer] Pose detection disabled for Video B'
+      );
+    } else {
+      await props.poseLandmarkerB.enablePoseDetection();
+      if (videoBElement.value) {
+        startRAFPoseDetection(videoBElement.value, 'B');
+      }
+      console.log('✅ [UnifiedVideoPlayer] Pose detection enabled for Video B');
+    }
+  } catch (error) {
+    console.error(
+      '❌ [UnifiedVideoPlayer] Failed to toggle pose detection for Video B:',
+      error
+    );
+  }
+};
+
+// Configure enhanced ROI settings for fast movements
+const configureEnhancedROIForFastMovements = () => {
+  const poseLandmarkers = [
+    props.poseLandmarker,
+    props.poseLandmarkerA,
+    props.poseLandmarkerB,
+  ].filter(Boolean);
+
+  poseLandmarkers.forEach((poseLandmarker) => {
+    if (poseLandmarker && poseLandmarker.updateSettings) {
+      // Fast movements configuration
+      poseLandmarker.updateSettings({
+        // High performance setup for fast movements
+        roiSmoothingFactor: 0.5, // Less smoothing for responsiveness
+        motionPredictionWeight: 0.4, // Higher prediction weight
+        adaptiveROIExpansionRate: 0.08, // Faster expansion
+        frameSkip: 1, // Process every frame
+        maxFPS: 60, // Higher frame rate
+        useAdaptiveROI: true,
+        useMotionPrediction: true,
+        roiValidationEnabled: true,
+        roiValidationMinLandmarks: 5,
+        roiValidationMinConfidence: 0.4,
+      });
+
+      console.log(
+        '🚀 [UnifiedVideoPlayer] Enhanced ROI configured for fast movements'
+      );
+    }
+  });
+};
+
+// Keypoint selection methods
+const getCurrentSelectedKeypoints = () => {
+  // Get selected keypoints from the appropriate pose landmarker
+  if (props.mode === 'single' && props.poseLandmarker?.selectedKeypoints) {
+    const current = props.poseLandmarker.selectedKeypoints.value || [];
+    localSelectedKeypoints.value = [...current];
+    return current;
+  } else if (props.mode === 'dual') {
+    // For dual mode, use the first available pose landmarker's selection
+    // Both videos will share the same keypoint selection
+    if (props.poseLandmarkerA?.selectedKeypoints) {
+      const current = props.poseLandmarkerA.selectedKeypoints.value || [];
+      localSelectedKeypoints.value = [...current];
+      return current;
+    } else if (props.poseLandmarkerB?.selectedKeypoints) {
+      const current = props.poseLandmarkerB.selectedKeypoints.value || [];
+      localSelectedKeypoints.value = [...current];
+      return current;
+    }
+  }
+  // Default to all keypoints if no pose landmarker is available
+  const defaultKeypoints = Array.from({ length: 33 }, (_, i) => i);
+  localSelectedKeypoints.value = [...defaultKeypoints];
+  return defaultKeypoints;
+};
+
+const updateSelectedKeypoints = (keypoints: number[]) => {
+  // Update local state first
+  localSelectedKeypoints.value = [...keypoints];
+
+  // Update selected keypoints for all active pose landmarkers
+  if (props.mode === 'single' && props.poseLandmarker?.setSelectedKeypoints) {
+    props.poseLandmarker.setSelectedKeypoints(keypoints);
+  } else if (props.mode === 'dual') {
+    // Update both pose landmarkers in dual mode
+    if (props.poseLandmarkerA?.setSelectedKeypoints) {
+      props.poseLandmarkerA.setSelectedKeypoints(keypoints);
+    }
+    if (props.poseLandmarkerB?.setSelectedKeypoints) {
+      props.poseLandmarkerB.setSelectedKeypoints(keypoints);
+    }
+  }
+  console.log(
+    '🎯 [UnifiedVideoPlayer] Selected keypoints updated:',
+    keypoints.length,
+    'keypoints'
+  );
+};
+
+const openKeypointSelector = () => {
+  // Initialize local state with current selection
+  const current = getCurrentSelectedKeypoints();
+  showKeypointSelector.value = true;
+};
+
 // Setup video event listeners
 const setupVideoEventListeners = (
   videoElement: HTMLVideoElement,
@@ -405,6 +1489,23 @@ const setupVideoEventListeners = (
   videoElement.addEventListener('timeupdate', () => {
     currentTime.value = videoElement.currentTime;
     updateFrameFromTime();
+
+    // Update pose landmarker current frame
+    if (props.poseLandmarker) {
+      props.poseLandmarker.setCurrentFrame(currentFrame.value);
+    }
+    if (props.poseLandmarkerA && videoLabel === 'A') {
+      props.poseLandmarkerA.setCurrentFrame(currentFrame.value);
+    }
+    if (props.poseLandmarkerB && videoLabel === 'B') {
+      props.poseLandmarkerB.setCurrentFrame(currentFrame.value);
+    }
+
+    // Process pose detection for current frame (optimized with frame skipping)
+    if (props.enablePoseDetection && isPlaying.value) {
+      processPoseDetection(videoElement, videoLabel);
+    }
+
     emit('time-update', {
       currentTime: videoElement.currentTime,
       duration: videoElement.duration || duration.value,
@@ -436,6 +1537,10 @@ const setupVideoEventListeners = (
   videoElement.addEventListener('pause', () => {
     isPlaying.value = false;
     emit('pause');
+  });
+
+  videoElement.addEventListener('ended', () => {
+    isPlaying.value = false;
   });
 
   videoElement.addEventListener('loadstart', () => {
@@ -639,6 +1744,17 @@ const handleVideoClick = () => {
   }
 
   emit('video-click');
+};
+
+// Pose detection controls
+const togglePoseDetection = async () => {
+  if (props.poseLandmarker) {
+    await props.poseLandmarker.togglePoseDetection();
+    console.log(
+      '🤖 [UnifiedVideoPlayer] Pose detection toggled:',
+      props.poseLandmarker.isEnabled.value
+    );
+  }
 };
 
 // Drawing event handlers
@@ -943,6 +2059,16 @@ defineExpose({
   z-index: 30;
 }
 
+.dual-video-controls {
+  position: relative;
+  background: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin-top: 10px;
+  z-index: 30;
+}
+
 .controls-content {
   display: flex;
   align-items: center;
@@ -1036,6 +2162,79 @@ defineExpose({
   color: white;
 }
 
+/* Pose Controls */
+.pose-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pose-control-group {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.pose-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.8);
+  min-width: 1rem;
+}
+
+.roi-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: 0.5rem;
+  padding-left: 0.5rem;
+  border-left: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.roi-control-group {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.shared-pose-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: 0.5rem;
+  padding-left: 0.5rem;
+  border-left: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.control-button.pose-active {
+  background: rgba(59, 130, 246, 0.3);
+  color: #3b82f6;
+}
+
+.control-button.pose-loading {
+  background: rgba(255, 255, 255, 0.1);
+  color: #9ca3af;
+  cursor: not-allowed;
+}
+
+.pose-loading-spinner {
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top: 2px solid #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .videos-grid {
@@ -1043,8 +2242,91 @@ defineExpose({
   }
 
   .volume-controls,
-  .speed-controls {
+  .speed-controls,
+  .pose-controls {
     display: none;
   }
+
+  .pose-status-indicator {
+    top: 0.5rem;
+    right: 0.5rem;
+    padding: 0.5rem;
+  }
+
+  .pose-status-text {
+    display: none;
+  }
+}
+
+/* Keypoint Selector Modal Styles */
+.keypoint-selector-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+
+.modal-content {
+  background: #1f2937;
+  border-radius: 12px;
+  max-width: 600px;
+  max-height: 80vh;
+  width: 90%;
+  overflow: hidden;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  border: 1px solid #374151;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #374151;
+  background: #111827;
+}
+
+.modal-header h2 {
+  margin: 0;
+  color: #f9fafb;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 6px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.close-button:hover {
+  background: #374151;
+  color: #f9fafb;
+}
+
+.close-button svg {
+  width: 20px;
+  height: 20px;
+  stroke-width: 2;
+}
+
+.modal-body {
+  padding: 0;
+  overflow-y: auto;
+  max-height: calc(80vh - 80px);
 }
 </style>
