@@ -1,5 +1,6 @@
 import { ref, reactive, onUnmounted, computed } from 'vue';
 import { FilesetResolver, PoseLandmarker } from '@mediapipe/tasks-vision';
+import { useSpeedCalculator } from './useSpeedCalculator.js';
 
 export function useEnhancedPoseLandmarker() {
   // State
@@ -25,12 +26,22 @@ export function useEnhancedPoseLandmarker() {
   // Keypoint selection state
   const selectedKeypoints = ref(Array.from({ length: 33 }, (_, i) => i)); // All keypoints selected by default
 
+  // Speed calculation integration
+  const {
+    speedMetrics,
+    update: updateSpeedCalculator,
+    reset: resetSpeedCalculator,
+  } = useSpeedCalculator();
+
   // Performance tracking
   const lastDetectionTime = ref(0);
   const detectionFPS = ref(0);
   const frameProcessingQueue = ref([]);
   const isProcessingFrame = ref(false);
   let animationFrameId = null;
+
+  // MediaPipe timestamp management
+  const lastMediaPipeTimestamp = ref(0);
 
   // Enhanced ROI tracking state
   const roiHistory = ref([]); // Store ROI history for temporal smoothing
@@ -163,10 +174,6 @@ export function useEnhancedPoseLandmarker() {
     error.value = null;
 
     try {
-      console.log(
-        '🤖 [Enhanced PoseLandmarker] Initializing MediaPipe pose landmarker...'
-      );
-
       const vision = await FilesetResolver.forVisionTasks(
         'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.15/wasm'
       );
@@ -187,14 +194,8 @@ export function useEnhancedPoseLandmarker() {
       });
 
       isInitialized.value = true;
-      console.log(
-        '✅ [Enhanced PoseLandmarker] MediaPipe pose landmarker initialized successfully'
-      );
     } catch (err) {
-      console.error(
-        '❌ [Enhanced PoseLandmarker] Failed to initialize pose landmarker:',
-        err
-      );
+      console.error('Failed to initialize pose landmarker:', err);
       error.value = `Failed to initialize pose landmarker: ${err.message}`;
     } finally {
       isLoading.value = false;
@@ -213,9 +214,6 @@ export function useEnhancedPoseLandmarker() {
     ).filter((landmark) => landmark && landmark.visibility > 0.3);
 
     if (keyLandmarks.length < 3) {
-      console.log(
-        '🎯 [Enhanced ROI] Insufficient key landmarks for ROI calculation'
-      );
       return null;
     }
 
@@ -278,13 +276,17 @@ export function useEnhancedPoseLandmarker() {
   };
 
   // Update ROI history and calculate stability metrics
-  const updateROIHistory = (roi) => {
+  const updateROIHistory = (roi, videoTimestamp = null) => {
     if (!roi) return;
+
+    // Use video timestamp if provided, otherwise fall back to performance.now()
+    const timestamp =
+      videoTimestamp !== null ? videoTimestamp : performance.now();
 
     // Add to history
     roiHistory.value.push({
       roi: { ...roi },
-      timestamp: performance.now(),
+      timestamp: timestamp,
     });
 
     // Limit history length
@@ -306,10 +308,11 @@ export function useEnhancedPoseLandmarker() {
       roiStabilityMetrics.averagePosition.y =
         recent.reduce((sum, h) => sum + h.roi.y, 0) / recent.length;
 
-      // Calculate velocity estimates
+      // Calculate velocity estimates using video timestamps directly
       if (recent.length >= 2) {
         const current = recent[recent.length - 1];
         const previous = recent[recent.length - 2];
+        // FIXED: Use video timestamps directly without playbackRate compensation
         const timeDelta = (current.timestamp - previous.timestamp) / 1000; // Convert to seconds
 
         if (timeDelta > 0) {
@@ -447,15 +450,20 @@ export function useEnhancedPoseLandmarker() {
   };
 
   // Enhanced pose detection with improved ROI handling
-  const detectPose = async (videoElement, timestamp, frameNumber) => {
+  const detectPose = async (
+    videoElement,
+    timestamp,
+    frameNumber,
+    playbackRate = 1
+  ) => {
     if (!poseLandmarker || !isInitialized.value || !isEnabled.value) {
       return null;
     }
 
-    // FPS limiting
+    // FPS limiting with playback rate compensation
     const now = performance.now();
     const timeSinceLastDetection = now - lastDetectionTime.value;
-    const minInterval = 1000 / detectionSettings.maxFPS;
+    const minInterval = 1000 / detectionSettings.maxFPS / playbackRate;
 
     if (timeSinceLastDetection < minInterval) {
       return getPoseForFrame(frameNumber);
@@ -476,8 +484,18 @@ export function useEnhancedPoseLandmarker() {
       isProcessingFrame.value = true;
       lastDetectionTime.value = now;
 
+      // Ensure monotonic timestamps for MediaPipe
+      const mediaPipeTimestamp = Math.max(
+        timestamp,
+        lastMediaPipeTimestamp.value + 1
+      );
+      lastMediaPipeTimestamp.value = mediaPipeTimestamp;
+
       // Detect poses in the video frame
-      const results = poseLandmarker.detectForVideo(videoElement, timestamp);
+      const results = poseLandmarker.detectForVideo(
+        videoElement,
+        mediaPipeTimestamp
+      );
       poseResults.value = results;
 
       if (results.landmarks && results.landmarks.length > 0) {
@@ -519,7 +537,7 @@ export function useEnhancedPoseLandmarker() {
 
           if (newROI) {
             // Update ROI history and metrics
-            updateROIHistory(newROI);
+            updateROIHistory(newROI, timestamp);
 
             // Update current ROI if auto-update is enabled
             if (detectionSettings.useAdaptiveROI) {
@@ -534,6 +552,20 @@ export function useEnhancedPoseLandmarker() {
           const confidence = calculateAverageConfidence(landmarks.value);
           roiConfidence.value = confidence;
 
+          // Update speed calculations with corrected timestamp (in seconds)
+          if (
+            landmarks.value &&
+            landmarks.value.length > 0 &&
+            worldLandmarks.value &&
+            worldLandmarks.value.length > 0
+          ) {
+            updateSpeedCalculator(
+              landmarks.value,
+              worldLandmarks.value,
+              timestamp / 1000
+            );
+          }
+
           // Store pose data for this frame
           const poseFrameData = {
             landmarks: landmarks.value,
@@ -547,6 +579,7 @@ export function useEnhancedPoseLandmarker() {
             roiValidation: bestROIMatch,
             roiStability: { ...roiStabilityMetrics },
             enhancedROI: newROI,
+            speedMetrics: speedMetrics.isValid ? { ...speedMetrics } : null,
           };
 
           poseData.set(frameNumber, poseFrameData);
@@ -556,13 +589,6 @@ export function useEnhancedPoseLandmarker() {
           detectionFPS.value = Math.round(
             1000 / Math.max(detectionTime, minInterval)
           );
-
-          console.log('✅ [Enhanced PoseLandmarker] Pose accepted:', {
-            frame: frameNumber,
-            confidence: confidence.toFixed(3),
-            stabilityScore: roiStabilityMetrics.stabilityScore.toFixed(3),
-            roiValidation: bestROIMatch,
-          });
 
           return poseFrameData;
         } else {
@@ -602,7 +628,7 @@ export function useEnhancedPoseLandmarker() {
         return noPoseData;
       }
     } catch (err) {
-      console.error('❌ [Enhanced PoseLandmarker] Error detecting pose:', err);
+      console.error('Pose detection error:', err);
       error.value = `Pose detection error: ${err.message}`;
       return null;
     } finally {
@@ -643,8 +669,6 @@ export function useEnhancedPoseLandmarker() {
     // Reset ROI history when manually setting ROI
     roiHistory.value = [];
     roiPrediction.value = null;
-
-    console.log('🎯 [Enhanced PoseLandmarker] ROI set:', newROI);
   };
 
   // Clear ROI and reset tracking
@@ -663,17 +687,11 @@ export function useEnhancedPoseLandmarker() {
       sizeVelocity: { width: 0, height: 0 },
       stabilityScore: 0,
     });
-
-    console.log('🎯 [Enhanced PoseLandmarker] ROI cleared');
   };
 
   // Toggle ROI usage
   const toggleROI = () => {
     detectionSettings.useROI = !detectionSettings.useROI;
-    console.log(
-      '🎯 [Enhanced PoseLandmarker] ROI toggled:',
-      detectionSettings.useROI
-    );
   };
 
   // Get pose data for frame with interpolation
@@ -718,7 +736,6 @@ export function useEnhancedPoseLandmarker() {
     poseResults.value = null;
     roiHistory.value = [];
     roiPrediction.value = null;
-    console.log('🗑️ [Enhanced PoseLandmarker] All pose data cleared');
   };
 
   // Enable pose detection
@@ -727,13 +744,13 @@ export function useEnhancedPoseLandmarker() {
       await initialize();
     }
     isEnabled.value = true;
-    console.log('▶️ [Enhanced PoseLandmarker] Pose detection enabled');
   };
 
   // Disable pose detection
   const disablePoseDetection = () => {
     isEnabled.value = false;
-    console.log('⏸️ [Enhanced PoseLandmarker] Pose detection disabled');
+    // Reset MediaPipe timestamp to prevent timestamp mismatch errors
+    lastMediaPipeTimestamp.value = 0;
   };
 
   // Toggle pose detection
@@ -748,7 +765,6 @@ export function useEnhancedPoseLandmarker() {
   // Update settings
   const updateSettings = (newSettings) => {
     Object.assign(detectionSettings, newSettings);
-    console.log('⚙️ [Enhanced PoseLandmarker] Settings updated:', newSettings);
   };
 
   // Convert normalized coordinates to canvas coordinates
@@ -838,10 +854,6 @@ export function useEnhancedPoseLandmarker() {
   // Keypoint selection methods
   const setSelectedKeypoints = (keypoints) => {
     selectedKeypoints.value = [...keypoints].sort((a, b) => a - b);
-    console.log(
-      '🎯 [Enhanced PoseLandmarker] Selected keypoints updated:',
-      selectedKeypoints.value
-    );
   };
 
   const getSelectedKeypoints = () => {
@@ -866,22 +878,64 @@ export function useEnhancedPoseLandmarker() {
     );
   };
 
-  // Cleanup function
-  const cleanup = () => {
+  // RAF-based pose detection for smooth performance
+  const detectPoseRAF = (videoElement, onPoseDetected, playbackRate = 1) => {
+    if (!poseLandmarker || !isInitialized.value || !isEnabled.value) {
+      return;
+    }
+
+    const processFrame = async () => {
+      if (!isEnabled.value) return;
+
+      try {
+        const videoTimestamp = videoElement.currentTime * 1000;
+        const frameNumber = Math.floor((videoTimestamp * 30) / 1000);
+
+        const poseData = await detectPose(
+          videoElement,
+          videoTimestamp,
+          frameNumber,
+          playbackRate
+        );
+
+        if (poseData && onPoseDetected) {
+          onPoseDetected(poseData);
+        }
+      } catch (error) {
+        console.error('RAF pose detection error:', error);
+      }
+
+      if (isEnabled.value) {
+        animationFrameId = requestAnimationFrame(processFrame);
+      }
+    };
+
+    // Start the RAF loop
+    animationFrameId = requestAnimationFrame(processFrame);
+  };
+
+  // Stop RAF-based pose detection
+  const stopPoseDetectionRAF = () => {
     if (animationFrameId) {
       cancelAnimationFrame(animationFrameId);
       animationFrameId = null;
     }
+  };
+
+  // Cleanup function
+  const cleanup = () => {
+    stopPoseDetectionRAF();
 
     isEnabled.value = false;
     clearAllPoses();
+    resetSpeedCalculator();
+    // Reset MediaPipe timestamp to prevent timestamp mismatch errors
+    lastMediaPipeTimestamp.value = 0;
 
     if (poseLandmarker) {
       poseLandmarker.close();
       poseLandmarker = null;
     }
-
-    console.log('🧹 [Enhanced PoseLandmarker] Cleanup completed');
   };
 
   // Get performance statistics
@@ -934,9 +988,6 @@ export function useEnhancedPoseLandmarker() {
   // Backward compatibility method for setCurrentFrame
   const setCurrentFrame = (frameNumber) => {
     currentFrame.value = frameNumber;
-    console.log(
-      `🎯 [Enhanced PoseLandmarker] Current frame set to: ${frameNumber}`
-    );
   };
 
   // Cleanup on unmount
@@ -964,9 +1015,14 @@ export function useEnhancedPoseLandmarker() {
     roiConfidence,
     roiStabilityMetrics,
 
+    // Speed calculation state
+    speedMetrics,
+
     // Core methods
     initialize,
     detectPose,
+    detectPoseRAF,
+    stopPoseDetectionRAF,
     enablePoseDetection,
     disablePoseDetection,
     togglePoseDetection,

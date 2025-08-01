@@ -1058,11 +1058,15 @@ const processPoseDetection = async (
   if (!poseLandmarker || !poseLandmarker.isEnabled.value) return;
 
   try {
-    const timestamp = performance.now();
+    // Use video-relative timestamp instead of performance.now()
+    const videoTimestamp = videoElement.currentTime * 1000; // Convert to milliseconds
+    const playbackRate = videoElement.playbackRate;
+
     const poseData = await poseLandmarker.detectPose(
       videoElement,
-      timestamp,
-      currentFrame.value
+      videoTimestamp,
+      currentFrame.value,
+      playbackRate
     );
 
     if (poseData) {
@@ -1109,29 +1113,33 @@ const startRAFPoseDetection = (
 
   if (!poseLandmarker || !poseLandmarker.isEnabled.value) return;
 
-  // Use RAF-based detection for smooth performance
-  poseLandmarker.detectPoseRAF(videoElement, (poseData) => {
-    // Update enhanced ROI state if using enhanced pose landmarker
-    if (poseLandmarker.getROIInsights) {
-      const roiInsights = poseLandmarker.getROIInsights();
+  // Use RAF-based detection for smooth performance with playback rate compensation
+  poseLandmarker.detectPoseRAF(
+    videoElement,
+    (poseData) => {
+      // Update enhanced ROI state if using enhanced pose landmarker
+      if (poseLandmarker.getROIInsights) {
+        const roiInsights = poseLandmarker.getROIInsights();
 
-      // Update the appropriate ROI settings based on video context
-      const roiSettingsToUpdate =
-        videoContext === 'A'
-          ? roiSettingsA
-          : videoContext === 'B'
-          ? roiSettingsB
-          : roiSettings;
+        // Update the appropriate ROI settings based on video context
+        const roiSettingsToUpdate =
+          videoContext === 'A'
+            ? roiSettingsA
+            : videoContext === 'B'
+            ? roiSettingsB
+            : roiSettings;
 
-      roiSettingsToUpdate.currentROI = roiInsights.currentROI;
-      roiSettingsToUpdate.predictedROI = roiInsights.predictedROI;
-      roiSettingsToUpdate.roiHistory = roiInsights.history;
-      roiSettingsToUpdate.roiConfidence = roiInsights.confidence;
-      roiSettingsToUpdate.stabilityMetrics = roiInsights.stability;
-    }
+        roiSettingsToUpdate.currentROI = roiInsights.currentROI;
+        roiSettingsToUpdate.predictedROI = roiInsights.predictedROI;
+        roiSettingsToUpdate.roiHistory = roiInsights.history;
+        roiSettingsToUpdate.roiConfidence = roiInsights.confidence;
+        roiSettingsToUpdate.stabilityMetrics = roiInsights.stability;
+      }
 
-    emit('pose-detected', poseData, videoContext);
-  });
+      emit('pose-detected', poseData, videoContext);
+    },
+    videoElement.playbackRate
+  );
 };
 
 // Stop RAF-based pose detection

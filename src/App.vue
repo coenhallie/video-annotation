@@ -8,6 +8,7 @@ import LoadVideoModal from './components/LoadVideoModal.vue';
 import ShareModal from './components/ShareModal.vue';
 import NotificationToast from './components/NotificationToast.vue';
 import UnifiedVideoPlayer from './components/UnifiedVideoPlayer.vue';
+import SpeedVisualization from './components/SpeedVisualization.vue';
 import { useAuth } from './composables/useAuth.ts';
 import { useVideoAnnotations } from './composables/useVideoAnnotations.ts';
 import { useRealtimeAnnotations } from './composables/useRealtimeAnnotations.ts';
@@ -189,10 +190,6 @@ const configureFastMovements = () => {
       roiValidationMinConfidence: 0.4,
     });
   });
-
-  console.log(
-    '🚀 Enhanced ROI configured for fast movements across all pose landmarkers'
-  );
 };
 
 // Initialize fast movements configuration
@@ -201,35 +198,8 @@ configureFastMovements();
 watch(
   annotations,
   (newAnnotations) => {
-    console.log('👀 [App] Annotations watcher triggered with:', newAnnotations);
-    console.log('👀 [App] Annotations count:', newAnnotations?.length || 0);
-
     if (newAnnotations) {
-      // Log each annotation's type for debugging
-      newAnnotations.forEach((ann, index) => {
-        console.log(`👀 [App] Annotation ${index}:`, {
-          id: ann.id,
-          type: ann.annotationType,
-          hasDrawingData: !!ann.drawingData,
-          frame: ann.frame,
-        });
-      });
-
-      const drawingAnnotations = newAnnotations.filter(
-        (ann) => ann.annotationType === 'drawing'
-      );
-
-      console.log(
-        '👀 [App] Drawing annotations found:',
-        drawingAnnotations.length
-      );
-      console.log(
-        '👀 [App] About to call drawingCanvas.loadDrawingsFromAnnotations'
-      );
-
       drawingCanvas.loadDrawingsFromAnnotations(newAnnotations);
-    } else {
-      console.log('👀 [App] No annotations to process');
     }
   },
   { immediate: true, deep: true }
@@ -310,17 +280,13 @@ const handleLoaded = async () => {
   // Initialize pose detection for the appropriate mode
   try {
     if (playerMode.value === 'single') {
-      // Initialize pose detection for single video mode
       await poseLandmarker.enablePoseDetection();
-      console.log('✅ [App] Pose detection enabled for single video mode');
     } else if (playerMode.value === 'dual') {
-      // Initialize pose detection for dual video mode
       await poseLandmarkerA.enablePoseDetection();
       await poseLandmarkerB.enablePoseDetection();
-      console.log('✅ [App] Pose detection enabled for dual video mode');
     }
   } catch (error) {
-    console.error('❌ [App] Failed to initialize pose detection:', error);
+    console.error('Failed to initialize pose detection:', error);
   }
 };
 
@@ -997,6 +963,42 @@ const shareModalProps = computed(() => {
   }
 });
 
+// Computed property for current speed metrics based on player mode and active context
+const currentSpeedMetrics = computed(() => {
+  if (playerMode.value === 'single') {
+    // Single video mode - use the main pose landmarker
+    return poseLandmarker.speedMetrics;
+  } else if (playerMode.value === 'dual') {
+    // Dual video mode - use the appropriate pose landmarker based on active context
+    if (activeVideoContext.value === 'B') {
+      return poseLandmarkerB.speedMetrics;
+    } else {
+      return poseLandmarkerA.speedMetrics;
+    }
+  }
+  return null;
+});
+
+// Handle speed visualization toggle
+const handleSpeedVisualizationToggled = (enabled) => {
+  // Optional: Store user preference in localStorage for persistence
+  try {
+    localStorage.setItem('speedVisualizationEnabled', enabled.toString());
+  } catch (error) {
+    // Silently handle localStorage errors (e.g., in private browsing mode)
+  }
+};
+
+// Handle speed chart toggle
+const handleChartToggled = (enabled) => {
+  // Optional: Store user preference in localStorage for persistence
+  try {
+    localStorage.setItem('speedChartEnabled', enabled.toString());
+  } catch (error) {
+    // Silently handle localStorage errors (e.g., in private browsing mode)
+  }
+};
+
 const closeShareModal = () => {
   isShareModalVisible.value = false;
 };
@@ -1577,6 +1579,24 @@ const initializeSharedComparison = async (comparisonId) => {
               @drawing-created="handleDrawingCreated"
               @drawing-updated="handleDrawingUpdated"
               @drawing-deleted="handleDrawingDeleted"
+            />
+
+            <!-- Speed Visualization Overlay -->
+            <SpeedVisualization
+              :speed-metrics="currentSpeedMetrics"
+              :canvas-width="videoDimensions.width"
+              :canvas-height="videoDimensions.height"
+              :current-timestamp="currentTime"
+              :show-speed="true"
+              :show-center-of-mass="true"
+              :show-velocity-vector="true"
+              :show-speed-panel="true"
+              :show-labels="true"
+              :show-velocity-components="false"
+              :show-co-m-coordinates="false"
+              :show-toggle-control="true"
+              @speed-visualization-toggled="handleSpeedVisualizationToggled"
+              @chart-toggled="handleChartToggled"
             />
           </div>
         </div>
