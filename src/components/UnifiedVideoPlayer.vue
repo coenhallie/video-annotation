@@ -1498,6 +1498,13 @@ const setupVideoEventListeners = (
     currentTime.value = videoElement.currentTime;
     updateFrameFromTime();
 
+    // DEBUG: Log video timing
+    console.log(
+      `🎬 [VideoPlayer] timeupdate - currentTime: ${videoElement.currentTime.toFixed(
+        3
+      )}s, frame: ${currentFrame.value}`
+    );
+
     // Update pose landmarker current frame
     if (props.poseLandmarker) {
       props.poseLandmarker.setCurrentFrame(currentFrame.value);

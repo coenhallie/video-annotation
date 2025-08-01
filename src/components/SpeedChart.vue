@@ -199,8 +199,7 @@
               opacity="0.8"
             >
               <title>
-                {{ point.speed.toFixed(2) }} m/s at
-                {{ point.timeAgo.toFixed(1) }}s ago
+                {{ point.speed.toFixed(2) }} m/s at Frame {{ point.frame }}
               </title>
             </circle>
           </g>
@@ -239,10 +238,10 @@
         </div>
         <div class="stat-item">
           <span class="text-xs text-gray-500 uppercase tracking-wide"
-            >Points:</span
+            >Frame:</span
           >
           <span class="text-sm font-medium text-gray-900">{{
-            speedHistory.length
+            currentFrame
           }}</span>
         </div>
       </div>
@@ -261,6 +260,10 @@ export default {
       default: null,
     },
     timestamp: {
+      type: Number,
+      default: 0,
+    },
+    currentFrame: {
       type: Number,
       default: 0,
     },
@@ -289,15 +292,33 @@ export default {
       return props.speedMetrics?.speed || 0;
     });
 
-    // Add new speed data point
-    const addSpeedData = (speed, timestamp) => {
+    // Add new speed data point using synchronized timestamp
+    const addSpeedData = (speed, timestamp, frameNumber) => {
       if (typeof speed !== 'number' || !isFinite(speed) || speed < 0) {
+        console.warn(`📊 [SpeedChart] Invalid speed data: ${speed}`);
         return;
       }
 
+      if (
+        typeof timestamp !== 'number' ||
+        !isFinite(timestamp) ||
+        timestamp < 0
+      ) {
+        console.warn(`📊 [SpeedChart] Invalid timestamp: ${timestamp}`);
+        return;
+      }
+
+      // DEBUG: Log synchronized chart data addition
+      console.log(
+        `📊 [SpeedChart] Adding synchronized data point - timestamp: ${timestamp.toFixed(
+          3
+        )}s, frame: ${frameNumber}, speed: ${speed.toFixed(3)} m/s`
+      );
+
       speedHistory.value.push({
         speed: Math.min(speed, 50), // Cap at 50 m/s for sanity
-        timestamp: timestamp,
+        timestamp: timestamp, // This is now the synchronized timestamp from video player
+        frame: frameNumber || 0, // Store frame number
         id: Date.now() + Math.random(), // Unique ID for each point
       });
 
@@ -306,19 +327,30 @@ export default {
         speedHistory.value.shift();
       }
 
-      // Remove data points older than chart duration
+      // Remove data points older than chart duration using synchronized timestamp
       const cutoffTime = timestamp - chartDuration.value;
       speedHistory.value = speedHistory.value.filter(
         (point) => point.timestamp >= cutoffTime
       );
     };
 
-    // Watch for new speed data
+    // Watch for new speed data - using synchronized timestamp from video player
     watch(
-      () => [props.speedMetrics?.speed, props.timestamp],
-      ([newSpeed, newTimestamp]) => {
-        if (newSpeed !== undefined && newTimestamp > 0) {
-          addSpeedData(newSpeed, newTimestamp);
+      () => [props.speedMetrics?.speed, props.timestamp, props.currentFrame],
+      ([newSpeed, newTimestamp, newFrame]) => {
+        // Only add data when we have valid speed metrics and synchronized timestamp
+        if (
+          newSpeed !== undefined &&
+          newTimestamp > 0 &&
+          props.speedMetrics?.isValid
+        ) {
+          // DEBUG: Log synchronized timestamp usage
+          console.log(
+            `📊 [SpeedChart] Using synchronized timestamp from video player - timestamp: ${newTimestamp.toFixed(
+              3
+            )}s, frame: ${newFrame}, speed: ${newSpeed.toFixed(3)} m/s`
+          );
+          addSpeedData(newSpeed, newTimestamp, newFrame);
         }
       },
       { immediate: true }
@@ -350,6 +382,7 @@ export default {
             speed: point.speed,
             timeAgo: timeAgo,
             timestamp: point.timestamp,
+            frame: point.frame || 0,
           };
         });
     });
@@ -464,6 +497,7 @@ export default {
       chartHeight,
       speedHistory,
       currentSpeed,
+      currentFrame: computed(() => props.currentFrame),
 
       // Refs
       chartWrapper,

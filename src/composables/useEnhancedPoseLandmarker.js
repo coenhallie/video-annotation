@@ -27,11 +27,12 @@ export function useEnhancedPoseLandmarker() {
   const selectedKeypoints = ref(Array.from({ length: 33 }, (_, i) => i)); // All keypoints selected by default
 
   // Speed calculation integration
+  const speedCalculator = useSpeedCalculator();
   const {
     speedMetrics,
     update: updateSpeedCalculator,
     reset: resetSpeedCalculator,
-  } = useSpeedCalculator();
+  } = speedCalculator;
 
   // Performance tracking
   const lastDetectionTime = ref(0);
@@ -63,8 +64,8 @@ export function useEnhancedPoseLandmarker() {
     minPosePresenceConfidence: 0.3,
     minTrackingConfidence: 0.3,
     outputSegmentationMasks: false,
-    frameSkip: 2,
-    maxFPS: 30,
+    frameSkip: 1, // Process every frame for better temporal accuracy
+    maxFPS: 60, // Higher FPS for fast-moving sports
     useRequestAnimationFrame: false,
 
     // Enhanced ROI settings
@@ -559,6 +560,13 @@ export function useEnhancedPoseLandmarker() {
             worldLandmarks.value &&
             worldLandmarks.value.length > 0
           ) {
+            // DEBUG: Log pose detection timing
+            console.log(
+              `🤖 [PoseLandmarker] Pose detected - timestamp: ${(
+                timestamp / 1000
+              ).toFixed(3)}s, frame: ${frameNumber}`
+            );
+
             updateSpeedCalculator(
               landmarks.value,
               worldLandmarks.value,
@@ -1017,6 +1025,7 @@ export function useEnhancedPoseLandmarker() {
 
     // Speed calculation state
     speedMetrics,
+    speedCalculator,
 
     // Core methods
     initialize,

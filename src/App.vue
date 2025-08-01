@@ -9,6 +9,7 @@ import ShareModal from './components/ShareModal.vue';
 import NotificationToast from './components/NotificationToast.vue';
 import UnifiedVideoPlayer from './components/UnifiedVideoPlayer.vue';
 import SpeedVisualization from './components/SpeedVisualization.vue';
+import CalibrationControls from './components/CalibrationControls.vue';
 import { useAuth } from './composables/useAuth.ts';
 import { useVideoAnnotations } from './composables/useVideoAnnotations.ts';
 import { useRealtimeAnnotations } from './composables/useRealtimeAnnotations.ts';
@@ -17,6 +18,7 @@ import { useDrawingCanvas } from './composables/useDrawingCanvas.ts';
 import { useComparisonVideoWorkflow } from './composables/useComparisonVideoWorkflow.ts';
 import { useDualVideoPlayer } from './composables/useDualVideoPlayer.js';
 import { useEnhancedPoseLandmarker } from './composables/useEnhancedPoseLandmarker.js';
+import { useSessionCleanup } from './composables/useSessionCleanup.ts';
 import { VideoService } from './services/videoService.ts';
 import { AnnotationService } from './services/annotationService.ts';
 import { ShareService } from './services/shareService.ts';
@@ -170,6 +172,25 @@ const comparisonWorkflow = useComparisonVideoWorkflow();
 const poseLandmarker = useEnhancedPoseLandmarker(); // For single video mode
 const poseLandmarkerA = useEnhancedPoseLandmarker(); // For dual video mode - Video A
 const poseLandmarkerB = useEnhancedPoseLandmarker(); // For dual video mode - Video B
+
+// Session cleanup utility
+const { cleanupAllSessionData } = useSessionCleanup();
+
+// Access speed calculator for calibration
+const currentSpeedCalculator = computed(() => {
+  if (playerMode.value === 'single') {
+    return poseLandmarker.speedCalculator;
+  } else if (activeVideoContext.value === 'A') {
+    return poseLandmarkerA.speedCalculator;
+  } else {
+    return poseLandmarkerB.speedCalculator;
+  }
+});
+
+// Calibration state
+const isCourtCalibrating = ref(false);
+const courtCalibrationPoints = ref([]);
+const showCalibrationControls = ref(true);
 
 // Configure all pose landmarkers for fast movements
 const configureFastMovements = () => {
@@ -449,6 +470,63 @@ const handleTimelinePause = () => {
   }
 };
 
+// Calibration methods
+const handleSetPlayerHeight = (height) => {
+  if (currentSpeedCalculator.value) {
+    currentSpeedCalculator.value.setPlayerHeight(height);
+  }
+};
+
+const handleSetCourtDimensions = (dimensions) => {
+  if (currentSpeedCalculator.value) {
+    currentSpeedCalculator.value.setCourtDimensions(dimensions);
+  }
+};
+
+const handleSetCourtReferencePoints = (points) => {
+  if (currentSpeedCalculator.value) {
+    currentSpeedCalculator.value.setCourtReferencePoints(
+      points,
+      videoDimensions.value
+    );
+  }
+  isCourtCalibrating.value = false;
+  courtCalibrationPoints.value = [];
+};
+
+const handleResetCalibration = () => {
+  if (currentSpeedCalculator.value) {
+    currentSpeedCalculator.value.resetCalibration();
+  }
+  isCourtCalibrating.value = false;
+  courtCalibrationPoints.value = [];
+};
+
+const toggleCalibrationControls = () => {
+  showCalibrationControls.value = !showCalibrationControls.value;
+};
+
+const handleStartCourtCalibration = () => {
+  isCourtCalibrating.value = true;
+  courtCalibrationPoints.value = [];
+  // Add click listener to video canvas for court calibration
+  // This will be handled by the video player component
+};
+
+const handleVideoCanvasClick = (event) => {
+  if (isCourtCalibrating.value && courtCalibrationPoints.value.length < 4) {
+    const rect = event.target.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+
+    courtCalibrationPoints.value.push({ x, y });
+
+    if (courtCalibrationPoints.value.length === 4) {
+      handleSetCourtReferencePoints(courtCalibrationPoints.value);
+    }
+  }
+};
+
 onMounted(async () => {
   await initAuth();
 
@@ -478,52 +556,133 @@ onMounted(async () => {
   }
 });
 
-// Clear video state function
-const clearVideoState = () => {
-  // Reset player mode to single
-  playerMode.value = 'single';
+// Clear video state function with comprehensive session cleanup
+const clearVideoState = async () => {
+  console.log('🧹 [App] Starting comprehensive video state cleanup...');
 
-  // Reset dual video player URLs
-  if (dualVideoPlayer) {
-    dualVideoPlayer.videoAUrl.value = '';
-    dualVideoPlayer.videoBUrl.value = '';
-    dualVideoPlayer.cleanup();
+  try {
+    // Use the centralized session cleanup utility
+    await cleanupAllSessionData({
+      poseLandmarker,
+      poseLandmarkerA,
+      poseLandmarkerB,
+      drawingCanvas,
+      dualVideoPlayer,
+      comparisonWorkflow,
+      videoSession: {
+        endSession,
+        cleanup: () => {
+          // Additional video session cleanup if needed
+        },
+      },
+      additionalCleanup: [
+        // Additional cleanup for UI state
+        () => {
+          console.log('🧹 [App] Cleaning up UI state...');
+
+          // Reset player mode to single
+          playerMode.value = 'single';
+
+          // Reset video state
+          videoUrl.value = '';
+          videoId.value = 'sample-video-1';
+          urlInput.value = '';
+          currentTime.value = 0;
+          duration.value = 0;
+          isPlaying.value = false;
+          currentFrame.value = 0;
+          totalFrames.value = 0;
+          fps.value = -1;
+          selectedAnnotation.value = null;
+          isAnnotationFormVisible.value = false;
+          isLoadModalVisible.value = false;
+          isShareModalVisible.value = false;
+          currentVideoId.value = null;
+          currentComparisonId.value = null;
+          isSharedComparison.value = false;
+          isSharedVideo.value = false;
+          sharedVideoData.value = null;
+
+          // Reset calibration state
+          isCourtCalibrating.value = false;
+          courtCalibrationPoints.value = [];
+
+          // Reset video dimensions
+          videoDimensions.value = { width: 1920, height: 1080 };
+
+          // Reset video type
+          currentVideoType.value = null;
+
+          console.log('✅ [App] UI state cleanup completed');
+        },
+      ],
+    });
+
+    console.log(
+      '✅ [App] Comprehensive video state cleanup completed successfully'
+    );
+  } catch (error) {
+    console.error('❌ [App] Error during video state cleanup:', error);
+    // Fallback to basic cleanup if comprehensive cleanup fails
+    console.log('🔄 [App] Falling back to basic cleanup...');
+
+    // Reset player mode to single
+    playerMode.value = 'single';
+
+    // Reset dual video player URLs
+    if (dualVideoPlayer) {
+      dualVideoPlayer.videoAUrl.value = '';
+      dualVideoPlayer.videoBUrl.value = '';
+      if (dualVideoPlayer.cleanup) {
+        dualVideoPlayer.cleanup();
+      }
+    }
+
+    // Reset comparison workflow
+    if (comparisonWorkflow?.resetWorkflow) {
+      comparisonWorkflow.resetWorkflow();
+    }
+
+    videoUrl.value = '';
+    videoId.value = 'sample-video-1';
+    urlInput.value = '';
+    currentTime.value = 0;
+    duration.value = 0;
+    isPlaying.value = false;
+    currentFrame.value = 0;
+    totalFrames.value = 0;
+    fps.value = -1;
+    selectedAnnotation.value = null;
+    isAnnotationFormVisible.value = false;
+    isLoadModalVisible.value = false;
+    isShareModalVisible.value = false;
+    currentVideoId.value = null;
+    currentComparisonId.value = null;
+    isSharedComparison.value = false;
+    isSharedVideo.value = false;
+    sharedVideoData.value = null;
+
+    // End any active session
+    if (isSessionActive.value) {
+      try {
+        await endSession();
+      } catch (sessionError) {
+        console.error('❌ [App] Error ending session:', sessionError);
+      }
+    }
+
+    // Clean up pose detection
+    try {
+      poseLandmarker.disablePoseDetection();
+      poseLandmarker.clearAllPoses();
+      poseLandmarkerA.disablePoseDetection();
+      poseLandmarkerA.clearAllPoses();
+      poseLandmarkerB.disablePoseDetection();
+      poseLandmarkerB.clearAllPoses();
+    } catch (poseError) {
+      console.error('❌ [App] Error cleaning up pose detection:', poseError);
+    }
   }
-
-  // Reset comparison workflow
-  comparisonWorkflow.resetWorkflow();
-
-  videoUrl.value = '';
-  videoId.value = 'sample-video-1';
-  urlInput.value = '';
-  currentTime.value = 0;
-  duration.value = 0;
-  isPlaying.value = false;
-  currentFrame.value = 0;
-  totalFrames.value = 0;
-  fps.value = -1;
-  selectedAnnotation.value = null;
-  isAnnotationFormVisible.value = false;
-  isLoadModalVisible.value = false;
-  isShareModalVisible.value = false;
-  currentVideoId.value = null;
-  currentComparisonId.value = null;
-  isSharedComparison.value = false;
-  isSharedVideo.value = false;
-  sharedVideoData.value = null;
-
-  // End any active session
-  if (isSessionActive.value) {
-    endSession();
-  }
-
-  // Clean up pose detection
-  poseLandmarker.disablePoseDetection();
-  poseLandmarker.clearAllPoses();
-  poseLandmarkerA.disablePoseDetection();
-  poseLandmarkerA.clearAllPoses();
-  poseLandmarkerB.disablePoseDetection();
-  poseLandmarkerB.clearAllPoses();
 };
 
 // Watch for user authentication changes and re-initialize video if needed
@@ -532,7 +691,8 @@ watch(
   async (newUser, oldUser) => {
     // If user changed (sign out or different user), clear video state
     if (oldUser && (!newUser || newUser.id !== oldUser.id)) {
-      clearVideoState();
+      console.log('🔄 [App] User changed, cleaning up session data...');
+      await clearVideoState();
     }
 
     if (newUser) {
@@ -658,6 +818,16 @@ const closeLoadModal = () => {
 // Handle project selection (unified handler for single and dual video projects)
 const handleProjectSelected = async (project) => {
   try {
+    console.log(
+      '🎬 [App] Project selected, cleaning up previous session...',
+      project.title
+    );
+
+    // Clean up all session data before switching to new project
+    await clearVideoState();
+
+    console.log('🎬 [App] Session cleanup completed, loading new project...');
+
     if (project.projectType === 'single') {
       // Handle single video project
       const video = project.video;
@@ -707,7 +877,11 @@ const handleProjectSelected = async (project) => {
       // Call the existing comparison video handler
       await handleComparisonVideoSelected(comparisonData);
     }
-  } catch (err) {}
+
+    console.log('✅ [App] Project loaded successfully:', project.title);
+  } catch (err) {
+    console.error('❌ [App] Error loading project:', err);
+  }
 };
 
 const handleVideoSelected = async (data) => {
@@ -1587,6 +1761,7 @@ const initializeSharedComparison = async (comparisonId) => {
               :canvas-width="videoDimensions.width"
               :canvas-height="videoDimensions.height"
               :current-timestamp="currentTime"
+              :current-frame="currentFrame"
               :show-speed="true"
               :show-center-of-mass="true"
               :show-velocity-vector="true"
@@ -1669,51 +1844,112 @@ const initializeSharedComparison = async (comparisonId) => {
         </div>
       </section>
 
-      <!-- Annotation Panel -->
+      <!-- Sidebar with Calibration and Annotation Panel -->
       <aside
         class="w-96 min-w-96 max-w-96 flex-shrink-0 bg-white border-l border-gray-200 flex flex-col overflow-hidden"
       >
-        <AnnotationPanel
-          ref="annotationPanelRef"
-          :annotations="annotations"
-          :selected-annotation="selectedAnnotation"
-          :current-time="currentTime"
-          :current-frame="currentFrame"
-          :fps="fps"
-          :drawing-canvas="drawingCanvas"
-          :read-only="(isSharedVideo || isSharedComparison) && !canComment()"
-          :video-id="currentVideoId"
-          :loading="annotationsLoading"
-          :is-dual-mode="playerMode === 'dual'"
-          :drawing-canvas-a="dualVideoPlayer?.drawingCanvasA"
-          :drawing-canvas-b="dualVideoPlayer?.drawingCanvasB"
-          :dual-video-player="dualVideoPlayer"
-          :comment-permissions="commentPermissions"
-          :anonymous-session="anonymousSession"
-          :is-shared-video="isSharedVideo || isSharedComparison"
-          :comment-context="getCommentContext()"
-          :drawing-canvas-ref="unifiedVideoPlayerRef?.singleDrawingCanvasRef"
-          :drawing-canvas-a-ref="unifiedVideoPlayerRef?.drawingCanvasARef"
-          :drawing-canvas-b-ref="unifiedVideoPlayerRef?.drawingCanvasBRef"
-          :video-a-current-frame="
-            dualVideoPlayer?.videoACurrentFrame?.value || 0
-          "
-          :video-b-current-frame="
-            dualVideoPlayer?.videoBCurrentFrame?.value || 0
-          "
-          :video-a-fps="dualVideoPlayer?.videoAState?.fps || 30"
-          :video-b-fps="dualVideoPlayer?.videoBState?.fps || 30"
-          @add-annotation="handleAddAnnotation"
-          @update-annotation="updateAnnotation"
-          @delete-annotation="deleteAnnotation"
-          @select-annotation="handleAnnotationClick"
-          @annotation-edit="handleAnnotationEdit"
-          @form-show="handleFormShow"
-          @form-hide="handleFormHide"
-          @pause="handleTimelinePause"
-          @drawing-created="handleDrawingCreated"
-          @create-anonymous-session="handleCreateAnonymousSession"
-        />
+        <!-- Calibration Controls -->
+        <div class="flex-shrink-0 border-b border-gray-200">
+          <!-- Toggle Button -->
+          <div class="p-3 bg-gray-50 border-b border-gray-200">
+            <button
+              @click="toggleCalibrationControls"
+              class="flex items-center justify-between w-full text-left text-sm font-medium text-gray-700 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded-md p-2 hover:bg-gray-100 transition-colors"
+            >
+              <span class="flex items-center">
+                <svg
+                  class="w-4 h-4 mr-2"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4"
+                  ></path>
+                </svg>
+                Speed Calibration
+              </span>
+              <svg
+                :class="[
+                  'w-4 h-4 transition-transform duration-200',
+                  showCalibrationControls ? 'rotate-180' : 'rotate-0',
+                ]"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M19 9l-7 7-7-7"
+                ></path>
+              </svg>
+            </button>
+          </div>
+
+          <!-- Calibration Controls Panel -->
+          <div v-if="showCalibrationControls" class="p-4">
+            <CalibrationControls
+              v-if="currentSpeedCalculator"
+              :calibration-settings="currentSpeedCalculator.calibrationSettings"
+              :video-dimensions="videoDimensions"
+              :on-set-player-height="handleSetPlayerHeight"
+              :on-set-court-dimensions="handleSetCourtDimensions"
+              :on-set-court-reference-points="handleSetCourtReferencePoints"
+              :on-reset-calibration="handleResetCalibration"
+              @start-court-calibration="handleStartCourtCalibration"
+            />
+          </div>
+        </div>
+
+        <!-- Annotation Panel -->
+        <div class="flex-1 overflow-hidden">
+          <AnnotationPanel
+            ref="annotationPanelRef"
+            :annotations="annotations"
+            :selected-annotation="selectedAnnotation"
+            :current-time="currentTime"
+            :current-frame="currentFrame"
+            :fps="fps"
+            :drawing-canvas="drawingCanvas"
+            :read-only="(isSharedVideo || isSharedComparison) && !canComment()"
+            :video-id="currentVideoId"
+            :loading="annotationsLoading"
+            :is-dual-mode="playerMode === 'dual'"
+            :drawing-canvas-a="dualVideoPlayer?.drawingCanvasA"
+            :drawing-canvas-b="dualVideoPlayer?.drawingCanvasB"
+            :dual-video-player="dualVideoPlayer"
+            :comment-permissions="commentPermissions"
+            :anonymous-session="anonymousSession"
+            :is-shared-video="isSharedVideo || isSharedComparison"
+            :comment-context="getCommentContext()"
+            :drawing-canvas-ref="unifiedVideoPlayerRef?.singleDrawingCanvasRef"
+            :drawing-canvas-a-ref="unifiedVideoPlayerRef?.drawingCanvasARef"
+            :drawing-canvas-b-ref="unifiedVideoPlayerRef?.drawingCanvasBRef"
+            :video-a-current-frame="
+              dualVideoPlayer?.videoACurrentFrame?.value || 0
+            "
+            :video-b-current-frame="
+              dualVideoPlayer?.videoBCurrentFrame?.value || 0
+            "
+            :video-a-fps="dualVideoPlayer?.videoAState?.fps || 30"
+            :video-b-fps="dualVideoPlayer?.videoBState?.fps || 30"
+            @add-annotation="handleAddAnnotation"
+            @update-annotation="updateAnnotation"
+            @delete-annotation="deleteAnnotation"
+            @select-annotation="handleAnnotationClick"
+            @annotation-edit="handleAnnotationEdit"
+            @form-show="handleFormShow"
+            @form-hide="handleFormHide"
+            @pause="handleTimelinePause"
+            @drawing-created="handleDrawingCreated"
+            @create-anonymous-session="handleCreateAnonymousSession"
+          />
+        </div>
       </aside>
     </main>
 

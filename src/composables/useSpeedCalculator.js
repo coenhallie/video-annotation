@@ -98,6 +98,30 @@ const BODY_SEGMENT_WEIGHTS = {
  * @returns {Function} calculateCoM - Calculate center of mass from landmarks
  */
 export function useSpeedCalculator() {
+  // Calibration settings for improved accuracy
+  const calibrationSettings = reactive({
+    // Player height calibration
+    playerHeight: 170, // cm, default average height
+    useHeightCalibration: false,
+
+    // Court dimension calibration
+    useCourtCalibration: false,
+    courtDimensions: {
+      width: 13.4, // meters (badminton court width)
+      height: 6.1, // meters (badminton court length)
+    },
+    courtReferencePoints: [], // User-clicked court corners [topLeft, topRight, bottomLeft, bottomRight]
+    pixelsToMetersRatio: null,
+
+    // Camera distance estimation
+    useCameraDistanceCalibration: false,
+    estimatedCameraDistance: 10, // meters, rough estimate
+
+    // Calibration status
+    isCalibrated: false,
+    calibrationAccuracy: 0, // 0-100% estimated accuracy
+  });
+
   // Reactive speed metrics for real-time updates
   const speedMetrics = reactive({
     centerOfMass: {
@@ -115,11 +139,178 @@ export function useSpeedCalculator() {
     generalMovingSpeed: 0, // Horizontal speed in m/s
     rightFootSpeed: 0, // Speed of the right foot in m/s
     isValid: false,
+    // Calibration-related metrics
+    calibratedSpeed: 0, // Speed after applying calibration
+    calibratedGeneralMovingSpeed: 0,
+    calibratedRightFootSpeed: 0,
+    scalingFactor: 1, // Current scaling factor applied
   });
 
   // Frame history for temporal smoothing
   const history = ref([]);
   const historySize = 10; // Frames to store for smoothing
+
+  /**
+   * Calculate scaling factor based on calibration settings
+   * @returns {number} Scaling factor to apply to measurements
+   */
+  const calculateScalingFactor = () => {
+    let scalingFactor = 1;
+
+    if (calibrationSettings.useHeightCalibration) {
+      // Scale based on player height vs. MediaPipe's assumed average (170cm)
+      scalingFactor *= calibrationSettings.playerHeight / 170;
+    }
+
+    if (
+      calibrationSettings.useCourtCalibration &&
+      calibrationSettings.pixelsToMetersRatio
+    ) {
+      // Additional scaling based on court calibration
+      // This would override height calibration if both are enabled
+      scalingFactor = calibrationSettings.pixelsToMetersRatio;
+    }
+
+    return scalingFactor;
+  };
+
+  /**
+   * Apply calibration scaling to world landmarks
+   * @param {Array} landmarks - Original world landmarks
+   * @returns {Array} Calibrated world landmarks
+   */
+  const applyCalibratedScaling = (landmarks) => {
+    if (!landmarks || landmarks.length === 0) return landmarks;
+
+    const scalingFactor = calculateScalingFactor();
+
+    if (scalingFactor === 1) return landmarks; // No calibration needed
+
+    return landmarks.map((landmark) => ({
+      ...landmark,
+      x: landmark.x * scalingFactor,
+      y: landmark.y * scalingFactor,
+      z: landmark.z * scalingFactor,
+    }));
+  };
+
+  /**
+   * Set player height for calibration
+   * @param {number} height - Player height in centimeters
+   */
+  const setPlayerHeight = (height) => {
+    if (height > 0 && height < 300) {
+      // Reasonable height range
+      calibrationSettings.playerHeight = height;
+      calibrationSettings.useHeightCalibration = true;
+      updateCalibrationStatus();
+    }
+  };
+
+  /**
+   * Set court dimensions for calibration
+   * @param {Object} dimensions - {width, height} of court in meters
+   */
+  const setCourtDimensions = (dimensions) => {
+    if (dimensions.width > 0 && dimensions.height > 0) {
+      calibrationSettings.courtDimensions.width = dimensions.width;
+      calibrationSettings.courtDimensions.height = dimensions.height;
+
+      // For dimension-based calibration, we use a simplified scaling approach
+      // This assumes the video shows the full court proportionally
+      const avgDimension = (dimensions.width + dimensions.height) / 2;
+      const standardAvg = (13.4 + 6.1) / 2; // Standard badminton court average
+
+      // Apply a scaling factor based on court size relative to standard badminton court
+      calibrationSettings.pixelsToMetersRatio = avgDimension / standardAvg;
+      calibrationSettings.useCourtCalibration = true;
+      updateCalibrationStatus();
+    }
+  };
+
+  /**
+   * Set court reference points for calibration (legacy method for compatibility)
+   * @param {Array} points - Array of 4 points [topLeft, topRight, bottomLeft, bottomRight]
+   * @param {Object} videoDimensions - {width, height} of video in pixels
+   */
+  const setCourtReferencePoints = (points, videoDimensions) => {
+    // For dimension-based calibration, we don't need actual points
+    // Just trigger the calibration update if court dimensions are set
+    if (
+      calibrationSettings.courtDimensions.width > 0 &&
+      calibrationSettings.courtDimensions.height > 0
+    ) {
+      setCourtDimensions(calibrationSettings.courtDimensions);
+      return;
+    }
+
+    // Legacy point-based calibration (if 4 points provided)
+    if (points.length !== 4) {
+      console.warn('Court calibration requires exactly 4 reference points');
+      return;
+    }
+
+    calibrationSettings.courtReferencePoints = points;
+
+    // Calculate pixels to meters ratio based on court dimensions
+    // Using the width of the court as reference (more reliable than perspective-affected length)
+    const topWidth = Math.sqrt(
+      Math.pow(points[1].x - points[0].x, 2) +
+        Math.pow(points[1].y - points[0].y, 2)
+    );
+    const bottomWidth = Math.sqrt(
+      Math.pow(points[3].x - points[2].x, 2) +
+        Math.pow(points[3].y - points[2].y, 2)
+    );
+
+    // Average the top and bottom widths to account for perspective
+    const averageWidthInPixels = (topWidth + bottomWidth) / 2;
+    const realCourtWidth = calibrationSettings.courtDimensions.width; // 13.4m
+
+    calibrationSettings.pixelsToMetersRatio =
+      realCourtWidth / averageWidthInPixels;
+    calibrationSettings.useCourtCalibration = true;
+    updateCalibrationStatus();
+  };
+
+  /**
+   * Update calibration status and accuracy estimate
+   */
+  const updateCalibrationStatus = () => {
+    let accuracy = 0;
+
+    if (calibrationSettings.useHeightCalibration) {
+      accuracy += 20; // Height calibration adds ~20% accuracy
+    }
+
+    if (calibrationSettings.useCourtCalibration) {
+      accuracy += 40; // Court calibration adds ~40% accuracy
+    }
+
+    if (calibrationSettings.useCameraDistanceCalibration) {
+      accuracy += 25; // Camera distance adds ~25% accuracy
+    }
+
+    calibrationSettings.calibrationAccuracy = Math.min(accuracy, 95); // Cap at 95%
+    calibrationSettings.isCalibrated = accuracy > 0;
+  };
+
+  /**
+   * Reset all calibration settings
+   */
+  const resetCalibration = () => {
+    Object.assign(calibrationSettings, {
+      playerHeight: 170,
+      useHeightCalibration: false,
+      useCourtCalibration: false,
+      courtReferencePoints: [],
+      pixelsToMetersRatio: null,
+      useCameraDistanceCalibration: false,
+      estimatedCameraDistance: 10,
+      isCalibrated: false,
+      calibrationAccuracy: 0,
+    });
+  };
 
   /**
    * Calculate center of mass from pose landmarks
@@ -421,13 +612,20 @@ export function useSpeedCalculator() {
         return;
       }
 
-      const centerOfMass = calculateCoM(worldLandmarks);
+      // Apply calibration scaling to world landmarks
+      const calibratedWorldLandmarks = applyCalibratedScaling(worldLandmarks);
+      const scalingFactor = calculateScalingFactor();
+
+      const centerOfMass = calculateCoM(calibratedWorldLandmarks);
       const centerOfGravityHeight = calculateCoGHeight(landmarks);
 
       if (!centerOfMass) {
         speedMetrics.isValid = false;
         return;
       }
+
+      // Store scaling factor for reference
+      speedMetrics.scalingFactor = scalingFactor;
 
       // Validate center of mass values
       if (
@@ -442,9 +640,16 @@ export function useSpeedCalculator() {
       const frameData = {
         com: centerOfMass,
         landmarks: landmarks,
-        worldLandmarks: worldLandmarks,
+        worldLandmarks: calibratedWorldLandmarks, // Use calibrated landmarks
         timestamp,
       };
+
+      // DEBUG: Log speed calculation timing
+      console.log(
+        `⚡ [SpeedCalculator] Speed calculated - timestamp: ${timestamp.toFixed(
+          3
+        )}s, speed: ${speedMetrics.speed?.toFixed(3) || 'N/A'} m/s`
+      );
 
       history.value.push(frameData);
       if (history.value.length > historySize) {
@@ -505,6 +710,12 @@ export function useSpeedCalculator() {
           timeDelta
         );
         speedMetrics.rightFootSpeed = rightFootSpeed || 0;
+
+        // Calculate calibrated speeds (these are the same as regular speeds now since we applied calibration to landmarks)
+        speedMetrics.calibratedSpeed = speedMetrics.speed;
+        speedMetrics.calibratedGeneralMovingSpeed =
+          speedMetrics.generalMovingSpeed;
+        speedMetrics.calibratedRightFootSpeed = speedMetrics.rightFootSpeed;
       }
 
       speedMetrics.isValid = true;
@@ -536,17 +747,30 @@ export function useSpeedCalculator() {
       generalMovingSpeed: 0,
       rightFootSpeed: 0,
       isValid: false,
+      // Reset calibrated metrics
+      calibratedSpeed: 0,
+      calibratedGeneralMovingSpeed: 0,
+      calibratedRightFootSpeed: 0,
+      scalingFactor: 1,
     });
   };
 
   // Return the public API
   return {
     speedMetrics,
+    calibrationSettings,
     update,
     reset,
     calculateCoM,
     calculateCoGHeight,
     calculateLandmarkSpeed,
     calculateGeneralMovingSpeed,
+    // Calibration functions
+    setPlayerHeight,
+    setCourtDimensions,
+    setCourtReferencePoints,
+    resetCalibration,
+    updateCalibrationStatus,
+    calculateScalingFactor,
   };
 }

@@ -32,7 +32,7 @@ export function usePoseLandmarker() {
   // Keypoint selection state
   const selectedKeypoints = ref(Array.from({ length: 33 }, (_, i) => i)); // All keypoints selected by default
 
-  // Performance settings optimized for real-time
+  // Performance settings optimized for high-accuracy tracking
   const detectionSettings = reactive({
     runningMode: 'VIDEO',
     numPoses: 1,
@@ -40,8 +40,8 @@ export function usePoseLandmarker() {
     minPosePresenceConfidence: 0.3, // Lower for better performance
     minTrackingConfidence: 0.3, // Lower for better performance
     outputSegmentationMasks: false,
-    frameSkip: 2, // Process every 2nd frame for better performance
-    maxFPS: 30, // Limit detection FPS
+    frameSkip: 1, // Process every frame for better temporal accuracy
+    maxFPS: 60, // Higher FPS for fast-moving sports
     useRequestAnimationFrame: false, // Disable RAF for now, use timeupdate events
     useROI: false, // Enable region of interest filtering
     roiBox: null, // ROI bounding box { x, y, width, height } in normalized coordinates

@@ -7,6 +7,7 @@
     <SpeedChart
       :speedMetrics="speedMetrics"
       :timestamp="currentTimestamp"
+      :currentFrame="currentFrame"
       @chart-toggled="onChartToggled"
     />
     <!-- Speed Visualization Toggle Control -->
@@ -393,6 +394,12 @@ export default {
 
     // Current timestamp for chart
     currentTimestamp: {
+      type: Number,
+      default: 0,
+    },
+
+    // Current frame for chart
+    currentFrame: {
       type: Number,
       default: 0,
     },
