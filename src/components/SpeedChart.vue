@@ -249,276 +249,237 @@
   </div>
 </template>
 
-<script>
+<script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 
-export default {
-  name: 'SpeedChart',
-  props: {
-    speedMetrics: {
-      type: Object,
-      default: null,
-    },
-    timestamp: {
-      type: Number,
-      default: 0,
-    },
-    currentFrame: {
-      type: Number,
-      default: 0,
-    },
+const props = defineProps({
+  speedMetrics: {
+    type: Object,
+    default: null,
   },
-
-  emits: ['chart-toggled'],
-
-  setup(props, { emit }) {
-    // Chart state
-    const isVisible = ref(false);
-    const chartDuration = ref(30); // seconds
-    const maxSpeedScale = ref(1); // m/s
-    const chartWidth = ref(400);
-    const chartHeight = ref(160);
-
-    // Chart elements
-    const chartWrapper = ref(null);
-    const chartSvg = ref(null);
-
-    // Speed data history
-    const speedHistory = ref([]);
-    const maxHistorySize = 1000; // Maximum number of data points to store
-
-    // Current speed for display
-    const currentSpeed = computed(() => {
-      return props.speedMetrics?.speed || 0;
-    });
-
-    // Add new speed data point using synchronized timestamp
-    const addSpeedData = (speed, timestamp, frameNumber) => {
-      if (typeof speed !== 'number' || !isFinite(speed) || speed < 0) {
-        console.warn(`📊 [SpeedChart] Invalid speed data: ${speed}`);
-        return;
-      }
-
-      if (
-        typeof timestamp !== 'number' ||
-        !isFinite(timestamp) ||
-        timestamp < 0
-      ) {
-        console.warn(`📊 [SpeedChart] Invalid timestamp: ${timestamp}`);
-        return;
-      }
-
-      // DEBUG: Log synchronized chart data addition
-      console.log(
-        `📊 [SpeedChart] Adding synchronized data point - timestamp: ${timestamp.toFixed(
-          3
-        )}s, frame: ${frameNumber}, speed: ${speed.toFixed(3)} m/s`
-      );
-
-      speedHistory.value.push({
-        speed: Math.min(speed, 50), // Cap at 50 m/s for sanity
-        timestamp: timestamp, // This is now the synchronized timestamp from video player
-        frame: frameNumber || 0, // Store frame number
-        id: Date.now() + Math.random(), // Unique ID for each point
-      });
-
-      // Remove old data points beyond max history size
-      if (speedHistory.value.length > maxHistorySize) {
-        speedHistory.value.shift();
-      }
-
-      // Remove data points older than chart duration using synchronized timestamp
-      const cutoffTime = timestamp - chartDuration.value;
-      speedHistory.value = speedHistory.value.filter(
-        (point) => point.timestamp >= cutoffTime
-      );
-    };
-
-    // Watch for new speed data - using synchronized timestamp from video player
-    watch(
-      () => [props.speedMetrics?.speed, props.timestamp, props.currentFrame],
-      ([newSpeed, newTimestamp, newFrame]) => {
-        // Only add data when we have valid speed metrics and synchronized timestamp
-        if (
-          newSpeed !== undefined &&
-          newTimestamp > 0 &&
-          props.speedMetrics?.isValid
-        ) {
-          // DEBUG: Log synchronized timestamp usage
-          console.log(
-            `📊 [SpeedChart] Using synchronized timestamp from video player - timestamp: ${newTimestamp.toFixed(
-              3
-            )}s, frame: ${newFrame}, speed: ${newSpeed.toFixed(3)} m/s`
-          );
-          addSpeedData(newSpeed, newTimestamp, newFrame);
-        }
-      },
-      { immediate: true }
-    );
-
-    // Filter visible data points based on chart duration
-    const visibleDataPoints = computed(() => {
-      if (!speedHistory.value.length) return [];
-
-      const currentTime = props.timestamp || 0;
-      const cutoffTime = currentTime - chartDuration.value;
-
-      return speedHistory.value
-        .filter((point) => point.timestamp >= cutoffTime)
-        .map((point) => {
-          const timeAgo = currentTime - point.timestamp;
-          const x =
-            chartWidth.value -
-            20 -
-            (timeAgo / chartDuration.value) * (chartWidth.value - 60);
-          const y =
-            chartHeight.value -
-            30 -
-            (point.speed / maxSpeedScale.value) * (chartHeight.value - 50);
-
-          return {
-            x: Math.max(40, Math.min(chartWidth.value - 20, x)),
-            y: Math.max(20, Math.min(chartHeight.value - 30, y)),
-            speed: point.speed,
-            timeAgo: timeAgo,
-            timestamp: point.timestamp,
-            frame: point.frame || 0,
-          };
-        });
-    });
-
-    // Generate SVG path for speed line
-    const speedPath = computed(() => {
-      const points = visibleDataPoints.value;
-      if (points.length < 2) return '';
-
-      let path = `M ${points[0].x} ${points[0].y}`;
-      for (let i = 1; i < points.length; i++) {
-        path += ` L ${points[i].x} ${points[i].y}`;
-      }
-
-      return path;
-    });
-
-    // Y-axis ticks
-    const yAxisTicks = computed(() => {
-      const ticks = [];
-      const tickCount = 5;
-
-      for (let i = 0; i <= tickCount; i++) {
-        const value = (i / tickCount) * maxSpeedScale.value;
-        const y =
-          chartHeight.value - 30 - (i / tickCount) * (chartHeight.value - 50);
-        ticks.push({ value, y });
-      }
-
-      return ticks;
-    });
-
-    // X-axis ticks
-    const xAxisTicks = computed(() => {
-      const ticks = [];
-      const tickCount = 5;
-
-      for (let i = 0; i <= tickCount; i++) {
-        const timeAgo = (i / tickCount) * chartDuration.value;
-        const x =
-          chartWidth.value - 20 - (i / tickCount) * (chartWidth.value - 60);
-        const label = timeAgo.toFixed(0);
-        ticks.push({ x, label });
-      }
-
-      return ticks.reverse(); // Reverse so 0 is on the right
-    });
-
-    // Calculate statistics
-    const averageSpeed = computed(() => {
-      if (!visibleDataPoints.value.length) return 0;
-      const sum = visibleDataPoints.value.reduce(
-        (acc, point) => acc + point.speed,
-        0
-      );
-      return sum / visibleDataPoints.value.length;
-    });
-
-    const maxSpeed = computed(() => {
-      if (!visibleDataPoints.value.length) return 0;
-      return Math.max(...visibleDataPoints.value.map((point) => point.speed));
-    });
-
-    // Speed color functions - converted to grayscale
-    const getSpeedColor = (speed) => {
-      if (speed < 0.5) return '#374151'; // gray-700 (was bright green)
-      if (speed < 1.5) return '#6b7280'; // gray-500 (was bright yellow)
-      if (speed < 3.0) return '#9ca3af'; // gray-400 (was bright orange)
-      return '#d1d5db'; // gray-300 (was bright red)
-    };
-
-    const getSpeedColorClass = (speed) => {
-      if (speed < 0.5) return 'text-gray-700';
-      if (speed < 1.5) return 'text-gray-500';
-      if (speed < 3.0) return 'text-gray-400';
-      return 'text-gray-300';
-    };
-
-    // Chart controls
-    const toggleChart = () => {
-      isVisible.value = !isVisible.value;
-      emit('chart-toggled', isVisible.value);
-    };
-
-    const clearHistory = () => {
-      speedHistory.value = [];
-    };
-
-    // Handle window resize
-    const handleResize = () => {
-      if (chartWrapper.value) {
-        const rect = chartWrapper.value.getBoundingClientRect();
-        chartWidth.value = Math.max(300, Math.min(600, rect.width));
-      }
-    };
-
-    onMounted(() => {
-      window.addEventListener('resize', handleResize);
-      handleResize();
-    });
-
-    onUnmounted(() => {
-      window.removeEventListener('resize', handleResize);
-    });
-
-    return {
-      // State
-      isVisible,
-      chartDuration,
-      maxSpeedScale,
-      chartWidth,
-      chartHeight,
-      speedHistory,
-      currentSpeed,
-      currentFrame: computed(() => props.currentFrame),
-
-      // Refs
-      chartWrapper,
-      chartSvg,
-
-      // Computed
-      visibleDataPoints,
-      speedPath,
-      yAxisTicks,
-      xAxisTicks,
-      averageSpeed,
-      maxSpeed,
-
-      // Methods
-      toggleChart,
-      clearHistory,
-      getSpeedColor,
-      getSpeedColorClass,
-    };
+  timestamp: {
+    type: Number,
+    default: 0,
   },
+  currentFrame: {
+    type: Number,
+    default: 0,
+  },
+});
+
+const emit = defineEmits(['chart-toggled']);
+// Chart state
+const isVisible = ref(false);
+const chartDuration = ref(30); // seconds
+const maxSpeedScale = ref(1); // m/s
+const chartWidth = ref(400);
+const chartHeight = ref(160);
+
+// Chart elements
+const chartWrapper = ref(null);
+const chartSvg = ref(null);
+
+// Speed data history
+const speedHistory = ref([]);
+const maxHistorySize = 1000; // Maximum number of data points to store
+
+// Current speed for display
+const currentSpeed = computed(() => {
+  return props.speedMetrics?.speed || 0;
+});
+
+// Add new speed data point using synchronized timestamp
+const addSpeedData = (speed, timestamp, frameNumber) => {
+  if (typeof speed !== 'number' || !isFinite(speed) || speed < 0) {
+    console.warn(`📊 [SpeedChart] Invalid speed data: ${speed}`);
+    return;
+  }
+
+  if (typeof timestamp !== 'number' || !isFinite(timestamp) || timestamp < 0) {
+    console.warn(`📊 [SpeedChart] Invalid timestamp: ${timestamp}`);
+    return;
+  }
+
+  // DEBUG: Log synchronized chart data addition
+  console.log(
+    `📊 [SpeedChart] Adding synchronized data point - timestamp: ${timestamp.toFixed(
+      3
+    )}s, frame: ${frameNumber}, speed: ${speed.toFixed(3)} m/s`
+  );
+
+  speedHistory.value.push({
+    speed: Math.min(speed, 50), // Cap at 50 m/s for sanity
+    timestamp: timestamp, // This is now the synchronized timestamp from video player
+    frame: frameNumber || 0, // Store frame number
+    id: Date.now() + Math.random(), // Unique ID for each point
+  });
+
+  // Remove old data points beyond max history size
+  if (speedHistory.value.length > maxHistorySize) {
+    speedHistory.value.shift();
+  }
+
+  // Remove data points older than chart duration using synchronized timestamp
+  const cutoffTime = timestamp - chartDuration.value;
+  speedHistory.value = speedHistory.value.filter(
+    (point) => point.timestamp >= cutoffTime
+  );
 };
+
+// Watch for new speed data - using synchronized timestamp from video player
+watch(
+  () => [props.speedMetrics?.speed, props.timestamp, props.currentFrame],
+  ([newSpeed, newTimestamp, newFrame]) => {
+    // Only add data when we have valid speed metrics and synchronized timestamp
+    if (
+      newSpeed !== undefined &&
+      newTimestamp > 0 &&
+      props.speedMetrics?.isValid
+    ) {
+      // DEBUG: Log synchronized timestamp usage
+      console.log(
+        `📊 [SpeedChart] Using synchronized timestamp from video player - timestamp: ${newTimestamp.toFixed(
+          3
+        )}s, frame: ${newFrame}, speed: ${newSpeed.toFixed(3)} m/s`
+      );
+      addSpeedData(newSpeed, newTimestamp, newFrame);
+    }
+  },
+  { immediate: true }
+);
+
+// Filter visible data points based on chart duration
+const visibleDataPoints = computed(() => {
+  if (!speedHistory.value.length) return [];
+
+  const currentTime = props.timestamp || 0;
+  const cutoffTime = currentTime - chartDuration.value;
+
+  return speedHistory.value
+    .filter((point) => point.timestamp >= cutoffTime)
+    .map((point) => {
+      const timeAgo = currentTime - point.timestamp;
+      const x =
+        chartWidth.value -
+        20 -
+        (timeAgo / chartDuration.value) * (chartWidth.value - 60);
+      const y =
+        chartHeight.value -
+        30 -
+        (point.speed / maxSpeedScale.value) * (chartHeight.value - 50);
+
+      return {
+        x: Math.max(40, Math.min(chartWidth.value - 20, x)),
+        y: Math.max(20, Math.min(chartHeight.value - 30, y)),
+        speed: point.speed,
+        timeAgo: timeAgo,
+        timestamp: point.timestamp,
+        frame: point.frame || 0,
+      };
+    });
+});
+
+// Generate SVG path for speed line
+const speedPath = computed(() => {
+  const points = visibleDataPoints.value;
+  if (points.length < 2) return '';
+
+  let path = `M ${points[0].x} ${points[0].y}`;
+  for (let i = 1; i < points.length; i++) {
+    path += ` L ${points[i].x} ${points[i].y}`;
+  }
+
+  return path;
+});
+
+// Y-axis ticks
+const yAxisTicks = computed(() => {
+  const ticks = [];
+  const tickCount = 5;
+
+  for (let i = 0; i <= tickCount; i++) {
+    const value = (i / tickCount) * maxSpeedScale.value;
+    const y =
+      chartHeight.value - 30 - (i / tickCount) * (chartHeight.value - 50);
+    ticks.push({ value, y });
+  }
+
+  return ticks;
+});
+
+// X-axis ticks
+const xAxisTicks = computed(() => {
+  const ticks = [];
+  const tickCount = 5;
+
+  for (let i = 0; i <= tickCount; i++) {
+    const timeAgo = (i / tickCount) * chartDuration.value;
+    const x = chartWidth.value - 20 - (i / tickCount) * (chartWidth.value - 60);
+    const label = timeAgo.toFixed(0);
+    ticks.push({ x, label });
+  }
+
+  return ticks.reverse(); // Reverse so 0 is on the right
+});
+
+// Calculate statistics
+const averageSpeed = computed(() => {
+  if (!visibleDataPoints.value.length) return 0;
+  const sum = visibleDataPoints.value.reduce(
+    (acc, point) => acc + point.speed,
+    0
+  );
+  return sum / visibleDataPoints.value.length;
+});
+
+const maxSpeed = computed(() => {
+  if (!visibleDataPoints.value.length) return 0;
+  return Math.max(...visibleDataPoints.value.map((point) => point.speed));
+});
+
+// Speed color functions - converted to grayscale
+const getSpeedColor = (speed) => {
+  if (speed < 0.5) return '#374151'; // gray-700 (was bright green)
+  if (speed < 1.5) return '#6b7280'; // gray-500 (was bright yellow)
+  if (speed < 3.0) return '#9ca3af'; // gray-400 (was bright orange)
+  return '#d1d5db'; // gray-300 (was bright red)
+};
+
+const getSpeedColorClass = (speed) => {
+  if (speed < 0.5) return 'text-gray-700';
+  if (speed < 1.5) return 'text-gray-500';
+  if (speed < 3.0) return 'text-gray-400';
+  return 'text-gray-300';
+};
+
+// Chart controls
+const toggleChart = () => {
+  isVisible.value = !isVisible.value;
+  emit('chart-toggled', isVisible.value);
+};
+
+const clearHistory = () => {
+  speedHistory.value = [];
+};
+
+// Handle window resize
+const handleResize = () => {
+  if (chartWrapper.value) {
+    const rect = chartWrapper.value.getBoundingClientRect();
+    chartWidth.value = Math.max(300, Math.min(600, rect.width));
+  }
+};
+
+onMounted(() => {
+  window.addEventListener('resize', handleResize);
+  handleResize();
+});
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize);
+});
+
+// No need to return anything in script setup - all variables are automatically exposed
 </script>
 
 <style scoped>

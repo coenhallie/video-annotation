@@ -585,6 +585,16 @@ export function useSpeedCalculator() {
    */
   const update = (landmarks, worldLandmarks, timestamp) => {
     try {
+      // DEBUG: Log incoming data at start of function
+      console.log('🔍 [SpeedCalculator] update() called with:', {
+        landmarks: landmarks ? `Array(${landmarks.length})` : 'null/undefined',
+        worldLandmarks: worldLandmarks
+          ? `Array(${worldLandmarks.length})`
+          : 'null/undefined',
+        timestamp: timestamp,
+        timestampType: typeof timestamp,
+      });
+
       // Validate input parameters
       if (!landmarks || !Array.isArray(landmarks) || landmarks.length === 0) {
         speedMetrics.isValid = false;
@@ -604,6 +614,9 @@ export function useSpeedCalculator() {
         speedMetrics.isValid = false;
         return;
       }
+
+      // DEBUG: Log before center of mass calculation
+      console.log('🧮 [SpeedCalculator] Attempting center of mass calculation');
 
       // Apply calibration scaling to world landmarks
       const calibratedWorldLandmarks = applyCalibratedScaling(worldLandmarks);
@@ -665,8 +678,14 @@ export function useSpeedCalculator() {
       speedMetrics.centerOfMassNormalized = centerOfMassNormalized;
       speedMetrics.centerOfGravityHeight = centerOfGravityHeight || 0;
 
+      // DEBUG: Log before history length check
+      console.log(
+        '📊 [SpeedCalculator] History length check - current length:',
+        history.value.length
+      );
+
       if (history.value.length < 2) {
-        speedMetrics.isValid = true;
+        speedMetrics.isValid = false;
         return;
       }
 
@@ -716,6 +735,11 @@ export function useSpeedCalculator() {
           speedMetrics.generalMovingSpeed;
         speedMetrics.calibratedRightFootSpeed = speedMetrics.rightFootSpeed;
       }
+
+      // DEBUG: Success log before setting isValid to true
+      console.log(
+        '✅ [SpeedCalculator] All validations passed, setting isValid = true'
+      );
 
       speedMetrics.isValid = true;
     } catch (error) {

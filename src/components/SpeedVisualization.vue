@@ -6,7 +6,7 @@
     <!-- Speed Visualization Toggle Control -->
     <div
       class="absolute top-4 left-4 pointer-events-auto"
-      v-if="showToggleControl"
+      v-if="showToggleControl && videoLoaded"
     >
       <button
         @click="toggleSpeedVisualization"
@@ -133,6 +133,7 @@
     <!-- Speed display panel -->
     <div
       v-if="
+        videoLoaded &&
         speedVisualizationEnabled &&
         showSpeedPanel &&
         speedMetrics &&
@@ -262,242 +263,225 @@
   </div>
 </template>
 
-<script>
-import { computed, toRefs, ref } from 'vue';
-export default {
-  name: 'SpeedVisualization',
-  components: {},
-  props: {
-    // Speed data
-    speedMetrics: {
-      type: Object,
-      default: null,
-    },
+<script setup>
+import { computed, ref } from 'vue';
 
-    // Canvas dimensions
-    canvasWidth: {
-      type: Number,
-      default: 1920,
-    },
-    canvasHeight: {
-      type: Number,
-      default: 1080,
-    },
-
-    // Visibility controls
-    showSpeed: {
-      type: Boolean,
-      default: true,
-    },
-    showToggleControl: {
-      type: Boolean,
-      default: true,
-    },
-    showCenterOfMass: {
-      type: Boolean,
-      default: true,
-    },
-    showVelocityVector: {
-      type: Boolean,
-      default: true,
-    },
-    showSpeedPanel: {
-      type: Boolean,
-      default: true,
-    },
-    showLabels: {
-      type: Boolean,
-      default: true,
-    },
-    showVelocityComponents: {
-      type: Boolean,
-      default: false,
-    },
-    showCoMCoordinates: {
-      type: Boolean,
-      default: false,
-    },
-    showNoSpeedIndicator: {
-      type: Boolean,
-      default: true,
-    },
-
-    // Styling options - updated to grayscale
-    comColor: {
-      type: String,
-      default: '#374151', // gray-700
-    },
-    comStrokeColor: {
-      type: String,
-      default: '#ffffff',
-    },
-    comRadius: {
-      type: Number,
-      default: 8,
-    },
-    comStrokeWidth: {
-      type: Number,
-      default: 2,
-    },
-    velocityColor: {
-      type: String,
-      default: '#6b7280', // gray-500
-    },
-    velocityLineWidth: {
-      type: Number,
-      default: 3,
-    },
-    labelColor: {
-      type: String,
-      default: '#374151', // gray-700
-    },
-    labelFontSize: {
-      type: Number,
-      default: 12,
-    },
-
-    // Velocity vector settings
-    velocityScale: {
-      type: Number,
-      default: 100, // Scale factor for velocity vector length
-    },
-    minVelocityThreshold: {
-      type: Number,
-      default: 0.01, // Minimum velocity to show vector
-    },
-    maxVelocityLength: {
-      type: Number,
-      default: 200, // Maximum pixel length for velocity vector
-    },
-
-    // Speed panel settings
-    maxSpeedForBar: {
-      type: Number,
-      default: 5.0, // Maximum speed for progress bar (m/s)
-    },
-
-    // Current timestamp for chart
-    currentTimestamp: {
-      type: Number,
-      default: 0,
-    },
-
-    // Current frame for chart
-    currentFrame: {
-      type: Number,
-      default: 0,
-    },
+// Define props with proper TypeScript-like syntax
+const props = defineProps({
+  // Speed data
+  speedMetrics: {
+    type: Object,
+    default: null,
   },
 
-  setup(props, { emit }) {
-    const {
-      speedMetrics,
-      canvasWidth,
-      canvasHeight,
-      velocityScale,
-      maxVelocityLength,
-      minVelocityThreshold,
-    } = toRefs(props);
-
-    // Speed visualization toggle state
-    const speedVisualizationEnabled = ref(true);
-
-    // Toggle speed visualization
-    const toggleSpeedVisualization = () => {
-      speedVisualizationEnabled.value = !speedVisualizationEnabled.value;
-      emit('speed-visualization-toggled', speedVisualizationEnabled.value);
-    };
-
-    // Convert normalized coordinates to canvas coordinates
-    // This matches the coordinate system used by pose landmarks (0-1 range)
-    const normalizedToCanvas = (normalizedCoord) => {
-      return {
-        x: normalizedCoord.x * canvasWidth.value,
-        y: normalizedCoord.y * canvasHeight.value,
-      };
-    };
-
-    // Center of Mass canvas coordinates
-    const comCanvasCoord = computed(() => {
-      if (!speedMetrics.value || !speedMetrics.value.isValid) {
-        return { x: 0, y: 0 };
-      }
-      // Use normalized coordinates instead of world coordinates for proper alignment
-      return normalizedToCanvas(speedMetrics.value.centerOfMass);
-    });
-
-    // Velocity magnitude
-    const velocityMagnitude = computed(() => {
-      if (!speedMetrics.value || !speedMetrics.value.isValid) {
-        return 0;
-      }
-      return speedMetrics.value.speed;
-    });
-
-    // Velocity vector end point
-    const velocityEndPoint = computed(() => {
-      if (
-        !speedMetrics.value ||
-        !speedMetrics.value.isValid ||
-        velocityMagnitude.value < minVelocityThreshold.value
-      ) {
-        return comCanvasCoord.value;
-      }
-
-      const velocity = speedMetrics.value.velocity;
-      const scale = velocityScale.value;
-
-      // Calculate vector length, capped at maximum
-      let vectorLength = velocityMagnitude.value * scale;
-      if (vectorLength > maxVelocityLength.value) {
-        vectorLength = maxVelocityLength.value;
-      }
-
-      // For normalized coordinates, velocity is in normalized space
-      // Scale the velocity vector appropriately for display
-      const normalizedVel = {
-        x: velocity.x,
-        y: velocity.y,
-      };
-
-      // Convert velocity to pixel space and apply to canvas coordinates
-      return {
-        x: comCanvasCoord.value.x + normalizedVel.x * vectorLength,
-        y: comCanvasCoord.value.y + normalizedVel.y * vectorLength, // No Y flip needed for normalized coords
-      };
-    });
-
-    // Speed color classes for display - converted to grayscale
-    const getSpeedColorClass = (speed) => {
-      if (speed < 0.5) return 'text-gray-700';
-      if (speed < 1.5) return 'text-gray-500';
-      if (speed < 3.0) return 'text-gray-400';
-      return 'text-gray-300';
-    };
-
-    const getSpeedBarColorClass = (speed) => {
-      if (speed < 0.5) return 'bg-gray-700';
-      if (speed < 1.5) return 'bg-gray-500';
-      if (speed < 3.0) return 'bg-gray-400';
-      return 'bg-gray-300';
-    };
-
-    // Handle chart toggle event
-    const onChartToggled = (isVisible) => {
-      emit('chart-toggled', isVisible);
-    };
-
-    return {
-      speedVisualizationEnabled,
-      toggleSpeedVisualization,
-      comCanvasCoord,
-      velocityEndPoint,
-      velocityMagnitude,
-      getSpeedColorClass,
-      getSpeedBarColorClass,
-      onChartToggled,
-    };
+  // Canvas dimensions
+  canvasWidth: {
+    type: Number,
+    default: 1920,
   },
+  canvasHeight: {
+    type: Number,
+    default: 1080,
+  },
+
+  // Visibility controls
+  showSpeed: {
+    type: Boolean,
+    default: true,
+  },
+  showToggleControl: {
+    type: Boolean,
+    default: true,
+  },
+  showCenterOfMass: {
+    type: Boolean,
+    default: true,
+  },
+  showVelocityVector: {
+    type: Boolean,
+    default: true,
+  },
+  showSpeedPanel: {
+    type: Boolean,
+    default: true,
+  },
+  showLabels: {
+    type: Boolean,
+    default: true,
+  },
+  showVelocityComponents: {
+    type: Boolean,
+    default: false,
+  },
+  showCoMCoordinates: {
+    type: Boolean,
+    default: false,
+  },
+  showNoSpeedIndicator: {
+    type: Boolean,
+    default: true,
+  },
+  videoLoaded: {
+    type: Boolean,
+    default: false,
+  },
+
+  // Styling options - updated to grayscale
+  comColor: {
+    type: String,
+    default: '#374151', // gray-700
+  },
+  comStrokeColor: {
+    type: String,
+    default: '#ffffff',
+  },
+  comRadius: {
+    type: Number,
+    default: 8,
+  },
+  comStrokeWidth: {
+    type: Number,
+    default: 2,
+  },
+  velocityColor: {
+    type: String,
+    default: '#6b7280', // gray-500
+  },
+  velocityLineWidth: {
+    type: Number,
+    default: 3,
+  },
+  labelColor: {
+    type: String,
+    default: '#374151', // gray-700
+  },
+  labelFontSize: {
+    type: Number,
+    default: 12,
+  },
+
+  // Velocity vector settings
+  velocityScale: {
+    type: Number,
+    default: 100, // Scale factor for velocity vector length
+  },
+  minVelocityThreshold: {
+    type: Number,
+    default: 0.01, // Minimum velocity to show vector
+  },
+  maxVelocityLength: {
+    type: Number,
+    default: 200, // Maximum pixel length for velocity vector
+  },
+
+  // Speed panel settings
+  maxSpeedForBar: {
+    type: Number,
+    default: 5.0, // Maximum speed for progress bar (m/s)
+  },
+
+  // Current timestamp for chart
+  currentTimestamp: {
+    type: Number,
+    default: 0,
+  },
+
+  // Current frame for chart
+  currentFrame: {
+    type: Number,
+    default: 0,
+  },
+});
+
+// Define emits
+const emit = defineEmits(['speed-visualization-toggled', 'chart-toggled']);
+
+// Speed visualization toggle state
+const speedVisualizationEnabled = ref(true);
+
+// Toggle speed visualization
+const toggleSpeedVisualization = () => {
+  speedVisualizationEnabled.value = !speedVisualizationEnabled.value;
+  emit('speed-visualization-toggled', speedVisualizationEnabled.value);
+};
+
+// Convert normalized coordinates to canvas coordinates
+// This matches the coordinate system used by pose landmarks (0-1 range)
+const normalizedToCanvas = (normalizedCoord) => {
+  return {
+    x: normalizedCoord.x * props.canvasWidth,
+    y: normalizedCoord.y * props.canvasHeight,
+  };
+};
+
+// Center of Mass canvas coordinates
+const comCanvasCoord = computed(() => {
+  if (!props.speedMetrics || !props.speedMetrics.isValid) {
+    return { x: 0, y: 0 };
+  }
+  // Use normalized coordinates instead of world coordinates for proper alignment
+  return normalizedToCanvas(props.speedMetrics.centerOfMass);
+});
+
+// Velocity magnitude
+const velocityMagnitude = computed(() => {
+  if (!props.speedMetrics || !props.speedMetrics.isValid) {
+    return 0;
+  }
+  return props.speedMetrics.speed;
+});
+
+// Velocity vector end point
+const velocityEndPoint = computed(() => {
+  if (
+    !props.speedMetrics ||
+    !props.speedMetrics.isValid ||
+    velocityMagnitude.value < props.minVelocityThreshold
+  ) {
+    return comCanvasCoord.value;
+  }
+
+  const velocity = props.speedMetrics.velocity;
+  const scale = props.velocityScale;
+
+  // Calculate vector length, capped at maximum
+  let vectorLength = velocityMagnitude.value * scale;
+  if (vectorLength > props.maxVelocityLength) {
+    vectorLength = props.maxVelocityLength;
+  }
+
+  // For normalized coordinates, velocity is in normalized space
+  // Scale the velocity vector appropriately for display
+  const normalizedVel = {
+    x: velocity.x,
+    y: velocity.y,
+  };
+
+  // Convert velocity to pixel space and apply to canvas coordinates
+  return {
+    x: comCanvasCoord.value.x + normalizedVel.x * vectorLength,
+    y: comCanvasCoord.value.y + normalizedVel.y * vectorLength, // No Y flip needed for normalized coords
+  };
+});
+
+// Speed color classes for display - converted to grayscale
+const getSpeedColorClass = (speed) => {
+  if (speed < 0.5) return 'text-gray-700';
+  if (speed < 1.5) return 'text-gray-500';
+  if (speed < 3.0) return 'text-gray-400';
+  return 'text-gray-300';
+};
+
+const getSpeedBarColorClass = (speed) => {
+  if (speed < 0.5) return 'bg-gray-700';
+  if (speed < 1.5) return 'bg-gray-500';
+  if (speed < 3.0) return 'bg-gray-400';
+  return 'bg-gray-300';
+};
+
+// Handle chart toggle event
+const onChartToggled = (isVisible) => {
+  emit('chart-toggled', isVisible);
 };
 </script>
 

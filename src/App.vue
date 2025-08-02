@@ -213,6 +213,7 @@ const isLoadModalVisible = ref(false);
 // Share modal state
 const isShareModalVisible = ref(false);
 const isChartVisible = ref(false);
+const videoLoaded = ref(false);
 const currentVideoId = ref(null);
 const currentComparisonId = ref(null);
 const isSharedComparison = ref(false);
@@ -367,6 +368,7 @@ const handlePause = () => {
 const handleError = (error) => {};
 
 const handleLoaded = async () => {
+  videoLoaded.value = true;
   // Get video dimensions from the video element
   const videoElement =
     playerMode.value === 'single'
@@ -593,6 +595,7 @@ const closeLoadModal = () => {
 
 // Load video from the modal
 const loadVideo = (video, type = 'youtube') => {
+  videoLoaded.value = false;
   try {
     // Determine the player mode based on whether we have a current comparison
     const isDualMode = comparisonWorkflow.currentComparison.value !== null;
@@ -833,7 +836,7 @@ const handleSpeedData = (data) => {
 };
 
 const currentSpeedMetrics = computed(() => {
-  return currentSpeedCalculator.value?.speedMetrics.value;
+  return currentSpeedCalculator.value?.speedMetrics;
 });
 
 // Logout and cleanup
@@ -1120,6 +1123,7 @@ watch(
                 :show-co-m-coordinates="false"
                 :show-toggle-control="true"
                 @speed-visualization-toggled="handleSpeedVisualizationToggled"
+                :video-loaded="videoLoaded"
               />
             </div>
             <SpeedChart
@@ -1252,6 +1256,7 @@ watch(
             <CalibrationControls
               v-if="currentSpeedCalculator"
               :calibration-settings="currentSpeedCalculator.calibrationSettings"
+              :speed-metrics="currentSpeedCalculator.speedMetrics"
               :video-dimensions="videoDimensions"
               :on-set-player-height="handleSetPlayerHeight"
               :on-set-court-dimensions="handleSetCourtDimensions"

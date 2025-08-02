@@ -193,6 +193,326 @@
         Reset All Calibration
       </button>
     </div>
+
+    <!-- Show Calculation Button - Always Visible -->
+    <div class="mt-4 pt-4 border-t border-gray-200">
+      <button
+        @click="showCalculationModal = true"
+        class="w-full px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors font-medium"
+      >
+        📊 Show Speed Calculation Details
+      </button>
+    </div>
+
+    <!-- Speed Calculation Modal -->
+    <div
+      v-if="showCalculationModal"
+      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      @click="showCalculationModal = false"
+    >
+      <div
+        class="bg-white rounded-lg p-6 max-w-4xl max-h-[90vh] overflow-y-auto"
+        @click.stop
+      >
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-xl font-bold text-gray-900">
+            Speed Calculation Formulas
+          </h2>
+          <button
+            @click="showCalculationModal = false"
+            class="text-gray-400 hover:text-gray-600"
+          >
+            <svg
+              class="w-6 h-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M6 18L18 6M6 6l12 12"
+              ></path>
+            </svg>
+          </button>
+        </div>
+
+        <div class="space-y-6">
+          <!-- Center of Mass Calculation -->
+          <div class="border-b border-gray-200 pb-4">
+            <h3 class="text-lg font-semibold text-gray-800 mb-3">
+              1. Center of Mass (CoM) Calculation
+            </h3>
+            <div class="bg-gray-50 p-4 rounded-lg mb-3">
+              <p class="text-sm text-gray-700 mb-2">
+                <strong>Formula:</strong>
+              </p>
+              <div class="font-mono text-sm bg-white p-2 rounded border">
+                CoM = Σ(segment_weight × segment_position) / Σ(segment_weight)
+              </div>
+            </div>
+            <div class="text-sm text-gray-600">
+              <p>
+                <strong>Body Segment Weights (% of total body mass):</strong>
+              </p>
+              <ul class="list-disc list-inside mt-2 space-y-1">
+                <li>Head: 8.26%</li>
+                <li>Torso: 48.33%</li>
+                <li>Upper Arms: 2.71% each</li>
+                <li>Forearms: 1.62% each</li>
+                <li>Hands: 0.61% each</li>
+                <li>Thighs: 10.5% each</li>
+                <li>Shanks: 4.75% each</li>
+                <li>Feet: 1.43% each</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- Velocity Calculation -->
+          <div class="border-b border-gray-200 pb-4">
+            <h3 class="text-lg font-semibold text-gray-800 mb-3">
+              2. Velocity Calculation
+            </h3>
+            <div class="bg-gray-50 p-4 rounded-lg mb-3">
+              <p class="text-sm text-gray-700 mb-2">
+                <strong>Formula:</strong>
+              </p>
+              <div class="font-mono text-sm bg-white p-2 rounded border">
+                velocity = (current_position - previous_position) / time_delta
+              </div>
+              <div class="font-mono text-sm bg-white p-2 rounded border mt-2">
+                velocity = {x: (x₁ - x₀)/Δt, y: (y₁ - y₀)/Δt, z: (z₁ - z₀)/Δt}
+              </div>
+            </div>
+            <div class="text-sm text-gray-600">
+              <p>Where:</p>
+              <ul class="list-disc list-inside mt-1">
+                <li>current_position: CoM at current frame</li>
+                <li>previous_position: CoM at previous frame</li>
+                <li>time_delta: Time difference between frames (seconds)</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- Speed Calculation -->
+          <div class="border-b border-gray-200 pb-4">
+            <h3 class="text-lg font-semibold text-gray-800 mb-3">
+              3. Speed Calculation
+            </h3>
+            <div class="bg-gray-50 p-4 rounded-lg mb-3">
+              <p class="text-sm text-gray-700 mb-2">
+                <strong>Overall Speed Formula:</strong>
+              </p>
+              <div class="font-mono text-sm bg-white p-2 rounded border">
+                speed = √(velocity.x² + velocity.y² + velocity.z²)
+              </div>
+              <p class="text-sm text-gray-700 mb-2 mt-3">
+                <strong>Horizontal Speed Formula:</strong>
+              </p>
+              <div class="font-mono text-sm bg-white p-2 rounded border">
+                horizontal_speed = √(velocity.x² + velocity.z²)
+              </div>
+            </div>
+            <div class="text-sm text-gray-600">
+              <p>
+                Speed is the magnitude of the velocity vector. Horizontal speed
+                excludes vertical movement (y-axis).
+              </p>
+            </div>
+          </div>
+
+          <!-- Landmark Speed Calculation -->
+          <div class="border-b border-gray-200 pb-4">
+            <h3 class="text-lg font-semibold text-gray-800 mb-3">
+              4. Individual Landmark Speed
+            </h3>
+            <div class="bg-gray-50 p-4 rounded-lg mb-3">
+              <p class="text-sm text-gray-700 mb-2">
+                <strong>Formula (e.g., Right Foot):</strong>
+              </p>
+              <div class="font-mono text-sm bg-white p-2 rounded border">
+                landmark_speed = √(Δx² + Δy² + Δz²) / time_delta
+              </div>
+              <div class="font-mono text-sm bg-white p-2 rounded border mt-2">
+                where Δx = current_landmark.x - previous_landmark.x
+              </div>
+            </div>
+          </div>
+
+          <!-- Calibration Scaling -->
+          <div class="border-b border-gray-200 pb-4">
+            <h3 class="text-lg font-semibold text-gray-800 mb-3">
+              5. Calibration Scaling
+            </h3>
+            <div class="bg-gray-50 p-4 rounded-lg mb-3">
+              <p class="text-sm text-gray-700 mb-2">
+                <strong>Height-based Scaling:</strong>
+              </p>
+              <div class="font-mono text-sm bg-white p-2 rounded border">
+                height_scaling_factor = player_height / 170cm
+              </div>
+              <p class="text-sm text-gray-700 mb-2 mt-3">
+                <strong>Court-based Scaling:</strong>
+              </p>
+              <div class="font-mono text-sm bg-white p-2 rounded border">
+                court_scaling_factor = court_dimension / standard_dimension
+              </div>
+            </div>
+            <div class="text-sm text-gray-600">
+              <p>
+                All landmark coordinates are multiplied by the scaling factor
+                before speed calculations.
+              </p>
+            </div>
+          </div>
+
+          <!-- Current Values -->
+          <div>
+            <h3 class="text-lg font-semibold text-gray-800 mb-3">
+              6. Current Calculation Values
+            </h3>
+
+            <!-- Valid Speed Data -->
+            <div
+              v-if="speedMetrics && speedMetrics.isValid"
+              class="bg-blue-50 p-4 rounded-lg"
+            >
+              <div class="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p><strong>Center of Mass:</strong></p>
+                  <p class="font-mono">
+                    x: {{ speedMetrics.centerOfMass.x?.toFixed(4) || 'N/A' }}
+                  </p>
+                  <p class="font-mono">
+                    y: {{ speedMetrics.centerOfMass.y?.toFixed(4) || 'N/A' }}
+                  </p>
+                  <p class="font-mono">
+                    z: {{ speedMetrics.centerOfMass.z?.toFixed(4) || 'N/A' }}
+                  </p>
+                </div>
+                <div>
+                  <p><strong>Velocity (m/s):</strong></p>
+                  <p class="font-mono">
+                    x: {{ speedMetrics.velocity.x?.toFixed(4) || 'N/A' }}
+                  </p>
+                  <p class="font-mono">
+                    y: {{ speedMetrics.velocity.y?.toFixed(4) || 'N/A' }}
+                  </p>
+                  <p class="font-mono">
+                    z: {{ speedMetrics.velocity.z?.toFixed(4) || 'N/A' }}
+                  </p>
+                </div>
+                <div>
+                  <p><strong>Speeds (m/s):</strong></p>
+                  <p class="font-mono">
+                    Overall: {{ speedMetrics.speed?.toFixed(4) || 'N/A' }}
+                  </p>
+                  <p class="font-mono">
+                    Horizontal:
+                    {{ speedMetrics.generalMovingSpeed?.toFixed(4) || 'N/A' }}
+                  </p>
+                  <p class="font-mono">
+                    Right Foot:
+                    {{ speedMetrics.rightFootSpeed?.toFixed(4) || 'N/A' }}
+                  </p>
+                </div>
+                <div>
+                  <p><strong>Calibration:</strong></p>
+                  <p class="font-mono">
+                    Scaling Factor:
+                    {{ speedMetrics.scalingFactor?.toFixed(4) || 'N/A' }}
+                  </p>
+                  <p class="font-mono">
+                    Player Height: {{ calibrationSettings.playerHeight }}cm
+                  </p>
+                  <p class="font-mono">
+                    Accuracy: {{ calibrationSettings.calibrationAccuracy }}%
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <!-- No Speed Data Available -->
+            <div v-else class="bg-yellow-50 p-4 rounded-lg">
+              <div class="text-sm text-yellow-800">
+                <p class="font-semibold mb-2">⚠️ No Speed Data Available</p>
+                <p class="mb-2">Possible reasons:</p>
+                <ul class="list-disc list-inside space-y-1 text-xs">
+                  <li>Video is paused or not playing</li>
+                  <li>
+                    Pose landmarks not detected with sufficient confidence
+                  </li>
+                  <li>Speed calculator not receiving landmark data</li>
+                  <li>Insufficient frame history (need at least 2 frames)</li>
+                </ul>
+
+                <!-- Debug Information -->
+                <div class="mt-3 p-2 bg-yellow-100 rounded text-xs">
+                  <p><strong>Debug Info:</strong></p>
+                  <p>speedMetrics exists: {{ !!speedMetrics }}</p>
+                  <p>
+                    speedMetrics.isValid: {{ speedMetrics?.isValid || false }}
+                  </p>
+                  <p>
+                    centerOfMass exists:
+                    {{ speedMetrics?.centerOfMass ? 'yes' : 'no' }}
+                  </p>
+                  <p>
+                    centerOfMass values: x={{
+                      speedMetrics?.centerOfMass?.x || 'N/A'
+                    }}, y={{ speedMetrics?.centerOfMass?.y || 'N/A' }}, z={{
+                      speedMetrics?.centerOfMass?.z || 'N/A'
+                    }}
+                  </p>
+                  <p>
+                    velocity exists: {{ speedMetrics?.velocity ? 'yes' : 'no' }}
+                  </p>
+                  <p>
+                    velocity values: x={{ speedMetrics?.velocity?.x || 'N/A' }},
+                    y={{ speedMetrics?.velocity?.y || 'N/A' }}, z={{
+                      speedMetrics?.velocity?.z || 'N/A'
+                    }}
+                  </p>
+                  <p>speed: {{ speedMetrics?.speed || 'N/A' }}</p>
+                  <p>
+                    scalingFactor: {{ speedMetrics?.scalingFactor || 'N/A' }}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Notes -->
+          <div class="bg-yellow-50 p-4 rounded-lg">
+            <h4 class="font-semibold text-yellow-800 mb-2">Important Notes:</h4>
+            <ul class="text-sm text-yellow-700 space-y-1">
+              <li>
+                • All calculations use MediaPipe Pose landmarks in 3D world
+                coordinates
+              </li>
+              <li>• Speed values are clamped to maximum 50 m/s for safety</li>
+              <li>
+                • Temporal smoothing is applied using a 10-frame history window
+              </li>
+              <li>• Landmark visibility threshold is 0.5 (50% confidence)</li>
+              <li>
+                • Time delta calculations use video.currentTime for accuracy
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="mt-6 flex justify-end">
+          <button
+            @click="showCalculationModal = false"
+            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -204,6 +524,18 @@ const props = defineProps({
   calibrationSettings: {
     type: Object,
     required: true,
+  },
+  speedMetrics: {
+    type: Object,
+    default: () => ({
+      centerOfMass: { x: 0, y: 0, z: 0 },
+      velocity: { x: 0, y: 0, z: 0 },
+      speed: 0,
+      generalMovingSpeed: 0,
+      rightFootSpeed: 0,
+      scalingFactor: 1,
+      isValid: false,
+    }),
   },
   onSetPlayerHeight: {
     type: Function,
@@ -225,6 +557,7 @@ const props = defineProps({
 const playerHeightInput = ref(props.calibrationSettings.playerHeight);
 const courtLength = ref(13.4); // Default badminton court length
 const courtWidth = ref(6.1); // Default badminton court width
+const showCalculationModal = ref(false);
 
 // Computed
 const accuracyColorClass = computed(() => {
