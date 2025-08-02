@@ -60,6 +60,59 @@
         </text>
       </g>
 
+      <!-- Center of Mass -->
+      <g
+        v-if="
+          showCenterOfMass &&
+          speedMetrics &&
+          speedMetrics.centerOfMassNormalized
+        "
+        class="center-of-mass"
+      >
+        <!-- Crosshair lines -->
+        <line
+          :x1="centerOfMassCanvasCoord.x - centerOfMassRadius - 2"
+          :y1="centerOfMassCanvasCoord.y"
+          :x2="centerOfMassCanvasCoord.x + centerOfMassRadius + 2"
+          :y2="centerOfMassCanvasCoord.y"
+          :stroke="centerOfMassColor"
+          :stroke-width="centerOfMassStrokeWidth"
+          stroke-linecap="round"
+        />
+        <line
+          :x1="centerOfMassCanvasCoord.x"
+          :y1="centerOfMassCanvasCoord.y - centerOfMassRadius - 2"
+          :x2="centerOfMassCanvasCoord.x"
+          :y2="centerOfMassCanvasCoord.y + centerOfMassRadius + 2"
+          :stroke="centerOfMassColor"
+          :stroke-width="centerOfMassStrokeWidth"
+          stroke-linecap="round"
+        />
+        <!-- Center circle -->
+        <circle
+          :cx="centerOfMassCanvasCoord.x"
+          :cy="centerOfMassCanvasCoord.y"
+          :r="centerOfMassRadius"
+          :fill="centerOfMassColor"
+          :stroke="centerOfMassStrokeColor"
+          :stroke-width="centerOfMassStrokeWidth"
+          opacity="0.8"
+        />
+        <!-- CoM label -->
+        <text
+          v-if="showLabels"
+          :x="centerOfMassCanvasCoord.x + centerOfMassRadius + 8"
+          :y="centerOfMassCanvasCoord.y - centerOfMassRadius - 5"
+          :fill="centerOfMassColor"
+          :font-size="labelFontSize"
+          font-family="Arial, sans-serif"
+          font-weight="bold"
+          text-shadow="1px 1px 2px rgba(0, 0, 0, 0.8)"
+        >
+          CoM
+        </text>
+      </g>
+
       <!-- Confidence indicator -->
       <g
         v-if="showConfidence && currentPose.confidence > 0"
@@ -146,6 +199,16 @@ export default {
       type: Boolean,
       default: true,
     },
+    showCenterOfMass: {
+      type: Boolean,
+      default: false,
+    },
+
+    // Speed data
+    speedMetrics: {
+      type: Object,
+      default: null,
+    },
 
     // Keypoint selection
     selectedKeypoints: {
@@ -187,6 +250,24 @@ export default {
       default: () => ({ x: 5, y: -5 }),
     },
 
+    // Center of mass styling
+    centerOfMassColor: {
+      type: String,
+      default: '#9333ea', // Purple to distinguish from other colors
+    },
+    centerOfMassRadius: {
+      type: Number,
+      default: 6,
+    },
+    centerOfMassStrokeColor: {
+      type: String,
+      default: '#ffffff',
+    },
+    centerOfMassStrokeWidth: {
+      type: Number,
+      default: 2,
+    },
+
     // Minimum visibility threshold
     minVisibility: {
       type: Number,
@@ -201,6 +282,7 @@ export default {
       canvasHeight,
       minVisibility,
       selectedKeypoints,
+      speedMetrics,
     } = toRefs(props);
 
     // MediaPipe pose landmark connections
@@ -418,6 +500,24 @@ export default {
       );
     });
 
+    // Convert normalized coordinates to canvas coordinates
+    // This matches the coordinate system used by pose landmarks (0-1 range)
+    const normalizedToCanvas = (normalizedCoord) => {
+      return {
+        x: normalizedCoord.x * canvasWidth.value,
+        y: normalizedCoord.y * canvasHeight.value,
+      };
+    };
+
+    // Center of Mass canvas coordinates
+    const centerOfMassCanvasCoord = computed(() => {
+      if (!speedMetrics.value || !speedMetrics.value.centerOfMassNormalized) {
+        return { x: 0, y: 0 };
+      }
+      // Use normalized coordinates for proper alignment with pose landmarks
+      return normalizedToCanvas(speedMetrics.value.centerOfMassNormalized);
+    });
+
     return {
       POSE_CONNECTIONS,
       LANDMARK_NAMES,
@@ -428,6 +528,8 @@ export default {
       getConnectionOpacity,
       getConfidenceColor,
       isKeypointSelected,
+      normalizedToCanvas,
+      centerOfMassCanvasCoord,
     };
   },
 };

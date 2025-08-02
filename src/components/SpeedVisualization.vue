@@ -181,23 +181,18 @@
 
       <!-- New speed metrics -->
       <div class="space-y-2 mb-3 text-sm">
-        <!-- General Moving Speed -->
         <div class="flex justify-between items-center">
           <span class="text-gray-600">Horizontal Speed:</span>
           <span class="font-mono text-gray-700">
             {{ speedMetrics.generalMovingSpeed?.toFixed(2) || '0.00' }} m/s
           </span>
         </div>
-
-        <!-- Right Foot Speed -->
         <div class="flex justify-between items-center">
           <span class="text-gray-600">Right Foot Speed:</span>
           <span class="font-mono text-gray-500">
             {{ speedMetrics.rightFootSpeed?.toFixed(2) || '0.00' }} m/s
           </span>
         </div>
-
-        <!-- Center of Gravity Height -->
         <div class="flex justify-between items-center">
           <span class="text-gray-600">CoG Height:</span>
           <span class="font-mono text-gray-400">

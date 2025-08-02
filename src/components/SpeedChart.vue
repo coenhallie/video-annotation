@@ -4,7 +4,7 @@
     <div class="chart-controls">
       <button
         @click="toggleChart"
-        class="btn btn-ghost btn-sm"
+        class="btn btn-ghost btn-sm bg-white border border-gray-200 rounded-lg shadow-md hover:bg-gray-50"
         :title="isVisible ? 'Hide speed chart' : 'Show speed chart'"
       >
         <svg

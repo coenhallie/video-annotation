@@ -92,6 +92,8 @@
           :show-landmarks="poseVisualizationSettings.showLandmarks"
           :show-labels="poseVisualizationSettings.showLabels"
           :show-confidence="poseVisualizationSettings.showConfidence"
+          :show-center-of-mass="poseVisualizationSettings.showCenterOfMass"
+          :speed-metrics="poseLandmarker?.speedMetrics"
           :selected-keypoints="poseLandmarker?.selectedKeypoints?.value || []"
         />
 
@@ -377,6 +379,8 @@
               :show-landmarks="poseVisualizationSettings.showLandmarks"
               :show-labels="poseVisualizationSettings.showLabels"
               :show-confidence="poseVisualizationSettings.showConfidence"
+              :show-center-of-mass="poseVisualizationSettings.showCenterOfMass"
+              :speed-metrics="poseLandmarkerA?.speedMetrics"
               :selected-keypoints="
                 poseLandmarkerA?.selectedKeypoints?.value || []
               "
@@ -473,6 +477,8 @@
               :show-landmarks="poseVisualizationSettings.showLandmarks"
               :show-labels="poseVisualizationSettings.showLabels"
               :show-confidence="poseVisualizationSettings.showConfidence"
+              :show-center-of-mass="poseVisualizationSettings.showCenterOfMass"
+              :speed-metrics="poseLandmarkerB?.speedMetrics"
               :selected-keypoints="
                 poseLandmarkerB?.selectedKeypoints?.value || []
               "
@@ -969,6 +975,7 @@ const poseVisualizationSettings = reactive({
   showLabels: false,
   showConfidence: true,
   showNoPoseIndicator: true,
+  showCenterOfMass: true,
 });
 
 // Keypoint selector state

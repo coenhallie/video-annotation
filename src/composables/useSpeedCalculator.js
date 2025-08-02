@@ -129,6 +129,11 @@ export function useSpeedCalculator() {
       y: 0,
       z: 0,
     },
+    centerOfMassNormalized: {
+      x: 0,
+      y: 0,
+      z: 0,
+    },
     centerOfGravityHeight: 0, // Height of center of gravity from ground
     velocity: {
       x: 0,
@@ -616,10 +621,12 @@ export function useSpeedCalculator() {
       const calibratedWorldLandmarks = applyCalibratedScaling(worldLandmarks);
       const scalingFactor = calculateScalingFactor();
 
-      const centerOfMass = calculateCoM(calibratedWorldLandmarks);
+      // Calculate center of mass in both coordinate systems
+      const centerOfMass = calculateCoM(calibratedWorldLandmarks); // For speed calculations (world coordinates)
+      const centerOfMassNormalized = calculateCoM(landmarks); // For visualization (normalized coordinates)
       const centerOfGravityHeight = calculateCoGHeight(landmarks);
 
-      if (!centerOfMass) {
+      if (!centerOfMass || !centerOfMassNormalized) {
         speedMetrics.isValid = false;
         return;
       }
@@ -631,7 +638,10 @@ export function useSpeedCalculator() {
       if (
         !isFinite(centerOfMass.x) ||
         !isFinite(centerOfMass.y) ||
-        !isFinite(centerOfMass.z)
+        !isFinite(centerOfMass.z) ||
+        !isFinite(centerOfMassNormalized.x) ||
+        !isFinite(centerOfMassNormalized.y) ||
+        !isFinite(centerOfMassNormalized.z)
       ) {
         speedMetrics.isValid = false;
         return;
@@ -664,6 +674,7 @@ export function useSpeedCalculator() {
 
       // Update center of mass and center of gravity height
       speedMetrics.centerOfMass = smoothedCoM;
+      speedMetrics.centerOfMassNormalized = centerOfMassNormalized;
       speedMetrics.centerOfGravityHeight = centerOfGravityHeight || 0;
 
       if (history.value.length < 2) {
@@ -733,6 +744,11 @@ export function useSpeedCalculator() {
     history.value = [];
     Object.assign(speedMetrics, {
       centerOfMass: {
+        x: 0,
+        y: 0,
+        z: 0,
+      },
+      centerOfMassNormalized: {
         x: 0,
         y: 0,
         z: 0,
