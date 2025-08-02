@@ -195,11 +195,12 @@ export class VideoUploadService {
     filePath: string,
     url: string,
     userId: string,
-    metadata: VideoMetadata
+    metadata: VideoMetadata,
+    customTitle?: string
   ): Promise<any> {
     const videoData: VideoInsert = {
       ownerId: userId,
-      title: file.name.replace(/\.[^/.]+$/, ''), // Remove file extension
+      title: customTitle || file.name.replace(/\.[^/.]+$/, ''), // Use custom title or remove file extension
       url: url,
       videoId: `upload_${Date.now()}`,
       fps: metadata.fps,
@@ -233,6 +234,7 @@ export class VideoUploadService {
   static async uploadVideoComplete(
     file: File,
     userId: string,
+    customTitle?: string,
     onProgress?: (progress: UploadProgress) => void
   ): Promise<any> {
     try {
@@ -248,7 +250,8 @@ export class VideoUploadService {
         path,
         url,
         userId,
-        metadata
+        metadata,
+        customTitle
       );
 
       return videoRecord;

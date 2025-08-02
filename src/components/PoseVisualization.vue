@@ -112,30 +112,6 @@
           CoM
         </text>
       </g>
-
-      <!-- Confidence indicator -->
-      <g
-        v-if="showConfidence && currentPose.confidence > 0"
-        class="pose-confidence"
-      >
-        <rect
-          x="10"
-          y="10"
-          width="200"
-          height="30"
-          fill="rgba(0, 0, 0, 0.7)"
-          rx="5"
-        />
-        <text
-          x="20"
-          y="30"
-          :fill="getConfidenceColor(currentPose.confidence)"
-          font-size="14"
-          font-family="Arial, sans-serif"
-        >
-          Pose Confidence: {{ Math.round(currentPose.confidence * 100) }}%
-        </text>
-      </g>
     </svg>
   </div>
 </template>

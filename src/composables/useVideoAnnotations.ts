@@ -1,4 +1,4 @@
-import { ref, readonly, toValue, watch } from 'vue';
+import { ref, readonly, toValue, watch, onMounted } from 'vue';
 import { VideoService } from '../services/videoService';
 import { AnnotationService } from '../services/annotationService';
 import { useAuth } from './useAuth';
@@ -52,6 +52,22 @@ export function useVideoAnnotations(
       }
     }
   );
+
+  // Check for shared videos on mount
+  onMounted(async () => {
+    console.log(
+      '🔍 [useVideoAnnotations] onMounted - checking for shared video'
+    );
+    const urlParams = new URLSearchParams(window.location.search);
+    const shareId = urlParams.get('share');
+
+    if (shareId) {
+      console.log(
+        '🔍 [useVideoAnnotations] Found shared video on mount, triggering loadAnnotations'
+      );
+      await loadAnnotations();
+    }
+  });
 
   // Create or get video record
   const initializeVideo = async (videoData) => {
@@ -168,12 +184,76 @@ export function useVideoAnnotations(
       user: toValue(user)?.email,
     });
 
+    // Check if this is a shared video by looking at URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const shareId = urlParams.get('share');
+    const isSharedVideo = !!shareId;
+
+    console.log('🔍 [useVideoAnnotations] Share detection:', {
+      shareId,
+      isSharedVideo,
+      currentURL: window.location.href,
+    });
+
     // For comparison context, we don't need currentVideo
-    if (!isComparisonContext.value && !currentVideo.value) {
+    // For shared videos, we also don't need currentVideo to be set yet
+    if (!isComparisonContext.value && !currentVideo.value && !isSharedVideo) {
       console.log(
-        '🔍 [useVideoAnnotations] Skipping - no comparison context and no current video'
+        '🔍 [useVideoAnnotations] Skipping - no comparison context, no current video, and not shared video'
       );
       return;
+    }
+
+    // If this is a shared video, load it using ShareService
+    if (isSharedVideo && shareId) {
+      console.log(
+        '🔍 [useVideoAnnotations] Loading shared video annotations for:',
+        shareId
+      );
+      try {
+        const { ShareService } = await import('../services/shareService');
+        const shareData =
+          await ShareService.getSharedVideoWithCommentPermissions(shareId);
+
+        console.log(
+          '🔍 [useVideoAnnotations] Shared video data loaded:',
+          shareData
+        );
+        console.log(
+          '🔍 [useVideoAnnotations] Shared video annotations:',
+          shareData.annotations
+        );
+
+        if (shareData.annotations && shareData.annotations.length > 0) {
+          console.log(
+            '🔍 [useVideoAnnotations] Setting shared video annotations'
+          );
+          annotations.value = shareData.annotations.map((ann) => {
+            // If it's already in app format, use as-is, otherwise transform
+            if (ann.frame !== undefined) {
+              return ann; // Already in app format
+            } else {
+              return ann; // Cast from DB format
+            }
+          });
+          console.log(
+            '🔍 [useVideoAnnotations] Annotations set:',
+            annotations.value
+          );
+        } else {
+          console.log(
+            '🔍 [useVideoAnnotations] No annotations in shared video'
+          );
+          annotations.value = [];
+        }
+        return;
+      } catch (error) {
+        console.error(
+          '🔍 [useVideoAnnotations] Error loading shared video:',
+          error
+        );
+        return;
+      }
     }
 
     // Allow loading annotations if user is authenticated OR if video is public OR if in comparison context (for shared comparisons)

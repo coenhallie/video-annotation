@@ -109,6 +109,26 @@
           <p class="file-size">{{ formatFileSize(selectedFile.size) }}</p>
         </div>
       </div>
+
+      <!-- Custom Project Name Input -->
+      <div class="project-name-section">
+        <label for="projectName" class="project-name-label">
+          Project Name
+        </label>
+        <input
+          id="projectName"
+          v-model="customProjectName"
+          type="text"
+          class="project-name-input"
+          :placeholder="defaultProjectName"
+          maxlength="100"
+        />
+        <p class="project-name-hint">
+          Enter a custom name for your project, or leave blank to use the
+          filename
+        </p>
+      </div>
+
       <div class="file-actions">
         <button
           @click="startUpload"
@@ -130,7 +150,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { VideoUploadService } from '../services/videoUploadService';
 import { useAuth } from '../composables/useAuth';
 
@@ -156,6 +176,13 @@ const isUploading = ref(false);
 const uploadProgress = ref(0);
 const uploadStatus = ref('');
 const uploadError = ref(null);
+const customProjectName = ref('');
+
+// Computed
+const defaultProjectName = computed(() => {
+  if (!selectedFile.value) return '';
+  return selectedFile.value.name.replace(/\.[^/.]+$/, ''); // Remove file extension
+});
 
 // Methods
 const triggerFileInput = () => {
@@ -215,9 +242,14 @@ const startUpload = async () => {
   uploadError.value = null;
 
   try {
+    // Use custom project name if provided, otherwise use filename without extension
+    const projectName =
+      customProjectName.value.trim() || defaultProjectName.value;
+
     const videoRecord = await VideoUploadService.uploadVideoComplete(
       selectedFile.value,
       user.value.id,
+      projectName,
       (progress) => {
         uploadProgress.value = progress.percentage;
         uploadStatus.value = `Uploading... ${formatFileSize(
@@ -238,6 +270,7 @@ const startUpload = async () => {
 
 const clearSelection = () => {
   selectedFile.value = null;
+  customProjectName.value = '';
   if (fileInput.value) {
     fileInput.value.value = '';
   }
@@ -245,6 +278,7 @@ const clearSelection = () => {
 
 const resetUpload = () => {
   selectedFile.value = null;
+  customProjectName.value = '';
   isUploading.value = false;
   uploadProgress.value = 0;
   uploadStatus.value = '';
@@ -397,6 +431,49 @@ const formatFileSize = (bytes) => {
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   background-color: white;
+}
+
+.project-name-section {
+  margin: 1rem 0;
+  padding: 1rem;
+  background-color: #f9fafb;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+}
+
+.project-name-label {
+  display: block;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.project-name-input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  background-color: white;
+}
+
+.project-name-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.project-name-input::placeholder {
+  color: #9ca3af;
+}
+
+.project-name-hint {
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin-bottom: 0;
 }
 
 .file-details {

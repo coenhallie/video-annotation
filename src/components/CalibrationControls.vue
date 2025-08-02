@@ -4,30 +4,13 @@
   >
     <div class="flex items-center justify-between mb-4">
       <h3 class="text-lg font-medium text-gray-900">Speed Calibration</h3>
-      <div class="flex items-center space-x-2">
-        <span class="text-sm text-gray-500">Accuracy:</span>
-        <span
-          :class="accuracyColorClass"
-          class="px-2 py-1 rounded text-xs font-medium"
-        >
-          {{ calibrationSettings.calibrationAccuracy }}%
-        </span>
-      </div>
+      <div class="flex items-center space-x-2"></div>
     </div>
 
     <!-- Player Height Calibration -->
     <div class="mb-6">
       <div class="flex items-center justify-between mb-2">
         <label class="text-sm font-medium text-gray-700">Player Height</label>
-        <div class="flex items-center space-x-2">
-          <input
-            type="checkbox"
-            v-model="calibrationSettings.useHeightCalibration"
-            @change="onHeightCalibrationToggle"
-            class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-          />
-          <span class="text-xs text-gray-500">Enable</span>
-        </div>
       </div>
 
       <div class="flex items-center space-x-3">
@@ -67,15 +50,6 @@
         <label class="text-sm font-medium text-gray-700"
           >Court Calibration</label
         >
-        <div class="flex items-center space-x-2">
-          <input
-            type="checkbox"
-            v-model="calibrationSettings.useCourtCalibration"
-            @change="onCourtCalibrationToggle"
-            class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-          />
-          <span class="text-xs text-gray-500">Enable</span>
-        </div>
       </div>
 
       <div class="space-y-3">
@@ -133,15 +107,6 @@
           </button>
         </div>
 
-        <div
-          v-if="
-            calibrationSettings.useCourtCalibration && courtLength && courtWidth
-          "
-          class="text-xs text-green-600"
-        >
-          ✓ Court dimensions: {{ courtLength }}m × {{ courtWidth }}m
-        </div>
-
         <div class="text-xs text-gray-500">
           Default: Badminton (13.4m × 6.1m), Tennis (23.8m × 8.2m)
         </div>
@@ -150,57 +115,19 @@
 
     <!-- Calibration Status -->
     <div class="border-t border-gray-200 pt-4">
-      <div class="flex items-center justify-between text-sm">
-        <span class="text-gray-600">Calibration Status:</span>
-        <span
-          :class="
-            calibrationSettings.isCalibrated
-              ? 'text-green-600'
-              : 'text-amber-600'
-          "
-        >
-          {{ calibrationSettings.isCalibrated ? 'Active' : 'Not Calibrated' }}
-        </span>
-      </div>
-
       <div
         v-if="calibrationSettings.isCalibrated"
         class="mt-2 text-xs text-gray-500"
-      >
-        <div>
-          Scaling Factor:
-          {{ calibrationSettings.scalingFactor?.toFixed(3) || 'N/A' }}
-        </div>
-        <div v-if="calibrationSettings.useHeightCalibration">
-          Height-based scaling:
-          {{ (calibrationSettings.playerHeight / 170).toFixed(3) }}x
-        </div>
-        <div
-          v-if="
-            calibrationSettings.useCourtCalibration &&
-            calibrationSettings.pixelsToMetersRatio
-          "
-        >
-          Court-based ratio:
-          {{ calibrationSettings.pixelsToMetersRatio.toFixed(6) }} m/px
-        </div>
-      </div>
-
-      <button
-        @click="resetAllCalibration"
-        class="w-full mt-3 px-3 py-1 text-xs bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
-      >
-        Reset All Calibration
-      </button>
+      ></div>
     </div>
 
     <!-- Show Calculation Button - Always Visible -->
-    <div class="mt-4 pt-4 border-t border-gray-200">
+    <div class="border-gray-200">
       <button
         @click="showCalculationModal = true"
         class="w-full px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors font-medium"
       >
-        📊 Show Speed Calculation Details
+        Show Speed Calculation Details
       </button>
     </div>
 
@@ -428,55 +355,6 @@
                   </p>
                   <p class="font-mono">
                     Accuracy: {{ calibrationSettings.calibrationAccuracy }}%
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <!-- No Speed Data Available -->
-            <div v-else class="bg-yellow-50 p-4 rounded-lg">
-              <div class="text-sm text-yellow-800">
-                <p class="font-semibold mb-2">⚠️ No Speed Data Available</p>
-                <p class="mb-2">Possible reasons:</p>
-                <ul class="list-disc list-inside space-y-1 text-xs">
-                  <li>Video is paused or not playing</li>
-                  <li>
-                    Pose landmarks not detected with sufficient confidence
-                  </li>
-                  <li>Speed calculator not receiving landmark data</li>
-                  <li>Insufficient frame history (need at least 2 frames)</li>
-                </ul>
-
-                <!-- Debug Information -->
-                <div class="mt-3 p-2 bg-yellow-100 rounded text-xs">
-                  <p><strong>Debug Info:</strong></p>
-                  <p>speedMetrics exists: {{ !!speedMetrics }}</p>
-                  <p>
-                    speedMetrics.isValid: {{ speedMetrics?.isValid || false }}
-                  </p>
-                  <p>
-                    centerOfMass exists:
-                    {{ speedMetrics?.centerOfMass ? 'yes' : 'no' }}
-                  </p>
-                  <p>
-                    centerOfMass values: x={{
-                      speedMetrics?.centerOfMass?.x || 'N/A'
-                    }}, y={{ speedMetrics?.centerOfMass?.y || 'N/A' }}, z={{
-                      speedMetrics?.centerOfMass?.z || 'N/A'
-                    }}
-                  </p>
-                  <p>
-                    velocity exists: {{ speedMetrics?.velocity ? 'yes' : 'no' }}
-                  </p>
-                  <p>
-                    velocity values: x={{ speedMetrics?.velocity?.x || 'N/A' }},
-                    y={{ speedMetrics?.velocity?.y || 'N/A' }}, z={{
-                      speedMetrics?.velocity?.z || 'N/A'
-                    }}
-                  </p>
-                  <p>speed: {{ speedMetrics?.speed || 'N/A' }}</p>
-                  <p>
-                    scalingFactor: {{ speedMetrics?.scalingFactor || 'N/A' }}
                   </p>
                 </div>
               </div>

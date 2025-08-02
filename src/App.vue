@@ -613,6 +613,7 @@ const loadVideo = (video, type = 'youtube') => {
       videoId.value = video.id;
       currentVideoType.value = type; // Keep track of the video type
     }
+    videoLoaded.value = false;
   } catch (error) {
     console.error('Failed to load video:', error);
   }
@@ -711,33 +712,42 @@ const closeShareModal = () => {
 onMounted(async () => {
   await initAuth();
 
-  const urlParams = new URLSearchParams(window.location.search);
-  const shareId = urlParams.get('share');
+  const shareInfo = ShareService.parseShareUrl();
 
-  if (shareId) {
+  if (shareInfo.type && shareInfo.id) {
     try {
-      const shareData = await ShareService.getSharedItem(shareId);
-
-      if (shareData.video_id) {
+      if (shareInfo.type === 'video') {
         // This is a shared video
         isSharedVideo.value = true;
-        const video = await VideoService.get(shareData.video_id);
-        if (video) {
-          sharedVideoData.value = video;
-          loadVideo(
-            {
-              id: video.id,
-              url: video.url,
-            },
-            'shared'
-          );
-        }
-      } else if (shareData.comparison_id) {
+        const shareData =
+          await ShareService.getSharedVideoWithCommentPermissions(shareInfo.id);
+
+        sharedVideoData.value = {
+          id: shareData.id,
+          title: shareData.title,
+          description: shareData.description,
+          url: shareData.url,
+          filePath: shareData.filePath,
+          videoType: shareData.videoType,
+          isPublic: shareData.isPublic,
+        };
+
+        // Set the current video ID for comments and annotations
+        currentVideoId.value = shareData.id;
+
+        loadVideo(
+          {
+            id: shareData.id,
+            url: shareData.url,
+          },
+          'shared'
+        );
+      } else if (shareInfo.type === 'comparison') {
         // This is a shared comparison
         isSharedComparison.value = true;
         if (comparisonWorkflow) {
           await comparisonWorkflow.loadComparisonVideo({
-            id: shareData.comparison_id,
+            id: shareInfo.id,
           });
           playerMode.value = 'dual'; // Set to dual mode for comparison
         }
@@ -747,6 +757,9 @@ onMounted(async () => {
     }
   } else if (!user.value) {
     // If no share link and not logged in, show the login page
+  } else if (!videoLoaded.value) {
+    // If no video is loaded, and we are not handling a share link, show the modal
+    isLoadModalVisible.value = true;
   }
 });
 
@@ -1123,16 +1136,10 @@ watch(
                 :show-co-m-coordinates="false"
                 :show-toggle-control="true"
                 @speed-visualization-toggled="handleSpeedVisualizationToggled"
+                @chart-toggled="handleChartToggled"
                 :video-loaded="videoLoaded"
               />
             </div>
-            <SpeedChart
-              v-if="isChartVisible"
-              :speed-metrics="currentSpeedMetrics"
-              :timestamp="currentTime"
-              :current-frame="currentFrame"
-              @chart-toggled="handleChartToggled"
-            />
           </div>
         </div>
 

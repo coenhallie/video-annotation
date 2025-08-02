@@ -5,7 +5,7 @@
   >
     <!-- Speed Visualization Toggle Control -->
     <div
-      class="absolute top-4 left-4 pointer-events-auto"
+      class="absolute opacity-95 top-4 left-4 pointer-events-auto"
       v-if="showToggleControl && videoLoaded"
     >
       <button
@@ -139,7 +139,7 @@
         speedMetrics &&
         speedMetrics.isValid
       "
-      class="absolute top-4 right-4 bg-white border border-gray-200 rounded-lg shadow-md p-4 pointer-events-auto"
+      class="absolute opacity-95 top-4 right-4 bg-white border border-gray-200 rounded-lg shadow-md p-4 pointer-events-auto"
       style="min-width: 200px"
       role="region"
       aria-label="Speed metrics display"
@@ -195,6 +195,45 @@
         </div>
       </div>
 
+      <!-- Chart Toggle Button -->
+      <div class="mb-3 pt-2 border-t border-gray-200">
+        <button
+          @click="toggleChart"
+          class="w-full btn btn-ghost btn-sm bg-gray-50 border border-gray-200 rounded-lg shadow-sm hover:bg-gray-100 transition-colors duration-200"
+          :title="
+            isChartVisible
+              ? 'Hide horizontal speed chart'
+              : 'Show horizontal speed chart'
+          "
+          :aria-label="
+            isChartVisible
+              ? 'Hide horizontal speed chart'
+              : 'Show horizontal speed chart'
+          "
+        >
+          <svg
+            class="w-4 h-4 mr-2"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            :class="{
+              'text-blue-600': isChartVisible,
+              'text-gray-500': !isChartVisible,
+            }"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+            />
+          </svg>
+          <span class="text-sm font-medium">
+            {{ isChartVisible ? 'Hide Chart' : 'Show Chart' }}
+          </span>
+        </button>
+      </div>
+
       <!-- Velocity components -->
       <div v-if="showVelocityComponents" class="text-xs space-y-1">
         <div class="flex justify-between">
@@ -244,17 +283,27 @@
           }}</span>
         </div>
       </div>
+
+      <!-- Speed Chart Component -->
+      <SpeedChart
+        v-if="isChartVisible"
+        :speed-metrics="speedMetrics"
+        :timestamp="currentTimestamp"
+        :current-frame="currentFrame"
+        :visible="isChartVisible"
+      />
     </div>
 
     <!-- No speed data indicator -->
     <div
       v-if="
+        videoLoaded &&
         speedVisualizationEnabled &&
         showSpeed &&
         (!speedMetrics || !speedMetrics.isValid) &&
         showNoSpeedIndicator
       "
-      class="absolute top-4 right-4 bg-white border border-gray-200 rounded-lg shadow-md px-3 py-2 text-sm text-gray-600 pointer-events-auto"
+      class="absolute opacity-95 top-4 right-4 bg-white border border-gray-200 rounded-lg shadow-md px-3 py-2 text-sm text-gray-600 pointer-events-auto"
       role="status"
       aria-live="polite"
     >
@@ -265,6 +314,7 @@
 
 <script setup>
 import { computed, ref } from 'vue';
+import SpeedChart from './SpeedChart.vue';
 
 // Define props with proper TypeScript-like syntax
 const props = defineProps({
@@ -399,10 +449,27 @@ const emit = defineEmits(['speed-visualization-toggled', 'chart-toggled']);
 // Speed visualization toggle state
 const speedVisualizationEnabled = ref(true);
 
+// Chart visibility toggle state
+const isChartVisible = ref(false);
+
 // Toggle speed visualization
 const toggleSpeedVisualization = () => {
   speedVisualizationEnabled.value = !speedVisualizationEnabled.value;
   emit('speed-visualization-toggled', speedVisualizationEnabled.value);
+};
+
+// Toggle chart visibility
+const toggleChart = () => {
+  console.log(
+    '🔄 [SpeedVisualization] Chart toggle clicked, current state:',
+    isChartVisible.value
+  );
+  isChartVisible.value = !isChartVisible.value;
+  console.log(
+    '🔄 [SpeedVisualization] Chart toggle new state:',
+    isChartVisible.value
+  );
+  onChartToggled(isChartVisible.value);
 };
 
 // Convert normalized coordinates to canvas coordinates

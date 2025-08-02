@@ -670,7 +670,7 @@ defineExpose({
       </div>
 
       <button
-        v-if="!readOnly && permissions.canComment"
+        v-if="permissions.canComment"
         class="btn btn-primary btn-sm flex items-center space-x-1"
         @click="startAddComment"
         :disabled="isLoading"
@@ -723,7 +723,7 @@ defineExpose({
     </div>
 
     <!-- Comment Form -->
-    <div v-if="showCommentForm && !readOnly" class="border-b border-gray-200">
+    <div v-if="showCommentForm" class="border-b border-gray-200">
       <CommentForm
         :annotation-id="props.annotationId"
         :editing-comment="editingComment"
@@ -751,10 +751,7 @@ defineExpose({
           ></path>
         </svg>
         <p class="text-sm">No comments yet</p>
-        <p
-          v-if="!readOnly && permissions.canComment"
-          class="text-xs text-gray-400 mt-1"
-        >
+        <p v-if="permissions.canComment" class="text-xs text-gray-400 mt-1">
           Be the first to add a comment
         </p>
       </div>
@@ -780,8 +777,8 @@ defineExpose({
       </div>
     </div>
 
-    <!-- Read-only Notice -->
-    <div v-if="readOnly" class="p-3 bg-gray-50 border-t border-gray-200">
+    <!-- Read-only Notice (removed - comments always allowed) -->
+    <div v-if="false" class="p-3 bg-gray-50 border-t border-gray-200">
       <p class="text-xs text-gray-500 text-center">
         Comments are view-only in this mode
       </p>

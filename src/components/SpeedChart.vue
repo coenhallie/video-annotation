@@ -1,14 +1,33 @@
 <template>
-  <div class="speed-chart-container" :class="{ 'chart-visible': isVisible }">
-    <!-- Chart Toggle Button -->
-    <div class="chart-controls">
+  <div class="speed-chart-container">
+    <!-- Chart Settings -->
+    <div class="chart-settings">
+      <label class="setting-item">
+        <span class="text-sm text-gray-600">Duration:</span>
+        <select v-model="chartDuration" class="input text-xs">
+          <option :value="10">10s</option>
+          <option :value="30">30s</option>
+          <option :value="60">1min</option>
+          <option :value="120">2min</option>
+        </select>
+      </label>
+
+      <label class="setting-item">
+        <span class="text-sm text-gray-600">Max Speed:</span>
+        <select v-model="maxSpeedScale" class="input text-xs">
+          <option :value="1">1 m/s</option>
+          <option :value="2">2 m/s</option>
+          <option :value="5">5 m/s</option>
+        </select>
+      </label>
+
       <button
-        @click="toggleChart"
-        class="btn btn-ghost btn-sm bg-white border border-gray-200 rounded-lg shadow-md hover:bg-gray-50"
-        :title="isVisible ? 'Hide speed chart' : 'Show speed chart'"
+        @click="clearHistory"
+        class="btn btn-ghost btn-sm text-gray-500 hover:text-red-600"
+        title="Clear chart history"
       >
         <svg
-          class="w-4 h-4"
+          class="w-3 h-3"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -17,57 +36,14 @@
             stroke-linecap="round"
             stroke-linejoin="round"
             stroke-width="2"
-            d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
           />
         </svg>
-        <span class="ml-1">{{ isVisible ? 'Hide Chart' : 'Show Chart' }}</span>
       </button>
-
-      <!-- Chart Settings -->
-      <div v-if="isVisible" class="chart-settings">
-        <label class="setting-item">
-          <span class="text-sm text-gray-600">Duration:</span>
-          <select v-model="chartDuration" class="input text-xs">
-            <option :value="10">10s</option>
-            <option :value="30">30s</option>
-            <option :value="60">1min</option>
-            <option :value="120">2min</option>
-          </select>
-        </label>
-
-        <label class="setting-item">
-          <span class="text-sm text-gray-600">Max Speed:</span>
-          <select v-model="maxSpeedScale" class="input text-xs">
-            <option :value="1">1 m/s</option>
-            <option :value="2">2 m/s</option>
-            <option :value="5">5 m/s</option>
-          </select>
-        </label>
-
-        <button
-          @click="clearHistory"
-          class="btn btn-ghost btn-sm text-gray-500 hover:text-red-600"
-          title="Clear chart history"
-        >
-          <svg
-            class="w-3 h-3"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-            />
-          </svg>
-        </button>
-      </div>
     </div>
 
     <!-- Speed Chart -->
-    <div v-if="isVisible" class="speed-chart">
+    <div class="speed-chart">
       <div class="chart-header">
         <h4 class="text-sm font-medium text-gray-900">
           Overall Speed Over Time
@@ -265,11 +241,14 @@ const props = defineProps({
     type: Number,
     default: 0,
   },
+  visible: {
+    type: Boolean,
+    default: true,
+  },
 });
 
-const emit = defineEmits(['chart-toggled']);
-// Chart state
-const isVisible = ref(false);
+// Remove emit since we no longer have internal toggle
+// Chart state - now controlled by parent
 const chartDuration = ref(30); // seconds
 const maxSpeedScale = ref(1); // m/s
 const chartWidth = ref(400);
@@ -452,11 +431,7 @@ const getSpeedColorClass = (speed) => {
   return 'text-gray-300';
 };
 
-// Chart controls
-const toggleChart = () => {
-  isVisible.value = !isVisible.value;
-  emit('chart-toggled', isVisible.value);
-};
+// Chart controls - removed internal toggle functionality
 
 const clearHistory = () => {
   speedHistory.value = [];
@@ -484,10 +459,8 @@ onUnmounted(() => {
 
 <style scoped>
 .speed-chart-container {
-  position: absolute;
-  top: 280px;
-  right: 4px;
-  z-index: 20;
+  position: relative;
+  margin-top: 16px;
   pointer-events: auto;
 }
 

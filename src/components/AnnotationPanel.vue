@@ -148,6 +148,9 @@ const newAnnotation = ref({
 const showDrawingSection = ref(false);
 const hasDrawingData = ref(false);
 
+// Editing state
+const isEditing = ref(false);
+
 // Comment state
 const expandedComments = ref(new Set());
 const commentCounts = ref(new Map());
@@ -229,6 +232,7 @@ const startAddAnnotation = () => {
   showAddForm.value = true;
   editingAnnotation.value = null;
   showDrawingSection.value = false;
+  isEditing.value = false; // This is a new annotation, not editing
 
   // Check if there are existing drawings on the current frame
   const hasExistingDrawings = props.isDualMode
@@ -276,6 +280,7 @@ const startEditAnnotation = (annotation) => {
   newAnnotation.value = { ...annotation };
   showAddForm.value = true;
   editingAnnotation.value = annotation;
+  isEditing.value = true; // Set editing state to true
 
   // Handle drawing data if present, but keep drawing section closed by default
   if (annotation.drawingData) {
@@ -417,6 +422,7 @@ const cancelForm = () => {
   editingAnnotation.value = null;
   showDrawingSection.value = false;
   hasDrawingData.value = false;
+  isEditing.value = false; // Reset editing state
 
   // Reset newAnnotation to prevent null reference errors
   newAnnotation.value = {
@@ -703,12 +709,59 @@ onUnmounted(() => {
   cleanupGlobalComments();
 });
 
+// Missing methods that are called from App.vue
+const setDrawingData = (drawingData) => {
+  if (!drawingData) return;
+
+  // Set the drawing data for the current annotation
+  if (newAnnotation.value) {
+    newAnnotation.value.drawingData = drawingData;
+    hasDrawingData.value = true;
+
+    // If we're in dual mode, handle both canvas drawings
+    if (props.isDualMode) {
+      if (drawingData.drawingA && props.drawingCanvasA) {
+        props.drawingCanvasA.addDrawing(drawingData.drawingA);
+      }
+      if (drawingData.drawingB && props.drawingCanvasB) {
+        props.drawingCanvasB.addDrawing(drawingData.drawingB);
+      }
+    } else {
+      // Single mode - add drawing to primary canvas
+      if (primaryDrawingCanvas.value) {
+        primaryDrawingCanvas.value.addDrawing(drawingData);
+      }
+    }
+  }
+};
+
+const clearDrawingData = () => {
+  // Clear the drawing data from the current annotation
+  if (newAnnotation.value) {
+    newAnnotation.value.drawingData = null;
+    hasDrawingData.value = false;
+  }
+
+  // Clear drawings from canvas(es)
+  if (props.isDualMode) {
+    if (props.drawingCanvasA) props.drawingCanvasA.clearCurrentFrameDrawings();
+    if (props.drawingCanvasB) props.drawingCanvasB.clearCurrentFrameDrawings();
+  } else {
+    if (primaryDrawingCanvas.value) {
+      primaryDrawingCanvas.value.clearCurrentFrameDrawings();
+    }
+  }
+};
+
 // Expose methods to parent component
 defineExpose({
   startAddAnnotation,
   cancelForm,
   onDrawingCreated,
   toggleComments,
+  setDrawingData,
+  clearDrawingData,
+  isEditing,
 });
 </script>
 <template>
@@ -1271,7 +1324,6 @@ defineExpose({
           <div @click.stop>
             <CommentSection
               :annotation-id="annotation.id"
-              :read-only="readOnly"
               :current-user="user"
               :video-id="videoId"
               @comment-added="handleCommentAdded"
