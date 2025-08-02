@@ -98,7 +98,7 @@
         />
 
         <!-- Enhanced ROI Selector Overlay for Single Video -->
-        <EnhancedROISelector
+        <ROISelector
           v-if="videoUrl && poseLandmarker && roiSettings.enabled"
           :canvas-width="singleVideoElement?.videoWidth || 1920"
           :canvas-height="singleVideoElement?.videoHeight || 1080"
@@ -387,7 +387,7 @@
             />
 
             <!-- Enhanced ROI Selector Overlay for Video A -->
-            <EnhancedROISelector
+            <ROISelector
               v-if="videoAUrl && poseLandmarkerA && roiSettingsA.enabled"
               :canvas-width="videoAElement?.videoWidth || 1920"
               :canvas-height="videoAElement?.videoHeight || 1080"
@@ -485,7 +485,7 @@
             />
 
             <!-- Enhanced ROI Selector Overlay for Video B -->
-            <EnhancedROISelector
+            <ROISelector
               v-if="videoBUrl && poseLandmarkerB && roiSettingsB.enabled"
               :canvas-width="videoBElement?.videoWidth || 1920"
               :canvas-height="videoBElement?.videoHeight || 1080"
@@ -840,7 +840,7 @@ import {
 } from 'vue';
 import DrawingCanvas from './DrawingCanvas.vue';
 import PoseVisualization from './PoseVisualization.vue';
-import EnhancedROISelector from './EnhancedROISelector.vue';
+import ROISelector from './ROISelector.vue';
 import KeypointSelector from './KeypointSelector.vue';
 import { useVideoPlayer } from '../composables/useVideoPlayer.js';
 import { useEnhancedPoseLandmarker } from '../composables/useEnhancedPoseLandmarker.js';

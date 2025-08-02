@@ -17,7 +17,7 @@ import { useVideoSession } from './composables/useVideoSession.ts';
 import { useDrawingCanvas } from './composables/useDrawingCanvas.ts';
 import { useComparisonVideoWorkflow } from './composables/useComparisonVideoWorkflow.ts';
 import { useDualVideoPlayer } from './composables/useDualVideoPlayer.js';
-import { useEnhancedPoseLandmarker } from './composables/useEnhancedPoseLandmarker.js';
+import { usePoseLandmarker } from './composables/usePoseLandmarker.js';
 import { useSessionCleanup } from './composables/useSessionCleanup.ts';
 import { VideoService } from './services/videoService.ts';
 import { AnnotationService } from './services/annotationService.ts';
@@ -169,9 +169,9 @@ const drawingCanvas = useDrawingCanvas();
 const comparisonWorkflow = useComparisonVideoWorkflow();
 
 // Enhanced Pose detection functionality with fast movements optimization
-const poseLandmarker = useEnhancedPoseLandmarker(); // For single video mode
-const poseLandmarkerA = useEnhancedPoseLandmarker(); // For dual video mode - Video A
-const poseLandmarkerB = useEnhancedPoseLandmarker(); // For dual video mode - Video B
+const poseLandmarker = usePoseLandmarker(); // For single video mode
+const poseLandmarkerA = usePoseLandmarker(); // For dual video mode - Video A
+const poseLandmarkerB = usePoseLandmarker(); // For dual video mode - Video B
 
 // Session cleanup utility
 const { cleanupAllSessionData } = useSessionCleanup();
