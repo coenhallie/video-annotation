@@ -93,229 +93,201 @@
   </div>
 </template>
 
-<script>
-import { ref, computed, watch, toRefs } from 'vue';
+<script setup>
+import { ref, computed, toRefs, defineProps, defineEmits } from 'vue';
 
-export default {
-  name: 'KeypointSelector',
-  props: {
-    selectedKeypoints: {
-      type: Array,
-      default: () => Array.from({ length: 33 }, (_, i) => i), // All keypoints by default
-    },
+const props = defineProps({
+  selectedKeypoints: {
+    type: Array,
+    default: () => Array.from({ length: 33 }, (_, i) => i), // All keypoints by default
   },
-  emits: ['update:selectedKeypoints'],
-  setup(props, { emit }) {
-    const { selectedKeypoints } = toRefs(props);
+});
 
-    // Landmark names (same as in usePoseLandmarker)
-    const LANDMARK_NAMES = [
-      'nose',
-      'left_eye_inner',
-      'left_eye',
-      'left_eye_outer',
-      'right_eye_inner',
-      'right_eye',
-      'right_eye_outer',
-      'left_ear',
-      'right_ear',
-      'mouth_left',
-      'mouth_right',
-      'left_shoulder',
-      'right_shoulder',
-      'left_elbow',
-      'right_elbow',
-      'left_wrist',
-      'right_wrist',
-      'left_pinky',
-      'right_pinky',
-      'left_index',
-      'right_index',
-      'left_thumb',
-      'right_thumb',
-      'left_hip',
-      'right_hip',
-      'left_knee',
-      'right_knee',
-      'left_ankle',
-      'right_ankle',
-      'left_heel',
-      'right_heel',
-      'left_foot_index',
-      'right_foot_index',
-    ];
+const emit = defineEmits(['update:selectedKeypoints']);
 
-    // Keypoint groups for better organization
-    const keypointGroups = [
-      {
-        name: 'Face',
-        color: '#3b82f6',
-        indices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-      },
-      {
-        name: 'Arms & Hands',
-        color: '#10b981',
-        indices: [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22],
-      },
-      {
-        name: 'Torso',
-        color: '#f59e0b',
-        indices: [23, 24],
-      },
-      {
-        name: 'Legs & Feet',
-        color: '#ef4444',
-        indices: [25, 26, 27, 28, 29, 30, 31, 32],
-      },
-    ];
+const { selectedKeypoints } = toRefs(props);
 
-    // Quick presets for common use cases
-    const presets = [
-      {
-        name: 'Upper Body',
-        description: 'Face, arms, and torso',
-        indices: [
-          0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
-          20, 21, 22, 23, 24,
-        ],
-      },
-      {
-        name: 'Core Pose',
-        description: 'Essential pose points',
-        indices: [0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28],
-      },
-      {
-        name: 'Face Only',
-        description: 'Facial landmarks only',
-        indices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-      },
-      {
-        name: 'Arms Only',
-        description: 'Arm and hand landmarks',
-        indices: [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22],
-      },
-      {
-        name: 'Legs Only',
-        description: 'Leg and foot landmarks',
-        indices: [23, 24, 25, 26, 27, 28, 29, 30, 31, 32],
-      },
-    ];
+// Landmark names (same as in usePoseLandmarker)
+const LANDMARK_NAMES = [
+  'nose',
+  'left_eye_inner',
+  'left_eye',
+  'left_eye_outer',
+  'right_eye_inner',
+  'right_eye',
+  'right_eye_outer',
+  'left_ear',
+  'right_ear',
+  'mouth_left',
+  'mouth_right',
+  'left_shoulder',
+  'right_shoulder',
+  'left_elbow',
+  'right_elbow',
+  'left_wrist',
+  'right_wrist',
+  'left_pinky',
+  'right_pinky',
+  'left_index',
+  'right_index',
+  'left_thumb',
+  'right_thumb',
+  'left_hip',
+  'right_hip',
+  'left_knee',
+  'right_knee',
+  'left_ankle',
+  'right_ankle',
+  'left_heel',
+  'right_heel',
+  'left_foot_index',
+  'right_foot_index',
+];
 
-    // State
-    const expandedGroups = ref([
-      'Face',
-      'Arms & Hands',
-      'Torso',
-      'Legs & Feet',
-    ]); // All expanded by default
+// Keypoint groups for better organization
+const keypointGroups = [
+  {
+    name: 'Face',
+    indices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+  },
+  {
+    name: 'Arms & Hands',
+    indices: [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22],
+  },
+  {
+    name: 'Torso',
+    indices: [23, 24],
+  },
+  {
+    name: 'Legs & Feet',
+    indices: [25, 26, 27, 28, 29, 30, 31, 32],
+  },
+];
 
-    // Computed properties
-    const allSelected = computed(() => {
-      return selectedKeypoints.value.length === LANDMARK_NAMES.length;
-    });
+// Quick presets for common use cases
+const presets = [
+  {
+    name: 'Upper Body',
+    description: 'Face, arms, and torso',
+    indices: [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+      21, 22, 23, 24,
+    ],
+  },
+  {
+    name: 'Core Pose',
+    description: 'Essential pose points',
+    indices: [0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28],
+  },
+  {
+    name: 'Face Only',
+    description: 'Facial landmarks only',
+    indices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+  },
+  {
+    name: 'Arms Only',
+    description: 'Arm and hand landmarks',
+    indices: [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22],
+  },
+  {
+    name: 'Legs Only',
+    description: 'Leg and foot landmarks',
+    indices: [23, 24, 25, 26, 27, 28, 29, 30, 31, 32],
+  },
+];
 
-    // Methods
-    const toggleKeypoint = (index) => {
-      const newSelection = [...selectedKeypoints.value];
+// State
+const expandedGroups = ref(['Face', 'Arms & Hands', 'Torso', 'Legs & Feet']); // All expanded by default
+
+// Computed properties
+const allSelected = computed(() => {
+  return selectedKeypoints.value.length === LANDMARK_NAMES.length;
+});
+
+// Methods
+const toggleKeypoint = (index) => {
+  const newSelection = [...selectedKeypoints.value];
+  const currentIndex = newSelection.indexOf(index);
+
+  if (currentIndex > -1) {
+    newSelection.splice(currentIndex, 1);
+  } else {
+    newSelection.push(index);
+  }
+
+  newSelection.sort((a, b) => a - b); // Keep sorted
+  emit('update:selectedKeypoints', newSelection);
+};
+
+const toggleAll = () => {
+  if (allSelected.value) {
+    emit('update:selectedKeypoints', []);
+  } else {
+    emit(
+      'update:selectedKeypoints',
+      Array.from({ length: LANDMARK_NAMES.length }, (_, i) => i)
+    );
+  }
+};
+
+const resetToDefault = () => {
+  emit(
+    'update:selectedKeypoints',
+    Array.from({ length: LANDMARK_NAMES.length }, (_, i) => i)
+  );
+};
+
+const toggleGroup = (group) => {
+  const groupSelected = isGroupSelected(group);
+  const newSelection = [...selectedKeypoints.value];
+
+  if (groupSelected) {
+    // Remove all group indices
+    group.indices.forEach((index) => {
       const currentIndex = newSelection.indexOf(index);
-
       if (currentIndex > -1) {
         newSelection.splice(currentIndex, 1);
-      } else {
+      }
+    });
+  } else {
+    // Add all group indices
+    group.indices.forEach((index) => {
+      if (!newSelection.includes(index)) {
         newSelection.push(index);
       }
+    });
+  }
 
-      newSelection.sort((a, b) => a - b); // Keep sorted
-      emit('update:selectedKeypoints', newSelection);
-    };
+  newSelection.sort((a, b) => a - b);
+  emit('update:selectedKeypoints', newSelection);
+};
 
-    const toggleAll = () => {
-      if (allSelected.value) {
-        emit('update:selectedKeypoints', []);
-      } else {
-        emit(
-          'update:selectedKeypoints',
-          Array.from({ length: LANDMARK_NAMES.length }, (_, i) => i)
-        );
-      }
-    };
+const toggleGroupExpansion = (groupName) => {
+  const index = expandedGroups.value.indexOf(groupName);
+  if (index > -1) {
+    expandedGroups.value.splice(index, 1);
+  } else {
+    expandedGroups.value.push(groupName);
+  }
+};
 
-    const resetToDefault = () => {
-      emit(
-        'update:selectedKeypoints',
-        Array.from({ length: LANDMARK_NAMES.length }, (_, i) => i)
-      );
-    };
+const isGroupSelected = (group) => {
+  return group.indices.every((index) =>
+    selectedKeypoints.value.includes(index)
+  );
+};
 
-    const toggleGroup = (group) => {
-      const groupSelected = isGroupSelected(group);
-      const newSelection = [...selectedKeypoints.value];
+const getSelectedInGroup = (group) => {
+  return group.indices.filter((index) =>
+    selectedKeypoints.value.includes(index)
+  ).length;
+};
 
-      if (groupSelected) {
-        // Remove all group indices
-        group.indices.forEach((index) => {
-          const currentIndex = newSelection.indexOf(index);
-          if (currentIndex > -1) {
-            newSelection.splice(currentIndex, 1);
-          }
-        });
-      } else {
-        // Add all group indices
-        group.indices.forEach((index) => {
-          if (!newSelection.includes(index)) {
-            newSelection.push(index);
-          }
-        });
-      }
-
-      newSelection.sort((a, b) => a - b);
-      emit('update:selectedKeypoints', newSelection);
-    };
-
-    const toggleGroupExpansion = (groupName) => {
-      const index = expandedGroups.value.indexOf(groupName);
-      if (index > -1) {
-        expandedGroups.value.splice(index, 1);
-      } else {
-        expandedGroups.value.push(groupName);
-      }
-    };
-
-    const isGroupSelected = (group) => {
-      return group.indices.every((index) =>
-        selectedKeypoints.value.includes(index)
-      );
-    };
-
-    const getSelectedInGroup = (group) => {
-      return group.indices.filter((index) =>
-        selectedKeypoints.value.includes(index)
-      ).length;
-    };
-
-    const applyPreset = (preset) => {
-      emit(
-        'update:selectedKeypoints',
-        [...preset.indices].sort((a, b) => a - b)
-      );
-    };
-
-    return {
-      LANDMARK_NAMES,
-      keypointGroups,
-      presets,
-      expandedGroups,
-      allSelected,
-      toggleKeypoint,
-      toggleAll,
-      resetToDefault,
-      toggleGroup,
-      toggleGroupExpansion,
-      isGroupSelected,
-      getSelectedInGroup,
-      applyPreset,
-    };
-  },
+const applyPreset = (preset) => {
+  emit(
+    'update:selectedKeypoints',
+    [...preset.indices].sort((a, b) => a - b)
+  );
 };
 </script>
 

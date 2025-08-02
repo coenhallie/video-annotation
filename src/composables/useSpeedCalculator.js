@@ -577,18 +577,6 @@ export function useSpeedCalculator() {
   };
 
   /**
-   * Simple Kalman filter for 1D smoothing
-   *
-   * @param {number} lastEstimate - Previous filtered value
-   * @param {number} currentMeasurement - Current raw measurement
-   * @param {number} gain - Filter gain (0-1, higher = less smoothing)
-   * @returns {number} Filtered value
-   */
-  const kalmanFilter1D = (lastEstimate, currentMeasurement, gain) => {
-    return lastEstimate + gain * (currentMeasurement - lastEstimate);
-  };
-
-  /**
    * Update speed calculations with new landmark data
    *
    * @param {Array} landmarks - Current frame's pose landmarks

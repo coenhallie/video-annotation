@@ -14,10 +14,7 @@ const handleAuth = async () => {
       const result = await signUp(email.value, password.value);
       // If signup successful and email confirmation is required, switch to sign-in mode
       if (result.user && !result.session) {
-        isSigningUp.value = false;
-        // Clear the form
-        email.value = '';
-        password.value = '';
+        toggleMode();
       }
     } else {
       await signIn(email.value, password.value);

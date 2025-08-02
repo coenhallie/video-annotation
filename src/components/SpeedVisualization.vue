@@ -3,13 +3,6 @@
     class="speed-visualization absolute inset-0 pointer-events-none"
     :style="{ zIndex: 15 }"
   >
-    <!-- Speed Chart Component -->
-    <SpeedChart
-      :speedMetrics="speedMetrics"
-      :timestamp="currentTimestamp"
-      :currentFrame="currentFrame"
-      @chart-toggled="onChartToggled"
-    />
     <!-- Speed Visualization Toggle Control -->
     <div
       class="absolute top-4 left-4 pointer-events-auto"
@@ -271,13 +264,9 @@
 
 <script>
 import { computed, toRefs, ref } from 'vue';
-import SpeedChart from './SpeedChart.vue';
-
 export default {
   name: 'SpeedVisualization',
-  components: {
-    SpeedChart,
-  },
+  components: {},
   props: {
     // Speed data
     speedMetrics: {

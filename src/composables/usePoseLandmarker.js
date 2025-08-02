@@ -17,7 +17,6 @@ export function usePoseLandmarker() {
   const poseResults = ref(null);
   const landmarks = ref([]);
   const worldLandmarks = ref([]);
-  const segmentationMasks = ref([]);
 
   // Frame-based pose data storage
   const poseData = reactive(new Map()); // frame -> pose results
@@ -1075,8 +1074,5 @@ export function usePoseLandmarker() {
     detectionSettings,
     POSE_CONNECTIONS,
     ROI_KEY_LANDMARKS,
-
-    // Cleanup
-    cleanup,
   };
 }

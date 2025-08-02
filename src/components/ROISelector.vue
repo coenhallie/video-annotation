@@ -152,7 +152,7 @@
 </template>
 
 <script>
-import { ref, computed, toRefs, watch } from 'vue';
+import { ref, computed, toRefs } from 'vue';
 
 export default {
   name: 'ROISelector',

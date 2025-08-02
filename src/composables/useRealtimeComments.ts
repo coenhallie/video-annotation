@@ -206,99 +206,74 @@ export function useRealtimeComments(annotationId: string | Ref<string>) {
    * Handle comment insert events
    */
   const handleCommentInsert = (dbComment: any) => {
-    try {
-      const comment = dbComment as Comment;
+    const comment = dbComment as Comment;
 
-      // Check if comment already exists (avoid duplicates)
-      const exists = realtimeComments.value.find((c) => c.id === comment.id);
-      if (!exists) {
-        realtimeComments.value.push(comment);
-        realtimeComments.value.sort(
-          (a, b) =>
-            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-        );
-      }
-
-      // Add to event log
-      commentEvents.value.push({
-        type: 'INSERT',
-        comment,
-      });
-
-      // Trigger event handlers
-      eventHandlers.onCommentInsert.forEach((handler) => handler(comment));
-    } catch (error) {
-      console.error(
-        '❌ [RealtimeComments] Error handling comment insert:',
-        error
+    // Check if comment already exists (avoid duplicates)
+    const exists = realtimeComments.value.find((c) => c.id === comment.id);
+    if (!exists) {
+      realtimeComments.value.push(comment);
+      realtimeComments.value.sort(
+        (a, b) =>
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
       );
     }
+
+    // Add to event log
+    commentEvents.value.push({
+      type: 'INSERT',
+      comment,
+    });
+
+    // Trigger event handlers
+    eventHandlers.onCommentInsert.forEach((handler) => handler(comment));
   };
 
   /**
    * Handle comment update events
    */
   const handleCommentUpdate = (dbComment: any, dbOldComment?: any) => {
-    try {
-      const comment = dbComment as Comment;
-      const oldComment = dbOldComment ? (dbOldComment as Comment) : undefined;
+    const comment = dbComment as Comment;
+    const oldComment = dbOldComment ? (dbOldComment as Comment) : undefined;
 
-      // Update in realtime comments array
-      const index = realtimeComments.value.findIndex(
-        (c) => c.id === comment.id
-      );
-      if (index !== -1) {
-        realtimeComments.value[index] = comment;
-      }
-
-      // Add to event log
-      commentEvents.value.push({
-        type: 'UPDATE',
-        comment,
-        old: oldComment,
-      });
-
-      // Trigger event handlers
-      eventHandlers.onCommentUpdate.forEach((handler) =>
-        handler(comment, oldComment)
-      );
-    } catch (error) {
-      console.error(
-        '❌ [RealtimeComments] Error handling comment update:',
-        error
-      );
+    // Update in realtime comments array
+    const index = realtimeComments.value.findIndex((c) => c.id === comment.id);
+    if (index !== -1) {
+      realtimeComments.value[index] = comment;
     }
+
+    // Add to event log
+    commentEvents.value.push({
+      type: 'UPDATE',
+      comment,
+      old: oldComment,
+    });
+
+    // Trigger event handlers
+    eventHandlers.onCommentUpdate.forEach((handler) =>
+      handler(comment, oldComment)
+    );
   };
 
   /**
    * Handle comment delete events
    */
   const handleCommentDelete = (dbComment: any) => {
-    try {
-      const comment = dbComment as Comment;
+    const comment = dbComment as Comment;
 
-      // Remove from realtime comments array
-      const index = realtimeComments.value.findIndex(
-        (c) => c.id === comment.id
-      );
-      if (index !== -1) {
-        realtimeComments.value.splice(index, 1);
-      }
-
-      // Add to event log
-      commentEvents.value.push({
-        type: 'DELETE',
-        comment,
-      });
-
-      // Trigger event handlers
-      eventHandlers.onCommentDelete.forEach((handler) => handler(comment));
-    } catch (error) {
-      console.error(
-        '❌ [RealtimeComments] Error handling comment delete:',
-        error
-      );
+    // Remove from realtime comments array
+    const index = realtimeComments.value.findIndex((c) => c.id === comment.id);
+    if (index !== -1) {
+      realtimeComments.value.splice(index, 1);
     }
+
+    // Add to event log
+    commentEvents.value.push({
+      type: 'DELETE',
+      comment,
+    });
+
+    // Trigger event handlers
+    eventHandlers.onCommentDelete.forEach((handler) => handler(comment));
   };
 
   /**

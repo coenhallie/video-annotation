@@ -180,7 +180,6 @@ interface Props {
 
 interface Emits {
   (e: 'jump-to-frame', frame: number): void;
-  (e: 'video-context-changed', context: string): void;
 }
 
 const props = defineProps<Props>();
@@ -202,7 +201,6 @@ const {
   currentTool,
   severityColors,
   toggleDrawingMode,
-  setTool,
   setStrokeWidth,
   setSeverity,
   clearCurrentFrameDrawings,
@@ -210,7 +208,6 @@ const {
   getTotalDrawingsCount,
   getFramesWithDrawings,
   hasDrawingsOnFrame,
-  currentFrameDrawings,
 } = activeDrawingCanvas.value || props.drawingCanvas;
 
 // Computed properties

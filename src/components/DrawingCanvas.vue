@@ -44,7 +44,6 @@ import type { DrawingData, DrawingPath, SeverityLevel } from '@/types/database';
 interface Props {
   currentFrame: number;
   isDrawingMode: boolean;
-  selectedTool: 'pen';
   strokeWidth: number;
   severity: SeverityLevel;
   existingDrawings?: DrawingData[];
@@ -53,8 +52,6 @@ interface Props {
 
 interface Emits {
   (e: 'drawing-created', drawing: DrawingData, event?: Event): void;
-  (e: 'drawing-updated', drawing: DrawingData, event?: Event): void;
-  (e: 'drawing-deleted', drawingId: string, event?: Event): void;
   (
     e: 'drawing-stroke-added',
     data: { path: DrawingPath; sessionPaths: DrawingPath[]; frame: number }
@@ -64,7 +61,6 @@ interface Emits {
 const props = withDefaults(defineProps<Props>(), {
   currentFrame: 0,
   isDrawingMode: false,
-  selectedTool: 'pen',
   strokeWidth: 3,
   severity: 'medium',
   existingDrawings: () => [],
@@ -218,16 +214,6 @@ const createDrawingPathFromFabricPath = (path: fabric.Path): DrawingPath => {
 };
 
 // Convert fabric path to DrawingData (legacy function, kept for compatibility)
-const createDrawingDataFromPath = (path: fabric.Path): DrawingData => {
-  const drawingPath = createDrawingPathFromFabricPath(path);
-
-  return {
-    paths: [drawingPath],
-    canvasWidth: canvasWidth.value,
-    canvasHeight: canvasHeight.value,
-    frame: props.currentFrame,
-  };
-};
 
 // Extract points from fabric path data
 const extractPointsFromPath = (pathData: any[]): { x: number; y: number }[] => {
@@ -260,12 +246,6 @@ const handleMouseUp = (event: fabric.TEvent) => {
   if (!props.isDrawingMode) return;
   isDrawing.value = false;
   if (event.e) event.e.stopPropagation();
-};
-
-// Finish the current drawing session and emit the complete drawing
-// Note: This function is now unused since we emit drawings immediately
-const finishDrawingSession = () => {
-  // No longer needed - drawings are emitted immediately in handlePathCreated
 };
 
 // Update canvas size to fill the container

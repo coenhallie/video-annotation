@@ -1,7 +1,7 @@
 <script setup>
-import { ref, computed, onMounted, watch, nextTick } from 'vue';
-import { useAuth } from '../composables/useAuth';
+import { ref, computed, onMounted, watch, onUnmounted } from 'vue';
 import { useRealtimeComments } from '../composables/useRealtimeComments';
+import { useAuth } from '../composables/useAuth';
 import { CommentService } from '../services/commentService';
 import CommentItem from './CommentItem.vue';
 import CommentForm from './CommentForm.vue';
@@ -31,18 +31,13 @@ const emit = defineEmits([
   'comment-deleted',
 ]);
 
-// Composables
+// Auth composable
 const { user, isAuthenticated } = useAuth();
 
 // Real-time composable
 const {
-  isConnected,
-  connectionError,
   realtimeComments,
-  activeUsers,
-  typingUsers,
-  hasActiveUsers,
-  typingUsersList,
+  pendingComments,
   setupPresenceTracking,
   addOptimisticComment,
   removeOptimisticComment,
@@ -74,39 +69,81 @@ const typingTimeout = ref(null);
 
 // Computed
 const allComments = computed(() => {
-  // Merge local comments with real-time comments, avoiding duplicates
-  const commentMap = new Map();
+  try {
+    // Merge local comments with real-time comments and pending comments, avoiding duplicates
+    const commentMap = new Map();
 
-  // Add local comments
-  comments.value.forEach((comment) => {
-    commentMap.set(comment.id, comment);
-  });
+    // Add local comments
+    if (Array.isArray(comments.value)) {
+      comments.value.forEach((comment) => {
+        if (comment && comment.id) {
+          commentMap.set(comment.id, comment);
+        }
+      });
+    }
 
-  // Add real-time comments (will override local if same ID)
-  realtimeComments.value.forEach((comment) => {
-    commentMap.set(comment.id, comment);
-  });
+    // Add real-time comments (will override local if same ID)
+    if (Array.isArray(realtimeComments.value)) {
+      realtimeComments.value.forEach((comment) => {
+        if (comment && comment.id) {
+          commentMap.set(comment.id, comment);
+        }
+      });
+    }
 
-  return Array.from(commentMap.values());
+    // Add pending comments (optimistic updates)
+    if (Array.isArray(pendingComments.value)) {
+      pendingComments.value.forEach((comment) => {
+        if (comment && comment.id) {
+          commentMap.set(comment.id, comment);
+        }
+      });
+    }
+
+    return Array.from(commentMap.values());
+  } catch (error) {
+    console.error('Error in allComments computed:', error);
+    return [];
+  }
 });
 
 const sortedComments = computed(() => {
-  return [...allComments.value].sort(
-    (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
-  );
+  try {
+    return [...allComments.value].sort(
+      (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
+    );
+  } catch (error) {
+    console.error('Error in sortedComments computed:', error);
+    return [];
+  }
 });
 
-const commentCount = computed(() => allComments.value.length);
-
-const connectionStatus = computed(() => {
-  if (connectionError.value) return 'error';
-  if (isConnected.value) return 'connected';
-  return 'disconnected';
+const commentCount = computed(() => {
+  try {
+    return allComments.value.length;
+  } catch (error) {
+    console.error('Error in commentCount computed:', error);
+    return 0;
+  }
 });
 
-const currentUserId = computed(() => user.value?.id || null);
+const currentUserId = computed(() => {
+  try {
+    return props.currentUser?.id || user.value?.id || null;
+  } catch (error) {
+    console.error('Error in currentUserId computed:', error);
+    return null;
+  }
+});
 
-const isAnonymous = computed(() => !isAuthenticated.value);
+const isAnonymous = computed(() => {
+  try {
+    return !isAuthenticated.value;
+  } catch (error) {
+    console.error('Error in isAnonymous computed:', error);
+    return true;
+  }
+});
 
 // Methods
 const loadComments = async () => {
@@ -145,7 +182,7 @@ const loadComments = async () => {
 };
 
 const loadAnonymousSession = () => {
-  if (isAuthenticated.value) return;
+  if (props.currentUser) return;
 
   // Try to get existing session from localStorage
   const sessionId = localStorage.getItem('anonymousSessionId');
@@ -255,7 +292,7 @@ const handleCommentSubmit = async (commentData) => {
         content: commentData.content,
       };
 
-      if (isAuthenticated.value) {
+      if (props.currentUser) {
         createParams.userId = currentUserId.value;
         createParams.isAnonymous = false;
       } else {
@@ -294,7 +331,7 @@ const handleCommentSubmit = async (commentData) => {
         isAnonymous: createParams.isAnonymous || false,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        user: isAuthenticated.value ? user.value : null,
+        user: props.currentUser ? props.currentUser : null,
       };
 
       // Add optimistic comment
@@ -306,8 +343,8 @@ const handleCommentSubmit = async (commentData) => {
         // Remove optimistic comment
         removeOptimisticComment(optimisticComment.id);
 
-        // Add comment to local array
-        comments.value.push(result);
+        // Don't add to local array here - let the real-time event handle it
+        // This prevents duplicate comments in the count
 
         emit('comment-added', result);
         console.log('✅ [CommentSection] Comment created:', result);
@@ -393,7 +430,7 @@ const canEditComment = (comment) => {
     looseEqual: comment.userId == currentUserId.value,
   });
 
-  if (isAuthenticated.value) {
+  if (props.currentUser) {
     const canEdit = comment.userId === currentUserId.value;
     console.log(
       '🔍 [CommentSection] Authenticated user canEdit result:',
@@ -416,16 +453,6 @@ const canModerateComment = (comment) => {
 
 // Watchers
 watch(() => props.annotationId, loadComments, { immediate: true });
-
-watch(
-  isAuthenticated,
-  (newValue) => {
-    if (!newValue) {
-      loadAnonymousSession();
-    }
-  },
-  { immediate: true }
-);
 
 // Real-time event handlers
 const handleRealtimeCommentInsert = (comment) => {
@@ -532,35 +559,92 @@ const handleFormStopTyping = () => {
   );
 };
 
+// Cleanup function
+let cleanupFunctions = [];
+
 // Setup real-time subscriptions
 const setupRealtimeSubscriptions = () => {
-  // Setup event handlers
-  onCommentInsert(handleRealtimeCommentInsert);
-  onCommentUpdate(handleRealtimeCommentUpdate);
-  onCommentDelete(handleRealtimeCommentDelete);
-  onUserJoin(handleUserJoin);
-  onUserLeave(handleUserLeave);
-  onTypingStart(handleTypingStart);
-  onTypingStop(handleTypingStop);
+  try {
+    // Setup event handlers
+    const unsubscribeInsert = onCommentInsert(handleRealtimeCommentInsert);
+    const unsubscribeUpdate = onCommentUpdate(handleRealtimeCommentUpdate);
+    const unsubscribeDelete = onCommentDelete(handleRealtimeCommentDelete);
+    const unsubscribeUserJoin = onUserJoin(handleUserJoin);
+    const unsubscribeUserLeave = onUserLeave(handleUserLeave);
+    const unsubscribeTypingStart = onTypingStart(handleTypingStart);
+    const unsubscribeTypingStop = onTypingStop(handleTypingStop);
 
-  // Setup presence tracking if authenticated
-  if (isAuthenticated.value && user.value) {
-    setupPresenceTracking(
-      user.value.id,
-      user.value.fullName || user.value.email
+    // Store cleanup functions
+    cleanupFunctions.push(
+      unsubscribeInsert,
+      unsubscribeUpdate,
+      unsubscribeDelete,
+      unsubscribeUserJoin,
+      unsubscribeUserLeave,
+      unsubscribeTypingStart,
+      unsubscribeTypingStop
     );
+
+    // Setup presence tracking if authenticated
+    if (isAuthenticated.value && user.value) {
+      const presenceCleanup = setupPresenceTracking(
+        user.value.id,
+        user.value.fullName || user.value.email
+      );
+      if (presenceCleanup) {
+        cleanupFunctions.push(presenceCleanup);
+      }
+    }
+  } catch (error) {
+    console.error('Error setting up realtime subscriptions:', error);
   }
 };
 
-// Setup real-time subscriptions immediately when component is created
-setupRealtimeSubscriptions();
+// Cleanup function
+const cleanup = () => {
+  try {
+    // Clear typing timeout
+    if (typingTimeout.value) {
+      clearTimeout(typingTimeout.value);
+      typingTimeout.value = null;
+    }
+
+    // Run all cleanup functions
+    cleanupFunctions.forEach((cleanup) => {
+      if (typeof cleanup === 'function') {
+        try {
+          cleanup();
+        } catch (error) {
+          console.error('Error during cleanup:', error);
+        }
+      }
+    });
+    cleanupFunctions = [];
+  } catch (error) {
+    console.error('Error during component cleanup:', error);
+  }
+};
 
 // Lifecycle
-onMounted(() => {
-  loadComments();
-  if (!isAuthenticated.value) {
-    loadAnonymousSession();
+onMounted(async () => {
+  try {
+    // Setup real-time subscriptions
+    setupRealtimeSubscriptions();
+
+    // Load initial data
+    await loadComments();
+
+    if (!isAuthenticated.value) {
+      loadAnonymousSession();
+    }
+  } catch (error) {
+    console.error('Error during component mount:', error);
+    error.value = 'Failed to initialize comment section';
   }
+});
+
+onUnmounted(() => {
+  cleanup();
 });
 
 // Expose methods for parent components

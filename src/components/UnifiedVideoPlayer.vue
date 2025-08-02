@@ -183,7 +183,11 @@
               <div class="speed-controls">
                 <select
                   :value="playbackSpeed"
-                  @change="setPlaybackSpeed(parseFloat($event.target.value))"
+                  @change="
+                    setPlaybackSpeed(
+                      parseFloat(($event.target as HTMLSelectElement).value)
+                    )
+                  "
                   class="speed-select"
                   :aria-label="'Playback speed: ' + playbackSpeed + 'x'"
                 >
@@ -580,7 +584,11 @@
           <div class="speed-controls">
             <select
               :value="playbackSpeed"
-              @change="setPlaybackSpeed(parseFloat($event.target.value))"
+              @change="
+                setPlaybackSpeed(
+                  parseFloat(($event.target as HTMLSelectElement).value)
+                )
+              "
               class="speed-select"
               :aria-label="'Playback speed: ' + playbackSpeed + 'x'"
             >
@@ -798,33 +806,12 @@
     </div>
 
     <!-- Keypoint Selector Modal -->
-    <div
-      v-if="showKeypointSelector"
-      class="keypoint-selector-modal"
-      @click.self="showKeypointSelector = false"
-    >
-      <div class="modal-content">
-        <div class="modal-header">
-          <h2>Select Keypoints to Track</h2>
-          <button
-            @click="showKeypointSelector = false"
-            class="close-button"
-            aria-label="Close keypoint selector"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-          </button>
-        </div>
-        <div class="modal-body">
-          <KeypointSelector
-            :selected-keypoints="localSelectedKeypoints"
-            @update:selected-keypoints="updateSelectedKeypoints"
-          />
-        </div>
-      </div>
-    </div>
+    <KeypointSelectorModal
+      :show-modal="showKeypointSelector"
+      :selected-keypoints="localSelectedKeypoints"
+      @update:selected-keypoints="updateSelectedKeypoints"
+      @close="showKeypointSelector = false"
+    />
   </div>
 </template>
 
@@ -841,7 +828,7 @@ import {
 import DrawingCanvas from './DrawingCanvas.vue';
 import PoseVisualization from './PoseVisualization.vue';
 import ROISelector from './ROISelector.vue';
-import KeypointSelector from './KeypointSelector.vue';
+import KeypointSelectorModal from './KeypointSelectorModal.vue';
 import { useVideoPlayer } from '../composables/useVideoPlayer.js';
 import { useEnhancedPoseLandmarker } from '../composables/useEnhancedPoseLandmarker.js';
 import type { DrawingData } from '@/types/database';
@@ -1438,32 +1425,22 @@ const configureEnhancedROIForFastMovements = () => {
 const getCurrentSelectedKeypoints = () => {
   // Get selected keypoints from the appropriate pose landmarker
   if (props.mode === 'single' && props.poseLandmarker?.selectedKeypoints) {
-    const current = props.poseLandmarker.selectedKeypoints.value || [];
-    localSelectedKeypoints.value = [...current];
-    return current;
+    return props.poseLandmarker.selectedKeypoints.value || [];
   } else if (props.mode === 'dual') {
     // For dual mode, use the first available pose landmarker's selection
     // Both videos will share the same keypoint selection
     if (props.poseLandmarkerA?.selectedKeypoints) {
-      const current = props.poseLandmarkerA.selectedKeypoints.value || [];
-      localSelectedKeypoints.value = [...current];
-      return current;
+      return props.poseLandmarkerA.selectedKeypoints.value || [];
     } else if (props.poseLandmarkerB?.selectedKeypoints) {
-      const current = props.poseLandmarkerB.selectedKeypoints.value || [];
-      localSelectedKeypoints.value = [...current];
-      return current;
+      return props.poseLandmarkerB.selectedKeypoints.value || [];
     }
   }
   // Default to all keypoints if no pose landmarker is available
-  const defaultKeypoints = Array.from({ length: 33 }, (_, i) => i);
-  localSelectedKeypoints.value = [...defaultKeypoints];
-  return defaultKeypoints;
+  return Array.from({ length: 33 }, (_, i) => i);
 };
 
 const updateSelectedKeypoints = (keypoints: number[]) => {
-  // Update local state first
   localSelectedKeypoints.value = [...keypoints];
-
   // Update selected keypoints for all active pose landmarkers
   if (props.mode === 'single' && props.poseLandmarker?.setSelectedKeypoints) {
     props.poseLandmarker.setSelectedKeypoints(keypoints);
@@ -1485,7 +1462,7 @@ const updateSelectedKeypoints = (keypoints: number[]) => {
 
 const openKeypointSelector = () => {
   // Initialize local state with current selection
-  const current = getCurrentSelectedKeypoints();
+  localSelectedKeypoints.value = getCurrentSelectedKeypoints();
   showKeypointSelector.value = true;
 };
 
@@ -2278,77 +2255,5 @@ defineExpose({
   .pose-status-text {
     display: none;
   }
-}
-
-/* Keypoint Selector Modal Styles */
-.keypoint-selector-modal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.8);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  backdrop-filter: blur(4px);
-}
-
-.modal-content {
-  background: #1f2937;
-  border-radius: 12px;
-  max-width: 600px;
-  max-height: 80vh;
-  width: 90%;
-  overflow: hidden;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-  border: 1px solid #374151;
-}
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 20px 24px;
-  border-bottom: 1px solid #374151;
-  background: #111827;
-}
-
-.modal-header h2 {
-  margin: 0;
-  color: #f9fafb;
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.close-button {
-  background: none;
-  border: none;
-  color: #9ca3af;
-  cursor: pointer;
-  padding: 8px;
-  border-radius: 6px;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.close-button:hover {
-  background: #374151;
-  color: #f9fafb;
-}
-
-.close-button svg {
-  width: 20px;
-  height: 20px;
-  stroke-width: 2;
-}
-
-.modal-body {
-  padding: 0;
-  overflow-y: auto;
-  max-height: calc(80vh - 80px);
 }
 </style>

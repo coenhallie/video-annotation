@@ -196,61 +196,6 @@ export class AnnotationService {
   }
 
   /**
-   * Get annotations with comment count metadata
-   */
-  static async getAnnotationsWithCommentCounts(
-    videoId: string,
-    projectId?: string
-  ) {
-    try {
-      // Get annotations first
-      const annotations = await this.getVideoAnnotations(videoId, projectId);
-
-      if (!annotations || annotations.length === 0) {
-        return [];
-      }
-
-      // Get comment counts for all annotations
-      const annotationIds = annotations.map((annotation) => annotation.id);
-      const commentCounts = await Promise.all(
-        annotationIds.map((id) => CommentService.getCommentCount(id))
-      );
-
-      // Combine annotations with comment counts
-      const annotationsWithCounts = annotations.map((annotation, index) => ({
-        ...annotation,
-        comment_count: commentCounts[index] || 0,
-      }));
-
-      return annotationsWithCounts;
-    } catch (error) {
-      throw error;
-    }
-  }
-
-  /**
-   * Delete annotation and cascade to all associated comments
-   */
-  static async deleteAnnotationWithComments(annotationId: string) {
-    try {
-      // Delete all associated comments first
-      await CommentService.deleteAnnotationComments(annotationId);
-
-      // Then delete the annotation
-      const { error } = await supabase
-        .from('annotations')
-        .delete()
-        .eq('id', annotationId);
-
-      if (error) {
-        throw error;
-      }
-    } catch (error) {
-      throw error;
-    }
-  }
-
-  /**
    * Check if user can comment on a specific annotation
    */
   static async canUserCommentOnAnnotation(
@@ -308,6 +253,11 @@ export class AnnotationService {
     comparisonVideoId: string,
     includeCommentCounts?: boolean
   ) {
+    // Validate comparisonVideoId to prevent undefined queries
+    if (!comparisonVideoId || comparisonVideoId === 'undefined') {
+      return [];
+    }
+
     const { data, error } = await supabase
       .from('annotations')
       .select('*')

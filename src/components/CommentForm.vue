@@ -37,8 +37,6 @@ const MIN_CONTENT_LENGTH = 1;
 const MAX_CONTENT_LENGTH = 2000;
 
 // Computed
-const isEditing = computed(() => !!props.editingComment);
-
 const characterCount = computed(() => content.value.length);
 
 const isContentValid = computed(() => {
@@ -72,17 +70,17 @@ const needsDisplayName = computed(() => {
 });
 
 const formTitle = computed(() => {
-  return isEditing.value ? 'Edit Comment' : 'Add Comment';
+  return !!props.editingComment ? 'Edit Comment' : 'Add Comment';
 });
 
 const submitButtonText = computed(() => {
   if (isSubmitting.value) return 'Submitting...';
-  return isEditing.value ? 'Update Comment' : 'Post Comment';
+  return !!props.editingComment ? 'Update Comment' : 'Post Comment';
 });
 
 // Methods
 const initializeForm = () => {
-  if (isEditing.value && props.editingComment) {
+  if (!!props.editingComment && props.editingComment) {
     content.value = props.editingComment.content;
   } else {
     content.value = '';
@@ -134,7 +132,7 @@ const handleSubmit = async () => {
     emit('submit', submitData);
 
     // Reset form if not editing
-    if (!isEditing.value) {
+    if (!props.editingComment) {
       content.value = '';
       if (!props.anonymousSession) {
         displayName.value = '';
@@ -151,23 +149,12 @@ const handleCancel = () => {
   emit('cancel');
 };
 
-const handleKeydown = (event) => {
-  // Hotkey functionality removed
-};
-
 const handleTyping = () => {
   emit('typing');
 };
 
 const handleStopTyping = () => {
   emit('stop-typing');
-};
-
-const focusTextarea = async () => {
-  await nextTick();
-  if (textareaRef.value) {
-    textareaRef.value.focus();
-  }
 };
 
 const focusDisplayName = async () => {
@@ -185,8 +172,6 @@ watch(
   (newValue) => {
     if (newValue) {
       focusDisplayName();
-    } else {
-      focusTextarea();
     }
   },
   { immediate: true }
@@ -246,7 +231,6 @@ initializeForm();
         placeholder="Enter your display name"
         maxlength="50"
         :disabled="isSubmitting"
-        @keydown="handleKeydown"
       />
       <p class="mt-1 text-xs text-gray-500">
         This name will be shown with your comment
@@ -270,7 +254,6 @@ initializeForm();
         placeholder="Write your comment..."
         :maxlength="MAX_CONTENT_LENGTH"
         :disabled="isSubmitting"
-        @keydown="handleKeydown"
         @input="handleTyping"
         @blur="handleStopTyping"
       ></textarea>

@@ -137,23 +137,11 @@
         </text>
       </g>
     </svg>
-
-    <!-- No pose detected indicator -->
-    <div
-      v-if="
-        showPose &&
-        (!currentPose || !currentPose.detected) &&
-        showNoPoseIndicator
-      "
-      class="absolute top-4 left-4 bg-black bg-opacity-70 text-white px-3 py-2 rounded text-sm"
-    >
-      No pose detected
-    </div>
   </div>
 </template>
 
 <script>
-import { computed, toRefs, ref, watch } from 'vue';
+import { computed, toRefs } from 'vue';
 
 export default {
   name: 'PoseVisualization',
@@ -502,12 +490,6 @@ export default {
 
     // Convert normalized coordinates to canvas coordinates
     // This matches the coordinate system used by pose landmarks (0-1 range)
-    const normalizedToCanvas = (normalizedCoord) => {
-      return {
-        x: normalizedCoord.x * canvasWidth.value,
-        y: normalizedCoord.y * canvasHeight.value,
-      };
-    };
 
     // Center of Mass canvas coordinates
     const centerOfMassCanvasCoord = computed(() => {
@@ -515,11 +497,13 @@ export default {
         return { x: 0, y: 0 };
       }
       // Use normalized coordinates for proper alignment with pose landmarks
-      return normalizedToCanvas(speedMetrics.value.centerOfMassNormalized);
+      return {
+        x: speedMetrics.value.centerOfMassNormalized.x * canvasWidth.value,
+        y: speedMetrics.value.centerOfMassNormalized.y * canvasHeight.value,
+      };
     });
 
     return {
-      POSE_CONNECTIONS,
       LANDMARK_NAMES,
       filteredConnections,
       getLandmarkCanvasCoord,
@@ -528,7 +512,6 @@ export default {
       getConnectionOpacity,
       getConfidenceColor,
       isKeypointSelected,
-      normalizedToCanvas,
       centerOfMassCanvasCoord,
     };
   },

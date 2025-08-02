@@ -213,28 +213,18 @@ const props = defineProps({
     type: Function,
     required: true,
   },
-  onSetCourtReferencePoints: {
-    type: Function,
-    required: true,
-  },
   onResetCalibration: {
     type: Function,
     required: true,
   },
-  videoDimensions: {
-    type: Object,
-    default: () => ({ width: 1920, height: 1080 }),
-  },
 });
 
 // Emits
-const emit = defineEmits(['start-court-calibration']);
 
 // Local state
 const playerHeightInput = ref(props.calibrationSettings.playerHeight);
 const courtLength = ref(13.4); // Default badminton court length
 const courtWidth = ref(6.1); // Default badminton court width
-const isCalibrating = ref(false);
 
 // Computed
 const accuracyColorClass = computed(() => {
@@ -311,15 +301,7 @@ const resetAllCalibration = () => {
   playerHeightInput.value = 170;
   courtLength.value = 13.4;
   courtWidth.value = 6.1;
-  isCalibrating.value = false;
 };
-
-// Expose methods for parent component
-defineExpose({
-  stopCalibration: () => {
-    isCalibrating.value = false;
-  },
-});
 </script>
 
 <style scoped>

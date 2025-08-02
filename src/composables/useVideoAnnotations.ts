@@ -389,6 +389,23 @@ export function useVideoAnnotations(
           currentVideo.value.id
         );
 
+        // Validate frame data before creating annotation
+        const startFrame =
+          annotationData.startFrame || annotationData.frame || 0;
+        const endFrame =
+          annotationData.endFrame || annotationData.frame || startFrame;
+
+        // Ensure endFrame is not less than startFrame
+        const validatedEndFrame = Math.max(endFrame, startFrame);
+
+        console.log('🔍 [DEBUG] Frame validation:', {
+          originalStartFrame: annotationData.startFrame,
+          originalEndFrame: annotationData.endFrame,
+          validatedStartFrame: startFrame,
+          validatedEndFrame: validatedEndFrame,
+          frame: annotationData.frame,
+        });
+
         const dbAnnotation = {
           videoId: currentVideo.value.id,
           userId: toValue(user).id,
@@ -399,8 +416,8 @@ export function useVideoAnnotations(
           color: annotationData.color,
           timestamp: annotationData.timestamp,
           frame: annotationData.frame,
-          startFrame: annotationData.startFrame,
-          endFrame: annotationData.endFrame,
+          startFrame: startFrame,
+          endFrame: validatedEndFrame,
           duration: annotationData.duration,
           durationFrames: annotationData.durationFrames,
           annotationType: annotationData.annotationType,

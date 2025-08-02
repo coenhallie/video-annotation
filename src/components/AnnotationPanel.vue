@@ -1,7 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, watch, onUnmounted } from 'vue';
 import CommentSection from './CommentSection.vue';
-import CommentForm from './CommentForm.vue';
 import AnnotationSkeleton from './AnnotationSkeleton.vue';
 import { useAuth } from '../composables/useAuth';
 import { useGlobalComments } from '../composables/useGlobalComments';
@@ -29,7 +28,8 @@ const props = defineProps({
   },
   drawingCanvas: {
     type: Object,
-    required: true,
+    required: false,
+    default: () => null,
   },
   readOnly: {
     type: Boolean,
@@ -173,7 +173,8 @@ const severityColors = {
 
 // Computed
 const isSaveDisabled = computed(() => {
-  const hasContent = newAnnotation.value.content.trim();
+  if (!newAnnotation.value) return true;
+  const hasContent = newAnnotation.value.content?.trim();
   const hasDrawing = hasDrawingData.value;
   return !hasContent && !hasDrawing;
 });
@@ -349,21 +350,23 @@ const saveAnnotation = async () => {
   }
 
   const hasDrawing = hasDrawingData.value && !!currentDrawingData;
-  const hasContent = newAnnotation.value.content.trim().length > 0;
+  const hasContent = newAnnotation.value?.content?.trim()?.length > 0;
 
   if (!hasContent && !hasDrawing) {
     return; // Nothing to save
   }
 
   // 2. Prepare annotation data
-  const severityInfo = getSeverityInfo(newAnnotation.value.severity);
+  const severityInfo = getSeverityInfo(
+    newAnnotation.value?.severity || 'medium'
+  );
   const title = hasContent
     ? newAnnotation.value.content.trim().substring(0, 50) +
       (newAnnotation.value.content.trim().length > 50 ? '...' : '')
     : 'Drawing Annotation';
 
   const annotationData = {
-    ...newAnnotation.value,
+    ...(newAnnotation.value || {}),
     color: severityInfo.color,
     title,
     content: hasContent
@@ -414,6 +417,16 @@ const cancelForm = () => {
   editingAnnotation.value = null;
   showDrawingSection.value = false;
   hasDrawingData.value = false;
+
+  // Reset newAnnotation to prevent null reference errors
+  newAnnotation.value = {
+    content: '',
+    severity: 'medium',
+    color: '#6b7280',
+    frame: props.currentFrame || 0,
+    annotationType: 'text',
+    drawingData: null,
+  };
   if (props.isDualMode) {
     // Complete any active drawing session before disabling
     if (props.dualVideoPlayer) {
@@ -463,6 +476,7 @@ const selectAnnotation = (annotation) => {
 };
 
 const onSeverityChange = () => {
+  if (!newAnnotation.value) return;
   const severityInfo = getSeverityInfo(newAnnotation.value.severity);
   newAnnotation.value.color = severityInfo.color;
   // Update drawing canvas severity too
@@ -758,12 +772,14 @@ defineExpose({
                 :key="severity.value"
                 type="button"
                 @click="
-                  newAnnotation.severity = severity.value;
-                  onSeverityChange();
+                  if (newAnnotation) {
+                    newAnnotation.severity = severity.value;
+                    onSeverityChange();
+                  }
                 "
                 :class="[
                   'flex items-center justify-center space-x-1 px-3 py-2 rounded-md text-sm font-medium transition-colors border',
-                  newAnnotation.severity === severity.value
+                  newAnnotation?.severity === severity.value
                     ? 'border-gray-400 shadow-sm'
                     : 'border-gray-200 hover:border-gray-300',
                 ]"
@@ -799,6 +815,7 @@ defineExpose({
             <input
               v-model.number="newAnnotation.frame"
               type="number"
+              v-if="newAnnotation"
               min="0"
               step="1"
               class="input"
@@ -859,6 +876,7 @@ defineExpose({
               >Content <span class="text-red-500">*</span></label
             >
             <textarea
+              v-if="newAnnotation"
               v-model="newAnnotation.content"
               placeholder="Enter annotation content..."
               class="input resize-y min-h-[50px]"
@@ -1263,24 +1281,7 @@ defineExpose({
           </div>
         </div>
 
-        <!-- Hidden Comment Section for real-time subscriptions when not expanded -->
-        <CommentSection
-          v-if="!isCommentsExpanded(annotation.id)"
-          v-show="false"
-          :annotation-id="annotation.id"
-          :read-only="true"
-          :current-user="user"
-          :video-id="videoId"
-          style="
-            pointer-events: none;
-            position: absolute;
-            visibility: hidden;
-            z-index: -1;
-          "
-          @comment-added="handleCommentAdded"
-          @comment-updated="handleCommentUpdated"
-          @comment-deleted="handleCommentDeleted"
-        />
+        <!-- Removed hidden CommentSection to fix component reference issues -->
       </div>
     </div>
 

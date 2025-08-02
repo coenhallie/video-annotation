@@ -24,10 +24,6 @@ const props = defineProps({
     type: Number,
     default: 30,
   },
-  videoAState: {
-    type: Object,
-    default: () => ({ fps: -1, duration: 0 }),
-  },
   // Video B timeline props
   videoBCurrentTime: {
     type: Number,
@@ -48,10 +44,6 @@ const props = defineProps({
   videoBFps: {
     type: Number,
     default: 30,
-  },
-  videoBState: {
-    type: Object,
-    default: () => ({ fps: -1, duration: 0 }),
   },
   // Shared props
   annotations: {

@@ -840,8 +840,6 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { ProjectService } from '../services/projectService.ts';
-import { VideoService } from '../services/videoService.ts';
-import { AnnotationService } from '../services/annotationService.ts';
 import { ComparisonVideoService } from '../services/comparisonVideoService.ts';
 import { CommentService } from '../services/commentService.ts';
 import { useAuth } from '../composables/useAuth.ts';

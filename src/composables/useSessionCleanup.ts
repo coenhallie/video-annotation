@@ -127,8 +127,11 @@ export function useSessionCleanup() {
         try {
           options.drawingCanvas.clearAllDrawings();
           options.drawingCanvas.disableDrawingMode();
-          // Reset drawing state
-          if (options.drawingCanvas.state) {
+          // Reset drawing state - add null checks
+          if (
+            options.drawingCanvas.state &&
+            options.drawingCanvas.state.value
+          ) {
             options.drawingCanvas.state.value.activeDrawing = null;
             options.drawingCanvas.state.value.isLoadingDrawings = false;
           }
