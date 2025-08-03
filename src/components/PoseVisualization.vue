@@ -11,7 +11,10 @@
       preserveAspectRatio="none"
     >
       <!-- Skeleton connections -->
-      <g v-if="showSkeleton" class="pose-skeleton">
+      <g
+        v-if="showSkeleton"
+        class="pose-skeleton"
+      >
         <line
           v-for="(connection, index) in filteredConnections"
           :key="`connection-${index}`"
@@ -27,7 +30,10 @@
       </g>
 
       <!-- Landmark points -->
-      <g v-if="showLandmarks" class="pose-landmarks">
+      <g
+        v-if="showLandmarks"
+        class="pose-landmarks"
+      >
         <circle
           v-for="(landmark, index) in currentPose.landmarks"
           v-show="isKeypointSelected(index)"
@@ -43,7 +49,10 @@
       </g>
 
       <!-- Landmark labels (optional) -->
-      <g v-if="showLabels" class="pose-labels">
+      <g
+        v-if="showLabels"
+        class="pose-labels"
+      >
         <text
           v-for="(landmark, index) in currentPose.landmarks"
           v-show="isKeypointSelected(index)"
@@ -64,8 +73,8 @@
       <g
         v-if="
           showCenterOfMass &&
-          speedMetrics &&
-          speedMetrics.centerOfMassNormalized
+            speedMetrics &&
+            speedMetrics.centerOfMassNormalized
         "
         class="center-of-mass"
       >

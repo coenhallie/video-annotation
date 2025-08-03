@@ -24,7 +24,7 @@ import { useRealtimeAnnotations } from './composables/useRealtimeAnnotations.ts'
 import { useVideoSession } from './composables/useVideoSession.ts';
 import { useDrawingCanvas } from './composables/useDrawingCanvas.ts';
 import { useComparisonVideoWorkflow } from './composables/useComparisonVideoWorkflow.ts';
-import { useDualVideoPlayer } from './composables/useDualVideoPlayer.js';
+import { useDualVideoPlayer } from './composables/useDualVideoPlayer.ts';
 import { usePoseLandmarker } from './composables/usePoseLandmarker.js';
 import { useSessionCleanup } from './composables/useSessionCleanup.ts';
 import { VideoService } from './services/videoService.ts';
@@ -143,9 +143,21 @@ const fps = computed({
   set: (value) => (videoState.fps = value),
 });
 
+// Drawing functionality
+const drawingCanvas = useDrawingCanvas(); // For single video mode
+const drawingCanvasA = useDrawingCanvas(); // For dual video mode - Video A
+const drawingCanvasB = useDrawingCanvas(); // For dual video mode - Video B
+
 // Dual video player state
 const dualVideoPlayer = useDualVideoPlayer();
 const dualVideoPlayerRef = ref(null);
+
+// Connect drawing canvas instances to dual video player
+dualVideoPlayer.drawingCanvasA.value = drawingCanvasA;
+dualVideoPlayer.drawingCanvasB.value = drawingCanvasB;
+
+// Note: Drawing canvas refs will be set by UnifiedVideoPlayer component
+// via the watcher in UnifiedVideoPlayer.vue lines 1708-1721
 
 // Annotations data
 const {
@@ -238,11 +250,143 @@ const {
   refreshCommentPermissions,
 } = useVideoSession(currentVideoId);
 
-// Drawing functionality
-const drawingCanvas = useDrawingCanvas();
-
 // Comparison video workflow
 const comparisonWorkflow = useComparisonVideoWorkflow();
+
+/**
+ * Single source-of-truth watcher to sync dual video sources from comparison workflow.
+ * Cleaned up duplicates and ensured watch is imported once.
+ */
+watch(
+  () => comparisonWorkflow.currentComparison.value,
+  async (comp) => {
+    console.log('🧭 [App] comparison.currentComparison changed:', {
+      hasComp: !!comp,
+      videoAId: comp?.videoAId,
+      videoBId: comp?.videoBId,
+      hasVideoA: !!comp?.videoA,
+      hasVideoB: !!comp?.videoB,
+    });
+
+    if (!dualVideoPlayer) return;
+
+    // Clear sources when no comparison
+    if (!comp) {
+      if (dualVideoPlayer.setVideoSources) {
+        dualVideoPlayer.setVideoSources(null, null);
+      } else {
+        if (dualVideoPlayer.videoAUrl) dualVideoPlayer.videoAUrl.value = '';
+        if (dualVideoPlayer.videoBUrl) dualVideoPlayer.videoBUrl.value = '';
+      }
+      return;
+    }
+
+    let videoA = comp.videoA || { id: comp.videoAId };
+    let videoB = comp.videoB || { id: comp.videoBId };
+
+    const ensureVideoHydrated = async (vid) => {
+      if (vid && (vid.url || vid.filePath)) return vid;
+      try {
+        const { data, error } = await supabase
+          .from('videos')
+          .select('*')
+          .eq('id', vid?.id)
+          .single();
+        if (error) {
+          console.warn('⚠️ [App] Hydrate watcher: failed for', vid?.id, error);
+          return vid || { id: null };
+        }
+        return data || vid;
+      } catch (e) {
+        console.warn('⚠️ [App] Hydrate watcher: exception for', vid?.id, e);
+        return vid || { id: null };
+      }
+    };
+
+    if (!videoA?.url && !videoA?.filePath)
+      videoA = await ensureVideoHydrated(videoA);
+    if (!videoB?.url && !videoB?.filePath)
+      videoB = await ensureVideoHydrated(videoB);
+
+    const aUrl = getVideoUrl(videoA) || '';
+    const bUrl = getVideoUrl(videoB) || '';
+    console.log('🧭 [App] Watcher computed URLs:', { aUrl, bUrl });
+
+    if (dualVideoPlayer.setVideoSources) {
+      dualVideoPlayer.setVideoSources(
+        { url: aUrl, id: videoA.id || comp.videoAId || 'video-a' },
+        { url: bUrl, id: videoB.id || comp.videoBId || 'video-b' }
+      );
+    } else {
+      if (dualVideoPlayer.videoAUrl) dualVideoPlayer.videoAUrl.value = aUrl;
+      if (dualVideoPlayer.videoBUrl) dualVideoPlayer.videoBUrl.value = bUrl;
+      if (dualVideoPlayer.videoAId)
+        dualVideoPlayer.videoAId.value =
+          videoA.id || comp.videoAId || 'video-a';
+      if (dualVideoPlayer.videoBId)
+        dualVideoPlayer.videoBId.value =
+          videoB.id || comp.videoBId || 'video-b';
+    }
+  },
+  { immediate: true, deep: true }
+);
+
+// Keep UnifiedVideoPlayer dual sources in sync with workflow
+watch(
+  () => comparisonWorkflow.currentComparison.value,
+  async (comp) => {
+    console.log('🧭 [App] Secondary watcher currentComparison changed');
+    if (!comp) {
+      if (dualVideoPlayer?.setVideoSources) {
+        dualVideoPlayer.setVideoSources(null, null);
+      } else {
+        if (dualVideoPlayer?.videoAUrl) dualVideoPlayer.videoAUrl.value = '';
+        if (dualVideoPlayer?.videoBUrl) dualVideoPlayer.videoBUrl.value = '';
+      }
+      return;
+    }
+
+    let a = comp.videoA || { id: comp.videoAId };
+    let b = comp.videoB || { id: comp.videoBId };
+
+    const ensureVideoHydrated = async (vid) => {
+      if (vid && (vid.url || vid.filePath)) return vid;
+      try {
+        const { data, error } = await supabase
+          .from('videos')
+          .select('*')
+          .eq('id', vid?.id)
+          .single();
+        if (error) return vid || { id: null };
+        return data || vid;
+      } catch {
+        return vid || { id: null };
+      }
+    };
+
+    if (!a?.url && !a?.filePath) a = await ensureVideoHydrated(a);
+    if (!b?.url && !b?.filePath) b = await ensureVideoHydrated(b);
+
+    const aUrl = getVideoUrl(a) || '';
+    const bUrl = getVideoUrl(b) || '';
+    console.log('🧭 [App] Secondary watcher URLs:', { aUrl, bUrl });
+
+    if (dualVideoPlayer?.setVideoSources) {
+      dualVideoPlayer.setVideoSources(
+        { url: aUrl, id: a.id || comp.videoAId || 'video-a' },
+        { url: bUrl, id: b.id || comp.videoBId || 'video-b' }
+      );
+    } else {
+      if (dualVideoPlayer?.videoAUrl) dualVideoPlayer.videoAUrl.value = aUrl;
+      if (dualVideoPlayer?.videoBUrl) dualVideoPlayer.videoBUrl.value = bUrl;
+      if (dualVideoPlayer?.videoAId)
+        dualVideoPlayer.videoAId.value = a.id || comp.videoAId || 'video-a';
+      if (dualVideoPlayer?.videoBId)
+        dualVideoPlayer.videoBId.value = b.id || comp.videoBId || 'video-b';
+    }
+  },
+  { immediate: true, deep: true }
+);
 
 // Enhanced Pose detection functionality with fast movements optimization
 const poseLandmarker = usePoseLandmarker(); // For single video mode
@@ -593,26 +737,22 @@ const closeLoadModal = () => {
   isLoadModalVisible.value = false;
 };
 
-// Load video from the modal
-const loadVideo = (video, type = 'youtube') => {
+/**
+ * Load a single video (never attempts to drive comparison workflow here).
+ * Dual comparisons are loaded via handleProjectSelected with explicit mode switch.
+ */
+const loadVideo = (video, type = 'upload') => {
   videoLoaded.value = false;
   try {
-    // Determine the player mode based on whether we have a current comparison
-    const isDualMode = comparisonWorkflow.currentComparison.value !== null;
-    playerMode.value = isDualMode ? 'dual' : 'single';
+    // Always treat this helper as single video loader
+    playerMode.value = 'single';
 
-    if (playerMode.value === 'dual') {
-      // In dual mode, use the comparison workflow to load the video
-      if (comparisonWorkflow) {
-        comparisonWorkflow.loadVideo(video, type);
-      }
-    } else {
-      // In single mode, load the video directly
-      urlInput.value = video.url;
-      videoUrl.value = getVideoUrl(video); // Use the helper function here
-      videoId.value = video.id;
-      currentVideoType.value = type; // Keep track of the video type
-    }
+    // Load the video directly
+    urlInput.value = video.url;
+    videoUrl.value = getVideoUrl(video);
+    videoId.value = video.id;
+    currentVideoType.value = type;
+
     videoLoaded.value = false;
   } catch (error) {
     console.error('Failed to load video:', error);
@@ -644,10 +784,74 @@ const handleProjectSelected = async (project) => {
     // Load annotations for the video
     await loadAnnotations(project.video.id);
   } else if (project.projectType === 'dual') {
-    // This is a comparison project, so we need to load it into the comparison workflow
+    // Comparison project selected from modal: set mode first, then load
     if (comparisonWorkflow) {
+      console.log('🧭 [App] Selecting dual project: switching to dual mode');
+      playerMode.value = 'dual';
       await comparisonWorkflow.loadComparisonVideo(project.comparisonVideo);
-      playerMode.value = 'dual'; // Switch to dual mode
+
+      // After load, force-propagate URLs to dualVideoPlayer to avoid any missed watcher race
+      const comp = comparisonWorkflow.currentComparison.value;
+      console.log('🧭 [App] Loaded comparison:', {
+        id: comp?.id,
+        videoAId: comp?.videoAId,
+        videoBId: comp?.videoBId,
+        hasVideoA: !!comp?.videoA,
+        hasVideoB: !!comp?.videoB,
+        videoAUrl: comp?.videoA?.url,
+        videoBUrl: comp?.videoB?.url,
+        videoAPath: comp?.videoA?.filePath,
+        videoBPath: comp?.videoB?.filePath,
+      });
+
+      if (comp && dualVideoPlayer) {
+        const ensureVideoHydrated = async (vid) => {
+          if (vid && (vid.url || vid.filePath)) return vid;
+          try {
+            const { data, error } = await supabase
+              .from('videos')
+              .select('*')
+              .eq('id', vid?.id)
+              .single();
+            if (error) {
+              console.warn(
+                '⚠️ [App] Failed to hydrate video by id:',
+                vid?.id,
+                error
+              );
+              return vid || { id: null };
+            }
+            return data || vid;
+          } catch (e) {
+            console.warn('⚠️ [App] Exception hydrating video:', vid?.id, e);
+            return vid || { id: null };
+          }
+        };
+
+        let a = comp.videoA || { id: comp.videoAId };
+        let b = comp.videoB || { id: comp.videoBId };
+        if (!a?.url && !a?.filePath) a = await ensureVideoHydrated(a);
+        if (!b?.url && !b?.filePath) b = await ensureVideoHydrated(b);
+
+        const aUrl = getVideoUrl(a) || '';
+        const bUrl = getVideoUrl(b) || '';
+        console.log('🧭 [App] Computed dual URLs:', { aUrl, bUrl });
+
+        if (dualVideoPlayer.setVideoSources) {
+          dualVideoPlayer.setVideoSources(
+            { url: aUrl, id: a.id || comp.videoAId || 'video-a' },
+            { url: bUrl, id: b.id || comp.videoBId || 'video-b' }
+          );
+        } else {
+          if (dualVideoPlayer.videoAUrl) dualVideoPlayer.videoAUrl.value = aUrl;
+          if (dualVideoPlayer.videoBUrl) dualVideoPlayer.videoBUrl.value = bUrl;
+          if (dualVideoPlayer.videoAId)
+            dualVideoPlayer.videoAId.value = a.id || comp.videoAId || 'video-a';
+          if (dualVideoPlayer.videoBId)
+            dualVideoPlayer.videoBId.value = b.id || comp.videoBId || 'video-b';
+        }
+        console.log('🧭 [App] Applied dual URLs to player');
+      }
     }
   }
 
@@ -781,26 +985,29 @@ const currentPoseLandmarker = computed(() => {
   return poseLandmarkerB;
 });
 
+// Safely guard nested refs for initial render before landmarker is ready
 const isROICalibrating = computed(
-  () => currentPoseLandmarker.value.isROICalibrating.value
+  () => currentPoseLandmarker?.value?.isROICalibrating?.value ?? false
 );
 
-const roiPoints = computed(() => currentPoseLandmarker.value.roiPoints.value);
+const roiPoints = computed(
+  () => currentPoseLandmarker?.value?.roiPoints?.value ?? []
+);
 
 const handleSetROI = (points) => {
-  currentPoseLandmarker.value.setROI(points);
+  currentPoseLandmarker?.value?.setROI?.(points);
 };
 
 const handleResetROI = () => {
-  currentPoseLandmarker.value.resetROI();
+  currentPoseLandmarker?.value?.resetROI?.();
 };
 
 const handleToggleROICalibration = () => {
-  currentPoseLandmarker.value.toggleROICalibration();
+  currentPoseLandmarker?.value?.toggleROICalibration?.();
 };
 
 const handleKeypointSelection = (keypoint, isSelected) => {
-  currentPoseLandmarker.value.updateSelectedKeypoints(keypoint, isSelected);
+  currentPoseLandmarker?.value?.updateSelectedKeypoints?.(keypoint, isSelected);
 };
 
 // Calibration Controls
@@ -909,28 +1116,30 @@ watch(
             stroke-linejoin="round"
             stroke-width="2"
             d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.314 16.5c-.77.833.192 2.5 1.732 2.5z"
-          ></path>
+          />
         </svg>
         <h2 class="text-lg font-semibold text-gray-900">
           Something went wrong
         </h2>
       </div>
 
-      <p class="text-gray-600 mb-4">{{ errorMessage }}</p>
+      <p class="text-gray-600 mb-4">
+        {{ errorMessage }}
+      </p>
 
       <div class="flex space-x-3">
         <button
+          class="flex-1 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors"
           @click="
             hasError = false;
             errorMessage = '';
           "
-          class="flex-1 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors"
         >
           Try Again
         </button>
         <button
-          @click="window.location.reload()"
           class="flex-1 bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700 transition-colors"
+          @click="window.location.reload()"
         >
           Reload Page
         </button>
@@ -946,7 +1155,7 @@ watch(
     <div class="text-center">
       <div
         class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"
-      ></div>
+      />
       <p class="text-gray-600">Loading...</p>
     </div>
   </div>
@@ -977,9 +1186,9 @@ watch(
         >
           <!-- Load Previous Videos Button -->
           <button
-            @click="openLoadModal"
             class="p-2 text-gray-600 hover:text-green-600 hover:bg-gray-50 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
             title="Upload video"
+            @click="openLoadModal"
           >
             <svg
               class="w-5 h-5"
@@ -992,16 +1201,16 @@ watch(
                 stroke-linejoin="round"
                 stroke-width="2"
                 d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
-              ></path>
+              />
             </svg>
           </button>
 
           <!-- Share Video Button -->
           <button
-            @click="openShareModal"
             :disabled="!canShare"
             class="p-2 text-gray-600 hover:text-purple-600 hover:bg-gray-50 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:text-gray-300 disabled:cursor-not-allowed disabled:hover:bg-transparent"
             title="Share current video"
+            @click="openShareModal"
           >
             <svg
               class="w-5 h-5"
@@ -1014,7 +1223,7 @@ watch(
                 stroke-linejoin="round"
                 stroke-width="2"
                 d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z"
-              ></path>
+              />
             </svg>
           </button>
         </div>
@@ -1035,7 +1244,7 @@ watch(
               stroke-linejoin="round"
               stroke-width="2"
               d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z"
-            ></path>
+            />
           </svg>
           <span class="font-medium">
             {{
@@ -1060,13 +1269,13 @@ watch(
                 stroke-linejoin="round"
                 stroke-width="2"
                 d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-              ></path>
+              />
             </svg>
             <span class="font-medium">{{ user?.email || 'Loading...' }}</span>
           </div>
           <button
-            @click="signOut"
             class="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+            @click="signOut"
           >
             Sign Out
           </button>
@@ -1089,14 +1298,26 @@ watch(
                 :video-url="videoUrl"
                 :video-id="videoId"
                 :drawing-canvas="drawingCanvas"
-                :video-a-url="dualVideoPlayer?.videoAUrl.value"
-                :video-a-id="dualVideoPlayer?.videoAId.value || 'video-a'"
-                :video-b-url="dualVideoPlayer?.videoBUrl.value"
-                :video-b-id="dualVideoPlayer?.videoBId.value || 'video-b'"
+                :video-a-url="dualVideoPlayer?.videoAUrl?.value || ''"
+                :video-a-id="dualVideoPlayer?.videoAId?.value || 'video-a'"
+                :video-b-url="dualVideoPlayer?.videoBUrl?.value || ''"
+                :video-b-id="dualVideoPlayer?.videoBId?.value || 'video-b'"
                 :drawing-canvas-a="dualVideoPlayer?.drawingCanvasA"
                 :drawing-canvas-b="dualVideoPlayer?.drawingCanvasB"
-                :video-a-state="dualVideoPlayer?.videoAState"
-                :video-b-state="dualVideoPlayer?.videoBState"
+                :video-a-state="
+                  dualVideoPlayer?.videoAState || {
+                    fps: 30,
+                    duration: 0,
+                    totalFrames: 0,
+                  }
+                "
+                :video-b-state="
+                  dualVideoPlayer?.videoBState || {
+                    fps: 30,
+                    duration: 0,
+                    totalFrames: 0,
+                  }
+                "
                 :dual-video-player="dualVideoPlayer"
                 :project-id="
                   comparisonWorkflow.currentComparison.value?.project_id
@@ -1135,9 +1356,9 @@ watch(
                 :show-velocity-components="false"
                 :show-co-m-coordinates="false"
                 :show-toggle-control="true"
+                :video-loaded="videoLoaded"
                 @speed-visualization-toggled="handleSpeedVisualizationToggled"
                 @chart-toggled="handleChartToggled"
-                :video-loaded="videoLoaded"
               />
             </div>
           </div>
@@ -1167,37 +1388,37 @@ watch(
           <DualTimeline
             v-else-if="playerMode === 'dual'"
             :video-a-current-time="
-              dualVideoPlayer?.videoACurrentTime?.value || 0
+              dualVideoPlayer?.videoACurrentTime?.value ?? 0
             "
-            :video-a-duration="dualVideoPlayer?.videoAState?.duration || 0"
+            :video-a-duration="dualVideoPlayer?.videoAState?.duration ?? 0"
             :video-a-current-frame="
-              dualVideoPlayer?.videoACurrentFrame?.value || 0
+              dualVideoPlayer?.videoACurrentFrame?.value ?? 0
             "
             :video-a-total-frames="
-              dualVideoPlayer?.videoAState?.totalFrames || 0
+              dualVideoPlayer?.videoAState?.totalFrames ?? 0
             "
-            :video-a-fps="dualVideoPlayer?.videoAState?.fps || 30"
+            :video-a-fps="dualVideoPlayer?.videoAState?.fps ?? 30"
             :video-a-state="
               dualVideoPlayer?.videoAState || { fps: 30, duration: 0 }
             "
             :video-b-current-time="
-              dualVideoPlayer?.videoBCurrentTime?.value || 0
+              dualVideoPlayer?.videoBCurrentTime?.value ?? 0
             "
-            :video-b-duration="dualVideoPlayer?.videoBState?.duration || 0"
+            :video-b-duration="dualVideoPlayer?.videoBState?.duration ?? 0"
             :video-b-current-frame="
-              dualVideoPlayer?.videoBCurrentFrame?.value || 0
+              dualVideoPlayer?.videoBCurrentFrame?.value ?? 0
             "
             :video-b-total-frames="
-              dualVideoPlayer?.videoBState?.totalFrames || 0
+              dualVideoPlayer?.videoBState?.totalFrames ?? 0
             "
-            :video-b-fps="dualVideoPlayer?.videoBState?.fps || 30"
+            :video-b-fps="dualVideoPlayer?.videoBState?.fps ?? 30"
             :video-b-state="
               dualVideoPlayer?.videoBState || { fps: 30, duration: 0 }
             "
             :annotations="annotations"
             :selected-annotation="selectedAnnotation"
-            :video-a-playing="dualVideoPlayer?.videoAIsPlaying?.value || false"
-            :video-b-playing="dualVideoPlayer?.videoBIsPlaying?.value || false"
+            :video-a-playing="dualVideoPlayer?.videoAIsPlaying?.value ?? false"
+            :video-b-playing="dualVideoPlayer?.videoBIsPlaying?.value ?? false"
             @seek-video-a="handleSeekVideoA"
             @seek-video-b="handleSeekVideoB"
             @annotation-click="handleAnnotationClick"
@@ -1220,8 +1441,8 @@ watch(
           <!-- Toggle Button -->
           <div class="p-3 bg-gray-50 border-b border-gray-200">
             <button
-              @click="toggleCalibrationControls"
               class="flex items-center justify-between w-full text-left text-sm font-medium text-gray-700 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded-md p-2 hover:bg-gray-100 transition-colors"
+              @click="toggleCalibrationControls"
             >
               <span class="flex items-center">
                 <svg
@@ -1235,7 +1456,7 @@ watch(
                     stroke-linejoin="round"
                     stroke-width="2"
                     d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4"
-                  ></path>
+                  />
                 </svg>
                 Speed Calibration
               </span>
@@ -1253,7 +1474,7 @@ watch(
                   stroke-linejoin="round"
                   stroke-width="2"
                   d="M19 9l-7 7-7-7"
-                ></path>
+                />
               </svg>
             </button>
           </div>
@@ -1289,8 +1510,8 @@ watch(
             :video-id="currentVideoId"
             :loading="annotationsLoading"
             :is-dual-mode="playerMode === 'dual'"
-            :drawing-canvas-a="dualVideoPlayer?.drawingCanvasA || null"
-            :drawing-canvas-b="dualVideoPlayer?.drawingCanvasB || null"
+            :drawing-canvas-a="dualVideoPlayer?.drawingCanvasA?.value || null"
+            :drawing-canvas-b="dualVideoPlayer?.drawingCanvasB?.value || null"
             :dual-video-player="dualVideoPlayer || null"
             :comment-permissions="commentPermissions || {}"
             :anonymous-session="anonymousSession || null"
@@ -1340,7 +1561,7 @@ watch(
                   stroke-linejoin="round"
                   stroke-width="2"
                   d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4"
-                ></path>
+                />
               </svg>
               <p class="text-sm">Initializing annotation panel...</p>
             </div>

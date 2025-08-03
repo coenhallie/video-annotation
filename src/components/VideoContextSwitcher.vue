@@ -1,27 +1,29 @@
 <template>
   <div class="video-context-switcher">
     <div class="flex items-center justify-between mb-3">
-      <h3 class="text-sm font-medium text-gray-900">Video Context</h3>
+      <h3 class="text-sm font-medium text-gray-900">
+        Video Context
+      </h3>
       <div class="flex items-center space-x-1 bg-gray-100 rounded-md p-1">
         <button
-          @click="setActiveVideo('A')"
           :class="[
             'px-3 py-1.5 rounded text-xs font-medium transition-colors',
             activeVideo === 'A'
               ? 'bg-blue-600 text-white shadow-sm'
               : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50',
           ]"
+          @click="setActiveVideo('A')"
         >
           Video A
         </button>
         <button
-          @click="setActiveVideo('B')"
           :class="[
             'px-3 py-1.5 rounded text-xs font-medium transition-colors',
             activeVideo === 'B'
               ? 'bg-blue-600 text-white shadow-sm'
               : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50',
           ]"
+          @click="setActiveVideo('B')"
         >
           Video B
         </button>
@@ -35,14 +37,17 @@
           'w-2 h-2 rounded-full',
           activeVideo === 'A' ? 'bg-blue-600' : 'bg-green-600',
         ]"
-      ></div>
+      />
       <span>
         Annotating: <strong>Video {{ activeVideo }}</strong>
       </span>
     </div>
 
     <!-- Video info if available -->
-    <div v-if="videoInfo" class="text-xs text-gray-500 space-y-1">
+    <div
+      v-if="videoInfo"
+      class="text-xs text-gray-500 space-y-1"
+    >
       <div v-if="videoInfo.title">
         <span class="font-medium">{{ activeVideo }}:</span>
         {{ videoInfo.title }}

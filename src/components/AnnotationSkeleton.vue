@@ -4,8 +4,8 @@
     <div
       class="sticky top-0 z-10 flex justify-between items-center p-2 border-b border-gray-200 bg-white"
     >
-      <div class="h-4 bg-gray-200 w-32 animate-pulse skeleton-rounded"></div>
-      <div class="h-8 bg-gray-200 w-16 animate-pulse skeleton-rounded"></div>
+      <div class="h-4 bg-gray-200 w-32 animate-pulse skeleton-rounded" />
+      <div class="h-8 bg-gray-200 w-16 animate-pulse skeleton-rounded" />
     </div>
 
     <!-- Annotations List Skeleton -->
@@ -22,11 +22,11 @@
             <!-- Severity icon skeleton -->
             <div
               class="w-3 h-3 bg-gray-200 animate-pulse skeleton-circle"
-            ></div>
+            />
             <!-- Severity label skeleton -->
             <div
               class="h-3 bg-gray-200 w-12 animate-pulse skeleton-rounded"
-            ></div>
+            />
             <!-- Comment count skeleton (sometimes visible) -->
             <div
               v-if="Math.random() > 0.5"
@@ -34,10 +34,10 @@
             >
               <div
                 class="w-3 h-3 bg-gray-200 animate-pulse skeleton-rounded"
-              ></div>
+              />
               <div
                 class="h-3 bg-gray-200 w-3 animate-pulse skeleton-rounded"
-              ></div>
+              />
             </div>
           </div>
           <!-- Timestamp skeleton -->
@@ -46,10 +46,10 @@
           >
             <div
               class="h-3 bg-gray-200 w-8 animate-pulse skeleton-rounded"
-            ></div>
+            />
             <div
               class="h-2 bg-gray-200 w-12 animate-pulse skeleton-rounded"
-            ></div>
+            />
           </div>
         </div>
 
@@ -60,7 +60,7 @@
             <div
               class="h-4 bg-gray-200 animate-pulse skeleton-rounded"
               :style="{ width: `${Math.random() * 100 + 80}px` }"
-            ></div>
+            />
             <!-- Drawing indicator skeleton (sometimes visible) -->
             <div
               v-if="Math.random() > 0.7"
@@ -68,10 +68,10 @@
             >
               <div
                 class="w-3 h-3 bg-gray-200 animate-pulse skeleton-rounded"
-              ></div>
+              />
               <div
                 class="h-3 bg-gray-200 w-12 animate-pulse skeleton-rounded"
-              ></div>
+              />
             </div>
           </div>
           <!-- Content skeleton -->
@@ -79,12 +79,12 @@
             <div
               class="h-3 bg-gray-200 animate-pulse skeleton-rounded"
               :style="{ width: `${Math.random() * 40 + 60}%` }"
-            ></div>
+            />
             <div
               v-if="Math.random() > 0.4"
               class="h-3 bg-gray-200 animate-pulse skeleton-rounded"
               :style="{ width: `${Math.random() * 30 + 40}%` }"
-            ></div>
+            />
           </div>
         </div>
 
@@ -94,20 +94,20 @@
           <div class="flex items-center space-x-1">
             <div
               class="w-3 h-3 bg-gray-200 animate-pulse skeleton-rounded"
-            ></div>
+            />
             <div
               class="h-3 bg-gray-200 w-16 animate-pulse skeleton-rounded"
-            ></div>
+            />
           </div>
 
           <!-- Edit/Delete buttons skeleton -->
           <div class="flex space-x-1">
             <div
               class="w-6 h-6 bg-gray-200 animate-pulse skeleton-rounded"
-            ></div>
+            />
             <div
               class="w-6 h-6 bg-gray-200 animate-pulse skeleton-rounded"
-            ></div>
+            />
           </div>
         </div>
 
@@ -118,11 +118,11 @@
         >
           <!-- Comment form skeleton -->
           <div class="space-y-2">
-            <div class="h-16 bg-gray-100 animate-pulse skeleton-rounded"></div>
+            <div class="h-16 bg-gray-100 animate-pulse skeleton-rounded" />
             <div class="flex justify-end">
               <div
                 class="h-6 bg-gray-200 w-16 animate-pulse skeleton-rounded"
-              ></div>
+              />
             </div>
           </div>
 
@@ -135,15 +135,15 @@
             <div class="flex justify-between items-start">
               <div
                 class="h-3 bg-gray-200 w-20 animate-pulse skeleton-rounded"
-              ></div>
+              />
               <div
                 class="h-2 bg-gray-200 w-12 animate-pulse skeleton-rounded"
-              ></div>
+              />
             </div>
             <div
               class="h-3 bg-gray-200 animate-pulse skeleton-rounded"
               :style="{ width: `${Math.random() * 50 + 50}%` }"
-            ></div>
+            />
           </div>
         </div>
       </div>
@@ -152,12 +152,12 @@
     <!-- Panel Footer Skeleton -->
     <div class="p-2 border-t border-gray-200 bg-gray-50">
       <div class="flex justify-between text-xs">
-        <div class="h-3 bg-gray-200 w-20 animate-pulse skeleton-rounded"></div>
+        <div class="h-3 bg-gray-200 w-20 animate-pulse skeleton-rounded" />
         <div class="flex flex-col items-end space-y-1">
-          <div class="h-3 bg-gray-200 w-8 animate-pulse skeleton-rounded"></div>
+          <div class="h-3 bg-gray-200 w-8 animate-pulse skeleton-rounded" />
           <div
             class="h-2 bg-gray-200 w-12 animate-pulse skeleton-rounded"
-          ></div>
+          />
         </div>
       </div>
     </div>

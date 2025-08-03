@@ -34,7 +34,11 @@ const getColorClasses = (type) => {
 
 <template>
   <div class="fixed top-4 right-4 z-50 space-y-2">
-    <TransitionGroup name="notification" tag="div" class="space-y-2">
+    <TransitionGroup
+      name="notification"
+      tag="div"
+      class="space-y-2"
+    >
       <div
         v-for="notification in notifications"
         :key="notification.id"
@@ -53,14 +57,17 @@ const getColorClasses = (type) => {
           <p class="text-sm font-medium">
             {{ notification.title }}
           </p>
-          <p v-if="notification.message" class="text-sm mt-1 opacity-90">
+          <p
+            v-if="notification.message"
+            class="text-sm mt-1 opacity-90"
+          >
             {{ notification.message }}
           </p>
         </div>
         <div class="flex-shrink-0">
           <button
-            @click="removeNotification(notification.id)"
             class="text-gray-400 hover:text-gray-600 transition-colors"
+            @click="removeNotification(notification.id)"
           >
             <span class="sr-only">Close</span>
             <svg

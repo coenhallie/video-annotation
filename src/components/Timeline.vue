@@ -1,5 +1,9 @@
-<script setup>
+<script setup lang="ts">
 import { ref, computed } from 'vue';
+import { logger } from '../utils/logger';
+
+/* Narrow annotation typing for the template to satisfy TS plugin */
+/** @typedef {{ id?: string; title?: string; timestamp: number; severity?: string }} TimelineAnnotation */
 
 const props = defineProps({
   currentTime: {
@@ -63,7 +67,7 @@ const timelineRef = ref(null);
 const isDragging = ref(false);
 
 // Debouncing for smooth scrubbing
-let seekTimeout = null;
+let seekTimeout: ReturnType<typeof setTimeout> | null = null;
 const SEEK_DEBOUNCE_MS = 16; // ~60fps for smooth scrubbing
 
 // Use time-based progress for consistency with video player
@@ -118,9 +122,12 @@ const handleTimelineClick = (event, immediate = false) => {
 
   // Use debounced seeking for smooth scrubbing, immediate for clicks
   debouncedSeek(newTime, immediate);
+  if (import.meta.env.DEV) {
+    logger.debug('[Timeline] seek', { newTime, immediate });
+  }
 };
 
-const handleTimelineMouseDown = (event) => {
+const handleTimelineMouseDown = (event: MouseEvent): void => {
   if (!props.duration) {
     return;
   }
@@ -166,7 +173,9 @@ const getSeverityColor = (severity) => {
 };
 
 // Optimized annotation positioning - use time-based for consistency
-const getAnnotationStyle = (annotation) => {
+/* (removed duplicate definition) */
+
+const getAnnotationStyle = (annotation /** @type {TimelineAnnotation} */) => {
   if (!props.duration) return { display: 'none' };
 
   // Always use time-based positioning for consistency with video player
@@ -178,14 +187,17 @@ const getAnnotationStyle = (annotation) => {
   };
 };
 
-const handleAnnotationClick = (annotation, event) => {
+const handleAnnotationClick = (
+  annotation: TimelineAnnotation,
+  event: MouseEvent
+): void => {
   event.stopPropagation();
   emit('annotation-click', annotation);
   emit('seek-to-time', annotation.timestamp);
 };
 
 // Play/pause button handlers
-const handlePlayPause = () => {
+const handlePlayPause = (): void => {
   if (props.isPlaying) {
     emit('pause');
   } else {
@@ -271,24 +283,26 @@ const timeMarkers = computed(() => {
 
         <!-- Annotations -->
         <div
-          v-for="annotation in annotations"
-          :key="annotation.id"
+          v-for="annotation in (annotations as unknown as TimelineAnnotation[])"
+          :key="annotation?.id ?? `${annotation.timestamp}`"
           class="absolute top-0 bottom-0 cursor-pointer transition-all duration-200 z-5 hover:scale-110"
           :class="{
-            'z-9': selectedAnnotation?.id === annotation.id,
+            'z-9': (selectedAnnotation as any)?.id === (annotation as any)?.id,
           }"
-          :style="getAnnotationStyle(annotation)"
-          :title="`${annotation.title} (${formatTime(annotation.timestamp)})`"
-          @click="handleAnnotationClick(annotation, $event)"
+          :style="getAnnotationStyle(annotation as TimelineAnnotation)"
+          :title="`${(annotation as any)?.title ?? 'Annotation'} (${formatTime((annotation as TimelineAnnotation).timestamp)})`"
+          @click="
+            handleAnnotationClick(annotation as TimelineAnnotation, $event)
+          "
         >
           <!-- Circle shape for annotations -->
           <div
             class="w-4 h-4 rounded-full border-2 border-white shadow-lg absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 opacity-90"
             :class="{
               'border-yellow-400 shadow-yellow-400/50 opacity-100 scale-110':
-                selectedAnnotation?.id === annotation.id,
+                (selectedAnnotation as any)?.id === (annotation as any)?.id,
             }"
-            :style="{ backgroundColor: getSeverityColor(annotation.severity) }"
+            :style="{ backgroundColor: getSeverityColor((annotation as any)?.severity) }"
           ></div>
         </div>
       </div>

@@ -25,7 +25,10 @@
             Math.round(currentROI.height * canvasHeight)
           }}
         </div>
-        <div v-if="showConfidenceInLabel" class="text-xs opacity-90">
+        <div
+          v-if="showConfidenceInLabel"
+          class="text-xs opacity-90"
+        >
           Confidence: {{ (roiConfidence * 100).toFixed(1) }}% | Stability:
           {{ (stabilityScore * 100).toFixed(1) }}%
         </div>
@@ -36,29 +39,29 @@
         v-if="predictedROI && showPrediction"
         class="predicted-roi absolute border border-dashed opacity-50"
         :style="predictedROIStyle"
-      ></div>
+      />
 
       <!-- Resize handles -->
       <div
         class="resize-handle absolute w-2 h-2 -top-1 -left-1 cursor-nw-resize"
         :class="handleClasses"
         @mousedown.stop="startResize('nw')"
-      ></div>
+      />
       <div
         class="resize-handle absolute w-2 h-2 -top-1 -right-1 cursor-ne-resize"
         :class="handleClasses"
         @mousedown.stop="startResize('ne')"
-      ></div>
+      />
       <div
         class="resize-handle absolute w-2 h-2 -bottom-1 -left-1 cursor-sw-resize"
         :class="handleClasses"
         @mousedown.stop="startResize('sw')"
-      ></div>
+      />
       <div
         class="resize-handle absolute w-2 h-2 -bottom-1 -right-1 cursor-se-resize"
         :class="handleClasses"
         @mousedown.stop="startResize('se')"
-      ></div>
+      />
 
       <!-- Control buttons -->
       <div class="roi-controls absolute -top-8 -right-8 flex gap-1">
@@ -68,8 +71,8 @@
           :class="
             adaptiveROI ? 'bg-green-500 text-white' : 'bg-gray-500 text-white'
           "
-          @click.stop="toggleAdaptiveROI"
           title="Toggle Adaptive ROI"
+          @click.stop="toggleAdaptiveROI"
         >
           A
         </button>
@@ -82,8 +85,8 @@
               ? 'bg-blue-500 text-white'
               : 'bg-gray-500 text-white'
           "
-          @click.stop="toggleMotionPrediction"
           title="Toggle Motion Prediction"
+          @click.stop="toggleMotionPrediction"
         >
           M
         </button>
@@ -91,8 +94,8 @@
         <!-- Delete button -->
         <button
           class="control-btn w-6 h-6 rounded text-xs bg-red-500 text-white hover:bg-red-600"
-          @click.stop="clearROI"
           title="Delete ROI"
+          @click.stop="clearROI"
         >
           ×
         </button>
@@ -100,13 +103,16 @@
     </div>
 
     <!-- ROI History visualization -->
-    <div v-if="showHistory && roiHistory.length > 1" class="roi-history">
+    <div
+      v-if="showHistory && roiHistory.length > 1"
+      class="roi-history"
+    >
       <div
         v-for="(historyItem, index) in recentHistory"
         :key="index"
         class="history-roi absolute border border-gray-400 pointer-events-none"
         :style="getHistoryROIStyle(historyItem, index)"
-      ></div>
+      />
     </div>
 
     <!-- Selection preview while drawing -->
@@ -114,14 +120,16 @@
       v-if="isSelecting && selectionBox"
       class="selection-preview absolute border-2 border-dashed border-blue-300"
       :style="selectionBoxStyle"
-    ></div>
+    />
 
     <!-- Enhanced instructions overlay -->
     <div
       v-if="!currentROI && showInstructions"
       class="instructions absolute top-4 left-4 bg-black bg-opacity-80 text-white px-4 py-3 rounded-lg text-sm max-w-sm"
     >
-      <div class="font-semibold mb-2 text-blue-300">Enhanced ROI Selection</div>
+      <div class="font-semibold mb-2 text-blue-300">
+        Enhanced ROI Selection
+      </div>
       <div class="text-xs space-y-1">
         <div>• Click and drag to select a region of interest</div>
         <div>• ROI will automatically adapt and track poses</div>
@@ -135,7 +143,9 @@
       v-if="currentROI && showStats"
       class="roi-stats absolute bottom-4 left-4 bg-black bg-opacity-80 text-white px-3 py-2 rounded text-xs max-w-xs"
     >
-      <div class="font-semibold mb-1 text-green-300">ROI Statistics</div>
+      <div class="font-semibold mb-1 text-green-300">
+        ROI Statistics
+      </div>
       <div class="grid grid-cols-2 gap-2 text-xs">
         <div>
           Size: {{ Math.round(currentROI.width * 100) }}% ×

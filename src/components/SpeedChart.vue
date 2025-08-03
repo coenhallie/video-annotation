@@ -4,7 +4,10 @@
     <div class="chart-settings">
       <label class="setting-item">
         <span class="text-sm text-gray-600">Duration:</span>
-        <select v-model="chartDuration" class="input text-xs">
+        <select
+          v-model="chartDuration"
+          class="input text-xs"
+        >
           <option :value="10">10s</option>
           <option :value="30">30s</option>
           <option :value="60">1min</option>
@@ -14,7 +17,10 @@
 
       <label class="setting-item">
         <span class="text-sm text-gray-600">Max Speed:</span>
-        <select v-model="maxSpeedScale" class="input text-xs">
+        <select
+          v-model="maxSpeedScale"
+          class="input text-xs"
+        >
           <option :value="1">1 m/s</option>
           <option :value="2">2 m/s</option>
           <option :value="5">5 m/s</option>
@@ -22,9 +28,9 @@
       </label>
 
       <button
-        @click="clearHistory"
         class="btn btn-ghost btn-sm text-gray-500 hover:text-red-600"
         title="Clear chart history"
+        @click="clearHistory"
       >
         <svg
           class="w-3 h-3"
@@ -59,7 +65,10 @@
         </div>
       </div>
 
-      <div class="chart-wrapper" ref="chartWrapper">
+      <div
+        ref="chartWrapper"
+        class="chart-wrapper"
+      >
         <svg
           ref="chartSvg"
           class="speed-chart-svg"
@@ -83,7 +92,11 @@
               />
             </pattern>
           </defs>
-          <rect width="100%" height="100%" fill="url(#grid)" />
+          <rect
+            width="100%"
+            height="100%"
+            fill="url(#grid)"
+          />
 
           <!-- Y-axis labels -->
           <g class="y-axis">
@@ -197,25 +210,15 @@
       <!-- Chart Stats -->
       <div class="chart-stats">
         <div class="stat-item">
-          <span class="text-xs text-gray-500 uppercase tracking-wide"
-            >Avg:</span
-          >
-          <span class="text-sm font-medium text-gray-900"
-            >{{ averageSpeed.toFixed(2) }} m/s</span
-          >
+          <span class="text-xs text-gray-500 uppercase tracking-wide">Avg:</span>
+          <span class="text-sm font-medium text-gray-900">{{ averageSpeed.toFixed(2) }} m/s</span>
         </div>
         <div class="stat-item">
-          <span class="text-xs text-gray-500 uppercase tracking-wide"
-            >Max:</span
-          >
-          <span class="text-sm font-medium text-gray-900"
-            >{{ maxSpeed.toFixed(2) }} m/s</span
-          >
+          <span class="text-xs text-gray-500 uppercase tracking-wide">Max:</span>
+          <span class="text-sm font-medium text-gray-900">{{ maxSpeed.toFixed(2) }} m/s</span>
         </div>
         <div class="stat-item">
-          <span class="text-xs text-gray-500 uppercase tracking-wide"
-            >Frame:</span
-          >
+          <span class="text-xs text-gray-500 uppercase tracking-wide">Frame:</span>
           <span class="text-sm font-medium text-gray-900">{{
             currentFrame
           }}</span>

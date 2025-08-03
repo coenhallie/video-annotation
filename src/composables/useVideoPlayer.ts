@@ -1,13 +1,77 @@
-import { ref, reactive, onUnmounted } from 'vue';
+/**
+ * useVideoPlayer.ts
+ * TypeScript conversion from JS preserving the public API.
+ */
+import { ref, reactive, onUnmounted, type Ref } from 'vue';
 
-export function useVideoPlayer() {
+export interface PlayerState {
+  isPlaying: Ref<boolean>;
+  currentTime: Ref<number>;
+  duration: Ref<number>;
+  isLoading: Ref<boolean>;
+  error: Ref<string | null>;
+  volume: Ref<number>;
+  isMuted: Ref<boolean>;
+  playbackSpeed: Ref<number>;
+  fps: Ref<number>;
+  currentFrame: Ref<number>;
+  totalFrames: Ref<number>;
+}
+
+export interface UseVideoPlayer {
+  // State
+  playerRef: Ref<HTMLVideoElement | null>;
+  playerState: PlayerState;
+  isPlaying: Ref<boolean>;
+  currentTime: Ref<number>;
+  duration: Ref<number>;
+  isLoading: Ref<boolean>;
+  error: Ref<string | null>;
+  volume: Ref<number>;
+  isMuted: Ref<boolean>;
+  playbackSpeed: Ref<number>;
+
+  // Frame-based state
+  fps: Ref<number>;
+  currentFrame: Ref<number>;
+  totalFrames: Ref<number>;
+
+  // Controls
+  play: () => Promise<void>;
+  pause: () => void;
+  togglePlayPause: () => void;
+  seekTo: (time: number) => void;
+  seekToNextFrame: () => void;
+  seekToPreviousFrame: () => void;
+  setVolume: (newVolume: number) => void;
+  toggleMute: () => void;
+  setPlaybackSpeed: (speed: number) => void;
+  increaseSpeed: () => void;
+  decreaseSpeed: () => void;
+  resetSpeed: () => void;
+
+  // Event listener management
+  startListening: () => void;
+  stopListening: () => void;
+
+  // Utilities
+  formatTime: (seconds: number) => string;
+  formatFrame: (frameNumber: number) => string;
+  formatFrameWithFPS: (frameNumber: number) => string;
+  timeToFrame: (timeInSeconds: number) => number;
+  frameToTime: (frameNumber: number) => number;
+  detectFPS: () => Promise<void>;
+  updateFrameFromTime: () => void;
+}
+
+export function useVideoPlayer(): UseVideoPlayer {
   // Player state
-  const playerRef = ref(null);
+  const playerRef = ref<HTMLVideoElement | null>(null);
   const isPlaying = ref(false);
   const currentTime = ref(0);
   const duration = ref(0);
   const isLoading = ref(false);
-  const error = ref(null);
+  const error = ref<string | null>(null);
   const volume = ref(1);
   const isMuted = ref(false);
   const playbackSpeed = ref(1); // Default playback speed (1x)
@@ -18,7 +82,7 @@ export function useVideoPlayer() {
   const totalFrames = ref(0);
 
   // Player state object for easier access
-  const playerState = reactive({
+  const playerState: PlayerState = reactive({
     isPlaying,
     currentTime,
     duration,
@@ -30,10 +94,10 @@ export function useVideoPlayer() {
     fps,
     currentFrame,
     totalFrames,
-  });
+  }) as unknown as PlayerState;
 
   // Frame calculation utilities
-  const timeToFrame = (timeInSeconds) => {
+  const timeToFrame = (timeInSeconds: number) => {
     // Ensure fps is positive to avoid negative frame calculations
     const validFps = fps.value > 0 ? fps.value : 30; // Default to 30 fps if not detected
     const calculatedFrame = Math.round(timeInSeconds * validFps);
@@ -41,8 +105,9 @@ export function useVideoPlayer() {
     return Math.max(0, calculatedFrame);
   };
 
-  const frameToTime = (frameNumber) => {
-    return frameNumber / fps.value;
+  const frameToTime = (frameNumber: number) => {
+    const validFps = fps.value > 0 ? fps.value : 30;
+    return frameNumber / validFps;
   };
 
   const detectFPS = async () => {
@@ -62,18 +127,19 @@ export function useVideoPlayer() {
         let detectedFPS = 30; // fallback
 
         // Method 1: Try to use getVideoPlaybackQuality if available (Chrome/Edge)
-        if (video.getVideoPlaybackQuality) {
+        // @ts-ignore - getVideoPlaybackQuality is not in the standard TS lib for HTMLVideoElement
+        if (typeof video.getVideoPlaybackQuality === 'function') {
+          // @ts-ignore
           const quality = video.getVideoPlaybackQuality();
+          // @ts-ignore
           if (quality.totalVideoFrames && video.currentTime > 0) {
+            // @ts-ignore
             const calculatedFPS = quality.totalVideoFrames / video.currentTime;
             // Find the closest common FPS
             detectedFPS = commonFPS.reduce((prev, curr) =>
               Math.abs(curr - calculatedFPS) < Math.abs(prev - calculatedFPS)
                 ? curr
                 : prev
-            );
-            console.log(
-              `🎬 [detectFPS] Detected FPS using getVideoPlaybackQuality: ${detectedFPS}`
             );
           }
         }
@@ -82,19 +148,15 @@ export function useVideoPlayer() {
         if (detectedFPS === 30 && duration.value > 0) {
           // Test common frame rates to see which gives the most reasonable total frame count
           const testResults = commonFPS.map((testFPS) => {
-            const totalFrames = Math.round(duration.value * testFPS);
+            const frames = Math.round(duration.value * testFPS);
             // Prefer frame rates that result in round numbers or common video lengths
-            const score =
-              totalFrames % 1000 === 0 ? 10 : totalFrames % 100 === 0 ? 5 : 1;
-            return { fps: testFPS, totalFrames, score };
+            const score = frames % 1000 === 0 ? 10 : frames % 100 === 0 ? 5 : 1;
+            return { fps: testFPS, totalFrames: frames, score };
           });
 
           // Sort by score and pick the best match
           testResults.sort((a, b) => b.score - a.score);
           detectedFPS = testResults[0].fps;
-          console.log(
-            `🎬 [detectFPS] Estimated FPS from duration: ${detectedFPS} (${testResults[0].totalFrames} total frames)`
-          );
         }
 
         fps.value = detectedFPS;
@@ -102,16 +164,9 @@ export function useVideoPlayer() {
         // Calculate total frames based on duration and detected FPS
         if (duration.value > 0) {
           totalFrames.value = Math.round(duration.value * fps.value);
-          console.log(
-            `🎬 [detectFPS] Final FPS: ${fps.value}, Total frames: ${totalFrames.value}, Duration: ${duration.value}s`
-          );
         }
       }
-    } catch (err) {
-      console.warn(
-        '🎬 [detectFPS] Error detecting FPS, using default 30fps:',
-        err
-      );
+    } catch {
       fps.value = 30;
       if (duration.value > 0) {
         totalFrames.value = Math.round(duration.value * fps.value);
@@ -133,7 +188,7 @@ export function useVideoPlayer() {
       await playerRef.value.play();
       isPlaying.value = true;
       error.value = null;
-    } catch (err) {
+    } catch (err: any) {
       const errorMsg = `Failed to play video: ${err.message}`;
       error.value = errorMsg;
     }
@@ -147,7 +202,7 @@ export function useVideoPlayer() {
     try {
       playerRef.value.pause();
       isPlaying.value = false;
-    } catch (err) {
+    } catch (err: any) {
       const errorMsg = `Failed to pause video: ${err.message}`;
       error.value = errorMsg;
     }
@@ -157,11 +212,11 @@ export function useVideoPlayer() {
     if (isPlaying.value) {
       pause();
     } else {
-      play();
+      void play();
     }
   };
 
-  const seekTo = (time) => {
+  const seekTo = (time: number) => {
     if (!playerRef.value) {
       return;
     }
@@ -193,12 +248,12 @@ export function useVideoPlayer() {
       updateFrameFromTime();
 
       // currentTime and frame will also be updated by timeupdate event
-    } catch (err) {
+    } catch (err: any) {
       error.value = `Failed to seek: ${err.message}`;
     }
   };
 
-  const setVolume = (newVolume) => {
+  const setVolume = (newVolume: number) => {
     if (!playerRef.value) return;
 
     try {
@@ -211,7 +266,7 @@ export function useVideoPlayer() {
       } else if (isMuted.value) {
         isMuted.value = false;
       }
-    } catch (err) {
+    } catch (err: any) {
       error.value = `Failed to set volume: ${err.message}`;
     }
   };
@@ -227,13 +282,13 @@ export function useVideoPlayer() {
         playerRef.value.muted = true;
         isMuted.value = true;
       }
-    } catch (err) {
+    } catch (err: any) {
       error.value = `Failed to toggle mute: ${err.message}`;
     }
   };
 
   // Playback speed controls
-  const setPlaybackSpeed = (speed) => {
+  const setPlaybackSpeed = (speed: number) => {
     if (!playerRef.value) return;
 
     try {
@@ -241,22 +296,26 @@ export function useVideoPlayer() {
       const clampedSpeed = Math.max(0.25, Math.min(speed, 2));
       playerRef.value.playbackRate = clampedSpeed;
       playbackSpeed.value = clampedSpeed;
-    } catch (err) {
+    } catch (err: any) {
       error.value = `Failed to set playback speed: ${err.message}`;
     }
   };
 
   const increaseSpeed = () => {
-    const speeds = [0.25, 0.5, 1, 1.25, 1.5, 2];
-    const currentIndex = speeds.indexOf(playbackSpeed.value);
+    const speeds = [0.25, 0.5, 1, 1.25, 1.5, 2] as const;
+    const currentIndex = speeds.indexOf(
+      playbackSpeed.value as (typeof speeds)[number]
+    );
     if (currentIndex < speeds.length - 1) {
       setPlaybackSpeed(speeds[currentIndex + 1]);
     }
   };
 
   const decreaseSpeed = () => {
-    const speeds = [0.25, 0.5, 1, 1.25, 1.5, 2];
-    const currentIndex = speeds.indexOf(playbackSpeed.value);
+    const speeds = [0.25, 0.5, 1, 1.25, 1.5, 2] as const;
+    const currentIndex = speeds.indexOf(
+      playbackSpeed.value as (typeof speeds)[number]
+    );
     if (currentIndex > 0) {
       setPlaybackSpeed(speeds[currentIndex - 1]);
     }
@@ -305,15 +364,12 @@ export function useVideoPlayer() {
     seekTo(offsetTime);
   };
 
-  // Simplified event handlers - removed unused custom event handlers
-  // VideoPlayer component handles native events directly
-
   // Keyboard shortcuts
-  const handleKeydown = (event) => {
+  const handleKeydown = (event: KeyboardEvent) => {
     if (!playerRef.value) return;
 
     // Only handle keyboard shortcuts if no input/textarea is focused
-    const activeElement = document.activeElement;
+    const activeElement = document.activeElement as HTMLElement | null;
     if (
       activeElement?.tagName === 'INPUT' ||
       activeElement?.tagName === 'TEXTAREA' ||
@@ -377,7 +433,7 @@ export function useVideoPlayer() {
   });
 
   // Format time helper
-  const formatTime = (seconds) => {
+  const formatTime = (seconds: number) => {
     if (!seconds || isNaN(seconds)) return '0:00';
 
     const hours = Math.floor(seconds / 3600);
@@ -394,13 +450,13 @@ export function useVideoPlayer() {
   };
 
   // Format frame helper
-  const formatFrame = (frameNumber) => {
+  const formatFrame = (frameNumber: number) => {
     if (!frameNumber || isNaN(frameNumber)) return 'Frame 0';
     return `Frame ${frameNumber.toLocaleString()}`;
   };
 
   // Format frame with FPS info
-  const formatFrameWithFPS = (frameNumber) => {
+  const formatFrameWithFPS = (frameNumber: number) => {
     if (!frameNumber || isNaN(frameNumber)) return 'Frame 0 @ 30fps';
     return `Frame ${frameNumber.toLocaleString()} @ ${fps.value}fps`;
   };

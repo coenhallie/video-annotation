@@ -1,3 +1,4 @@
+<!-- eslint-disable vue/comment-directive -->
 <template>
   <div class="unified-video-player">
     <!-- Single Video Mode -->
@@ -70,12 +71,12 @@
           v-if="videoUrl && drawingCanvas"
           ref="singleDrawingCanvasRef"
           :current-frame="currentFrame"
-          :is-drawing-mode="drawingCanvas.isDrawingMode.value"
-          :selected-tool="drawingCanvas.currentTool.value.type"
-          :stroke-width="drawingCanvas.currentTool.value.strokeWidth"
-          :severity="drawingCanvas.currentTool.value.severity"
-          :existing-drawings="drawingCanvas.allDrawings.value"
-          :is-loading-drawings="drawingCanvas.isLoadingDrawings.value"
+          :is-drawing-mode="drawingCanvas?.isDrawingMode?.value"
+          :selected-tool="drawingCanvas?.currentTool?.value?.type"
+          :stroke-width="drawingCanvas?.currentTool?.value?.strokeWidth"
+          :severity="drawingCanvas?.currentTool?.value?.severity"
+          :existing-drawings="drawingCanvas?.allDrawings?.value"
+          :is-loading-drawings="drawingCanvas?.isLoadingDrawings?.value"
           @drawing-created="handleDrawingCreated"
           @drawing-updated="handleDrawingUpdated"
           @drawing-deleted="handleDrawingDeleted"
@@ -107,8 +108,8 @@
           :roi-history="roiSettings.roiHistory"
           :roi-confidence="roiSettings.roiConfidence"
           :stability-metrics="roiSettings.stabilityMetrics"
-          :adaptive-r-o-i="roiSettings.useAdaptiveROI"
-          :motion-prediction="roiSettings.useMotionPrediction"
+          :adaptive-r-o-i="(roiSettings as any).useAdaptiveROI"
+          :motion-prediction="(roiSettings as any).useMotionPrediction"
           :show-roi="roiSettings.showROI"
           :show-prediction="roiSettings.showPrediction"
           :show-history="roiSettings.showHistory"
@@ -184,13 +185,18 @@
                 <select
                   :value="playbackSpeed"
                   @change="
-                    setPlaybackSpeed(
-                      parseFloat(($event.target as HTMLSelectElement).value)
+                    handleSpeedChange(
+                      parseFloat(
+                        $event.target && $event.target.value
+                          ? $event.target.value
+                          : '1'
+                      )
                     )
                   "
                   class="speed-select"
                   :aria-label="'Playback speed: ' + playbackSpeed + 'x'"
                 >
+                  <!-- @ts-expect-error: DOM typing -->
                   <option value="0.1">0.1x</option>
                   <option value="0.25">0.25x</option>
                   <option value="0.5">0.5x</option>
@@ -355,20 +361,20 @@
               v-if="videoAUrl && drawingCanvasA"
               ref="drawingCanvasARef"
               :current-frame="currentFrame"
-              :is-drawing-mode="drawingCanvasA.isDrawingMode.value"
-              :selected-tool="drawingCanvasA.currentTool.value.type"
-              :stroke-width="drawingCanvasA.currentTool.value.strokeWidth"
-              :severity="drawingCanvasA.currentTool.value.severity"
-              :existing-drawings="drawingCanvasA.allDrawings.value"
-              :is-loading-drawings="drawingCanvasA.isLoadingDrawings.value"
+              :is-drawing-mode="drawingCanvasA?.isDrawingMode?.value"
+              :selected-tool="drawingCanvasA?.currentTool?.value?.type"
+              :stroke-width="drawingCanvasA?.currentTool?.value?.strokeWidth"
+              :severity="drawingCanvasA?.currentTool?.value?.severity"
+              :existing-drawings="drawingCanvasA?.allDrawings?.value"
+              :is-loading-drawings="drawingCanvasA?.isLoadingDrawings?.value"
               @drawing-created="
-                (drawing, event) => handleDrawingCreated(drawing, event)
+                (drawing: any, event: Event) => handleDrawingCreated(drawing, event)
               "
               @drawing-updated="
-                (drawing, event) => handleDrawingUpdated(drawing, event)
+                (drawing: any, event: Event) => handleDrawingUpdated(drawing, event)
               "
               @drawing-deleted="
-                (drawingId, event) => handleDrawingDeleted(drawingId, event)
+                (drawingId: string, event: Event) => handleDrawingDeleted(drawingId, event)
               "
             />
 
@@ -400,8 +406,8 @@
               :roi-history="roiSettingsA.roiHistory"
               :roi-confidence="roiSettingsA.roiConfidence"
               :stability-metrics="roiSettingsA.stabilityMetrics"
-              :adaptive-r-o-i="roiSettingsA.useAdaptiveROI"
-              :motion-prediction="roiSettingsA.useMotionPrediction"
+              :adaptive-r-o-i="(roiSettingsA as any).useAdaptiveROI"
+              :motion-prediction="(roiSettingsA as any).useMotionPrediction"
               :show-roi="roiSettingsA.showROI"
               :show-prediction="roiSettingsA.showPrediction"
               :show-history="roiSettingsA.showHistory"
@@ -409,8 +415,8 @@
               :show-stats="false"
               :show-confidence-in-label="false"
               :enabled="roiSettingsA.enabled"
-              @roi-selected="(roi) => handleROISelected(roi, 'A')"
-              @roi-updated="(roi) => handleROIUpdated(roi, 'A')"
+              @roi-selected="(roi: any) => handleROISelected(roi, 'A')"
+              @roi-updated="(roi: any) => handleROIUpdated(roi, 'A')"
               @roi-cleared="() => handleROICleared('A')"
               @adaptive-roi-toggled="() => handleAdaptiveROIToggled('A')"
               @motion-prediction-toggled="
@@ -453,12 +459,12 @@
               v-if="videoBUrl && drawingCanvasB"
               ref="drawingCanvasBRef"
               :current-frame="currentFrame"
-              :is-drawing-mode="drawingCanvasB.isDrawingMode.value"
-              :selected-tool="drawingCanvasB.currentTool.value.type"
-              :stroke-width="drawingCanvasB.currentTool.value.strokeWidth"
-              :severity="drawingCanvasB.currentTool.value.severity"
-              :existing-drawings="drawingCanvasB.allDrawings.value"
-              :is-loading-drawings="drawingCanvasB.isLoadingDrawings.value"
+              :is-drawing-mode="drawingCanvasB?.isDrawingMode?.value"
+              :selected-tool="drawingCanvasB?.currentTool?.value?.type"
+              :stroke-width="drawingCanvasB?.currentTool?.value?.strokeWidth"
+              :severity="drawingCanvasB?.currentTool?.value?.severity"
+              :existing-drawings="drawingCanvasB?.allDrawings?.value"
+              :is-loading-drawings="drawingCanvasB?.isLoadingDrawings?.value"
               @drawing-created="
                 (drawing, event) => handleDrawingCreated(drawing, event)
               "
@@ -498,8 +504,8 @@
               :roi-history="roiSettingsB.roiHistory"
               :roi-confidence="roiSettingsB.roiConfidence"
               :stability-metrics="roiSettingsB.stabilityMetrics"
-              :adaptive-r-o-i="roiSettingsB.useAdaptiveROI"
-              :motion-prediction="roiSettingsB.useMotionPrediction"
+              :adaptive-r-o-i="(roiSettingsB as any).useAdaptiveROI"
+              :motion-prediction="(roiSettingsB as any).useMotionPrediction"
               :show-roi="roiSettingsB.showROI"
               :show-prediction="roiSettingsB.showPrediction"
               :show-history="roiSettingsB.showHistory"
@@ -507,8 +513,8 @@
               :show-stats="false"
               :show-confidence-in-label="false"
               :enabled="roiSettingsB.enabled"
-              @roi-selected="(roi) => handleROISelected(roi, 'B')"
-              @roi-updated="(roi) => handleROIUpdated(roi, 'B')"
+              @roi-selected="(roi: any) => handleROISelected(roi, 'B')"
+              @roi-updated="(roi: any) => handleROIUpdated(roi, 'B')"
               @roi-cleared="() => handleROICleared('B')"
               @adaptive-roi-toggled="() => handleAdaptiveROIToggled('B')"
               @motion-prediction-toggled="
@@ -585,8 +591,12 @@
             <select
               :value="playbackSpeed"
               @change="
-                setPlaybackSpeed(
-                  parseFloat(($event.target as HTMLSelectElement).value)
+                handleSpeedChange(
+                  parseFloat(
+                    $event.target && $event.target.value
+                      ? $event.target.value
+                      : '1'
+                  )
                 )
               "
               class="speed-select"
@@ -809,7 +819,7 @@
     <KeypointSelectorModal
       :show-modal="showKeypointSelector"
       :selected-keypoints="localSelectedKeypoints"
-      @update:selected-keypoints="updateSelectedKeypoints"
+      @update:selected-keypoints="(v) => (localSelectedKeypoints = v as number[])"
       @close="showKeypointSelector = false"
     />
   </div>
@@ -827,12 +837,28 @@ import {
 } from 'vue';
 import DrawingCanvas from './DrawingCanvas.vue';
 import PoseVisualization from './PoseVisualization.vue';
+// @ts-ignore: Vue SFC without d.ts
 import ROISelector from './ROISelector.vue';
 import KeypointSelectorModal from './KeypointSelectorModal.vue';
-import { useVideoPlayer } from '../composables/useVideoPlayer.js';
-import { useEnhancedPoseLandmarker } from '../composables/useEnhancedPoseLandmarker.js';
-import type { DrawingData } from '@/types/database';
+import { useVideoPlayer } from '../composables/useVideoPlayer.ts';
+// Fallback local type to satisfy TS if path alias not resolved
+type DrawingData = {
+  id?: string;
+  frame?: number;
+  paths?: any[];
+  [k: string]: any;
+};
 
+interface DrawingCanvasLike {
+  isDrawingMode: { value: boolean };
+  currentTool: {
+    value: { type: string; strokeWidth: number; severity: string };
+  };
+  allDrawings: { value: any[] };
+  isLoadingDrawings: { value: boolean };
+  setVideoSize?: (w: number, h: number) => void;
+  disableDrawingMode?: () => void;
+}
 interface Props {
   mode?: 'single' | 'dual';
   // Single video props
@@ -841,24 +867,41 @@ interface Props {
   autoplay?: boolean;
   controls?: boolean;
   poster?: string;
-  drawingCanvas?: any;
+  // Accept unknown but narrow at use-sites; keep template happy with optional chaining
+  drawingCanvas?: Partial<DrawingCanvasLike> | unknown;
   // Dual video props
   videoAUrl?: string;
   videoAId?: string;
   videoBUrl?: string;
   videoBId?: string;
-  drawingCanvasA?: any;
-  drawingCanvasB?: any;
-  videoAState?: any;
-  videoBState?: any;
-  dualVideoPlayer?: any;
+  drawingCanvasA?: Partial<DrawingCanvasLike> | unknown;
+  drawingCanvasB?: Partial<DrawingCanvasLike> | unknown;
+  videoAState?:
+    | { isLoaded?: boolean; fps?: number; duration?: number }
+    | Record<string, any>
+    | unknown;
+  videoBState?:
+    | { isLoaded?: boolean; fps?: number; duration?: number }
+    | Record<string, any>
+    | unknown;
+  dualVideoPlayer?:
+    | {
+        pauseVideoA?: () => void;
+        pauseVideoB?: () => void;
+        playVideoA?: () => void;
+        playVideoB?: () => void;
+        videoARef?: { value: HTMLVideoElement | null };
+        videoBRef?: { value: HTMLVideoElement | null };
+        setCanvasRefs?: (a: any, b: any) => void;
+      }
+    | unknown;
   // FPS compatibility props for dual video mode
   fpsCompatible?: boolean;
-  primaryVideo?: string;
+  primaryVideo?: 'A' | 'B';
   // Annotation-related props
   projectId?: string;
   comparisonVideoId?: string;
-  user?: any;
+  user?: unknown;
   // Pose detection props
   poseLandmarker?: any;
   poseLandmarkerA?: any;
@@ -937,16 +980,19 @@ const {
   updateFrameFromTime,
 } = useVideoPlayer();
 
+/* removed duplicate defineExpose used for type hints to avoid duplicate defineExpose() error.
+   All necessary methods/refs are exposed once at the end of the script. */
+
 // Template refs
 const singleVideoElement = ref<HTMLVideoElement | null>(null);
 const videoAElement = ref<HTMLVideoElement | null>(null);
 const videoBElement = ref<HTMLVideoElement | null>(null);
-const singleDrawingCanvasRef = ref();
-const drawingCanvasARef = ref();
-const drawingCanvasBRef = ref();
+const singleDrawingCanvasRef = ref<any | null>(null);
+const drawingCanvasARef = ref<any | null>(null);
+const drawingCanvasBRef = ref<any | null>(null);
 
 // Single video state
-const singleVideoState = ref({
+const singleVideoState = ref<{ isLoading: boolean; error: string | null }>({
   isLoading: false,
   error: null,
 });
@@ -967,7 +1013,9 @@ const poseVisualizationSettings = reactive({
 
 // Keypoint selector state
 const showKeypointSelector = ref(false);
-const localSelectedKeypoints = ref(Array.from({ length: 33 }, (_, i) => i));
+const localSelectedKeypoints = ref<number[]>(
+  Array.from({ length: 33 }, (_, i) => i)
+);
 
 // Enhanced ROI state
 const roiSettings = reactive({
@@ -977,9 +1025,9 @@ const roiSettings = reactive({
   showPrediction: true,
   showHistory: false,
   showStats: true,
-  currentROI: null,
-  predictedROI: null,
-  roiHistory: [],
+  currentROI: null as any,
+  predictedROI: null as any,
+  roiHistory: [] as any[],
   roiConfidence: 0,
   stabilityMetrics: {
     stabilityScore: 0,
@@ -1086,8 +1134,9 @@ const processPoseDetection = async (
       emit('pose-detected', poseData, videoContext);
     }
   } catch (error) {
+    const err = error as unknown as { message?: string };
     console.error('❌ [UnifiedVideoPlayer] Pose detection error:', error);
-    emit('pose-detection-error', error.message, videoContext);
+    emit('pose-detection-error', err?.message || 'Unknown error', videoContext);
   }
 };
 
@@ -1569,13 +1618,38 @@ const setupVideoEventListeners = (
     }
   });
 
+  // Add rich error diagnostics
+  // Add rich error diagnostics
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   videoElement.addEventListener('error', (e) => {
-    const errorMsg = `Error loading video: ${
-      videoElement.error?.message || 'Unknown error'
-    }`;
+    const mediaError = (videoElement as HTMLVideoElement).error;
+    const codes: Record<number, string> = {
+      1: 'ABORTED',
+      2: 'NETWORK',
+      3: 'DECODE',
+      4: 'SRC_NOT_SUPPORTED',
+    };
+    const codeName = mediaError?.code
+      ? codes[mediaError.code] || `CODE_${mediaError.code}`
+      : 'UNKNOWN';
+    const currentSrc =
+      (videoElement as HTMLVideoElement).currentSrc || '(no currentSrc)';
+    const errorMsg = `Error loading video [${
+      videoLabel || 'single'
+    }]: ${codeName} | src=${currentSrc}`;
+
+    console.error('❌ [UnifiedVideoPlayer] video error:', {
+      label: videoLabel,
+      code: mediaError?.code,
+      codeName,
+      message: (mediaError as any)?.message,
+      currentSrc,
+    });
 
     if (props.mode === 'single') {
       singleVideoState.value.error = errorMsg;
+    } else if (videoState) {
+      videoState.isLoaded = false;
     }
 
     emit('error', errorMsg);
@@ -1663,42 +1737,102 @@ watch(
 // Watch for dual video URL changes
 watch(
   () => [props.videoAUrl, props.videoBUrl],
-  ([newVideoAUrl, newVideoBUrl]) => {
+  async ([newVideoAUrl, newVideoBUrl]) => {
     console.log('🔍 [UnifiedVideoPlayer] Video URLs changed:', {
       mode: props.mode,
       videoAUrl: newVideoAUrl,
       videoBUrl: newVideoBUrl,
-      videoAElement: !!videoAElement.value,
-      videoBElement: !!videoBElement.value,
+      hasAEl: !!videoAElement.value,
+      hasBEl: !!videoBElement.value,
     });
 
-    if (props.mode === 'dual') {
-      if (newVideoAUrl && videoAElement.value) {
-        console.log(
-          '🔍 [UnifiedVideoPlayer] Setting Video A src:',
-          newVideoAUrl
-        );
-        videoAElement.value.src = newVideoAUrl;
-        videoAElement.value.load();
-      }
-      if (newVideoBUrl && videoBElement.value) {
-        console.log(
-          '🔍 [UnifiedVideoPlayer] Setting Video B src:',
-          newVideoBUrl
-        );
-        videoBElement.value.src = newVideoBUrl;
-        videoBElement.value.load();
-      }
-    }
+    if (props.mode !== 'dual') return;
+
+    // Ensure DOM refs are mounted before setting src
+    await nextTick();
+
+    const setSrcAndLoad = (
+      el: HTMLVideoElement | null,
+      url?: string,
+      label?: string
+    ) => {
+      if (!el || !url) return;
+      // Force a clean load by clearing source first (avoids some browser caching edge cases)
+      try {
+        el.pause();
+      } catch {}
+      el.removeAttribute('src');
+      // Also clear any &download query residue if present (defensive; not required)
+      el.load();
+
+      console.log(`🎯 [UnifiedVideoPlayer] Binding ${label} src`, { url });
+      el.src = url;
+      el.load();
+
+      // Attach one-time verbose diagnostics
+      const onLoadedMeta = () => {
+        console.log(`✅ [UnifiedVideoPlayer] ${label} loadedmetadata`, {
+          duration: el.duration,
+          videoWidth: el.videoWidth,
+          videoHeight: el.videoHeight,
+          currentSrc: el.currentSrc,
+        });
+        el.removeEventListener('loadedmetadata', onLoadedMeta);
+      };
+      const onCanPlay = () => {
+        console.log(`✅ [UnifiedVideoPlayer] ${label} canplay`, {
+          readyState: el.readyState,
+          currentTime: el.currentTime,
+        });
+        el.removeEventListener('canplay', onCanPlay);
+      };
+      const onErr = () => {
+        const me = el.error;
+        console.error(`❌ [UnifiedVideoPlayer] ${label} error`, {
+          code: me?.code,
+          currentSrc: el.currentSrc,
+        });
+        el.removeEventListener('error', onErr);
+      };
+      el.addEventListener('loadedmetadata', onLoadedMeta, { once: true });
+      el.addEventListener('canplay', onCanPlay, { once: true });
+      el.addEventListener('error', onErr, { once: true });
+    };
+
+    setSrcAndLoad(videoAElement.value, newVideoAUrl, 'Video A');
+    setSrcAndLoad(videoBElement.value, newVideoBUrl, 'Video B');
   },
   { flush: 'post', immediate: true }
 );
 
 // Volume control
 const handleVolumeChange = (event: Event) => {
-  const target = event.target as HTMLInputElement;
-  const newVolume = parseFloat(target.value);
+  const target = event.target as HTMLInputElement | null;
+  const newVolume = parseFloat(target?.value ?? '1');
   setVolume(newVolume);
+};
+
+// Custom speed control for dual video mode
+const handleSpeedChange = (speed: number) => {
+  if (props.mode === 'dual') {
+    // For dual video mode, use the dual video player's setPlaybackRate method
+    if (props.dualVideoPlayer && props.dualVideoPlayer.setPlaybackRate) {
+      props.dualVideoPlayer.setPlaybackRate(speed);
+    } else {
+      // Fallback: directly set playback rate on both video elements
+      if (videoAElement.value) {
+        videoAElement.value.playbackRate = speed;
+      }
+      if (videoBElement.value) {
+        videoBElement.value.playbackRate = speed;
+      }
+    }
+    // Update the playback speed state
+    playbackSpeed.value = speed;
+  } else {
+    // For single video mode, use the original setPlaybackSpeed
+    setPlaybackSpeed(speed);
+  }
 };
 
 // Handle video fade transition when seeking to a new frame
@@ -1841,7 +1975,7 @@ onMounted(() => {
       props.drawingCanvas
     ) {
       const video = singleVideoElement.value;
-      props.drawingCanvas.setVideoSize(
+      (props.drawingCanvas as any).setVideoSize?.(
         video.videoWidth || 1920,
         video.videoHeight || 1080
       );

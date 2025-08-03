@@ -1,5 +1,4 @@
 import { ref, readonly } from 'vue';
-import type { Ref } from 'vue';
 
 /**
  * Centralized session cleanup utility

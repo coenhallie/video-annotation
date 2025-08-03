@@ -1,6 +1,6 @@
 import { ref, onUnmounted, watch, readonly, toValue } from 'vue';
 import { supabase } from './useSupabase';
-import type { DatabaseAnnotation, Annotation } from '../types/database';
+import type { Annotation } from '../types/database';
 
 export function useRealtimeAnnotations(videoId, annotations) {
   const isConnected = ref(false);

@@ -39,7 +39,9 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import * as fabric from 'fabric';
-import type { DrawingData, DrawingPath, SeverityLevel } from '@/types/database';
+/** @typedef {import('@/types/database').DrawingData} DrawingData */
+/** @typedef {import('@/types/database').DrawingPath} DrawingPath */
+/** @typedef {import('@/types/database').SeverityLevel} SeverityLevel */
 
 interface Props {
   currentFrame: number;
@@ -338,6 +340,35 @@ const clearDrawings = () => {
   }
 };
 
+// Clear drawings for current frame (alias for clearDrawings since we only show current frame)
+const clearCurrentFrameDrawings = () => {
+  if (canvas.value) {
+    canvas.value.clear();
+  }
+  // Also clear any active drawing session for the current frame
+  if (
+    currentDrawingSession.value &&
+    currentDrawingSession.value.frame === props.currentFrame
+  ) {
+    currentDrawingSession.value = null;
+  }
+};
+
+// Add drawing data to the canvas
+const addDrawing = (drawingData: any) => {
+  if (!canvas.value || !drawingData) return;
+
+  // Clear current canvas first
+  canvas.value.clear();
+
+  // Render all paths from the drawing data
+  drawingData.paths.forEach((path: any) => {
+    renderDrawingPath(path);
+  });
+
+  canvas.value.renderAll();
+};
+
 // Check if there are drawings on the current frame
 const hasDrawingsOnCurrentFrame = (): boolean => {
   if (!canvas.value) {
@@ -456,12 +487,49 @@ const getCurrentDrawingSession = () => {
   return currentDrawingSession.value;
 };
 
+// Enable drawing mode
+const enableDrawingMode = () => {
+  if (canvas.value) {
+    canvas.value.isDrawingMode = true;
+    const canvasElement = canvas.value.getElement();
+    canvasElement.style.cursor = 'crosshair';
+    if (canvasContainer.value) {
+      canvasContainer.value.style.cursor = 'crosshair';
+    }
+  }
+};
+
+// Set severity (updates brush color)
+const setSeverity = (severity: any) => {
+  if (canvas.value?.freeDrawingBrush) {
+    canvas.value.freeDrawingBrush.color =
+      severityColors[severity as keyof typeof severityColors];
+  }
+};
+
+// Disable drawing mode
+const disableDrawingMode = () => {
+  if (canvas.value) {
+    canvas.value.isDrawingMode = false;
+    const canvasElement = canvas.value.getElement();
+    canvasElement.style.cursor = 'default';
+    if (canvasContainer.value) {
+      canvasContainer.value.style.cursor = 'default';
+    }
+  }
+};
+
 // Expose methods for parent component
 defineExpose({
   clearDrawings,
+  clearCurrentFrameDrawings,
+  addDrawing,
   completeDrawingSession,
   hasDrawingsOnCurrentFrame,
   getCurrentDrawingSession,
+  enableDrawingMode,
+  disableDrawingMode,
+  setSeverity,
 });
 </script>
 

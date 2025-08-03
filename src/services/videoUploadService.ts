@@ -13,6 +13,7 @@ export interface VideoMetadata {
   totalFrames: number;
   width: number;
   height: number;
+  isEstimatedFps?: boolean;
 }
 
 export class VideoUploadService {
@@ -57,9 +58,19 @@ export class VideoUploadService {
       const video = document.createElement('video');
       const url = URL.createObjectURL(file);
 
+      const cleanup = () => {
+        try {
+          URL.revokeObjectURL(url);
+        } catch {}
+        try {
+          video.src = '';
+        } catch {}
+      };
+
       video.onloadedmetadata = () => {
         const duration = video.duration;
-        const fps = 30; // Default FPS, could be enhanced to detect actual FPS
+        // TODO: attempt better FPS detection in future; for now mark as estimated
+        const fps = 30;
         const totalFrames = Math.floor(duration * fps);
 
         const metadata: VideoMetadata = {
@@ -68,14 +79,15 @@ export class VideoUploadService {
           totalFrames,
           width: video.videoWidth,
           height: video.videoHeight,
+          isEstimatedFps: true,
         };
 
-        URL.revokeObjectURL(url);
+        cleanup();
         resolve(metadata);
       };
 
       video.onerror = () => {
-        URL.revokeObjectURL(url);
+        cleanup();
         reject(new Error('Failed to load video metadata'));
       };
 

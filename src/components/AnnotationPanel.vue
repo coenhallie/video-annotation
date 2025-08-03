@@ -1,9 +1,51 @@
-<script setup>
+<script lang="ts">
+// Centralize all type aliases here (kept pure TS to avoid parser edge cases)
+export type PanelAnnotation = {
+  id: string;
+  title?: string;
+  content?: string;
+  severity?: string;
+  color?: string;
+  timestamp: number;
+  frame?: number;
+  startFrame?: number;
+  endFrame?: number;
+  duration?: number;
+  durationFrames?: number;
+  annotationType?: string;
+  drawingData?: any;
+  videoAFrame?: number;
+  videoBFrame?: number;
+  commentCount?: number;
+};
+
+export type NewAnnotationDraft = {
+  content: string;
+  severity: string;
+  color: string;
+  frame: number;
+  annotationType: string;
+  drawingData: any;
+  startFrame?: number;
+  endFrame?: number;
+  duration?: number;
+  durationFrames?: number;
+};
+</script>
+
+<script setup lang="ts">
+import { logger } from '../utils/logger';
 import { ref, computed, onMounted, watch, onUnmounted } from 'vue';
 import CommentSection from './CommentSection.vue';
 import AnnotationSkeleton from './AnnotationSkeleton.vue';
 import { useAuth } from '../composables/useAuth';
 import { useGlobalComments } from '../composables/useGlobalComments';
+
+// Helper to parse select value in template change handlers safely
+const parseSelectValue = (e) => {
+  const t = /** @type {HTMLSelectElement|null} */ e.target;
+  return t?.value ?? '';
+};
 
 const props = defineProps({
   annotations: {
@@ -182,16 +224,54 @@ const isSaveDisabled = computed(() => {
   return !hasContent && !hasDrawing;
 });
 
-const sortedAnnotations = computed(() => {
-  return [...props.annotations].sort((a, b) => a.timestamp - b.timestamp);
+const normalizedAnnotations = computed(() => {
+  const anns = props?.annotations ?? props?.annotations?.value ?? [];
+  const list = Array.isArray(anns) ? anns : [];
+  return list.map((it) => {
+    const a = it || {};
+    return {
+      id: a?.id ?? '',
+      title: a?.title ?? '',
+      content: a?.content ?? '',
+      severity: a?.severity ?? 'medium',
+      color: a?.color ?? '#6b7280',
+      timestamp: typeof a?.timestamp === 'number' ? a.timestamp : 0,
+      frame: typeof a?.frame === 'number' ? a.frame : undefined,
+      startFrame: typeof a?.startFrame === 'number' ? a.startFrame : undefined,
+      endFrame: typeof a?.endFrame === 'number' ? a.endFrame : undefined,
+      duration: typeof a?.duration === 'number' ? a.duration : undefined,
+      durationFrames:
+        typeof a?.durationFrames === 'number' ? a.durationFrames : undefined,
+      annotationType: a?.annotationType ?? 'text',
+      drawingData: a?.drawingData ?? null,
+      videoAFrame:
+        typeof a?.videoAFrame === 'number' ? a.videoAFrame : undefined,
+      videoBFrame:
+        typeof a?.videoBFrame === 'number' ? a.videoBFrame : undefined,
+      commentCount:
+        typeof a?.commentCount === 'number' ? a.commentCount : undefined,
+    };
+  });
 });
 
-// Stable loading state to prevent skeleton flickering
+const sortedAnnotations = computed(() => {
+  return normalizedAnnotations.value.slice().sort((a, b) => {
+    const ta = a && typeof a.timestamp === 'number' ? a.timestamp : 0;
+    const tb = b && typeof b.timestamp === 'number' ? b.timestamp : 0;
+    return ta - tb;
+  });
+});
+
+/**
+ * Stable loading state to prevent skeleton flickering
+ * DEV: gated mount log
+ */
 const shouldShowSkeleton = computed(() => {
-  // Only show skeleton if loading AND we don't have any annotations yet
-  // This prevents the skeleton from showing again after annotations are loaded
   return props.loading && props.annotations.length === 0;
 });
+if (import.meta.env.DEV) {
+  logger.debug('[AnnotationPanel] setup');
+}
 
 const formatTime = (seconds) => {
   if (!seconds || isNaN(seconds)) return '0:00';
@@ -205,29 +285,45 @@ const formatFrame = (frameNumber) => {
   return `Frame ${frameNumber.toLocaleString()}`;
 };
 
-// Frame calculation utilities
+/**
+ * Stable loading state to prevent skeleton flickering
+ * DEV: gated mount log
+ */
 const timeToFrame = (timeInSeconds) => {
   return Math.round(timeInSeconds * props.fps);
 };
+onMounted(() => {
+  if (import.meta.env.DEV) {
+    logger.debug('[AnnotationPanel] mounted');
+  }
+});
 
 const getSeverityInfo = (severity) => {
   return severityLevels.find((s) => s.value === severity) || severityLevels[1]; // Default to medium
 };
 
-// Methods
+/**
+ * Methods
+ * Start an add-annotation flow and prime defaults.
+ */
 const startAddAnnotation = () => {
   // emit('pause'); // This was the cause of the race condition
+  // cast to our local draft type to satisfy TS
+  // Cast removed for runtime JS compatibility; structure already matches expected draft shape
+  // Ensure the draft includes all runtime properties expected downstream
+  // Build draft with explicit fields to satisfy both runtime and linter
   newAnnotation.value = {
     content: '',
     severity: 'medium',
     color: '#fbbf24',
     frame: props.currentFrame,
+    annotationType: 'text',
+    drawingData: null,
+    // optional fields used later in code paths
     startFrame: props.currentFrame,
     endFrame: props.currentFrame,
     duration: 1 / props.fps,
     durationFrames: 1,
-    annotationType: 'text',
-    drawingData: null,
   };
   showAddForm.value = true;
   editingAnnotation.value = null;
@@ -236,8 +332,8 @@ const startAddAnnotation = () => {
 
   // Check if there are existing drawings on the current frame
   const hasExistingDrawings = props.isDualMode
-    ? props.drawingCanvasA?.hasDrawingsOnCurrentFrame() ||
-      props.drawingCanvasB?.hasDrawingsOnCurrentFrame()
+    ? props.drawingCanvasARef?.hasDrawingsOnCurrentFrame() ||
+      props.drawingCanvasBRef?.hasDrawingsOnCurrentFrame()
     : primaryDrawingCanvas.value?.hasDrawingsOnCurrentFrame();
 
   if (hasExistingDrawings) {
@@ -370,25 +466,30 @@ const saveAnnotation = async () => {
       (newAnnotation.value.content.trim().length > 50 ? '...' : '')
     : 'Drawing Annotation';
 
+  // Build a well-typed payload to satisfy TS plugin
+  // Treat as any to avoid TS casting syntax inside SFC causing parse issues
+  // Base draft as plain object
+  const baseDraft = newAnnotation.value;
+
+  // Build final payload
+  // Using plain object literal to avoid parser issues
   const annotationData = {
-    ...(newAnnotation.value || {}),
+    ...baseDraft,
     color: severityInfo.color,
     title,
     content: hasContent
       ? newAnnotation.value.content.trim()
       : 'Drawing annotation',
-    frame: Math.max(0, newAnnotation.value.frame || 0), // Ensure frame is never negative
-    startFrame: Math.max(0, newAnnotation.value.frame || 0), // Ensure startFrame is never negative
+    frame: Math.max(0, newAnnotation.value.frame || 0),
+    startFrame: Math.max(0, newAnnotation.value.frame || 0),
     timestamp: Math.max(
       0,
       (newAnnotation.value.frame || 0) / (props.fps || 30)
-    ), // Ensure timestamp is never negative
+    ),
     annotationType: hasDrawing ? 'drawing' : 'text',
     drawingData: hasDrawing ? currentDrawingData : null,
-    // Ensure valid duration values to avoid constraint violations
-    duration: Math.max(newAnnotation.value.duration || 1 / 30, 1 / 30),
-    durationFrames: Math.max(newAnnotation.value.durationFrames || 1, 1),
-    // For dual video mode, store both video frame numbers
+    duration: Math.max(baseDraft.duration || 1 / 30, 1 / 30),
+    durationFrames: Math.max(baseDraft.durationFrames || 1, 1),
     ...(props.isDualMode && {
       videoAFrame: Math.max(0, props.videoACurrentFrame || 0),
       videoBFrame: Math.max(0, props.videoBCurrentFrame || 0),
@@ -432,7 +533,7 @@ const cancelForm = () => {
     frame: props.currentFrame || 0,
     annotationType: 'text',
     drawingData: null,
-  };
+  } as NewAnnotationDraft as any;
   if (props.isDualMode) {
     // Complete any active drawing session before disabling
     if (props.dualVideoPlayer) {
@@ -466,7 +567,7 @@ const cancelForm = () => {
     durationFrames: 1,
     annotationType: 'text',
     drawingData: null,
-  };
+  } as NewAnnotationDraft as any;
 
   // Clear annotation context by emitting annotation-edit with null
   emit('annotation-edit', null);
@@ -573,12 +674,14 @@ const clearDrawing = () => {
 // Setup drawing canvas frame
 onMounted(() => {
   if (props.isDualMode) {
-    if (props.drawingCanvasA)
+    if (props.drawingCanvasA && props.drawingCanvasA.currentFrame)
       props.drawingCanvasA.currentFrame.value = props.currentFrame;
-    if (props.drawingCanvasB)
+    if (props.drawingCanvasB && props.drawingCanvasB.currentFrame)
       props.drawingCanvasB.currentFrame.value = props.currentFrame;
   } else {
-    primaryDrawingCanvas.value.currentFrame.value = props.currentFrame;
+    if (primaryDrawingCanvas.value && primaryDrawingCanvas.value.currentFrame) {
+      primaryDrawingCanvas.value.currentFrame.value = props.currentFrame;
+    }
   }
 });
 
@@ -618,13 +721,14 @@ const getCommentCount = (annotation) => {
   return annotation.commentCount || commentCounts.value.get(annotation.id) || 0;
 };
 
-const handleCommentAdded = (comment) => {
+const handleCommentAdded = (comment: { annotationId: string }) => {
   // Update comment count for the annotation
-  const currentCount = commentCounts.value.get(comment.annotationId) || 0;
+  const currentCount =
+    (commentCounts.value as Map<string, number>).get(comment.annotationId) || 0;
   commentCounts.value.set(comment.annotationId, currentCount + 1);
 
   // Add visual indicator for new comment
-  const annotation = props.annotations.find(
+  const annotation = (props.annotations as any[]).find(
     (a) => a.id === comment.annotationId
   );
   if (annotation) {
@@ -641,14 +745,15 @@ const handleCommentAdded = (comment) => {
   emit('comment-added', comment);
 };
 
-const handleCommentUpdated = (comment) => {
+const handleCommentUpdated = (comment: any) => {
   // Emit to parent
   emit('comment-updated', comment);
 };
 
-const handleCommentDeleted = (comment) => {
+const handleCommentDeleted = (comment: { annotationId: string }) => {
   // Update comment count for the annotation
-  const currentCount = commentCounts.value.get(comment.annotationId) || 0;
+  const currentCount =
+    (commentCounts.value as Map<string, number>).get(comment.annotationId) || 0;
   commentCounts.value.set(comment.annotationId, Math.max(0, currentCount - 1));
 
   // Emit to parent
@@ -659,7 +764,7 @@ const handleCommentDeleted = (comment) => {
 const setupGlobalCommentTracking = () => {
   if (props.videoId) {
     // Initialize comment counts for existing annotations
-    initializeCommentCounts(props.annotations);
+    initializeCommentCounts(props.annotations as any[]);
 
     // Setup global subscription (works for both authenticated and anonymous users)
     setupGlobalCommentSubscription(props.videoId, user.value?.id);
@@ -696,9 +801,9 @@ watch(user, (newUser) => {
 // Watch for annotations changes to update comment counts
 watch(
   () => props.annotations,
-  (newAnnotations) => {
+  (newAnnotations: any[]) => {
     if (newAnnotations && newAnnotations.length > 0) {
-      initializeCommentCounts(newAnnotations);
+      initializeCommentCounts(newAnnotations as any[]);
     }
   },
   { immediate: true }
@@ -973,7 +1078,7 @@ defineExpose({
                     :value="drawingCanvas.currentTool.value.strokeWidth"
                     @input="
                       drawingCanvas.setStrokeWidth(
-                        parseInt($event.target.value)
+                        Number(($event.target as HTMLInputElement)?.value ?? 0)
                       )
                     "
                     class="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer"
@@ -1083,8 +1188,8 @@ defineExpose({
       <!-- Annotations -->
       <div
         v-else
-        v-for="annotation in sortedAnnotations"
-        :key="annotation.id"
+        v-for="annotation in normalizedAnnotations"
+        :key="annotation.id || Math.random().toString(36).slice(2)"
         class="card card-hover mb-2 p-2 cursor-pointer transition-all duration-200 relative group"
         :class="{
           'bg-blue-50 border-blue-300 shadow-md ring-2 ring-blue-200':
@@ -1101,7 +1206,7 @@ defineExpose({
             <svg
               class="icon icon-sm"
               viewBox="0 0 24 24"
-              v-if="getSeverityInfo(annotation.severity).icon === 'info'"
+              v-if="getSeverityInfo(annotation.severity!).icon === 'info'"
             >
               <circle cx="12" cy="12" r="10"></circle>
               <line x1="12" y1="16" x2="12" y2="12"></line>
@@ -1111,7 +1216,7 @@ defineExpose({
               class="icon icon-sm"
               viewBox="0 0 24 24"
               v-else-if="
-                getSeverityInfo(annotation.severity).icon === 'alert-triangle'
+                getSeverityInfo(annotation.severity!).icon === 'alert-triangle'
               "
             >
               <path
@@ -1124,7 +1229,7 @@ defineExpose({
               class="icon icon-sm"
               viewBox="0 0 24 24"
               v-else-if="
-                getSeverityInfo(annotation.severity).icon === 'alert-circle'
+                getSeverityInfo(annotation.severity!).icon === 'alert-circle'
               "
             >
               <circle cx="12" cy="12" r="10"></circle>
@@ -1220,8 +1325,8 @@ defineExpose({
             <h4
               class="text-sm font-medium leading-tight"
               :class="{
-                'text-blue-900': selectedAnnotation?.id === annotation.id,
-                'text-gray-900': selectedAnnotation?.id !== annotation.id,
+                'text-blue-900': (selectedAnnotation as any)?.id === annotation.id,
+                'text-gray-900': (selectedAnnotation as any)?.id !== annotation.id,
               }"
             >
               {{ annotation.title }}
@@ -1247,7 +1352,7 @@ defineExpose({
             </div>
           </div>
           <p
-            v-if="annotation.content"
+            v-if="annotation.content && annotation.content.length"
             class="text-xs text-gray-600 mb-1 leading-snug"
           >
             {{ annotation.content }}

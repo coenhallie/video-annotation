@@ -15,8 +15,8 @@
             {{ getModalTitle() }}
           </h2>
           <button
-            @click="closeModal"
             class="text-gray-400 hover:text-gray-600 transition-colors"
+            @click="closeModal"
           >
             <svg
               class="w-6 h-6"
@@ -29,7 +29,7 @@
                 stroke-linejoin="round"
                 stroke-width="2"
                 d="M6 18L18 6M6 6l12 12"
-              ></path>
+              />
             </svg>
           </button>
         </div>
@@ -37,35 +37,35 @@
         <!-- Tab Navigation -->
         <div class="flex space-x-8 px-6">
           <button
-            @click="setActiveTab('load')"
             :class="[
               'py-4 px-1 border-b-2 font-medium text-sm transition-colors',
               activeTab === 'load'
                 ? 'border-blue-500 text-blue-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300',
             ]"
+            @click="setActiveTab('load')"
           >
             Load Project
           </button>
           <button
-            @click="setActiveTab('load-video')"
             :class="[
               'py-4 px-1 border-b-2 font-medium text-sm transition-colors',
               activeTab === 'load-video'
                 ? 'border-blue-500 text-blue-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300',
             ]"
+            @click="setActiveTab('load-video')"
           >
             Upload Video
           </button>
           <button
-            @click="setActiveTab('create')"
             :class="[
               'py-4 px-1 border-b-2 font-medium text-sm transition-colors',
               activeTab === 'create'
                 ? 'border-blue-500 text-blue-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300',
             ]"
+            @click="setActiveTab('create')"
           >
             Create Comparison
           </button>
@@ -100,15 +100,15 @@
                       @keypress="handleUrlKeyPress"
                     />
                     <button
-                      @click="loadVideoFromUrl"
                       :disabled="!urlInput.trim() || isLoadingUrl"
                       class="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 text-gray-400 hover:text-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       title="Load video"
+                      @click="loadVideoFromUrl"
                     >
                       <div
                         v-if="isLoadingUrl"
                         class="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"
-                      ></div>
+                      />
                       <svg
                         v-else
                         class="w-5 h-5"
@@ -121,7 +121,7 @@
                           stroke-linejoin="round"
                           stroke-width="2"
                           d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h1m4 0h1m6-10V4a2 2 0 00-2-2H5a2 2 0 00-2 2v16l4-2 4 2 4-2 4 2V4z"
-                        ></path>
+                        />
                       </svg>
                     </button>
                   </div>
@@ -132,7 +132,9 @@
                   v-if="urlError"
                   class="p-3 bg-red-50 border border-red-200 rounded-md"
                 >
-                  <p class="text-sm text-red-600">{{ urlError }}</p>
+                  <p class="text-sm text-red-600">
+                    {{ urlError }}
+                  </p>
                 </div>
               </div>
             </div>
@@ -140,7 +142,7 @@
             <!-- Divider -->
             <div class="relative">
               <div class="absolute inset-0 flex items-center">
-                <div class="w-full border-t border-gray-300"></div>
+                <div class="w-full border-t border-gray-300" />
               </div>
               <div class="relative flex justify-center text-sm">
                 <span class="px-2 bg-white text-gray-500">OR</span>
@@ -166,7 +168,7 @@
           <div v-if="isLoading" class="flex items-center justify-center py-12">
             <div
               class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"
-            ></div>
+            />
             <span class="ml-3 text-gray-600">Loading your projects...</span>
           </div>
 
@@ -184,13 +186,15 @@
                   stroke-linejoin="round"
                   stroke-width="2"
                   d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"
-                ></path>
+                />
               </svg>
             </div>
-            <p class="text-gray-600">{{ error }}</p>
+            <p class="text-gray-600">
+              {{ error }}
+            </p>
             <button
-              @click="loadProjects"
               class="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              @click="loadProjects"
             >
               Try Again
             </button>
@@ -210,7 +214,7 @@
                   stroke-linejoin="round"
                   stroke-width="2"
                   d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
-                ></path>
+                />
               </svg>
             </div>
             <h3 class="text-lg font-medium text-gray-900 mb-2">
@@ -368,9 +372,9 @@
                 <!-- Delete Button -->
                 <div class="ml-4 flex-shrink-0">
                   <button
-                    @click.stop="confirmDeleteProject(project)"
                     class="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
                     title="Delete project"
+                    @click.stop="confirmDeleteProject(project)"
                   >
                     <svg
                       class="w-5 h-5"
@@ -383,7 +387,7 @@
                         stroke-linejoin="round"
                         stroke-width="2"
                         d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v3M4 7h16"
-                      ></path>
+                      />
                     </svg>
                   </button>
                 </div>
@@ -398,7 +402,7 @@
           <div v-if="isLoading" class="flex items-center justify-center py-12">
             <div
               class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"
-            ></div>
+            />
             <span class="ml-3 text-gray-600">Loading your projects...</span>
           </div>
 
@@ -416,13 +420,15 @@
                   stroke-linejoin="round"
                   stroke-width="2"
                   d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"
-                ></path>
+                />
               </svg>
             </div>
-            <p class="text-gray-600">{{ error }}</p>
+            <p class="text-gray-600">
+              {{ error }}
+            </p>
             <button
-              @click="loadProjects"
               class="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              @click="loadProjects"
             >
               Try Again
             </button>
@@ -445,7 +451,7 @@
                   stroke-linejoin="round"
                   stroke-width="2"
                   d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
-                ></path>
+                />
               </svg>
             </div>
             <h3 class="text-lg font-medium text-gray-900 mb-2">
@@ -487,7 +493,7 @@
                         ? 'bg-green-500'
                         : 'bg-gray-200',
                     ]"
-                  ></div>
+                  />
                 </div>
                 <div class="flex items-center text-sm">
                   <span
@@ -514,7 +520,7 @@
                         ? 'bg-green-500'
                         : 'bg-gray-200',
                     ]"
-                  ></div>
+                  />
                 </div>
                 <div class="flex items-center text-sm">
                   <span
@@ -620,8 +626,8 @@
               </div>
               <div class="mt-4">
                 <button
-                  @click="goBackInComparison"
                   class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                  @click="goBackInComparison"
                 >
                   ← Back to Video A
                 </button>
@@ -712,7 +718,7 @@
                     class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="Describe what you're comparing..."
                     :disabled="comparisonState.isCreating"
-                  ></textarea>
+                  />
                 </div>
               </div>
 
@@ -721,29 +727,31 @@
                 v-if="comparisonState.error"
                 class="mt-4 p-3 bg-red-50 border border-red-200 rounded-md"
               >
-                <p class="text-sm text-red-600">{{ comparisonState.error }}</p>
+                <p class="text-sm text-red-600">
+                  {{ comparisonState.error }}
+                </p>
               </div>
 
               <!-- Actions -->
               <div class="flex items-center justify-between mt-6">
                 <button
-                  @click="goBackInComparison"
                   :disabled="comparisonState.isCreating"
                   class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors disabled:opacity-50"
+                  @click="goBackInComparison"
                 >
                   ← Back to Video B
                 </button>
                 <button
-                  @click="createComparison"
                   :disabled="
                     comparisonState.isCreating || !comparisonState.title.trim()
                   "
                   class="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                  @click="createComparison"
                 >
                   <div
                     v-if="comparisonState.isCreating"
                     class="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"
-                  ></div>
+                  />
                   {{
                     comparisonState.isCreating
                       ? 'Creating...'
@@ -761,8 +769,8 @@
         class="flex items-center justify-end space-x-3 p-6 border-t border-gray-200 bg-gray-50"
       >
         <button
-          @click="closeModal"
           class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+          @click="closeModal"
         >
           Cancel
         </button>
@@ -792,7 +800,7 @@
                 stroke-linejoin="round"
                 stroke-width="2"
                 d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"
-              ></path>
+              />
             </svg>
           </div>
           <div class="ml-3">
@@ -812,21 +820,21 @@
 
         <div class="flex justify-end space-x-3">
           <button
-            @click="cancelDelete"
             :disabled="isDeleting"
             class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            @click="cancelDelete"
           >
             Cancel
           </button>
           <button
-            @click="deleteProject"
             :disabled="isDeleting"
             class="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            @click="deleteProject"
           >
             <span v-if="isDeleting" class="flex items-center">
               <div
                 class="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"
-              ></div>
+              />
               Deleting...
             </span>
             <span v-else>Delete Project</span>
@@ -837,7 +845,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { ProjectService } from '../services/projectService.ts';
 import { ComparisonVideoService } from '../services/comparisonVideoService.ts';
@@ -863,12 +871,12 @@ const { subscribeToGlobalComments, unsubscribeFromGlobalComments } =
   useGlobalComments();
 
 // State
-const projects = ref([]);
+const projects = ref<Project[]>([]);
 const isLoading = ref(false);
 const error = ref(null);
-const commentCounts = ref({});
-const newCommentIndicators = ref(new Set());
-const lastViewedTimes = ref({});
+const commentCounts = ref<Record<string, number>>({});
+const newCommentIndicators = ref<Set<string>>(new Set());
+const lastViewedTimes = ref<Record<string, string>>({});
 
 // Tab management
 const activeTab = ref('load');
@@ -884,8 +892,10 @@ const projectToDelete = ref(null);
 const isDeleting = ref(false);
 
 // Computed properties
-const singleVideoProjects = computed(() =>
-  projects.value.filter((project) => project.projectType === 'single')
+const singleVideoProjects = computed<SingleProject[]>(() =>
+  projects.value.filter(
+    (project): project is SingleProject => project.projectType === 'single'
+  )
 );
 
 // Methods
@@ -899,11 +909,11 @@ const closeModal = () => {
   emit('close');
 };
 
-const setActiveTab = (tab) => {
+const setActiveTab = (tab: 'load' | 'load-video' | 'create') => {
   activeTab.value = tab;
 };
 
-const handleComparisonCreated = (comparisonProject) => {
+const handleComparisonCreated = (comparisonProject: any) => {
   console.log('🎬 [LoadVideoModal] Comparison created:', comparisonProject);
   emit('project-selected', comparisonProject);
   closeModal();
@@ -962,7 +972,7 @@ const loadProjects = async () => {
   }
 };
 
-const selectProject = async (project) => {
+const selectProject = async (project: Project) => {
   try {
     console.log(
       '🎬 [LoadVideoModal] Project selected:',
@@ -985,7 +995,7 @@ const selectProject = async (project) => {
 };
 
 // New comment indicator methods
-const markProjectAsViewed = (projectId) => {
+const markProjectAsViewed = (projectId: string) => {
   lastViewedTimes.value[projectId] = new Date().toISOString();
   newCommentIndicators.value.delete(projectId);
 
@@ -1004,7 +1014,10 @@ const loadLastViewedTimes = () => {
   }
 };
 
-const handleNewComment = (comment) => {
+const handleNewComment = (comment: {
+  annotationId: string;
+  createdAt: string;
+}) => {
   console.log('🔔 [LoadVideoModal] New comment received:', comment);
 
   // Find which project this comment belongs to
@@ -1046,7 +1059,7 @@ const cleanupRealtimeComments = () => {
 };
 
 // Utility functions
-const formatDuration = (seconds) => {
+const formatDuration = (seconds: number) => {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   const secs = Math.floor(seconds % 60);
@@ -1059,7 +1072,7 @@ const formatDuration = (seconds) => {
   return `${minutes}:${secs.toString().padStart(2, '0')}`;
 };
 
-const formatDate = (dateString) => {
+const formatDate = (dateString: string) => {
   const date = new Date(dateString);
   return (
     date.toLocaleDateString() +
@@ -1072,7 +1085,7 @@ const formatDate = (dateString) => {
 };
 
 // Delete project methods
-const confirmDeleteProject = (project) => {
+const confirmDeleteProject = (project: Project) => {
   projectToDelete.value = project;
   showDeleteConfirmation.value = true;
 };
@@ -1150,12 +1163,12 @@ const availableVideosForB = computed(() =>
 );
 
 // Comparison creation methods
-const selectVideoA = (project) => {
+const selectVideoA = (project: SingleProject) => {
   comparisonState.value.selectedVideoA = project;
   comparisonState.value.step = 'select-video-b';
 };
 
-const selectVideoB = (project) => {
+const selectVideoB = (project: SingleProject) => {
   comparisonState.value.selectedVideoB = project;
   comparisonState.value.step = 'details';
 };
@@ -1175,29 +1188,39 @@ const createComparison = async () => {
     comparisonState.value.error = 'Title is required';
     return;
   }
+  if (
+    !comparisonState.value.selectedVideoA?.video?.id ||
+    !comparisonState.value.selectedVideoB?.video?.id
+  ) {
+    comparisonState.value.error = 'Both videos must be selected';
+    return;
+  }
 
   try {
     comparisonState.value.isCreating = true;
     comparisonState.value.error = null;
 
-    // Create comparison using ComparisonVideoService
+    // Create comparison using ComparisonVideoService with explicit IDs (flat, camelCase aliases on the service)
     const comparisonVideo = await ComparisonVideoService.createComparisonVideo({
       title: comparisonState.value.title,
-      description: comparisonState.value.description,
-      videoA: comparisonState.value.selectedVideoA.video,
-      videoB: comparisonState.value.selectedVideoB.video,
+      description: comparisonState.value.description ?? null,
+      videoAId: comparisonState.value.selectedVideoA.video.id,
+      videoBId: comparisonState.value.selectedVideoB.video.id,
+      userId:
+        user.value && (user.value as any).id ? (user.value as any).id : null,
     });
 
     // Transform to Project format
     const dualProject = {
       id: comparisonVideo.id,
       projectType: 'dual',
-      title: comparisonVideo.title,
-      thumbnail_url: comparisonVideo.thumbnail_url,
-      createdAt: comparisonVideo.createdAt,
-      videoA: comparisonVideo.videoA,
-      videoB: comparisonVideo.videoB,
-      comparisonVideo: comparisonVideo,
+      title: comparisonVideo.title ?? comparisonState.value.title,
+      createdAt: comparisonVideo.createdAt ?? new Date().toISOString(),
+      videoA:
+        comparisonVideo.videoA ?? comparisonState.value.selectedVideoA.video,
+      videoB:
+        comparisonVideo.videoB ?? comparisonState.value.selectedVideoB.video,
+      comparisonVideo,
     };
 
     handleComparisonCreated(dualProject);
@@ -1257,7 +1280,7 @@ const handleVideoUploadError = (error) => {
 };
 
 // URL validation helper
-const isValidVideoUrl = (url) => {
+const isValidVideoUrl = (url: string) => {
   try {
     const urlObj = new URL(url);
 
@@ -1434,7 +1457,7 @@ const loadVideoFromUrl = async () => {
   }
 };
 
-const handleUrlKeyPress = (event) => {
+const handleUrlKeyPress = (event: KeyboardEvent) => {
   if (event.key === 'Enter') {
     loadVideoFromUrl();
   }

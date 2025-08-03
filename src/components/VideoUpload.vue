@@ -17,12 +17,15 @@
         ref="fileInput"
         type="file"
         accept="video/*"
-        @change="handleFileSelect"
         class="hidden"
-      />
+        @change="handleFileSelect"
+      >
 
       <!-- Upload Icon and Text -->
-      <div v-if="!isUploading && !uploadError" class="upload-content">
+      <div
+        v-if="!isUploading && !uploadError"
+        class="upload-content"
+      >
         <svg
           class="upload-icon"
           fill="none"
@@ -34,17 +37,24 @@
             stroke-linejoin="round"
             stroke-width="2"
             d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-          ></path>
+          />
         </svg>
-        <h3 class="upload-title">Upload Video File</h3>
+        <h3 class="upload-title">
+          Upload Video File
+        </h3>
         <p class="upload-description">
           Drag and drop your video file here, or click to browse
         </p>
-        <p class="upload-formats">Supported formats: MP4 (max 200MB)</p>
+        <p class="upload-formats">
+          Supported formats: MP4, WebM, OGG, MOV, AVI (max 200MB)
+        </p>
       </div>
 
       <!-- Upload Progress -->
-      <div v-if="isUploading" class="upload-progress">
+      <div
+        v-if="isUploading"
+        class="upload-progress"
+      >
         <svg
           class="progress-icon animate-spin"
           fill="none"
@@ -56,14 +66,16 @@
             stroke-linejoin="round"
             stroke-width="2"
             d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-          ></path>
+          />
         </svg>
-        <h3 class="upload-title">Uploading Video...</h3>
+        <h3 class="upload-title">
+          Uploading Video...
+        </h3>
         <div class="progress-bar">
           <div
             class="progress-fill"
             :style="{ width: `${uploadProgress}%` }"
-          ></div>
+          />
         </div>
         <p class="upload-description">
           {{ uploadProgress.toFixed(1) }}% - {{ uploadStatus }}
@@ -71,7 +83,10 @@
       </div>
 
       <!-- Error State -->
-      <div v-if="uploadError" class="upload-error">
+      <div
+        v-if="uploadError"
+        class="upload-error"
+      >
         <svg
           class="error-icon"
           fill="none"
@@ -83,36 +98,59 @@
             stroke-linejoin="round"
             stroke-width="2"
             d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"
-          ></path>
+          />
         </svg>
-        <h3 class="upload-title">Upload Failed</h3>
-        <p class="upload-description">{{ uploadError }}</p>
-        <button @click="resetUpload" class="retry-button">Try Again</button>
+        <h3 class="upload-title">
+          Upload Failed
+        </h3>
+        <p class="upload-description">
+          {{ uploadError }}
+        </p>
+        <button
+          class="retry-button"
+          @click="resetUpload"
+        >
+          Try Again
+        </button>
       </div>
     </div>
 
     <!-- Selected File Info -->
-    <div v-if="selectedFile && !isUploading" class="file-info">
+    <div
+      v-if="selectedFile && !isUploading"
+      class="file-info"
+    >
       <div class="file-details">
         <div class="file-icon">
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
             <path
               stroke-linecap="round"
               stroke-linejoin="round"
               stroke-width="2"
               d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-            ></path>
+            />
           </svg>
         </div>
         <div class="file-text">
-          <p class="file-name">{{ selectedFile.name }}</p>
-          <p class="file-size">{{ formatFileSize(selectedFile.size) }}</p>
+          <p class="file-name">
+            {{ selectedFile.name }}
+          </p>
+          <p class="file-size">
+            {{ formatFileSize(selectedFile.size) }}
+          </p>
         </div>
       </div>
 
       <!-- Custom Project Name Input -->
       <div class="project-name-section">
-        <label for="projectName" class="project-name-label">
+        <label
+          for="projectName"
+          class="project-name-label"
+        >
           Project Name
         </label>
         <input
@@ -122,7 +160,7 @@
           class="project-name-input"
           :placeholder="defaultProjectName"
           maxlength="100"
-        />
+        >
         <p class="project-name-hint">
           Enter a custom name for your project, or leave blank to use the
           filename
@@ -131,16 +169,16 @@
 
       <div class="file-actions">
         <button
-          @click="startUpload"
           class="upload-button"
           :disabled="isUploading"
+          @click="startUpload"
         >
           Upload Video
         </button>
         <button
-          @click="clearSelection"
           class="cancel-button"
           :disabled="isUploading"
+          @click="clearSelection"
         >
           Cancel
         </button>
@@ -153,6 +191,7 @@
 import { ref, computed } from 'vue';
 import { VideoUploadService } from '../services/videoUploadService';
 import { useAuth } from '../composables/useAuth';
+import { logger } from '../utils/logger';
 
 // Props
 const props = defineProps({
@@ -251,10 +290,20 @@ const startUpload = async () => {
       user.value.id,
       projectName,
       (progress) => {
-        uploadProgress.value = progress.percentage;
-        uploadStatus.value = `Uploading... ${formatFileSize(
-          progress.loaded
-        )} / ${formatFileSize(progress.total)}`;
+        // Throttle progress UI updates using requestAnimationFrame
+        if (!window.__vu_lastRaf) {
+          window.__vu_lastRaf = 0;
+        }
+        const update = () => {
+          uploadProgress.value = progress.percentage;
+          uploadStatus.value = `Uploading... ${formatFileSize(
+            progress.loaded
+          )} / ${formatFileSize(progress.total)}`;
+          window.__vu_lastRaf = 0;
+        };
+        if (!window.__vu_lastRaf) {
+          window.__vu_lastRaf = requestAnimationFrame(update);
+        }
       }
     );
 

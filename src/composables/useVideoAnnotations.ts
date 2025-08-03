@@ -1,24 +1,34 @@
-import { ref, readonly, toValue, watch, onMounted } from 'vue';
+import {
+  ref,
+  readonly,
+  toValue,
+  watch,
+  onMounted,
+  computed,
+  type Ref,
+} from 'vue';
 import { VideoService } from '../services/videoService';
+import { logger } from '../utils/logger';
 import { AnnotationService } from '../services/annotationService';
 import { useAuth } from './useAuth';
-import { supabase } from './useSupabase';
-import type { DatabaseAnnotation, Annotation } from '../types/database';
+import { ComparisonVideoService } from '../services/comparisonVideoService';
+import type { Annotation } from '../types/database';
 
 export function useVideoAnnotations(
-  videoUrl,
-  videoId,
-  projectId,
-  comparisonVideoId
+  videoUrl: Ref<string | null> | string,
+  videoId: Ref<string | null> | string,
+  projectId: Ref<string | null> | string,
+  comparisonVideoId: Ref<string | null> | string
 ) {
   const { user } = useAuth();
 
   // State
-  const currentVideo = ref(null);
-  const annotations = ref([]);
+  const currentVideo = ref<any | null>(null);
+  const annotations = ref<Annotation[]>([]);
   const isLoading = ref(false);
-  const error = ref(null);
-  const isComparisonContext = ref(false);
+  const error = ref<string | null>(null);
+  // Derive comparison context from comparisonVideoId to avoid drift
+  const isComparisonContext = computed(() => !!toValue(comparisonVideoId));
 
   // Watch for user changes and reload annotations if we have a current video
   watch(user, async (newUser, oldUser) => {
@@ -33,111 +43,55 @@ export function useVideoAnnotations(
 
   // Watch for comparisonVideoId changes and reload annotations
   watch(
-    comparisonVideoId,
-    async (newComparisonVideoId, oldComparisonVideoId) => {
-      if (newComparisonVideoId !== oldComparisonVideoId) {
-        console.log('🔄 [useVideoAnnotations] comparisonVideoId changed:', {
-          old: oldComparisonVideoId,
-          new: newComparisonVideoId,
+    () => toValue(comparisonVideoId),
+    async (newId, oldId) => {
+      if (newId !== oldId && (toValue(user) || newId)) {
+        logger.debug('[useVideoAnnotations] comparisonVideoId changed', {
+          old: oldId,
+          new: newId,
         });
-
-        // Update comparison context
-        isComparisonContext.value = !!newComparisonVideoId;
-
-        // Reload annotations when comparison video ID changes
-        // Allow loading for shared comparison videos even without authentication
-        if (toValue(user) || newComparisonVideoId) {
-          await loadAnnotations();
-        }
+        await loadAnnotations();
       }
     }
   );
 
   // Check for shared videos on mount
   onMounted(async () => {
-    console.log(
-      '🔍 [useVideoAnnotations] onMounted - checking for shared video'
-    );
     const urlParams = new URLSearchParams(window.location.search);
     const shareId = urlParams.get('share');
-
     if (shareId) {
-      console.log(
-        '🔍 [useVideoAnnotations] Found shared video on mount, triggering loadAnnotations'
-      );
+      logger.debug('[useVideoAnnotations] shared video detected on mount');
       await loadAnnotations();
     }
   });
 
   // Create or get video record
-  const initializeVideo = async (videoData) => {
+  const initializeVideo = async (videoData: any) => {
     if (!toValue(user)) return;
 
     try {
       isLoading.value = true;
 
-      // Check if we're in a comparison context
-      isComparisonContext.value = !!toValue(comparisonVideoId);
-
-      console.log(
-        '🐛 [DEBUG] useVideoAnnotations.initializeVideo called with:',
-        {
-          videoUrl: toValue(videoUrl),
-          videoId: toValue(videoId),
-          videoData,
-          currentUser: toValue(user)?.email,
-          comparisonVideoId: toValue(comparisonVideoId),
-          isComparisonContext: isComparisonContext.value,
-        }
-      );
-
       // If we have an existing video record (for uploaded videos), use it directly
       if (videoData.existingVideo) {
-        console.log(
-          '🐛 [DEBUG] Using existing video record:',
-          videoData.existingVideo.id
-        );
         currentVideo.value = videoData.existingVideo;
         await loadAnnotations();
         return videoData.existingVideo;
       }
 
-      // For uploaded videos, check if a video with this URL already exists as an upload
+      // For uploaded videos, check if a video with this URL already exists as an upload via service
       if (videoData.videoType === 'upload') {
-        console.log(
-          '🐛 [DEBUG] Checking for existing uploaded video with URL:',
-          toValue(videoUrl)
-        );
-
-        // Use VideoService to check for existing uploaded video
-        const { data: existingUploadedVideos, error: videoError } =
-          await supabase
-            .from('videos')
-            .select('*')
-            .eq('url', toValue(videoUrl))
-            .eq('ownerId', toValue(user).id)
-            .eq('videoType', 'upload');
-
         const existingUploadedVideo =
-          existingUploadedVideos && existingUploadedVideos.length > 0
-            ? existingUploadedVideos[0]
-            : null;
-
-        if (existingUploadedVideo) {
-          console.log(
-            '🐛 [DEBUG] Found existing uploaded video, using it:',
-            existingUploadedVideo.id
+          await VideoService.findExistingUploadedVideo(
+            toValue(videoUrl),
+            toValue(user).id
           );
+        if (existingUploadedVideo) {
           currentVideo.value = existingUploadedVideo;
           await loadAnnotations();
           return existingUploadedVideo;
         }
       }
-
-      // Only create new video record if no existing video was found
-      console.log(
-        '🐛 [DEBUG] No existing video found, creating new video record'
-      );
 
       // Create or update video record (handles duplicates automatically)
       const video = await VideoService.createVideo({
@@ -152,24 +106,11 @@ export function useVideoAnnotations(
         isPublic: false,
       });
 
-      console.log('🐛 [DEBUG] VideoService.createVideo returned:', {
-        videoId: video.id,
-        videoUrl: video.url,
-        videoType: video.videoType,
-        title: video.title,
-      });
-
-      console.log('🐛 [DEBUG] Setting currentVideo.value to:', video);
       currentVideo.value = video;
-      console.log(
-        '🐛 [DEBUG] currentVideo.value after setting:',
-        currentVideo.value
-      );
 
       // Load annotations for this video
       await loadAnnotations();
-    } catch (err) {
-      console.error('🐛 [DEBUG] Error in initializeVideo:', err);
+    } catch (err: any) {
       error.value = err.message;
     } finally {
       isLoading.value = false;
@@ -177,7 +118,8 @@ export function useVideoAnnotations(
   };
 
   const loadAnnotations = async () => {
-    console.log('🔍 [useVideoAnnotations] loadAnnotations called:', {
+    // DEV log (kept minimal)
+    logger.debug('[useVideoAnnotations] loadAnnotations', {
       isComparisonContext: isComparisonContext.value,
       comparisonVideoId: toValue(comparisonVideoId),
       currentVideo: currentVideo.value?.id,
@@ -189,7 +131,7 @@ export function useVideoAnnotations(
     const shareId = urlParams.get('share');
     const isSharedVideo = !!shareId;
 
-    console.log('🔍 [useVideoAnnotations] Share detection:', {
+    logger.debug('[useVideoAnnotations] share detection', {
       shareId,
       isSharedVideo,
       currentURL: window.location.href,
@@ -198,16 +140,14 @@ export function useVideoAnnotations(
     // For comparison context, we don't need currentVideo
     // For shared videos, we also don't need currentVideo to be set yet
     if (!isComparisonContext.value && !currentVideo.value && !isSharedVideo) {
-      console.log(
-        '🔍 [useVideoAnnotations] Skipping - no comparison context, no current video, and not shared video'
-      );
+      logger.debug('[useVideoAnnotations] skip load - no ctx/current/shared');
       return;
     }
 
     // If this is a shared video, load it using ShareService
     if (isSharedVideo && shareId) {
-      console.log(
-        '🔍 [useVideoAnnotations] Loading shared video annotations for:',
+      logger.debug(
+        '[useVideoAnnotations] load shared video annotations',
         shareId
       );
       try {
@@ -215,43 +155,14 @@ export function useVideoAnnotations(
         const shareData =
           await ShareService.getSharedVideoWithCommentPermissions(shareId);
 
-        console.log(
-          '🔍 [useVideoAnnotations] Shared video data loaded:',
-          shareData
-        );
-        console.log(
-          '🔍 [useVideoAnnotations] Shared video annotations:',
-          shareData.annotations
-        );
+        logger.debug('[useVideoAnnotations] shared video data loaded', {
+          count: shareData.annotations?.length ?? 0,
+        });
 
-        if (shareData.annotations && shareData.annotations.length > 0) {
-          console.log(
-            '🔍 [useVideoAnnotations] Setting shared video annotations'
-          );
-          annotations.value = shareData.annotations.map((ann) => {
-            // If it's already in app format, use as-is, otherwise transform
-            if (ann.frame !== undefined) {
-              return ann; // Already in app format
-            } else {
-              return ann; // Cast from DB format
-            }
-          });
-          console.log(
-            '🔍 [useVideoAnnotations] Annotations set:',
-            annotations.value
-          );
-        } else {
-          console.log(
-            '🔍 [useVideoAnnotations] No annotations in shared video'
-          );
-          annotations.value = [];
-        }
+        annotations.value = (shareData.annotations || []) as Annotation[];
         return;
       } catch (error) {
-        console.error(
-          '🔍 [useVideoAnnotations] Error loading shared video:',
-          error
-        );
+        logger.error('[useVideoAnnotations] error loading shared video', error);
         return;
       }
     }
@@ -263,8 +174,8 @@ export function useVideoAnnotations(
       currentVideo.value &&
       !currentVideo.value.isPublic
     ) {
-      console.log(
-        '🔍 [useVideoAnnotations] Skipping - no user and video not public'
+      logger.debug(
+        '[useVideoAnnotations] skip load - no user and video not public'
       );
       return;
     }
@@ -275,43 +186,29 @@ export function useVideoAnnotations(
 
       if (isComparisonContext.value && toValue(comparisonVideoId)) {
         // In comparison context, load ALL annotations (individual + comparison-specific)
-        console.log(
-          '🔍 [useVideoAnnotations] Loading all annotations for comparison video:',
+        logger.debug(
+          '[useVideoAnnotations] loading all annotations for comparison',
           toValue(comparisonVideoId)
         );
 
         try {
           // First get the comparison video details to get videoA and videoB IDs
-          const { data: comparisonVideo, error: comparisonError } =
-            await supabase
-              .from('comparison_videos')
-              .select('videoAId, videoBId')
-              .eq('id', toValue(comparisonVideoId))
-              .single();
-
-          if (comparisonError) {
-            console.error(
-              '❌ [useVideoAnnotations] Error getting comparison video details:',
-              comparisonError
-            );
-            throw comparisonError;
-          }
-
-          console.log(
-            '🔍 [useVideoAnnotations] Comparison video details:',
+          const comparisonVideo = await ComparisonVideoService.getById(
+            toValue(comparisonVideoId) as string
+          );
+          // comparisonError path removed; service throws on failure
+          logger.debug(
+            '[useVideoAnnotations] comparison details',
             comparisonVideo
           );
 
           if (comparisonVideo) {
             // Load all annotations for the comparison (individual + comparison-specific)
-            console.log(
-              '🔍 [useVideoAnnotations] Loading annotations for videos:',
-              {
-                comparisonVideoId: toValue(comparisonVideoId),
-                videoAId: comparisonVideo.videoAId,
-                videoBId: comparisonVideo.videoBId,
-              }
-            );
+            logger.debug('[useVideoAnnotations] loading annotations for', {
+              comparisonVideoId: toValue(comparisonVideoId),
+              videoAId: comparisonVideo.videoAId,
+              videoBId: comparisonVideo.videoBId,
+            });
 
             const allAnnotations =
               await AnnotationService.getAllComparisonVideoAnnotations(
@@ -320,43 +217,27 @@ export function useVideoAnnotations(
                 comparisonVideo.videoBId
               );
 
-            console.log('🔍 [useVideoAnnotations] Retrieved all annotations:', {
-              comparison: allAnnotations.comparison?.length || 0,
-              videoA: allAnnotations.videoA?.length || 0,
-              videoB: allAnnotations.videoB?.length || 0,
-              total:
-                (allAnnotations.comparison?.length || 0) +
-                (allAnnotations.videoA?.length || 0) +
-                (allAnnotations.videoB?.length || 0),
-            });
-
             // Flatten all annotations into a single array
             annotations.value = [
-              ...allAnnotations.comparison,
-              ...allAnnotations.videoA,
-              ...allAnnotations.videoB,
+              ...(allAnnotations.comparison || []),
+              ...(allAnnotations.videoA || []),
+              ...(allAnnotations.videoB || []),
             ];
-
-            console.log(
-              '🔍 [useVideoAnnotations] Final annotations array:',
-              annotations.value.length,
-              'annotations'
-            );
           } else {
-            console.warn('🔍 [useVideoAnnotations] No comparison video found');
+            logger.warn('[useVideoAnnotations] no comparison video found');
             annotations.value = [];
           }
         } catch (err) {
-          console.error(
-            '❌ [useVideoAnnotations] Error in comparison loading:',
+          logger.error(
+            '[useVideoAnnotations] error in comparison loading',
             err
           );
           throw err;
         }
       } else {
         // In individual video context, load individual video annotations
-        console.log(
-          '🔍 [DEBUG] Loading individual video annotations for:',
+        logger.debug(
+          '[useVideoAnnotations] loading individual annotations for',
           currentVideo.value.id
         );
         dbAnnotations = await AnnotationService.getVideoAnnotations(
@@ -376,14 +257,9 @@ export function useVideoAnnotations(
   const addAnnotation = async (annotationData) => {
     // Ensure comparison context is properly set
     const currentComparisonVideoId = toValue(comparisonVideoId);
-    if (currentComparisonVideoId && !isComparisonContext.value) {
-      console.log(
-        '🔧 [DEBUG] Fixing comparison context - setting isComparisonContext to true'
-      );
-      isComparisonContext.value = true;
-    }
+    // isComparisonContext is derived via computed; no mutation here
 
-    console.log('🔍 [DEBUG] addAnnotation called with:', {
+    logger.debug('[useVideoAnnotations] addAnnotation', {
       annotationData,
       currentVideo: currentVideo.value,
       user: toValue(user)?.email,
@@ -391,12 +267,10 @@ export function useVideoAnnotations(
       comparisonVideoId: currentComparisonVideoId,
     });
 
-    console.log(
-      '✅ [DEBUG] Column naming fixes applied - using camelCase for database operations'
-    );
+    // Column naming note: using camelCase for DB operations
 
     if (!toValue(user)) {
-      console.log('❌ [DEBUG] addAnnotation - Missing user');
+      logger.warn('[useVideoAnnotations] addAnnotation - missing user');
       return;
     }
 
@@ -404,45 +278,41 @@ export function useVideoAnnotations(
     if (isComparisonContext.value) {
       // For comparison context, we need comparisonVideoId
       if (!toValue(comparisonVideoId)) {
-        console.log(
-          '❌ [DEBUG] addAnnotation - Missing comparisonVideoId for comparison video context'
+        logger.warn(
+          '[useVideoAnnotations] addAnnotation - missing comparisonVideoId in comparison ctx'
         );
         return;
       }
-      console.log(
-        '✅ [DEBUG] Comparison context validation passed - comparisonVideoId:',
+      logger.debug(
+        '[useVideoAnnotations] comparison ctx validation passed',
         toValue(comparisonVideoId)
       );
     } else {
       // For individual video context, we need currentVideo
       if (!currentVideo.value) {
-        console.log(
-          '❌ [DEBUG] addAnnotation - Missing currentVideo for individual video context'
+        logger.warn(
+          '[useVideoAnnotations] addAnnotation - missing currentVideo for individual context'
         );
         return;
       }
-      console.log(
-        '✅ [DEBUG] Individual context validation passed - currentVideo.id:',
+      logger.debug(
+        '[useVideoAnnotations] addAnnotation - individual ctx ok',
         currentVideo.value.id
       );
     }
 
     try {
-      console.log(
-        '🐛 [DEBUG] addAnnotation - currentVideo.value:',
-        currentVideo.value
-      );
-      console.log(
-        '🐛 [DEBUG] addAnnotation - isComparisonContext:',
-        isComparisonContext.value
-      );
+      logger.debug('[useVideoAnnotations] addAnnotation context', {
+        currentVideo: currentVideo.value,
+        isComparisonContext: isComparisonContext.value,
+      });
 
       let newAnnotation;
 
       if (isComparisonContext.value && toValue(comparisonVideoId)) {
         // In comparison context, create comparison-specific annotation
-        console.log(
-          '🐛 [DEBUG] addAnnotation - creating comparison annotation for:',
+        logger.debug(
+          '[useVideoAnnotations] create comparison annotation for',
           toValue(comparisonVideoId)
         );
 
@@ -454,37 +324,21 @@ export function useVideoAnnotations(
           undefined, // synchronizedFrame
           toValue(projectId)
         );
-        console.log(
-          'Annotation data being sent to createComparisonAnnotation:',
-          annotationData
-        );
-        console.log(
-          '✅ [DEBUG] addAnnotation - comparison annotation created:',
-          newAnnotation
+        // logger payloads available above; avoid verbose dumps
+        logger.debug(
+          '[useVideoAnnotations] comparison annotation created',
+          newAnnotation?.id
         );
       } else {
         // In individual video context, create individual video annotation
-        console.log(
-          '🐛 [DEBUG] addAnnotation - creating individual annotation for:',
+        logger.debug(
+          '[useVideoAnnotations] creating individual annotation for',
           currentVideo.value.id
         );
 
-        // Validate frame data before creating annotation
-        const startFrame =
-          annotationData.startFrame || annotationData.frame || 0;
-        const endFrame =
-          annotationData.endFrame || annotationData.frame || startFrame;
-
-        // Ensure endFrame is not less than startFrame
-        const validatedEndFrame = Math.max(endFrame, startFrame);
-
-        console.log('🔍 [DEBUG] Frame validation:', {
-          originalStartFrame: annotationData.startFrame,
-          originalEndFrame: annotationData.endFrame,
-          validatedStartFrame: startFrame,
-          validatedEndFrame: validatedEndFrame,
-          frame: annotationData.frame,
-        });
+        // Validate frame data before creating annotation (inline to avoid missing helper)
+        const _start = annotationData.startFrame ?? annotationData.frame ?? 0;
+        const _end = annotationData.endFrame ?? annotationData.frame ?? _start;
 
         const dbAnnotation = {
           videoId: currentVideo.value.id,
@@ -496,8 +350,8 @@ export function useVideoAnnotations(
           color: annotationData.color,
           timestamp: annotationData.timestamp,
           frame: annotationData.frame,
-          startFrame: startFrame,
-          endFrame: validatedEndFrame,
+          startFrame: _start,
+          endFrame: Math.max(_end, _start),
           duration: annotationData.duration,
           durationFrames: annotationData.durationFrames,
           annotationType: annotationData.annotationType,
@@ -508,29 +362,29 @@ export function useVideoAnnotations(
         const createdAnnotation = await AnnotationService.createAnnotation(
           dbAnnotation
         );
-        console.log(
-          'Annotation data being sent to createAnnotation:',
+        logger.debug(
+          '[useVideoAnnotations] createAnnotation payload',
           dbAnnotation
         );
 
         newAnnotation = createdAnnotation as Annotation;
-        console.log(
-          '✅ [DEBUG] addAnnotation - individual annotation created:',
-          newAnnotation
+        logger.debug(
+          '[useVideoAnnotations] individual annotation created',
+          newAnnotation?.id
         );
       }
 
       annotations.value.push(newAnnotation);
       annotations.value.sort((a, b) => a.timestamp - b.timestamp);
 
-      console.log(
-        '✅ [DEBUG] addAnnotation - annotation added to local array, total:',
+      logger.debug(
+        '[useVideoAnnotations] annotation added locally',
         annotations.value.length
       );
       return newAnnotation;
     } catch (err) {
-      console.error('❌ [DEBUG] addAnnotation - Error:', err);
-      error.value = err.message;
+      logger.error('[useVideoAnnotations] addAnnotation error', err);
+      error.value = (err as any).message;
       throw err;
     }
   };

@@ -2,7 +2,6 @@ import { ref, readonly, onUnmounted, toValue } from 'vue';
 import { supabase } from './useSupabase';
 import { useAuth } from './useAuth';
 import { ShareService } from '../services/shareService';
-import { CommentService } from '../services/commentService';
 import type { CommentPermissionContext } from '../services/shareService';
 import type { AnonymousSession } from '../types/database';
 

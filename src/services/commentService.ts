@@ -5,7 +5,6 @@ import type {
   CommentUpdate,
   AnonymousSession,
   AnonymousSessionInsert,
-  AnonymousSessionUpdate,
 } from '../types/database';
 
 export interface CreateCommentParams {

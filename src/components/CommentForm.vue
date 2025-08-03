@@ -185,16 +185,31 @@ initializeForm();
   <div class="comment-form p-4 bg-gray-50 border-b border-gray-200">
     <!-- Form Header -->
     <div class="flex justify-between items-center mb-3">
-      <h5 class="text-sm font-medium text-gray-900">{{ formTitle }}</h5>
+      <h5 class="text-sm font-medium text-gray-900">
+        {{ formTitle }}
+      </h5>
       <button
         class="btn-ghost p-1"
-        @click="handleCancel"
         :disabled="isSubmitting"
         title="Cancel"
+        @click="handleCancel"
       >
-        <svg class="icon icon-sm" viewBox="0 0 24 24">
-          <line x1="18" y1="6" x2="6" y2="18"></line>
-          <line x1="6" y1="6" x2="18" y2="18"></line>
+        <svg
+          class="icon icon-sm"
+          viewBox="0 0 24 24"
+        >
+          <line
+            x1="18"
+            y1="6"
+            x2="6"
+            y2="18"
+          />
+          <line
+            x1="6"
+            y1="6"
+            x2="18"
+            y2="18"
+          />
         </svg>
       </button>
     </div>
@@ -205,17 +220,39 @@ initializeForm();
       class="mb-3 p-2 bg-red-50 border border-red-200 rounded-md"
     >
       <div class="flex items-center">
-        <svg class="icon icon-sm text-red-400 mr-2" viewBox="0 0 24 24">
-          <circle cx="12" cy="12" r="10"></circle>
-          <line x1="15" y1="9" x2="9" y2="15"></line>
-          <line x1="9" y1="9" x2="15" y2="15"></line>
+        <svg
+          class="icon icon-sm text-red-400 mr-2"
+          viewBox="0 0 24 24"
+        >
+          <circle
+            cx="12"
+            cy="12"
+            r="10"
+          />
+          <line
+            x1="15"
+            y1="9"
+            x2="9"
+            y2="15"
+          />
+          <line
+            x1="9"
+            y1="9"
+            x2="15"
+            y2="15"
+          />
         </svg>
-        <p class="text-sm text-red-700">{{ error }}</p>
+        <p class="text-sm text-red-700">
+          {{ error }}
+        </p>
       </div>
     </div>
 
     <!-- Display Name Input (for anonymous users without session) -->
-    <div v-if="needsDisplayName" class="mb-3">
+    <div
+      v-if="needsDisplayName"
+      class="mb-3"
+    >
       <label
         for="display-name"
         class="block text-sm font-medium text-gray-700 mb-1"
@@ -231,7 +268,7 @@ initializeForm();
         placeholder="Enter your display name"
         maxlength="50"
         :disabled="isSubmitting"
-      />
+      >
       <p class="mt-1 text-xs text-gray-500">
         This name will be shown with your comment
       </p>
@@ -256,7 +293,7 @@ initializeForm();
         :disabled="isSubmitting"
         @input="handleTyping"
         @blur="handleStopTyping"
-      ></textarea>
+      />
 
       <!-- Character Count -->
       <div class="flex justify-end items-center mt-1">
@@ -270,16 +307,16 @@ initializeForm();
     <div class="flex justify-end space-x-2">
       <button
         class="btn btn-secondary"
-        @click="handleCancel"
         :disabled="isSubmitting"
+        @click="handleCancel"
       >
         Cancel
       </button>
 
       <button
         class="btn btn-primary"
-        @click="handleSubmit"
         :disabled="!canSubmit"
+        @click="handleSubmit"
       >
         <svg
           v-if="isSubmitting"
@@ -294,12 +331,12 @@ initializeForm();
             stroke-width="4"
             fill="none"
             opacity="0.25"
-          ></circle>
+          />
           <path
             fill="currentColor"
             opacity="0.75"
             d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-          ></path>
+          />
         </svg>
         {{ submitButtonText }}
       </button>

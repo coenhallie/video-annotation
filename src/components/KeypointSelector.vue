@@ -2,29 +2,38 @@
   <div class="keypoint-selector">
     <!-- Header with toggle all -->
     <div class="selector-header">
-      <h3 class="selector-title">Keypoint Selection</h3>
+      <h3 class="selector-title">
+        Keypoint Selection
+      </h3>
       <div class="header-controls">
         <button
-          @click="toggleAll"
           class="toggle-all-btn"
           :class="{ 'all-selected': allSelected }"
+          @click="toggleAll"
         >
           {{ allSelected ? 'Deselect All' : 'Select All' }}
         </button>
-        <button @click="resetToDefault" class="reset-btn">Reset</button>
+        <button
+          class="reset-btn"
+          @click="resetToDefault"
+        >
+          Reset
+        </button>
       </div>
     </div>
 
     <!-- Quick presets -->
     <div class="preset-section">
-      <h4 class="preset-title">Quick Presets:</h4>
+      <h4 class="preset-title">
+        Quick Presets:
+      </h4>
       <div class="preset-buttons">
         <button
           v-for="preset in presets"
           :key="preset.name"
-          @click="applyPreset(preset)"
           class="preset-btn"
           :title="preset.description"
+          @click="applyPreset(preset)"
         >
           {{ preset.name }}
         </button>
@@ -40,21 +49,19 @@
       >
         <div class="group-header">
           <button
-            @click="toggleGroup(group)"
             class="group-toggle"
             :class="{ 'group-selected': isGroupSelected(group) }"
+            @click="toggleGroup(group)"
           >
             <span class="group-name">{{ group.name }}</span>
-            <span class="group-count"
-              >({{ getSelectedInGroup(group) }}/{{
-                group.indices.length
-              }})</span
-            >
+            <span class="group-count">({{ getSelectedInGroup(group) }}/{{
+              group.indices.length
+            }})</span>
           </button>
           <button
-            @click="toggleGroupExpansion(group.name)"
             class="expand-toggle"
             :class="{ expanded: expandedGroups.includes(group.name) }"
+            @click="toggleGroupExpansion(group.name)"
           >
             ▼
           </button>
@@ -73,9 +80,9 @@
             <input
               type="checkbox"
               :checked="selectedKeypoints.includes(index)"
-              @change="toggleKeypoint(index)"
               class="keypoint-checkbox"
-            />
+              @change="toggleKeypoint(index)"
+            >
             <span class="keypoint-name">{{ LANDMARK_NAMES[index] }}</span>
             <span class="keypoint-index">#{{ index }}</span>
           </label>

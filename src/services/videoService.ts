@@ -3,13 +3,25 @@ import type {
   VideoInsert,
   VideoUpdate,
   Video,
-  ComparisonVideo,
   VideoEntity,
 } from '../types/database';
 import { isComparisonVideo, isIndividualVideo } from '../types/database';
 import { VideoUploadService } from './videoUploadService';
 
 export class VideoService {
+  static async findExistingUploadedVideo(url: string, ownerId: string) {
+    const { data, error } = await supabase
+      .from('videos')
+      .select('*')
+      .eq('url', url)
+      .eq('ownerId', ownerId)
+      .eq('videoType', 'upload');
+
+    if (error) {
+      return null;
+    }
+    return data && data.length > 0 ? data[0] : null;
+  }
   static async createVideo(videoData: VideoInsert) {
     // Validate video data before proceeding
     if (

@@ -5,11 +5,10 @@
   >
     <!-- Speed Visualization Toggle Control -->
     <div
-      class="absolute opacity-95 top-4 left-4 pointer-events-auto"
       v-if="showToggleControl && videoLoaded"
+      class="absolute opacity-95 top-4 left-4 pointer-events-auto"
     >
       <button
-        @click="toggleSpeedVisualization"
         class="btn btn-ghost btn-sm bg-white border border-gray-200 rounded-lg shadow-md"
         :title="
           speedVisualizationEnabled
@@ -21,6 +20,7 @@
             ? 'Hide speed visualization'
             : 'Show speed visualization'
         "
+        @click="toggleSpeedVisualization"
       >
         <svg
           class="w-4 h-4"
@@ -49,16 +49,19 @@
     <svg
       v-if="
         speedVisualizationEnabled &&
-        showSpeed &&
-        speedMetrics &&
-        speedMetrics.isValid
+          showSpeed &&
+          speedMetrics &&
+          speedMetrics.isValid
       "
       class="absolute inset-0 w-full h-full pointer-events-none"
       :viewBox="`0 0 ${canvasWidth} ${canvasHeight}`"
       preserveAspectRatio="none"
     >
       <!-- Center of Mass point -->
-      <g v-if="showCenterOfMass" class="center-of-mass">
+      <g
+        v-if="showCenterOfMass"
+        class="center-of-mass"
+      >
         <circle
           :cx="comCanvasCoord.x"
           :cy="comCanvasCoord.y"
@@ -97,7 +100,10 @@
             refY="3.5"
             orient="auto"
           >
-            <polygon points="0 0, 10 3.5, 0 7" :fill="velocityColor" />
+            <polygon
+              points="0 0, 10 3.5, 0 7"
+              :fill="velocityColor"
+            />
           </marker>
         </defs>
 
@@ -134,10 +140,10 @@
     <div
       v-if="
         videoLoaded &&
-        speedVisualizationEnabled &&
-        showSpeedPanel &&
-        speedMetrics &&
-        speedMetrics.isValid
+          speedVisualizationEnabled &&
+          showSpeedPanel &&
+          speedMetrics &&
+          speedMetrics.isValid
       "
       class="absolute opacity-95 top-4 right-4 bg-white border border-gray-200 rounded-lg shadow-md p-4 pointer-events-auto"
       style="min-width: 200px"
@@ -169,7 +175,7 @@
                 (speedMetrics.speed / maxSpeedForBar) * 100
               )}%`,
             }"
-          ></div>
+          />
         </div>
       </div>
 
@@ -198,7 +204,6 @@
       <!-- Chart Toggle Button -->
       <div class="mb-3 pt-2 border-t border-gray-200">
         <button
-          @click="toggleChart"
           class="w-full btn btn-ghost btn-sm bg-gray-50 border border-gray-200 rounded-lg shadow-sm hover:bg-gray-100 transition-colors duration-200"
           :title="
             isChartVisible
@@ -210,6 +215,7 @@
               ? 'Hide horizontal speed chart'
               : 'Show horizontal speed chart'
           "
+          @click="toggleChart"
         >
           <svg
             class="w-4 h-4 mr-2"
@@ -235,7 +241,10 @@
       </div>
 
       <!-- Velocity components -->
-      <div v-if="showVelocityComponents" class="text-xs space-y-1">
+      <div
+        v-if="showVelocityComponents"
+        class="text-xs space-y-1"
+      >
         <div class="flex justify-between">
           <span class="text-gray-600">X:</span>
           <span class="font-mono text-gray-700">{{
@@ -298,10 +307,10 @@
     <div
       v-if="
         videoLoaded &&
-        speedVisualizationEnabled &&
-        showSpeed &&
-        (!speedMetrics || !speedMetrics.isValid) &&
-        showNoSpeedIndicator
+          speedVisualizationEnabled &&
+          showSpeed &&
+          (!speedMetrics || !speedMetrics.isValid) &&
+          showNoSpeedIndicator
       "
       class="absolute opacity-95 top-4 right-4 bg-white border border-gray-200 rounded-lg shadow-md px-3 py-2 text-sm text-gray-600 pointer-events-auto"
       role="status"

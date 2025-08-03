@@ -1,29 +1,165 @@
-import { ref, reactive, onUnmounted, computed } from 'vue';
-import { FilesetResolver, PoseLandmarker } from '@mediapipe/tasks-vision';
-import { useSpeedCalculator } from './useSpeedCalculator.js';
+/**
+ * usePoseLandmarker.ts
+ * TypeScript conversion from JS with preserved API and typing.
+ */
+import { ref, reactive, onUnmounted, computed, type Ref } from 'vue';
+import {
+  FilesetResolver,
+  PoseLandmarker,
+  // RunningMode is not exported by the lib types; we will use string literal types instead
+} from '@mediapipe/tasks-vision';
+import { useSpeedCalculator } from './useSpeedCalculator';
 
-export function usePoseLandmarker() {
+type Landmark = { x: number; y: number; z?: number; visibility?: number };
+type WorldLandmark = { x: number; y: number; z: number; visibility?: number };
+
+export interface PoseFrameData {
+  landmarks: Landmark[];
+  worldLandmarks: WorldLandmark[] | [];
+  timestamp: number; // ms
+  confidence: number;
+  detected: boolean;
+  inROI: boolean;
+  totalPosesDetected: number;
+  roiFilterApplied: boolean;
+  roiValidation: any;
+  roiStability: {
+    averageSize: { width: number; height: number };
+    averagePosition: { x: number; y: number };
+    velocityEstimate: { x: number; y: number };
+    sizeVelocity: { width: number; height: number };
+    stabilityScore: number;
+  };
+  enhancedROI: ROI | null;
+  speedMetrics: any;
+}
+
+export interface ROI {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface DetectionSettings {
+  // Use literal union instead of importing RunningMode from the lib (not exported)
+  runningMode: 'VIDEO' | 'IMAGE' | 'LIVE_STREAM';
+  numPoses: number;
+  minPoseDetectionConfidence: number;
+  minPosePresenceConfidence: number;
+  minTrackingConfidence: number;
+  outputSegmentationMasks: boolean;
+  frameSkip: number;
+  maxFPS: number;
+  useRequestAnimationFrame: boolean;
+
+  // ROI settings
+  useROI: boolean;
+  roiBox: ROI | null;
+
+  // ROI Stability Settings
+  roiSmoothingFactor: number;
+  roiHistoryLength: number;
+  roiExpansionFactor: number;
+  roiMinSize: { width: number; height: number };
+  roiMaxSize: { width: number; height: number };
+
+  // Adaptive ROI Settings
+  useAdaptiveROI: boolean;
+  adaptiveROIConfidenceThreshold: number;
+  adaptiveROIExpansionRate: number;
+  adaptiveROIShrinkRate: number;
+
+  // Motion Prediction Settings
+  useMotionPrediction: boolean;
+  motionPredictionWeight: number;
+  maxMotionPredictionDistance: number;
+
+  // ROI Validation Settings
+  roiValidationEnabled: boolean;
+  roiValidationMinLandmarks: number;
+  roiValidationMinConfidence: number;
+
+  // Fallback Settings
+  roiFallbackToFullFrame: boolean;
+  roiFallbackFrameCount: number;
+  roiFallbackRecoveryFrames: number;
+}
+
+export interface UsePoseLandmarker {
+  // State
+  isInitialized: Ref<boolean>;
+  isLoading: Ref<boolean>;
+  error: Ref<string | null>;
+  isDetecting: Ref<boolean>;
+  isEnabled: Ref<boolean>;
+
+  // Pose detection state
+  poseResults: Ref<any>;
+  landmarks: Ref<Landmark[]>;
+  worldLandmarks: Ref<WorldLandmark[]>;
+  currentFrame: Ref<number>;
+  selectedKeypoints: Ref<number[]>;
+
+  // Performance
+  detectionFPS: Ref<number>;
+
+  // ROI state
+  roiHistory: Ref<Array<{ roi: ROI; timestamp: number }>>;
+  roiPrediction: Ref<ROI | null>;
+  roiConfidence: Ref<number>;
+  roiStabilityMetrics: {
+    averageSize: { width: number; height: number };
+    averagePosition: { x: number; y: number };
+    velocityEstimate: { x: number; y: number };
+    sizeVelocity: { width: number; height: number };
+    stabilityScore: number;
+  };
+  detectionSettings: DetectionSettings;
+
+  // Speed metrics passthrough
+  speedMetrics: any;
+  selectedKeypointsComputed: Ref<number[]>;
+
+  // API
+  initialize: () => Promise<void>;
+  detectPose: (
+    videoElement: HTMLVideoElement,
+    timestamp: number,
+    frameNumber: number,
+    playbackRate?: number
+  ) => Promise<PoseFrameData | null>;
+  getPoseForFrame: (frameNumber: number) => PoseFrameData | null;
+  setEnabled: (enabled: boolean) => void;
+  reset: () => void;
+  destroy: () => void;
+  getCurrentPose: Ref<PoseFrameData | null>;
+}
+
+export function usePoseLandmarker(): UsePoseLandmarker {
   // State
   const isInitialized = ref(false);
   const isLoading = ref(false);
-  const error = ref(null);
+  const error = ref<string | null>(null);
   const isDetecting = ref(false);
   const isEnabled = ref(false);
 
   // Pose landmarker instance
-  let poseLandmarker = null;
+  let poseLandmarker: any = null;
 
   // Pose detection state
-  const poseResults = ref(null);
-  const landmarks = ref([]);
-  const worldLandmarks = ref([]);
+  const poseResults = ref<any>(null);
+  const landmarks = ref<Landmark[]>([]);
+  const worldLandmarks = ref<WorldLandmark[]>([]);
 
   // Frame-based pose data storage
-  const poseData = reactive(new Map()); // frame -> pose results
+  const poseData = reactive(new Map<number, PoseFrameData>()); // frame -> pose results
   const currentFrame = ref(0);
 
   // Keypoint selection state
-  const selectedKeypoints = ref(Array.from({ length: 33 }, (_, i) => i)); // All keypoints selected by default
+  const selectedKeypoints = ref<number[]>(
+    Array.from({ length: 33 }, (_, i) => i)
+  ); // All keypoints selected by default
 
   // Speed calculation integration
   const speedCalculator = useSpeedCalculator();
@@ -31,21 +167,21 @@ export function usePoseLandmarker() {
     speedMetrics,
     update: updateSpeedCalculator,
     reset: resetSpeedCalculator,
-  } = speedCalculator;
+  } = speedCalculator as any;
 
   // Performance tracking
   const lastDetectionTime = ref(0);
   const detectionFPS = ref(0);
-  const frameProcessingQueue = ref([]);
+  const frameProcessingQueue = ref<number[]>([]);
   const isProcessingFrame = ref(false);
-  let animationFrameId = null;
+  let animationFrameId: number | null = null;
 
   // MediaPipe timestamp management
   const lastMediaPipeTimestamp = ref(0);
 
   // Enhanced ROI tracking state
-  const roiHistory = ref([]); // Store ROI history for temporal smoothing
-  const roiPrediction = ref(null); // Predicted ROI for next frame
+  const roiHistory = ref<Array<{ roi: ROI; timestamp: number }>>([]); // Store ROI history for temporal smoothing
+  const roiPrediction = ref<ROI | null>(null); // Predicted ROI for next frame
   const roiConfidence = ref(0); // Confidence in current ROI
   const roiStabilityMetrics = reactive({
     averageSize: { width: 0, height: 0 },
@@ -56,7 +192,7 @@ export function usePoseLandmarker() {
   });
 
   // Enhanced performance settings with ROI optimizations
-  const detectionSettings = reactive({
+  const detectionSettings = reactive<DetectionSettings>({
     runningMode: 'VIDEO',
     numPoses: 1,
     minPoseDetectionConfidence: 0.3,
@@ -100,8 +236,8 @@ export function usePoseLandmarker() {
     roiFallbackRecoveryFrames: 10, // Frames to wait before re-enabling ROI
   });
 
-  // Pose landmark connections for skeleton visualization
-  const POSE_CONNECTIONS = [
+  // Pose landmark connections for skeleton visualization (kept for parity)
+  const POSE_CONNECTIONS: number[][] = [
     // Face
     [0, 1],
     [1, 2],
@@ -150,7 +286,7 @@ export function usePoseLandmarker() {
   ];
 
   // Key landmarks for ROI calculation (more comprehensive)
-  const ROI_KEY_LANDMARKS = [
+  const ROI_KEY_LANDMARKS: number[] = [
     0, // nose
     11, // left_shoulder
     12, // right_shoulder
@@ -164,7 +300,6 @@ export function usePoseLandmarker() {
     26, // right_knee
   ];
 
-  // Initialize MediaPipe pose landmarker
   const initialize = async () => {
     if (isInitialized.value) {
       return;
@@ -184,7 +319,8 @@ export function usePoseLandmarker() {
             'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task',
           delegate: 'GPU',
         },
-        runningMode: detectionSettings.runningMode,
+        // Cast runningMode to any to satisfy stricter library typings across versions
+        runningMode: detectionSettings.runningMode as unknown as any,
         numPoses: detectionSettings.numPoses,
         minPoseDetectionConfidence:
           detectionSettings.minPoseDetectionConfidence,
@@ -194,8 +330,7 @@ export function usePoseLandmarker() {
       });
 
       isInitialized.value = true;
-    } catch (err) {
-      console.error('Failed to initialize pose landmarker:', err);
+    } catch (err: any) {
       error.value = `Failed to initialize pose landmarker: ${err.message}`;
     } finally {
       isLoading.value = false;
@@ -203,15 +338,20 @@ export function usePoseLandmarker() {
   };
 
   // Enhanced ROI calculation with temporal smoothing
-  const calculateEnhancedROI = (landmarks, previousROI = null) => {
-    if (!landmarks || landmarks.length === 0) {
+  const calculateEnhancedROI = (
+    landmarksArr: Landmark[],
+    previousROI: ROI | null = null
+  ): ROI | null => {
+    if (!landmarksArr || landmarksArr.length === 0) {
       return null;
     }
 
     // Get key landmarks for ROI calculation
     const keyLandmarks = ROI_KEY_LANDMARKS.map(
-      (index) => landmarks[index]
-    ).filter((landmark) => landmark && landmark.visibility > 0.3);
+      (index) => landmarksArr[index]
+    ).filter(
+      (landmark) => landmark && (landmark.visibility ?? 0) > 0.3
+    ) as Landmark[];
 
     if (keyLandmarks.length < 3) {
       return null;
@@ -227,7 +367,7 @@ export function usePoseLandmarker() {
     const maxY = Math.max(...ys);
 
     // Calculate raw ROI
-    let rawROI = {
+    let rawROI: ROI = {
       x: minX,
       y: minY,
       width: maxX - minX,
@@ -276,7 +416,7 @@ export function usePoseLandmarker() {
   };
 
   // Update ROI history and calculate stability metrics
-  const updateROIHistory = (roi, videoTimestamp = null) => {
+  const updateROIHistory = (roi: ROI, videoTimestamp: number | null = null) => {
     if (!roi) return;
 
     // Use video timestamp if provided, otherwise fall back to performance.now()
@@ -312,7 +452,6 @@ export function usePoseLandmarker() {
       if (recent.length >= 2) {
         const current = recent[recent.length - 1];
         const previous = recent[recent.length - 2];
-        // FIXED: Use video timestamps directly without playbackRate compensation
         const timeDelta = (current.timestamp - previous.timestamp) / 1000; // Convert to seconds
 
         if (timeDelta > 0) {
@@ -343,7 +482,7 @@ export function usePoseLandmarker() {
   };
 
   // Predict ROI for next frame using motion estimation
-  const predictNextROI = (currentROI) => {
+  const predictNextROI = (currentROI: ROI | null): ROI | null => {
     if (!currentROI || !detectionSettings.useMotionPrediction) {
       return currentROI;
     }
@@ -356,7 +495,7 @@ export function usePoseLandmarker() {
     const velocity = roiStabilityMetrics.velocityEstimate;
     const frameTime = 1 / detectionSettings.maxFPS; // Assume consistent frame rate
 
-    let predictedROI = {
+    let predictedROI: ROI = {
       x:
         currentROI.x +
         velocity.x * frameTime * detectionSettings.motionPredictionWeight,
@@ -402,8 +541,8 @@ export function usePoseLandmarker() {
   };
 
   // Validate ROI based on pose landmarks
-  const validateROI = (landmarks, roi) => {
-    if (!detectionSettings.roiValidationEnabled || !landmarks || !roi) {
+  const validateROI = (landmarksArr: Landmark[], roi: ROI | null) => {
+    if (!detectionSettings.roiValidationEnabled || !landmarksArr || !roi) {
       return { isValid: true, reason: 'validation_disabled' };
     }
 
@@ -413,10 +552,10 @@ export function usePoseLandmarker() {
     let validLandmarks = 0;
 
     ROI_KEY_LANDMARKS.forEach((index) => {
-      const landmark = landmarks[index];
-      if (landmark && landmark.visibility > 0.3) {
+      const landmark = landmarksArr[index];
+      if (landmark && (landmark.visibility ?? 0) > 0.3) {
         validLandmarks++;
-        totalConfidence += landmark.visibility;
+        totalConfidence += landmark.visibility ?? 0;
 
         if (
           landmark.x >= roi.x &&
@@ -449,13 +588,20 @@ export function usePoseLandmarker() {
     };
   };
 
+  const calculateAverageConfidence = (lms: Landmark[]) => {
+    if (!lms || lms.length === 0) return 0;
+    const confidences = lms.map((l) => l.visibility ?? 0).filter((v) => v > 0);
+    if (confidences.length === 0) return 0;
+    return confidences.reduce((a, b) => a + b, 0) / confidences.length;
+  };
+
   // Enhanced pose detection with improved ROI handling
   const detectPose = async (
-    videoElement,
-    timestamp,
-    frameNumber,
+    videoElement: HTMLVideoElement,
+    timestamp: number,
+    frameNumber: number,
     playbackRate = 1
-  ) => {
+  ): Promise<PoseFrameData | null> => {
     if (!poseLandmarker || !isInitialized.value || !isEnabled.value) {
       return null;
     }
@@ -499,13 +645,13 @@ export function usePoseLandmarker() {
       poseResults.value = results;
 
       if (results.landmarks && results.landmarks.length > 0) {
-        let selectedPose = null;
+        let selectedPose: Landmark[] | null = null;
         let selectedPoseIndex = -1;
-        let bestROIMatch = null;
+        let bestROIMatch: any = null;
 
         // Enhanced pose selection with ROI consideration
         for (let i = 0; i < results.landmarks.length; i++) {
-          const pose = results.landmarks[i];
+          const pose = results.landmarks[i] as Landmark[];
 
           if (detectionSettings.useROI && detectionSettings.roiBox) {
             // Calculate how well this pose fits the current ROI
@@ -528,7 +674,7 @@ export function usePoseLandmarker() {
         if (selectedPose) {
           landmarks.value = selectedPose;
           worldLandmarks.value = results.worldLandmarks
-            ? results.worldLandmarks[selectedPoseIndex]
+            ? (results.worldLandmarks[selectedPoseIndex] as WorldLandmark[])
             : [];
 
           // Calculate enhanced ROI for this pose
@@ -559,13 +705,6 @@ export function usePoseLandmarker() {
             worldLandmarks.value &&
             worldLandmarks.value.length > 0
           ) {
-            // DEBUG: Log pose detection timing
-            console.log(
-              `🤖 [PoseLandmarker] Pose detected - timestamp: ${(
-                timestamp / 1000
-              ).toFixed(3)}s, frame: ${frameNumber}`
-            );
-
             updateSpeedCalculator(
               landmarks.value,
               worldLandmarks.value,
@@ -574,7 +713,7 @@ export function usePoseLandmarker() {
           }
 
           // Store pose data for this frame
-          const poseFrameData = {
+          const poseFrameData: PoseFrameData = {
             landmarks: landmarks.value,
             worldLandmarks: worldLandmarks.value,
             timestamp,
@@ -586,10 +725,15 @@ export function usePoseLandmarker() {
             roiValidation: bestROIMatch,
             roiStability: { ...roiStabilityMetrics },
             enhancedROI: newROI,
-            speedMetrics: speedMetrics.isValid ? { ...speedMetrics } : null,
+            speedMetrics: (speedMetrics as any).isValid
+              ? { ...(speedMetrics as any) }
+              : null,
           };
 
-          poseData.set(frameNumber, poseFrameData);
+          (poseData as Map<number, PoseFrameData>).set(
+            frameNumber,
+            poseFrameData
+          );
 
           // Update detection FPS
           const detectionTime = performance.now() - now;
@@ -598,45 +742,30 @@ export function usePoseLandmarker() {
           );
 
           return poseFrameData;
-        } else {
-          // No valid pose found
-          const noPoseData = {
-            landmarks: [],
-            worldLandmarks: [],
-            timestamp,
-            confidence: 0,
-            detected: false,
-            inROI: false,
-            reason: detectionSettings.useROI
-              ? 'pose_outside_roi'
-              : 'no_pose_detected',
-            totalPosesDetected: results.landmarks.length,
-            roiFilterApplied: detectionSettings.useROI,
-            roiStability: { ...roiStabilityMetrics },
-          };
-
-          poseData.set(frameNumber, noPoseData);
-          return noPoseData;
         }
-      } else {
-        // No pose detected at all
-        const noPoseData = {
-          landmarks: [],
-          worldLandmarks: [],
-          timestamp,
-          confidence: 0,
-          detected: false,
-          totalPosesDetected: 0,
-          roiFilterApplied: detectionSettings.useROI,
-          roiStability: { ...roiStabilityMetrics },
-        };
-
-        poseData.set(frameNumber, noPoseData);
-        return noPoseData;
       }
-    } catch (err) {
-      console.error('Pose detection error:', err);
-      error.value = `Pose detection error: ${err.message}`;
+
+      // No pose found
+      const emptyData: PoseFrameData = {
+        landmarks: [],
+        worldLandmarks: [],
+        timestamp,
+        confidence: 0,
+        detected: false,
+        inROI: !!detectionSettings.useROI,
+        totalPosesDetected: 0,
+        roiFilterApplied: !!detectionSettings.useROI,
+        roiValidation: null,
+        roiStability: { ...roiStabilityMetrics },
+        enhancedROI: null,
+        speedMetrics: null,
+      };
+
+      (poseData as Map<number, PoseFrameData>).set(frameNumber, emptyData);
+
+      return emptyData;
+    } catch (err: any) {
+      error.value = `Failed to detect pose: ${err.message}`;
       return null;
     } finally {
       isDetecting.value = false;
@@ -644,365 +773,58 @@ export function usePoseLandmarker() {
     }
   };
 
-  // Calculate average confidence from landmarks
-  const calculateAverageConfidence = (landmarks) => {
-    if (!landmarks || landmarks.length === 0) return 0;
-
-    const totalConfidence = landmarks.reduce((sum, landmark) => {
-      return sum + (landmark.visibility || 0);
-    }, 0);
-
-    return totalConfidence / landmarks.length;
+  const getPoseForFrame = (frameNumber: number): PoseFrameData | null => {
+    return (poseData as Map<number, PoseFrameData>).get(frameNumber) ?? null;
   };
 
-  // Enhanced ROI setting with validation
-  const setROI = (x, y, width, height) => {
-    const newROI = {
-      x: Math.max(0, Math.min(x, 1)),
-      y: Math.max(0, Math.min(y, 1)),
-      width: Math.max(
-        detectionSettings.roiMinSize.width,
-        Math.min(width, 1 - x)
-      ),
-      height: Math.max(
-        detectionSettings.roiMinSize.height,
-        Math.min(height, 1 - y)
-      ),
-    };
-
-    detectionSettings.roiBox = newROI;
-    detectionSettings.useROI = true;
-
-    // Reset ROI history when manually setting ROI
-    roiHistory.value = [];
-    roiPrediction.value = null;
+  const setEnabled = (enabled: boolean) => {
+    isEnabled.value = enabled;
   };
 
-  // Clear ROI and reset tracking
-  const clearROI = () => {
-    detectionSettings.useROI = false;
-    detectionSettings.roiBox = null;
+  const reset = () => {
+    (poseData as Map<number, PoseFrameData>).clear();
     roiHistory.value = [];
     roiPrediction.value = null;
     roiConfidence.value = 0;
-
-    // Reset stability metrics
-    Object.assign(roiStabilityMetrics, {
-      averageSize: { width: 0, height: 0 },
-      averagePosition: { x: 0, y: 0 },
-      velocityEstimate: { x: 0, y: 0 },
-      sizeVelocity: { width: 0, height: 0 },
-      stabilityScore: 0,
-    });
-  };
-
-  // Toggle ROI usage
-  const toggleROI = () => {
-    detectionSettings.useROI = !detectionSettings.useROI;
-  };
-
-  // Get pose data for frame with interpolation
-  const getPoseForFrame = (frameNumber) => {
-    const exactPose = poseData.get(frameNumber);
-    if (exactPose) {
-      return exactPose;
-    }
-
-    // Try to find nearby frames for interpolation
-    const nearbyFrames = [];
-    const searchRange = detectionSettings.frameSkip * 2;
-
-    for (
-      let i = frameNumber - searchRange;
-      i <= frameNumber + searchRange;
-      i++
-    ) {
-      const pose = poseData.get(i);
-      if (pose && pose.detected) {
-        nearbyFrames.push({ frame: i, pose });
-      }
-    }
-
-    if (nearbyFrames.length > 0) {
-      // Return closest frame's data
-      nearbyFrames.sort(
-        (a, b) =>
-          Math.abs(a.frame - frameNumber) - Math.abs(b.frame - frameNumber)
-      );
-      return nearbyFrames[0].pose;
-    }
-
-    return null;
-  };
-
-  // Clear all pose data
-  const clearAllPoses = () => {
-    poseData.clear();
-    landmarks.value = [];
-    worldLandmarks.value = [];
-    poseResults.value = null;
-    roiHistory.value = [];
-    roiPrediction.value = null;
-  };
-
-  // Enable pose detection
-  const enablePoseDetection = async () => {
-    if (!isInitialized.value) {
-      await initialize();
-    }
-    isEnabled.value = true;
-  };
-
-  // Disable pose detection
-  const disablePoseDetection = () => {
-    isEnabled.value = false;
-    // Reset MediaPipe timestamp to prevent timestamp mismatch errors
-    lastMediaPipeTimestamp.value = 0;
-  };
-
-  // Toggle pose detection
-  const togglePoseDetection = async () => {
-    if (isEnabled.value) {
-      disablePoseDetection();
-    } else {
-      await enablePoseDetection();
-    }
-  };
-
-  // Update settings
-  const updateSettings = (newSettings) => {
-    Object.assign(detectionSettings, newSettings);
-  };
-
-  // Convert normalized coordinates to canvas coordinates
-  const normalizedToCanvas = (normalizedCoord, canvasWidth, canvasHeight) => {
-    return {
-      x: normalizedCoord.x * canvasWidth,
-      y: normalizedCoord.y * canvasHeight,
-    };
-  };
-
-  // Get landmark by name
-  const getLandmarkByName = (landmarkName, frameNumber = null) => {
-    const LANDMARK_NAMES = [
-      'nose',
-      'left_eye_inner',
-      'left_eye',
-      'left_eye_outer',
-      'right_eye_inner',
-      'right_eye',
-      'right_eye_outer',
-      'left_ear',
-      'right_ear',
-      'mouth_left',
-      'mouth_right',
-      'left_shoulder',
-      'right_shoulder',
-      'left_elbow',
-      'right_elbow',
-      'left_wrist',
-      'right_wrist',
-      'left_pinky',
-      'right_pinky',
-      'left_index',
-      'right_index',
-      'left_thumb',
-      'right_thumb',
-      'left_hip',
-      'right_hip',
-      'left_knee',
-      'right_knee',
-      'left_ankle',
-      'right_ankle',
-      'left_heel',
-      'right_heel',
-      'left_foot_index',
-      'right_foot_index',
-    ];
-
-    const index = LANDMARK_NAMES.indexOf(landmarkName);
-    if (index === -1) return null;
-
-    const currentLandmarks =
-      frameNumber !== null
-        ? getPoseForFrame(frameNumber)?.landmarks
-        : landmarks.value;
-
-    return currentLandmarks?.[index] || null;
-  };
-
-  // Get pose confidence
-  const getPoseConfidence = (frameNumber = null) => {
-    if (frameNumber !== null) {
-      const poseFrame = getPoseForFrame(frameNumber);
-      return poseFrame?.confidence || 0;
-    }
-    return roiConfidence.value;
-  };
-
-  // Export pose data
-  const exportPoseData = (frameNumber = null) => {
-    if (frameNumber !== null) {
-      return getPoseForFrame(frameNumber);
-    }
-
-    return {
-      currentFrame: currentFrame.value,
-      landmarks: landmarks.value,
-      worldLandmarks: worldLandmarks.value,
-      confidence: roiConfidence.value,
-      roiBox: detectionSettings.roiBox,
-      roiStability: { ...roiStabilityMetrics },
-      roiHistory: roiHistory.value.slice(-5), // Last 5 frames
-      settings: { ...detectionSettings },
-    };
-  };
-
-  // Keypoint selection methods
-  const setSelectedKeypoints = (keypoints) => {
-    selectedKeypoints.value = [...keypoints].sort((a, b) => a - b);
-  };
-
-  const getSelectedKeypoints = () => {
-    return selectedKeypoints.value;
-  };
-
-  const isKeypointSelected = (index) => {
-    return selectedKeypoints.value.includes(index);
-  };
-
-  const getFilteredConnections = () => {
-    return POSE_CONNECTIONS.filter(
-      (connection) =>
-        selectedKeypoints.value.includes(connection[0]) &&
-        selectedKeypoints.value.includes(connection[1])
-    );
-  };
-
-  const getFilteredLandmarks = (landmarks) => {
-    return landmarks.filter((_, index) =>
-      selectedKeypoints.value.includes(index)
-    );
-  };
-
-  // RAF-based pose detection for smooth performance
-  const detectPoseRAF = (videoElement, onPoseDetected, playbackRate = 1) => {
-    if (!poseLandmarker || !isInitialized.value || !isEnabled.value) {
-      return;
-    }
-
-    const processFrame = async () => {
-      if (!isEnabled.value) return;
-
-      try {
-        const videoTimestamp = videoElement.currentTime * 1000;
-        const frameNumber = Math.floor((videoTimestamp * 30) / 1000);
-
-        const poseData = await detectPose(
-          videoElement,
-          videoTimestamp,
-          frameNumber,
-          playbackRate
-        );
-
-        if (poseData && onPoseDetected) {
-          onPoseDetected(poseData);
-        }
-      } catch (error) {
-        console.error('RAF pose detection error:', error);
-      }
-
-      if (isEnabled.value) {
-        animationFrameId = requestAnimationFrame(processFrame);
-      }
-    };
-
-    // Start the RAF loop
-    animationFrameId = requestAnimationFrame(processFrame);
-  };
-
-  // Stop RAF-based pose detection
-  const stopPoseDetectionRAF = () => {
-    if (animationFrameId) {
-      cancelAnimationFrame(animationFrameId);
-      animationFrameId = null;
-    }
-  };
-
-  // Cleanup function
-  const cleanup = () => {
-    stopPoseDetectionRAF();
-
-    isEnabled.value = false;
-    clearAllPoses();
+    roiStabilityMetrics.averageSize = { width: 0, height: 0 };
+    roiStabilityMetrics.averagePosition = { x: 0, y: 0 };
+    roiStabilityMetrics.velocityEstimate = { x: 0, y: 0 };
+    roiStabilityMetrics.sizeVelocity = { width: 0, height: 0 };
+    roiStabilityMetrics.stabilityScore = 0;
     resetSpeedCalculator();
-    // Reset MediaPipe timestamp to prevent timestamp mismatch errors
-    lastMediaPipeTimestamp.value = 0;
+  };
 
-    if (poseLandmarker) {
-      poseLandmarker.close();
-      poseLandmarker = null;
+  const destroy = () => {
+    try {
+      // if poseLandmarker has a close() method, call it to free resources
+      if (poseLandmarker && typeof poseLandmarker.close === 'function') {
+        poseLandmarker.close();
+      }
+    } catch {
+      // ignore
     }
+    isEnabled.value = false;
+    isInitialized.value = false;
+    isLoading.value = false;
+    error.value = null;
+    (poseData as Map<number, PoseFrameData>).clear();
   };
 
-  // Get performance statistics
-  const getPerformanceStats = () => {
-    return {
-      detectionFPS: detectionFPS.value,
-      isProcessing: isProcessingFrame.value,
-      poseDataSize: poseData.size,
-      roiStability: roiStabilityMetrics.stabilityScore,
-      roiConfidence: roiConfidence.value,
-      roiHistoryLength: roiHistory.value.length,
-    };
-  };
-
-  // Get ROI insights
-  const getROIInsights = () => {
-    return {
-      currentROI: detectionSettings.roiBox,
-      predictedROI: roiPrediction.value,
-      stability: { ...roiStabilityMetrics },
-      history: roiHistory.value.slice(-10),
-      confidence: roiConfidence.value,
-      settings: {
-        smoothingFactor: detectionSettings.roiSmoothingFactor,
-        useAdaptiveROI: detectionSettings.useAdaptiveROI,
-        useMotionPrediction: detectionSettings.useMotionPrediction,
-        roiValidationEnabled: detectionSettings.roiValidationEnabled,
-      },
-    };
-  };
-
-  // Backward compatibility method for getCurrentPose
-  const getCurrentPose = computed(() => {
-    if (landmarks.value && landmarks.value.length > 0) {
-      return {
-        landmarks: landmarks.value,
-        worldLandmarks: worldLandmarks.value,
-        confidence: roiConfidence.value,
-        detected: true,
-      };
-    }
-    return {
-      landmarks: [],
-      worldLandmarks: [],
-      confidence: 0,
-      detected: false,
-    };
+  // Current pose helper
+  const getCurrentPose = computed<PoseFrameData | null>(() => {
+    return (
+      (poseData as Map<number, PoseFrameData>).get(currentFrame.value) ?? null
+    );
   });
 
-  // Backward compatibility method for setCurrentFrame
-  const setCurrentFrame = (frameNumber) => {
-    currentFrame.value = frameNumber;
-  };
+  // Expose selected keypoints as a computed ref (for API parity)
+  const selectedKeypointsComputed = computed(() => selectedKeypoints.value);
 
   // Cleanup on unmount
   onUnmounted(() => {
-    cleanup();
+    destroy();
   });
 
-  // Return the enhanced API
   return {
     // State
     isInitialized,
@@ -1010,69 +832,35 @@ export function usePoseLandmarker() {
     error,
     isDetecting,
     isEnabled,
+
+    // Pose detection state
+    poseResults,
     landmarks,
     worldLandmarks,
-    poseResults,
     currentFrame,
+    selectedKeypoints,
+
+    // Performance
     detectionFPS,
 
-    // Enhanced ROI state
+    // ROI state
     roiHistory,
     roiPrediction,
     roiConfidence,
     roiStabilityMetrics,
+    detectionSettings,
 
-    // Speed calculation state
+    // Speed metrics
     speedMetrics,
-    speedCalculator,
 
-    // Core methods
+    // API
     initialize,
     detectPose,
-    detectPoseRAF,
-    stopPoseDetectionRAF,
-    enablePoseDetection,
-    disablePoseDetection,
-    togglePoseDetection,
-
-    // Enhanced ROI methods
-    setROI,
-    clearROI,
-    toggleROI,
-    calculateEnhancedROI,
-    validateROI,
-    predictNextROI,
-
-    // Data methods
     getPoseForFrame,
-    clearAllPoses,
-    exportPoseData,
-
-    // Utility methods
-    normalizedToCanvas,
-    getLandmarkByName,
-    getPoseConfidence,
-    updateSettings,
-
-    // Performance and insights
-    getPerformanceStats,
-    getROIInsights,
-
-    // Backward compatibility
+    setEnabled,
+    reset,
+    destroy,
     getCurrentPose,
-    setCurrentFrame,
-
-    // Keypoint selection
-    selectedKeypoints,
-    setSelectedKeypoints,
-    getSelectedKeypoints,
-    isKeypointSelected,
-    getFilteredConnections,
-    getFilteredLandmarks,
-
-    // Configuration
-    detectionSettings,
-    POSE_CONNECTIONS,
-    ROI_KEY_LANDMARKS,
+    selectedKeypointsComputed,
   };
 }

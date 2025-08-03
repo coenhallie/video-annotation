@@ -129,9 +129,12 @@ const closeActions = (event) => {
             :src="comment.user.avatarUrl"
             :alt="authorName"
             class="w-8 h-8 rounded-full object-cover"
-          />
+          >
         </div>
-        <div v-else class="avatar-placeholder">
+        <div
+          v-else
+          class="avatar-placeholder"
+        >
           <span class="text-xs font-medium text-gray-600">{{
             authorInitials
           }}</span>
@@ -146,7 +149,10 @@ const closeActions = (event) => {
             <h5 class="text-sm font-medium text-gray-900 truncate">
               {{ authorName }}
             </h5>
-            <span v-if="comment.isAnonymous" class="anonymous-badge">
+            <span
+              v-if="comment.isAnonymous"
+              class="anonymous-badge"
+            >
               Anonymous
             </span>
           </div>
@@ -167,17 +173,35 @@ const closeActions = (event) => {
             </time>
 
             <!-- Actions Menu -->
-            <div v-if="hasActions" class="relative">
+            <div
+              v-if="hasActions"
+              class="relative"
+            >
               <button
                 class="action-menu-trigger"
-                @click.stop="toggleActions"
                 :aria-expanded="showActions"
                 aria-label="Comment actions"
+                @click.stop="toggleActions"
               >
-                <svg class="icon icon-xs" viewBox="0 0 24 24">
-                  <circle cx="12" cy="12" r="1"></circle>
-                  <circle cx="19" cy="12" r="1"></circle>
-                  <circle cx="5" cy="12" r="1"></circle>
+                <svg
+                  class="icon icon-xs"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    cx="12"
+                    cy="12"
+                    r="1"
+                  />
+                  <circle
+                    cx="19"
+                    cy="12"
+                    r="1"
+                  />
+                  <circle
+                    cx="5"
+                    cy="12"
+                    r="1"
+                  />
                 </svg>
               </button>
 
@@ -192,13 +216,16 @@ const closeActions = (event) => {
                   class="action-menu-item"
                   @click.stop="handleEdit"
                 >
-                  <svg class="icon icon-xs" viewBox="0 0 24 24">
+                  <svg
+                    class="icon icon-xs"
+                    viewBox="0 0 24 24"
+                  >
                     <path
                       d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"
-                    ></path>
+                    />
                     <path
                       d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
-                    ></path>
+                    />
                   </svg>
                   Edit
                 </button>
@@ -208,11 +235,14 @@ const closeActions = (event) => {
                   class="action-menu-item text-red-600 hover:bg-red-50"
                   @click.stop="handleDelete"
                 >
-                  <svg class="icon icon-xs" viewBox="0 0 24 24">
-                    <polyline points="3,6 5,6 21,6"></polyline>
+                  <svg
+                    class="icon icon-xs"
+                    viewBox="0 0 24 24"
+                  >
+                    <polyline points="3,6 5,6 21,6" />
                     <path
                       d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
-                    ></path>
+                    />
                   </svg>
                   Delete
                 </button>
@@ -222,10 +252,27 @@ const closeActions = (event) => {
                   class="action-menu-item text-red-600 hover:bg-red-50"
                   @click.stop="handleModerate"
                 >
-                  <svg class="icon icon-xs" viewBox="0 0 24 24">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <line x1="15" y1="9" x2="9" y2="15"></line>
-                    <line x1="9" y1="9" x2="15" y2="15"></line>
+                  <svg
+                    class="icon icon-xs"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      cx="12"
+                      cy="12"
+                      r="10"
+                    />
+                    <line
+                      x1="15"
+                      y1="9"
+                      x2="9"
+                      y2="15"
+                    />
+                    <line
+                      x1="9"
+                      y1="9"
+                      x2="15"
+                      y2="15"
+                    />
                   </svg>
                   Remove
                 </button>

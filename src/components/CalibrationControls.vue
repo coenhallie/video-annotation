@@ -4,7 +4,7 @@
   >
     <div class="flex items-center justify-between mb-4">
       <h3 class="text-lg font-medium text-gray-900">Speed Calibration</h3>
-      <div class="flex items-center space-x-2"></div>
+      <div class="flex items-center space-x-2" />
     </div>
 
     <!-- Player Height Calibration -->
@@ -16,25 +16,23 @@
       <div class="flex items-center space-x-3">
         <div class="flex-1">
           <input
-            type="range"
             v-model="playerHeightInput"
-            @input="onPlayerHeightChange"
-            :disabled="!calibrationSettings.useHeightCalibration"
+            type="range"
             min="140"
             max="220"
             step="1"
-            class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider disabled:bg-gray-100"
+            class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
+            @input="onPlayerHeightChange"
           />
         </div>
         <div class="flex items-center space-x-2">
           <input
-            type="number"
             v-model="playerHeightInput"
-            @input="onPlayerHeightChange"
-            :disabled="!calibrationSettings.useHeightCalibration"
+            type="number"
             min="140"
             max="220"
-            class="w-16 px-2 py-1 text-sm bg-white border border-gray-300 rounded focus:border-blue-500 focus:outline-none disabled:bg-gray-50 disabled:text-gray-500"
+            class="w-16 px-2 py-1 text-sm bg-white border border-gray-300 rounded focus:border-blue-500 focus:outline-none"
+            @input="onPlayerHeightChange"
           />
           <span class="text-sm text-gray-500">cm</span>
         </div>
@@ -59,15 +57,14 @@
             >Court Length (meters)</label
           >
           <input
-            type="number"
             v-model="courtLength"
-            @input="onCourtDimensionsChange"
-            :disabled="!calibrationSettings.useCourtCalibration"
+            type="number"
             min="5"
             max="30"
             step="0.1"
             placeholder="13.4"
-            class="w-full px-3 py-2 text-sm bg-white border border-gray-300 rounded focus:border-blue-500 focus:outline-none disabled:bg-gray-50 disabled:text-gray-500"
+            class="w-full px-3 py-2 text-sm bg-white border border-gray-300 rounded focus:border-blue-500 focus:outline-none"
+            @input="onCourtDimensionsChange"
           />
         </div>
 
@@ -77,31 +74,28 @@
             >Court Width (meters)</label
           >
           <input
-            type="number"
             v-model="courtWidth"
-            @input="onCourtDimensionsChange"
-            :disabled="!calibrationSettings.useCourtCalibration"
+            type="number"
             min="3"
             max="20"
             step="0.1"
             placeholder="6.1"
-            class="w-full px-3 py-2 text-sm bg-white border border-gray-300 rounded focus:border-blue-500 focus:outline-none disabled:bg-gray-50 disabled:text-gray-500"
+            class="w-full px-3 py-2 text-sm bg-white border border-gray-300 rounded focus:border-blue-500 focus:outline-none"
+            @input="onCourtDimensionsChange"
           />
         </div>
 
         <!-- Preset Buttons -->
         <div class="flex space-x-2">
           <button
+            class="flex-1 px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
             @click="setCourtPreset('badminton')"
-            :disabled="!calibrationSettings.useCourtCalibration"
-            class="flex-1 px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed disabled:text-gray-500 text-white rounded transition-colors"
           >
             Badminton
           </button>
           <button
+            class="flex-1 px-2 py-1 text-xs bg-green-600 hover:bg-green-700 text-white rounded transition-colors"
             @click="setCourtPreset('tennis')"
-            :disabled="!calibrationSettings.useCourtCalibration"
-            class="flex-1 px-2 py-1 text-xs bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed disabled:text-gray-500 text-white rounded transition-colors"
           >
             Tennis
           </button>
@@ -118,14 +112,14 @@
       <div
         v-if="calibrationSettings.isCalibrated"
         class="mt-2 text-xs text-gray-500"
-      ></div>
+      />
     </div>
 
     <!-- Show Calculation Button - Always Visible -->
     <div class="border-gray-200">
       <button
-        @click="showCalculationModal = true"
         class="w-full px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors font-medium"
+        @click="showCalculationModal = true"
       >
         Show Speed Calculation Details
       </button>
@@ -146,8 +140,8 @@
             Speed Calculation Formulas
           </h2>
           <button
-            @click="showCalculationModal = false"
             class="text-gray-400 hover:text-gray-600"
+            @click="showCalculationModal = false"
           >
             <svg
               class="w-6 h-6"
@@ -160,7 +154,7 @@
                 stroke-linejoin="round"
                 stroke-width="2"
                 d="M6 18L18 6M6 6l12 12"
-              ></path>
+              />
             </svg>
           </button>
         </div>
@@ -383,8 +377,8 @@
 
         <div class="mt-6 flex justify-end">
           <button
-            @click="showCalculationModal = false"
             class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+            @click="showCalculationModal = false"
           >
             Close
           </button>
@@ -469,9 +463,10 @@ const onHeightCalibrationToggle = () => {
 
 const onCourtCalibrationToggle = () => {
   if (!props.calibrationSettings.useCourtCalibration) {
-    // Reset court calibration when disabled
-    props.calibrationSettings.courtReferencePoints = [];
-    props.calibrationSettings.pixelsToMetersRatio = null;
+    // Reset court calibration when disabled by applying default badminton dimensions
+    courtLength.value = 13.4;
+    courtWidth.value = 6.1;
+    onCourtDimensionsChange();
   } else {
     // Apply current dimensions when enabled
     onCourtDimensionsChange();
