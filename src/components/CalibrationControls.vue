@@ -296,61 +296,141 @@
 
             <!-- Valid Speed Data -->
             <div
-              v-if="speedMetrics && speedMetrics.isValid"
+              v-if="
+                speedMetrics && speedMetrics.value && speedMetrics.value.isValid
+              "
               class="bg-blue-50 p-4 rounded-lg"
             >
               <div class="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <p><strong>Center of Mass:</strong></p>
                   <p class="font-mono">
-                    x: {{ speedMetrics.centerOfMass.x?.toFixed(4) || 'N/A' }}
+                    x:
+                    {{ speedMetrics.value.centerOfMass.x?.toFixed(4) || 'N/A' }}
                   </p>
                   <p class="font-mono">
-                    y: {{ speedMetrics.centerOfMass.y?.toFixed(4) || 'N/A' }}
+                    y:
+                    {{ speedMetrics.value.centerOfMass.y?.toFixed(4) || 'N/A' }}
                   </p>
                   <p class="font-mono">
-                    z: {{ speedMetrics.centerOfMass.z?.toFixed(4) || 'N/A' }}
+                    z:
+                    {{ speedMetrics.value.centerOfMass.z?.toFixed(4) || 'N/A' }}
                   </p>
                 </div>
                 <div>
                   <p><strong>Velocity (m/s):</strong></p>
                   <p class="font-mono">
-                    x: {{ speedMetrics.velocity.x?.toFixed(4) || 'N/A' }}
+                    x: {{ speedMetrics.value.velocity.x?.toFixed(4) || 'N/A' }}
                   </p>
                   <p class="font-mono">
-                    y: {{ speedMetrics.velocity.y?.toFixed(4) || 'N/A' }}
+                    y: {{ speedMetrics.value.velocity.y?.toFixed(4) || 'N/A' }}
                   </p>
                   <p class="font-mono">
-                    z: {{ speedMetrics.velocity.z?.toFixed(4) || 'N/A' }}
+                    z: {{ speedMetrics.value.velocity.z?.toFixed(4) || 'N/A' }}
                   </p>
                 </div>
                 <div>
                   <p><strong>Speeds (m/s):</strong></p>
                   <p class="font-mono">
-                    Overall: {{ speedMetrics.speed?.toFixed(4) || 'N/A' }}
+                    Overall: {{ speedMetrics.value.speed?.toFixed(4) || 'N/A' }}
                   </p>
                   <p class="font-mono">
                     Horizontal:
-                    {{ speedMetrics.generalMovingSpeed?.toFixed(4) || 'N/A' }}
+                    {{
+                      speedMetrics.value.generalMovingSpeed?.toFixed(4) || 'N/A'
+                    }}
                   </p>
                   <p class="font-mono">
                     Right Foot:
-                    {{ speedMetrics.rightFootSpeed?.toFixed(4) || 'N/A' }}
+                    {{ speedMetrics.value.rightFootSpeed?.toFixed(4) || 'N/A' }}
                   </p>
                 </div>
                 <div>
                   <p><strong>Calibration:</strong></p>
                   <p class="font-mono">
                     Scaling Factor:
-                    {{ speedMetrics.scalingFactor?.toFixed(4) || 'N/A' }}
+                    {{ speedMetrics.value.scalingFactor?.toFixed(4) || 'N/A' }}
                   </p>
                   <p class="font-mono">
-                    Player Height: {{ calibrationSettings.playerHeight }}cm
+                    Player Height:
+                    {{
+                      calibrationSettings.value?.playerHeight ||
+                      calibrationSettings.playerHeight
+                    }}cm
                   </p>
                   <p class="font-mono">
-                    Accuracy: {{ calibrationSettings.calibrationAccuracy }}%
+                    Accuracy:
+                    {{
+                      calibrationSettings.value?.calibrationAccuracy ||
+                      calibrationSettings.calibrationAccuracy
+                    }}%
                   </p>
                 </div>
+              </div>
+            </div>
+
+            <!-- No Speed Data Available -->
+            <div v-else class="bg-gray-50 p-4 rounded-lg">
+              <div class="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p><strong>Center of Mass:</strong></p>
+                  <p class="font-mono text-gray-500">x: No data</p>
+                  <p class="font-mono text-gray-500">y: No data</p>
+                  <p class="font-mono text-gray-500">z: No data</p>
+                </div>
+                <div>
+                  <p><strong>Velocity (m/s):</strong></p>
+                  <p class="font-mono text-gray-500">x: No data</p>
+                  <p class="font-mono text-gray-500">y: No data</p>
+                  <p class="font-mono text-gray-500">z: No data</p>
+                </div>
+                <div>
+                  <p><strong>Speeds (m/s):</strong></p>
+                  <p class="font-mono text-gray-500">Overall: No data</p>
+                  <p class="font-mono text-gray-500">Horizontal: No data</p>
+                  <p class="font-mono text-gray-500">Right Foot: No data</p>
+                </div>
+                <div>
+                  <p><strong>Calibration:</strong></p>
+                  <p class="font-mono">
+                    Scaling Factor:
+                    {{
+                      calibrationSettings.value?.pixelsPerMeter ||
+                      calibrationSettings.pixelsPerMeter
+                        ? (
+                            (calibrationSettings.value?.pixelsPerMeter ||
+                              calibrationSettings.pixelsPerMeter) / 100
+                          ).toFixed(4)
+                        : '1.0000'
+                    }}
+                  </p>
+                  <p class="font-mono">
+                    Player Height:
+                    {{
+                      calibrationSettings.value?.playerHeight ||
+                      calibrationSettings.playerHeight
+                    }}cm
+                  </p>
+                  <p class="font-mono">
+                    Accuracy:
+                    {{
+                      calibrationSettings.value?.calibrationAccuracy ||
+                      calibrationSettings.calibrationAccuracy
+                    }}%
+                  </p>
+                </div>
+              </div>
+              <div
+                class="mt-3 p-3 bg-yellow-100 rounded border-l-4 border-yellow-400"
+              >
+                <p class="text-sm text-yellow-700">
+                  <strong>Status:</strong>
+                  {{
+                    speedMetrics && speedMetrics.value
+                      ? 'Speed data invalid or not ready'
+                      : 'No speed data available - start video playback to see live calculations'
+                  }}
+                </p>
               </div>
             </div>
           </div>
@@ -426,14 +506,19 @@ const props = defineProps({
 // Emits
 
 // Local state
-const playerHeightInput = ref(props.calibrationSettings.playerHeight);
+const playerHeightInput = ref(
+  props.calibrationSettings.value?.playerHeight ||
+    props.calibrationSettings.playerHeight
+);
 const courtLength = ref(13.4); // Default badminton court length
 const courtWidth = ref(6.1); // Default badminton court width
 const showCalculationModal = ref(false);
 
 // Computed
 const accuracyColorClass = computed(() => {
-  const accuracy = props.calibrationSettings.calibrationAccuracy;
+  const accuracy =
+    props.calibrationSettings.value?.calibrationAccuracy ||
+    props.calibrationSettings.calibrationAccuracy;
   if (accuracy >= 70) return 'bg-green-600 text-white';
   if (accuracy >= 40) return 'bg-yellow-600 text-white';
   return 'bg-red-600 text-white';
@@ -441,7 +526,9 @@ const accuracyColorClass = computed(() => {
 
 // Watch for external changes to calibration settings
 watch(
-  () => props.calibrationSettings.playerHeight,
+  () =>
+    props.calibrationSettings.value?.playerHeight ||
+    props.calibrationSettings.playerHeight,
   (newHeight) => {
     playerHeightInput.value = newHeight;
   }
@@ -456,13 +543,21 @@ const onPlayerHeightChange = () => {
 };
 
 const onHeightCalibrationToggle = () => {
-  if (props.calibrationSettings.useHeightCalibration) {
+  if (
+    props.calibrationSettings.value?.useHeightCalibration ||
+    props.calibrationSettings.useHeightCalibration
+  ) {
     onPlayerHeightChange();
   }
 };
 
 const onCourtCalibrationToggle = () => {
-  if (!props.calibrationSettings.useCourtCalibration) {
+  if (
+    !(
+      props.calibrationSettings.value?.useCourtCalibration ||
+      props.calibrationSettings.useCourtCalibration
+    )
+  ) {
     // Reset court calibration when disabled by applying default badminton dimensions
     courtLength.value = 13.4;
     courtWidth.value = 6.1;
@@ -475,7 +570,8 @@ const onCourtCalibrationToggle = () => {
 
 const onCourtDimensionsChange = () => {
   if (
-    props.calibrationSettings.useCourtCalibration &&
+    (props.calibrationSettings.value?.useCourtCalibration ||
+      props.calibrationSettings.useCourtCalibration) &&
     courtLength.value &&
     courtWidth.value
   ) {

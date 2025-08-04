@@ -136,6 +136,30 @@ export function useDrawingCanvas() {
     state.value.drawings.clear();
   };
 
+  // Complete cleanup for project switching
+  const cleanup = () => {
+    console.log('🧹 [DrawingCanvas] Starting complete cleanup...');
+
+    // Clear all drawings
+    clearAllDrawings();
+
+    // Disable drawing mode
+    disableDrawingMode();
+
+    // Reset state to initial values
+    state.value.activeDrawing = null;
+    state.value.isLoadingDrawings = false;
+    state.value.currentTool = {
+      type: 'pen',
+      strokeWidth: 3,
+      severity: 'medium',
+    };
+    state.value.canvasSize = { width: 0, height: 0 };
+    state.value.videoSize = { width: 1920, height: 1080 };
+
+    console.log('✅ [DrawingCanvas] Complete cleanup finished');
+  };
+
   // Convert drawing data to annotation format
   const convertDrawingToAnnotation = (
     drawing: DrawingData,
@@ -329,6 +353,7 @@ export function useDrawingCanvas() {
     addDrawing,
     clearCurrentFrameDrawings,
     clearAllDrawings,
+    cleanup,
     getDrawingsForFrame,
     completeDrawingSession,
 

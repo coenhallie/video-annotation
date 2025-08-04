@@ -85,7 +85,7 @@
         <!-- Pose Visualization Overlay for Single Video -->
         <PoseVisualization
           v-if="videoUrl && poseLandmarker"
-          :current-pose="poseLandmarker.getCurrentPose.value"
+          :current-pose="poseLandmarker.getCurrentPose"
           :canvas-width="singleVideoElement?.videoWidth || 1920"
           :canvas-height="singleVideoElement?.videoHeight || 1080"
           :show-pose="poseLandmarker.isEnabled.value"
@@ -121,6 +121,17 @@
           @roi-cleared="handleROICleared"
           @adaptive-roi-toggled="handleAdaptiveROIToggled"
           @motion-prediction-toggled="handleMotionPredictionToggled"
+        />
+
+        <!-- Speed Visualization Overlay for Single Video -->
+        <SpeedVisualization
+          v-if="videoUrl && poseLandmarker"
+          :speed-metrics="poseLandmarker?.speedMetrics"
+          :canvas-width="singleVideoElement?.videoWidth || 1920"
+          :canvas-height="singleVideoElement?.videoHeight || 1080"
+          :video-loaded="!!videoUrl"
+          :current-timestamp="currentTime"
+          :current-frame="currentFrame"
         />
 
         <!-- Custom controls for single video -->
@@ -378,10 +389,27 @@
               "
             />
 
+            <!-- Pose Detection Error Overlay for Video A -->
+            <div v-if="poseDetectionErrorA" class="pose-error-overlay">
+              <div class="pose-error-content">
+                <svg
+                  class="pose-error-icon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                >
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="15" y1="9" x2="9" y2="15"></line>
+                  <line x1="9" y1="9" x2="15" y2="15"></line>
+                </svg>
+                <p class="pose-error-message">{{ poseDetectionErrorA }}</p>
+              </div>
+            </div>
+
             <!-- Pose Visualization Overlay for Video A -->
             <PoseVisualization
               v-if="videoAUrl && poseLandmarkerA"
-              :current-pose="poseLandmarkerA.getCurrentPose.value"
+              :current-pose="poseLandmarkerA.getCurrentPose"
               :canvas-width="videoAElement?.videoWidth || 1920"
               :canvas-height="videoAElement?.videoHeight || 1080"
               :show-pose="poseLandmarkerA.isEnabled.value"
@@ -422,6 +450,17 @@
               @motion-prediction-toggled="
                 () => handleMotionPredictionToggled('A')
               "
+            />
+
+            <!-- Speed Visualization Overlay for Video A -->
+            <SpeedVisualization
+              v-if="videoAUrl && poseLandmarkerA"
+              :speed-metrics="poseLandmarkerA?.speedMetrics"
+              :canvas-width="videoAElement?.videoWidth || 1920"
+              :canvas-height="videoAElement?.videoHeight || 1080"
+              :video-loaded="!!videoAUrl"
+              :current-timestamp="currentTime"
+              :current-frame="currentFrame"
             />
           </div>
         </div>
@@ -476,10 +515,27 @@
               "
             />
 
+            <!-- Pose Detection Error Overlay for Video B -->
+            <div v-if="poseDetectionErrorB" class="pose-error-overlay">
+              <div class="pose-error-content">
+                <svg
+                  class="pose-error-icon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                >
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="15" y1="9" x2="9" y2="15"></line>
+                  <line x1="9" y1="9" x2="15" y2="15"></line>
+                </svg>
+                <p class="pose-error-message">{{ poseDetectionErrorB }}</p>
+              </div>
+            </div>
+
             <!-- Pose Visualization Overlay for Video B -->
             <PoseVisualization
               v-if="videoBUrl && poseLandmarkerB"
-              :current-pose="poseLandmarkerB.getCurrentPose.value"
+              :current-pose="poseLandmarkerB.getCurrentPose"
               :canvas-width="videoBElement?.videoWidth || 1920"
               :canvas-height="videoBElement?.videoHeight || 1080"
               :show-pose="poseLandmarkerB.isEnabled.value"
@@ -520,6 +576,17 @@
               @motion-prediction-toggled="
                 () => handleMotionPredictionToggled('B')
               "
+            />
+
+            <!-- Speed Visualization Overlay for Video B -->
+            <SpeedVisualization
+              v-if="videoBUrl && poseLandmarkerB"
+              :speed-metrics="poseLandmarkerB?.speedMetrics"
+              :canvas-width="videoBElement?.videoWidth || 1920"
+              :canvas-height="videoBElement?.videoHeight || 1080"
+              :video-loaded="!!videoBUrl"
+              :current-timestamp="currentTime"
+              :current-frame="currentFrame"
             />
           </div>
         </div>
@@ -837,6 +904,7 @@ import {
 } from 'vue';
 import DrawingCanvas from './DrawingCanvas.vue';
 import PoseVisualization from './PoseVisualization.vue';
+import SpeedVisualization from './SpeedVisualization.vue';
 // @ts-ignore: Vue SFC without d.ts
 import ROISelector from './ROISelector.vue';
 import KeypointSelectorModal from './KeypointSelectorModal.vue';
@@ -928,7 +996,7 @@ interface Emits {
   (e: 'duration-change', duration: number): void;
   (e: 'fps-detected', data: { fps: number; totalFrames: number }): void;
   (e: 'error', error: string): void;
-  (e: 'loaded'): void;
+  (e: 'loaded', data?: any): void;
   (e: 'video-click'): void;
   (e: 'drawing-created', drawing: DrawingData, videoContext?: string): void;
   (e: 'drawing-updated', drawing: DrawingData, videoContext?: string): void;
@@ -1145,7 +1213,18 @@ const startRAFPoseDetection = (
   videoElement: HTMLVideoElement,
   videoContext?: string
 ) => {
-  if (!props.enablePoseDetection) return;
+  console.log('🔍 [DEBUG] startRAFPoseDetection called', {
+    enablePoseDetection: props.enablePoseDetection,
+    videoContext,
+    videoElement: !!videoElement,
+  });
+
+  if (!props.enablePoseDetection) {
+    console.log(
+      '🔍 [DEBUG] startRAFPoseDetection early return - pose detection not enabled'
+    );
+    return;
+  }
 
   const poseLandmarker =
     videoContext === 'A'
@@ -1154,12 +1233,35 @@ const startRAFPoseDetection = (
       ? props.poseLandmarkerB
       : props.poseLandmarker;
 
-  if (!poseLandmarker || !poseLandmarker.isEnabled.value) return;
+  console.log('🔍 [DEBUG] poseLandmarker check', {
+    poseLandmarker: !!poseLandmarker,
+    isEnabled: poseLandmarker?.isEnabled?.value,
+    videoContext,
+  });
+
+  if (!poseLandmarker || !poseLandmarker.isEnabled.value) {
+    console.log(
+      '🔍 [DEBUG] startRAFPoseDetection early return - no landmarker or not enabled'
+    );
+    return;
+  }
+
+  console.log(
+    '🔍 [DEBUG] Starting RAF pose detection for',
+    videoContext || 'single'
+  );
 
   // Use RAF-based detection for smooth performance with playback rate compensation
   poseLandmarker.detectPoseRAF(
     videoElement,
     (poseData) => {
+      console.log('🔍 [DEBUG] RAF pose detection callback', {
+        poseData: !!poseData,
+        detected: poseData?.detected,
+        landmarksCount: poseData?.landmarks?.length || 0,
+        videoContext,
+      });
+
       // Update enhanced ROI state if using enhanced pose landmarker
       if (poseLandmarker.getROIInsights) {
         const roiInsights = poseLandmarker.getROIInsights();
@@ -1200,7 +1302,10 @@ const stopRAFPoseDetection = (videoContext?: string) => {
 };
 
 // ROI event handlers
-const handleROISelected = (roiBox: any, videoContext?: string) => {
+const setROI = (
+  roi: { x: number; y: number; width: number; height: number } | null,
+  videoContext?: string
+) => {
   const poseLandmarker =
     videoContext === 'A'
       ? props.poseLandmarkerA
@@ -1208,6 +1313,28 @@ const handleROISelected = (roiBox: any, videoContext?: string) => {
       ? props.poseLandmarkerB
       : props.poseLandmarker;
 
+  if (poseLandmarker?.isInitialized?.value) {
+    const regionOfInterest = roi
+      ? {
+          left: roi.x,
+          top: roi.y,
+          right: roi.x + roi.width,
+          bottom: roi.y + roi.height,
+        }
+      : { left: 0, top: 0, right: 1, bottom: 1 };
+
+    poseLandmarker.setOptions({ regionOfInterest }).catch((err: any) => {
+      console.error(
+        `[UnifiedVideoPlayer] Error setting ROI for ${
+          videoContext || 'single'
+        }:`,
+        err
+      );
+    });
+  }
+};
+
+const handleROISelected = (roiBox: any, videoContext?: string) => {
   const roiSettingsToUpdate =
     videoContext === 'A'
       ? roiSettingsA
@@ -1215,25 +1342,16 @@ const handleROISelected = (roiBox: any, videoContext?: string) => {
       ? roiSettingsB
       : roiSettings;
 
-  if (poseLandmarker) {
-    poseLandmarker.setROI(roiBox.x, roiBox.y, roiBox.width, roiBox.height);
-    roiSettingsToUpdate.currentROI = roiBox;
-    roiSettingsToUpdate.showInstructions = false;
-    console.log(
-      `🎯 [UnifiedVideoPlayer] ROI selected for ${videoContext || 'single'}:`,
-      roiBox
-    );
-  }
+  setROI(roiBox, videoContext);
+  roiSettingsToUpdate.currentROI = roiBox;
+  roiSettingsToUpdate.showInstructions = false;
+  console.log(
+    `🎯 [UnifiedVideoPlayer] ROI selected for ${videoContext || 'single'}:`,
+    roiBox
+  );
 };
 
 const handleROIUpdated = (roiBox: any, videoContext?: string) => {
-  const poseLandmarker =
-    videoContext === 'A'
-      ? props.poseLandmarkerA
-      : videoContext === 'B'
-      ? props.poseLandmarkerB
-      : props.poseLandmarker;
-
   const roiSettingsToUpdate =
     videoContext === 'A'
       ? roiSettingsA
@@ -1241,24 +1359,10 @@ const handleROIUpdated = (roiBox: any, videoContext?: string) => {
       ? roiSettingsB
       : roiSettings;
 
-  if (poseLandmarker) {
-    poseLandmarker.setROI(roiBox.x, roiBox.y, roiBox.width, roiBox.height);
-    roiSettingsToUpdate.currentROI = roiBox;
-    console.log(
-      `🎯 [UnifiedVideoPlayer] ROI updated for ${videoContext || 'single'}:`,
-      roiBox
-    );
-  }
+  roiSettingsToUpdate.currentROI = roiBox;
 };
 
 const handleROICleared = (videoContext?: string) => {
-  const poseLandmarker =
-    videoContext === 'A'
-      ? props.poseLandmarkerA
-      : videoContext === 'B'
-      ? props.poseLandmarkerB
-      : props.poseLandmarker;
-
   const roiSettingsToUpdate =
     videoContext === 'A'
       ? roiSettingsA
@@ -1266,14 +1370,12 @@ const handleROICleared = (videoContext?: string) => {
       ? roiSettingsB
       : roiSettings;
 
-  if (poseLandmarker) {
-    poseLandmarker.clearROI();
-    roiSettingsToUpdate.currentROI = null;
-    roiSettingsToUpdate.showInstructions = true;
-    console.log(
-      `🎯 [UnifiedVideoPlayer] ROI cleared for ${videoContext || 'single'}`
-    );
-  }
+  setROI(null, videoContext);
+  roiSettingsToUpdate.currentROI = null;
+  roiSettingsToUpdate.showInstructions = true;
+  console.log(
+    `🎯 [UnifiedVideoPlayer] ROI cleared for ${videoContext || 'single'}`
+  );
 };
 
 // Enhanced ROI event handlers
@@ -1388,53 +1490,379 @@ const toggleDualPlayPause = () => {
   }
 };
 
+// Enhanced pose detection error state
+const poseDetectionErrorA = ref<string | null>(null);
+const poseDetectionErrorB = ref<string | null>(null);
+const poseDetectionRetryCountA = ref(0);
+const poseDetectionRetryCountB = ref(0);
+const MAX_RETRY_ATTEMPTS = 3;
+const RETRY_DELAY_MS = 1000;
+
+// Helper function to wait for video element readiness
+const waitForVideoReadiness = async (
+  videoElement: HTMLVideoElement | null,
+  videoLabel: string,
+  maxWaitTime = 5000
+): Promise<boolean> => {
+  if (!videoElement) {
+    console.error(`❌ [DEBUG] ${videoLabel} element is null`);
+    return false;
+  }
+
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < maxWaitTime) {
+    if (videoElement.videoWidth > 0 && videoElement.readyState >= 2) {
+      console.log(`✅ [DEBUG] ${videoLabel} is ready for pose detection`);
+      return true;
+    }
+
+    console.log(`⏳ [DEBUG] Waiting for ${videoLabel} readiness...`, {
+      videoWidth: videoElement.videoWidth,
+      readyState: videoElement.readyState,
+      elapsed: Date.now() - startTime,
+    });
+
+    // Wait 100ms before checking again
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+
+  console.warn(
+    `⚠️ [DEBUG] ${videoLabel} readiness timeout after ${maxWaitTime}ms`
+  );
+  return false;
+};
+
+// Helper function to show user-visible error feedback
+const showPoseDetectionError = (videoContext: string, error: string) => {
+  if (videoContext === 'A') {
+    poseDetectionErrorA.value = error;
+    setTimeout(() => {
+      poseDetectionErrorA.value = null;
+    }, 5000);
+  } else if (videoContext === 'B') {
+    poseDetectionErrorB.value = error;
+    setTimeout(() => {
+      poseDetectionErrorB.value = null;
+    }, 5000);
+  }
+};
+
 const togglePoseDetectionA = async () => {
-  if (!props.poseLandmarkerA) return;
+  console.log('🔍 [DEBUG] togglePoseDetectionA clicked');
+  console.log('🔍 [DEBUG] poseLandmarkerA exists:', !!props.poseLandmarkerA);
+
+  // Clear any previous errors
+  poseDetectionErrorA.value = null;
+
+  if (!props.poseLandmarkerA) {
+    console.warn('⚠️ [DEBUG] poseLandmarkerA is null/undefined');
+    showPoseDetectionError('A', 'Pose detection not available for Video A');
+    return;
+  }
+
+  // ENHANCED DEBUG: Check initialization state
+  console.log(
+    '🔍 [DEBUG] poseLandmarkerA.isInitialized.value:',
+    props.poseLandmarkerA.isInitialized.value
+  );
+  console.log(
+    '🔍 [DEBUG] poseLandmarkerA.isEnabled.value:',
+    props.poseLandmarkerA.isEnabled.value
+  );
+  console.log(
+    '🔍 [DEBUG] poseLandmarkerA.isLoading.value:',
+    props.poseLandmarkerA.isLoading.value
+  );
+  console.log(
+    '🔍 [DEBUG] poseLandmarkerA.error.value:',
+    props.poseLandmarkerA.error.value
+  );
+
+  // ENHANCED DEBUG: Check video element readiness
+  if (videoAElement.value) {
+    console.log('🔍 [DEBUG] videoAElement readiness:', {
+      videoWidth: videoAElement.value.videoWidth,
+      videoHeight: videoAElement.value.videoHeight,
+      readyState: videoAElement.value.readyState,
+      currentTime: videoAElement.value.currentTime,
+      duration: videoAElement.value.duration,
+      src: videoAElement.value.src,
+      currentSrc: videoAElement.value.currentSrc,
+    });
+  } else {
+    console.warn('⚠️ [DEBUG] videoAElement is null/undefined');
+    showPoseDetectionError('A', 'Video A not loaded');
+    return;
+  }
+
+  // Check if pose landmarker is initialized before proceeding
+  if (!props.poseLandmarkerA.isInitialized.value) {
+    console.warn(
+      '⚠️ [DEBUG] poseLandmarkerA is not initialized, attempting to initialize...'
+    );
+
+    // Show loading state to user
+    props.poseLandmarkerA.isLoading.value = true;
+
+    try {
+      await props.poseLandmarkerA.initialize();
+      console.log('✅ [DEBUG] poseLandmarkerA initialized successfully');
+
+      // Reset retry count on successful initialization
+      poseDetectionRetryCountA.value = 0;
+    } catch (initError) {
+      console.error(
+        '❌ [DEBUG] Failed to initialize poseLandmarkerA:',
+        initError
+      );
+
+      const errorMsg =
+        initError instanceof Error
+          ? initError.message
+          : 'Unknown initialization error';
+
+      // Implement retry logic for initialization
+      if (poseDetectionRetryCountA.value < MAX_RETRY_ATTEMPTS) {
+        poseDetectionRetryCountA.value++;
+        console.log(
+          `🔄 [DEBUG] Retrying initialization for Video A (attempt ${poseDetectionRetryCountA.value}/${MAX_RETRY_ATTEMPTS})`
+        );
+
+        showPoseDetectionError(
+          'A',
+          `Initializing pose detection... (attempt ${poseDetectionRetryCountA.value})`
+        );
+
+        // Wait before retry
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+
+        // Recursive retry
+        return togglePoseDetectionA();
+      } else {
+        showPoseDetectionError(
+          'A',
+          `Failed to initialize pose detection: ${errorMsg}`
+        );
+        poseDetectionRetryCountA.value = 0; // Reset for next attempt
+        return;
+      }
+    } finally {
+      props.poseLandmarkerA.isLoading.value = false;
+    }
+  }
 
   try {
     if (props.poseLandmarkerA.isEnabled.value) {
+      console.log('🔍 [DEBUG] Disabling pose detection for Video A...');
       await props.poseLandmarkerA.disablePoseDetection();
       stopRAFPoseDetection('A');
+      console.log(
+        '🔍 [DEBUG] After disable - isEnabled:',
+        props.poseLandmarkerA.isEnabled.value
+      );
       console.log(
         '✅ [UnifiedVideoPlayer] Pose detection disabled for Video A'
       );
     } else {
-      await props.poseLandmarkerA.enablePoseDetection();
-      if (videoAElement.value) {
-        startRAFPoseDetection(videoAElement.value, 'A');
+      console.log('🔍 [DEBUG] Enabling pose detection for Video A...');
+
+      // ENHANCED: Wait for video element readiness with timeout
+      const isVideoReady = await waitForVideoReadiness(
+        videoAElement.value,
+        'Video A'
+      );
+
+      if (!isVideoReady) {
+        showPoseDetectionError(
+          'A',
+          'Video A is not ready for pose detection. Please wait for the video to load.'
+        );
+        return;
       }
+
+      await props.poseLandmarkerA.enablePoseDetection();
+      console.log(
+        '🔍 [DEBUG] poseLandmarkerA enabled, starting RAF detection...'
+      );
+      startRAFPoseDetection(videoAElement.value, 'A');
+
+      console.log(
+        '🔍 [DEBUG] After enable - isEnabled:',
+        props.poseLandmarkerA.isEnabled.value
+      );
       console.log('✅ [UnifiedVideoPlayer] Pose detection enabled for Video A');
+
+      // Reset retry count on success
+      poseDetectionRetryCountA.value = 0;
     }
   } catch (error) {
     console.error(
       '❌ [UnifiedVideoPlayer] Failed to toggle pose detection for Video A:',
       error
     );
+
+    const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+    showPoseDetectionError('A', `Pose detection error: ${errorMsg}`);
   }
 };
 
 const togglePoseDetectionB = async () => {
-  if (!props.poseLandmarkerB) return;
+  console.log('🔍 [DEBUG] togglePoseDetectionB clicked');
+  console.log('🔍 [DEBUG] poseLandmarkerB exists:', !!props.poseLandmarkerB);
+
+  // Clear any previous errors
+  poseDetectionErrorB.value = null;
+
+  if (!props.poseLandmarkerB) {
+    console.warn('⚠️ [DEBUG] poseLandmarkerB is null/undefined');
+    showPoseDetectionError('B', 'Pose detection not available for Video B');
+    return;
+  }
+
+  // ENHANCED DEBUG: Check initialization state
+  console.log(
+    '🔍 [DEBUG] poseLandmarkerB.isInitialized.value:',
+    props.poseLandmarkerB.isInitialized.value
+  );
+  console.log(
+    '🔍 [DEBUG] poseLandmarkerB.isEnabled.value:',
+    props.poseLandmarkerB.isEnabled.value
+  );
+  console.log(
+    '🔍 [DEBUG] poseLandmarkerB.isLoading.value:',
+    props.poseLandmarkerB.isLoading.value
+  );
+  console.log(
+    '🔍 [DEBUG] poseLandmarkerB.error.value:',
+    props.poseLandmarkerB.error.value
+  );
+
+  // ENHANCED DEBUG: Check video element readiness
+  if (videoBElement.value) {
+    console.log('🔍 [DEBUG] videoBElement readiness:', {
+      videoWidth: videoBElement.value.videoWidth,
+      videoHeight: videoBElement.value.videoHeight,
+      readyState: videoBElement.value.readyState,
+      currentTime: videoBElement.value.currentTime,
+      duration: videoBElement.value.duration,
+      src: videoBElement.value.src,
+      currentSrc: videoBElement.value.currentSrc,
+    });
+  } else {
+    console.warn('⚠️ [DEBUG] videoBElement is null/undefined');
+    showPoseDetectionError('B', 'Video B not loaded');
+    return;
+  }
+
+  // Check if pose landmarker is initialized before proceeding
+  if (!props.poseLandmarkerB.isInitialized.value) {
+    console.warn(
+      '⚠️ [DEBUG] poseLandmarkerB is not initialized, attempting to initialize...'
+    );
+
+    // Show loading state to user
+    props.poseLandmarkerB.isLoading.value = true;
+
+    try {
+      await props.poseLandmarkerB.initialize();
+      console.log('✅ [DEBUG] poseLandmarkerB initialized successfully');
+
+      // Reset retry count on successful initialization
+      poseDetectionRetryCountB.value = 0;
+    } catch (initError) {
+      console.error(
+        '❌ [DEBUG] Failed to initialize poseLandmarkerB:',
+        initError
+      );
+
+      const errorMsg =
+        initError instanceof Error
+          ? initError.message
+          : 'Unknown initialization error';
+
+      // Implement retry logic for initialization
+      if (poseDetectionRetryCountB.value < MAX_RETRY_ATTEMPTS) {
+        poseDetectionRetryCountB.value++;
+        console.log(
+          `🔄 [DEBUG] Retrying initialization for Video B (attempt ${poseDetectionRetryCountB.value}/${MAX_RETRY_ATTEMPTS})`
+        );
+
+        showPoseDetectionError(
+          'B',
+          `Initializing pose detection... (attempt ${poseDetectionRetryCountB.value})`
+        );
+
+        // Wait before retry
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+
+        // Recursive retry
+        return togglePoseDetectionB();
+      } else {
+        showPoseDetectionError(
+          'B',
+          `Failed to initialize pose detection: ${errorMsg}`
+        );
+        poseDetectionRetryCountB.value = 0; // Reset for next attempt
+        return;
+      }
+    } finally {
+      props.poseLandmarkerB.isLoading.value = false;
+    }
+  }
 
   try {
     if (props.poseLandmarkerB.isEnabled.value) {
+      console.log('🔍 [DEBUG] Disabling pose detection for Video B...');
       await props.poseLandmarkerB.disablePoseDetection();
       stopRAFPoseDetection('B');
+      console.log(
+        '🔍 [DEBUG] After disable - isEnabled:',
+        props.poseLandmarkerB.isEnabled.value
+      );
       console.log(
         '✅ [UnifiedVideoPlayer] Pose detection disabled for Video B'
       );
     } else {
-      await props.poseLandmarkerB.enablePoseDetection();
-      if (videoBElement.value) {
-        startRAFPoseDetection(videoBElement.value, 'B');
+      console.log('🔍 [DEBUG] Enabling pose detection for Video B...');
+
+      // ENHANCED: Wait for video element readiness with timeout
+      const isVideoReady = await waitForVideoReadiness(
+        videoBElement.value,
+        'Video B'
+      );
+
+      if (!isVideoReady) {
+        showPoseDetectionError(
+          'B',
+          'Video B is not ready for pose detection. Please wait for the video to load.'
+        );
+        return;
       }
+
+      await props.poseLandmarkerB.enablePoseDetection();
+      console.log(
+        '🔍 [DEBUG] poseLandmarkerB enabled, starting RAF detection...'
+      );
+      startRAFPoseDetection(videoBElement.value, 'B');
+
+      console.log(
+        '🔍 [DEBUG] After enable - isEnabled:',
+        props.poseLandmarkerB.isEnabled.value
+      );
       console.log('✅ [UnifiedVideoPlayer] Pose detection enabled for Video B');
+
+      // Reset retry count on success
+      poseDetectionRetryCountB.value = 0;
     }
   } catch (error) {
     console.error(
       '❌ [UnifiedVideoPlayer] Failed to toggle pose detection for Video B:',
       error
     );
+
+    const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+    showPoseDetectionError('B', `Pose detection error: ${errorMsg}`);
   }
 };
 
@@ -1550,7 +1978,7 @@ const setupVideoEventListeners = (
     }
 
     // Process pose detection for current frame (optimized with frame skipping)
-    if (props.enablePoseDetection && isPlaying.value) {
+    if (props.enablePoseDetection) {
       processPoseDetection(videoElement, videoLabel);
     }
 
@@ -1607,7 +2035,22 @@ const setupVideoEventListeners = (
 
     if (props.mode === 'single') {
       singleVideoState.value.isLoading = false;
-      emit('loaded');
+
+      // Create video data object for the loaded event
+      const videoData = {
+        id: props.videoId || 'default-video',
+        url: props.videoUrl || '',
+        duration: videoElement.duration,
+        dimensions: {
+          width: videoElement.videoWidth || 1920,
+          height: videoElement.videoHeight || 1080,
+        },
+        videoType: props.videoUrl?.startsWith('blob:') ? 'upload' : 'url',
+        fps: 30, // Default FPS, will be updated by FPS detection
+        totalFrames: Math.floor((videoElement.duration || 0) * 30),
+      };
+
+      emit('loaded', videoData);
     } else if (videoState) {
       videoState.isLoaded = true;
       if (videoLabel === 'A') {
@@ -1887,6 +2330,14 @@ const togglePoseDetection = async () => {
       '🤖 [UnifiedVideoPlayer] Pose detection toggled:',
       props.poseLandmarker.isEnabled.value
     );
+
+    // If pose detection was just enabled and we have a video, process the current frame
+    if (props.poseLandmarker.isEnabled.value) {
+      if (props.mode === 'single' && singleVideoElement.value) {
+        processPoseDetection(singleVideoElement.value);
+      }
+      // For dual mode, pose detection is handled separately for each video
+    }
   }
 };
 
@@ -2366,6 +2817,48 @@ defineExpose({
   100% {
     transform: rotate(360deg);
   }
+}
+
+/* Pose detection error overlay styles */
+.pose-error-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.pose-error-content {
+  background: rgba(220, 38, 38, 0.9);
+  color: white;
+  padding: 16px 20px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 300px;
+  text-align: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.pose-error-icon {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  stroke-width: 2;
+}
+
+.pose-error-message {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
 }
 
 /* Responsive */

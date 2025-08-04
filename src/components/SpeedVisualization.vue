@@ -49,19 +49,17 @@
     <svg
       v-if="
         speedVisualizationEnabled &&
-          showSpeed &&
-          speedMetrics &&
-          speedMetrics.isValid
+        showSpeed &&
+        speedMetrics &&
+        speedMetrics.value &&
+        speedMetrics.value.isValid
       "
       class="absolute inset-0 w-full h-full pointer-events-none"
       :viewBox="`0 0 ${canvasWidth} ${canvasHeight}`"
       preserveAspectRatio="none"
     >
       <!-- Center of Mass point -->
-      <g
-        v-if="showCenterOfMass"
-        class="center-of-mass"
-      >
+      <g v-if="showCenterOfMass" class="center-of-mass">
         <circle
           :cx="comCanvasCoord.x"
           :cy="comCanvasCoord.y"
@@ -100,10 +98,7 @@
             refY="3.5"
             orient="auto"
           >
-            <polygon
-              points="0 0, 10 3.5, 0 7"
-              :fill="velocityColor"
-            />
+            <polygon points="0 0, 10 3.5, 0 7" :fill="velocityColor" />
           </marker>
         </defs>
 
@@ -140,10 +135,11 @@
     <div
       v-if="
         videoLoaded &&
-          speedVisualizationEnabled &&
-          showSpeedPanel &&
-          speedMetrics &&
-          speedMetrics.isValid
+        speedVisualizationEnabled &&
+        showSpeedPanel &&
+        speedMetrics &&
+        speedMetrics.value &&
+        speedMetrics.value.isValid
       "
       class="absolute opacity-95 top-4 right-4 bg-white border border-gray-200 rounded-lg shadow-md p-4 pointer-events-auto"
       style="min-width: 200px"
@@ -160,19 +156,19 @@
           <span class="text-sm text-gray-600">Overall Speed:</span>
           <span
             class="text-xl font-mono"
-            :class="getSpeedColorClass(speedMetrics.speed)"
+            :class="getSpeedColorClass(speedMetrics.value.speed)"
           >
-            {{ speedMetrics.speed.toFixed(2) }} m/s
+            {{ speedMetrics.value.speed.toFixed(2) }} m/s
           </span>
         </div>
         <div class="w-full bg-gray-200 rounded-full h-2">
           <div
             class="h-2 rounded-full transition-all duration-300"
-            :class="getSpeedBarColorClass(speedMetrics.speed)"
+            :class="getSpeedBarColorClass(speedMetrics.value.speed)"
             :style="{
               width: `${Math.min(
                 100,
-                (speedMetrics.speed / maxSpeedForBar) * 100
+                (speedMetrics.value.speed / maxSpeedForBar) * 100
               )}%`,
             }"
           />
@@ -184,19 +180,21 @@
         <div class="flex justify-between items-center">
           <span class="text-gray-600">Horizontal Speed:</span>
           <span class="font-mono text-gray-700">
-            {{ speedMetrics.generalMovingSpeed?.toFixed(2) || '0.00' }} m/s
+            {{ speedMetrics.value.generalMovingSpeed?.toFixed(2) || '0.00' }}
+            m/s
           </span>
         </div>
         <div class="flex justify-between items-center">
           <span class="text-gray-600">Right Foot Speed:</span>
           <span class="font-mono text-gray-500">
-            {{ speedMetrics.rightFootSpeed?.toFixed(2) || '0.00' }} m/s
+            {{ speedMetrics.value.rightFootSpeed?.toFixed(2) || '0.00' }} m/s
           </span>
         </div>
         <div class="flex justify-between items-center">
           <span class="text-gray-600">CoG Height:</span>
-          <span class="font-mono text-gray-400">
-            {{ speedMetrics.centerOfGravityHeight?.toFixed(3) || '0.000' }}
+          <span class="font-mono text-gray-700">
+            {{ speedMetrics.value.centerOfGravityHeight?.toFixed(2) || '0.00' }}
+            m
           </span>
         </div>
       </div>
@@ -241,26 +239,23 @@
       </div>
 
       <!-- Velocity components -->
-      <div
-        v-if="showVelocityComponents"
-        class="text-xs space-y-1"
-      >
+      <div v-if="showVelocityComponents" class="text-xs space-y-1">
         <div class="flex justify-between">
           <span class="text-gray-600">X:</span>
           <span class="font-mono text-gray-700">{{
-            speedMetrics.velocity.x.toFixed(3)
+            speedMetrics.value.velocity.x.toFixed(3)
           }}</span>
         </div>
         <div class="flex justify-between">
           <span class="text-gray-600">Y:</span>
           <span class="font-mono text-gray-700">{{
-            speedMetrics.velocity.y.toFixed(3)
+            speedMetrics.value.velocity.y.toFixed(3)
           }}</span>
         </div>
         <div class="flex justify-between">
           <span class="text-gray-600">Z:</span>
           <span class="font-mono text-gray-700">{{
-            speedMetrics.velocity.z.toFixed(3)
+            speedMetrics.value.velocity.z.toFixed(3)
           }}</span>
         </div>
       </div>
@@ -276,19 +271,19 @@
         <div class="flex justify-between">
           <span class="text-gray-600">X:</span>
           <span class="font-mono text-gray-700">{{
-            speedMetrics.centerOfMass.x.toFixed(3)
+            speedMetrics.value.centerOfMass.x.toFixed(3)
           }}</span>
         </div>
         <div class="flex justify-between">
           <span class="text-gray-600">Y:</span>
           <span class="font-mono text-gray-700">{{
-            speedMetrics.centerOfMass.y.toFixed(3)
+            speedMetrics.value.centerOfMass.y.toFixed(3)
           }}</span>
         </div>
         <div class="flex justify-between">
           <span class="text-gray-600">Z:</span>
           <span class="font-mono text-gray-700">{{
-            speedMetrics.centerOfMass.z.toFixed(3)
+            speedMetrics.value.centerOfMass.z.toFixed(3)
           }}</span>
         </div>
       </div>
@@ -296,7 +291,7 @@
       <!-- Speed Chart Component -->
       <SpeedChart
         v-if="isChartVisible"
-        :speed-metrics="speedMetrics"
+        :speed-metrics="speedMetrics.value"
         :timestamp="currentTimestamp"
         :current-frame="currentFrame"
         :visible="isChartVisible"
@@ -307,10 +302,10 @@
     <div
       v-if="
         videoLoaded &&
-          speedVisualizationEnabled &&
-          showSpeed &&
-          (!speedMetrics || !speedMetrics.isValid) &&
-          showNoSpeedIndicator
+        speedVisualizationEnabled &&
+        showSpeed &&
+        (!speedMetrics || !speedMetrics.value || !speedMetrics.value.isValid) &&
+        showNoSpeedIndicator
       "
       class="absolute opacity-95 top-4 right-4 bg-white border border-gray-200 rounded-lg shadow-md px-3 py-2 text-sm text-gray-600 pointer-events-auto"
       role="status"
@@ -322,7 +317,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import SpeedChart from './SpeedChart.vue';
 
 // Define props with proper TypeScript-like syntax
@@ -333,14 +328,14 @@ const props = defineProps({
     default: null,
   },
 
-  // Canvas dimensions
+  // Canvas dimensions - should match actual video dimensions
   canvasWidth: {
     type: Number,
-    default: 1920,
+    default: 1920, // Default HD width, should be updated with actual video width
   },
   canvasHeight: {
     type: Number,
-    default: 1080,
+    default: 1080, // Default HD height, should be updated with actual video height
   },
 
   // Visibility controls
@@ -461,6 +456,52 @@ const speedVisualizationEnabled = ref(true);
 // Chart visibility toggle state
 const isChartVisible = ref(false);
 
+// Watch speedMetrics prop for debugging
+watch(
+  () => props.speedMetrics,
+  (newSpeedMetrics) => {
+    console.log('🔍 [SpeedVisualization] speedMetrics prop received:', {
+      speedMetrics: newSpeedMetrics,
+      isNull: newSpeedMetrics === null,
+      isUndefined: newSpeedMetrics === undefined,
+      isValid: newSpeedMetrics?.value?.isValid || newSpeedMetrics?.isValid,
+      hasSpeed:
+        newSpeedMetrics?.value?.speed !== undefined ||
+        newSpeedMetrics?.speed !== undefined,
+      speedValue: newSpeedMetrics?.value?.speed || newSpeedMetrics?.speed,
+      hasIsValidProperty:
+        'isValid' in (newSpeedMetrics?.value || newSpeedMetrics || {}),
+      allProperties: newSpeedMetrics?.value
+        ? Object.keys(newSpeedMetrics.value)
+        : newSpeedMetrics
+        ? Object.keys(newSpeedMetrics)
+        : 'no properties',
+    });
+  },
+  { immediate: true, deep: true }
+);
+
+// Watch speedVisualizationEnabled for debugging
+watch(
+  () => speedVisualizationEnabled.value,
+  (newValue) => {
+    console.log(
+      '🔍 [SpeedVisualization] speedVisualizationEnabled changed:',
+      newValue
+    );
+  },
+  { immediate: true }
+);
+
+// Watch videoLoaded for debugging
+watch(
+  () => props.videoLoaded,
+  (newValue) => {
+    console.log('🔍 [SpeedVisualization] videoLoaded changed:', newValue);
+  },
+  { immediate: true }
+);
+
 // Toggle speed visualization
 const toggleSpeedVisualization = () => {
   speedVisualizationEnabled.value = !speedVisualizationEnabled.value;
@@ -492,32 +533,41 @@ const normalizedToCanvas = (normalizedCoord) => {
 
 // Center of Mass canvas coordinates
 const comCanvasCoord = computed(() => {
-  if (!props.speedMetrics || !props.speedMetrics.isValid) {
+  if (
+    !props.speedMetrics ||
+    !props.speedMetrics.value ||
+    !props.speedMetrics.value.isValid
+  ) {
     return { x: 0, y: 0 };
   }
   // Use normalized coordinates instead of world coordinates for proper alignment
-  return normalizedToCanvas(props.speedMetrics.centerOfMass);
+  return normalizedToCanvas(props.speedMetrics.value.centerOfMass);
 });
 
 // Velocity magnitude
 const velocityMagnitude = computed(() => {
-  if (!props.speedMetrics || !props.speedMetrics.isValid) {
+  if (
+    !props.speedMetrics ||
+    !props.speedMetrics.value ||
+    !props.speedMetrics.value.isValid
+  ) {
     return 0;
   }
-  return props.speedMetrics.speed;
+  return props.speedMetrics.value.speed;
 });
 
 // Velocity vector end point
 const velocityEndPoint = computed(() => {
   if (
     !props.speedMetrics ||
-    !props.speedMetrics.isValid ||
+    !props.speedMetrics.value ||
+    !props.speedMetrics.value.isValid ||
     velocityMagnitude.value < props.minVelocityThreshold
   ) {
     return comCanvasCoord.value;
   }
 
-  const velocity = props.speedMetrics.velocity;
+  const velocity = props.speedMetrics.value.velocity;
   const scale = props.velocityScale;
 
   // Calculate vector length, capped at maximum

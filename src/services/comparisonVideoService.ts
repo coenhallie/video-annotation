@@ -14,6 +14,7 @@ export interface ComparisonVideoRecord {
   userId?: string | null;
   videoAId: string;
   videoBId: string;
+  isPublic?: boolean;
   /** Optionally hydrated relations */
   videoA?: any;
   videoB?: any;
@@ -24,7 +25,7 @@ export const ComparisonVideoService = {
     const { data, error } = await supabase
       .from('comparison_videos')
       .select(
-        'id, title, description, createdAt, updatedAt, userId, videoAId, videoBId, videoA:videoAId(*), videoB:videoBId(*)'
+        'id, title, description, createdAt, updatedAt, userId, videoAId, videoBId, isPublic, videoA:videoAId(*), videoB:videoBId(*)'
       )
       .eq('id', id)
       .single();
@@ -57,7 +58,7 @@ export const ComparisonVideoService = {
       .from('comparison_videos')
       .insert(payload)
       .select(
-        'id, title, description, createdAt, updatedAt, userId, videoAId, videoBId'
+        'id, title, description, createdAt, updatedAt, userId, videoAId, videoBId, isPublic'
       )
       .single();
 
@@ -74,7 +75,7 @@ export const ComparisonVideoService = {
     const { data, error } = await supabase
       .from('comparison_videos')
       .select(
-        'id, title, description, createdAt, updatedAt, userId, videoAId, videoBId, videoA:videoAId(*), videoB:videoBId(*)'
+        'id, title, description, createdAt, updatedAt, userId, videoAId, videoBId, isPublic, videoA:videoAId(*), videoB:videoBId(*)'
       )
       .eq('userId', userId)
       .order('createdAt', { ascending: false });

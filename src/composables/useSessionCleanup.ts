@@ -18,8 +18,10 @@ export function useSessionCleanup() {
       poseLandmarkerA?: any;
       poseLandmarkerB?: any;
 
-      // Drawing canvas instance
+      // Drawing canvas instances
       drawingCanvas?: any;
+      drawingCanvasA?: any;
+      drawingCanvasB?: any;
 
       // Dual video player instance
       dualVideoPlayer?: any;
@@ -29,6 +31,22 @@ export function useSessionCleanup() {
 
       // Video session instance
       videoSession?: any;
+
+      // Annotation and video state
+      annotations?: any;
+      videoAnnotations?: any;
+      selectedAnnotation?: any;
+
+      // Video player state
+      videoState?: any;
+      currentVideoId?: any;
+      currentComparisonId?: any;
+
+      // Comment and realtime state
+      realtimeAnnotations?: any;
+      globalComments?: any;
+      commentPermissions?: any;
+      anonymousSession?: any;
 
       // Speed calculator instances (accessed through pose landmarkers)
       // These will be cleaned up via pose landmarker cleanup
@@ -54,10 +72,13 @@ export function useSessionCleanup() {
       if (options.poseLandmarker) {
         console.log('🧹 [SessionCleanup] Cleaning up main pose landmarker...');
         try {
-          await options.poseLandmarker.disablePoseDetection();
-          options.poseLandmarker.clearAllPoses();
-          if (options.poseLandmarker.cleanup) {
-            options.poseLandmarker.cleanup();
+          // Disable pose detection first
+          if (options.poseLandmarker.disablePoseDetection) {
+            await options.poseLandmarker.disablePoseDetection();
+          }
+          // Reset pose data using the correct method
+          if (options.poseLandmarker.reset) {
+            options.poseLandmarker.reset();
           }
           // Reset speed calculator through pose landmarker
           if (options.poseLandmarker.speedCalculator?.reset) {
@@ -77,10 +98,13 @@ export function useSessionCleanup() {
       if (options.poseLandmarkerA) {
         console.log('🧹 [SessionCleanup] Cleaning up pose landmarker A...');
         try {
-          await options.poseLandmarkerA.disablePoseDetection();
-          options.poseLandmarkerA.clearAllPoses();
-          if (options.poseLandmarkerA.cleanup) {
-            options.poseLandmarkerA.cleanup();
+          // Disable pose detection first
+          if (options.poseLandmarkerA.disablePoseDetection) {
+            await options.poseLandmarkerA.disablePoseDetection();
+          }
+          // Reset pose data using the correct method
+          if (options.poseLandmarkerA.reset) {
+            options.poseLandmarkerA.reset();
           }
           // Reset speed calculator through pose landmarker A
           if (options.poseLandmarkerA.speedCalculator?.reset) {
@@ -100,10 +124,13 @@ export function useSessionCleanup() {
       if (options.poseLandmarkerB) {
         console.log('🧹 [SessionCleanup] Cleaning up pose landmarker B...');
         try {
-          await options.poseLandmarkerB.disablePoseDetection();
-          options.poseLandmarkerB.clearAllPoses();
-          if (options.poseLandmarkerB.cleanup) {
-            options.poseLandmarkerB.cleanup();
+          // Disable pose detection first
+          if (options.poseLandmarkerB.disablePoseDetection) {
+            await options.poseLandmarkerB.disablePoseDetection();
+          }
+          // Reset pose data using the correct method
+          if (options.poseLandmarkerB.reset) {
+            options.poseLandmarkerB.reset();
           }
           // Reset speed calculator through pose landmarker B
           if (options.poseLandmarkerB.speedCalculator?.reset) {
@@ -209,7 +236,194 @@ export function useSessionCleanup() {
         }
       }
 
-      // 6. Run additional cleanup callbacks
+      // 6. Clean up additional drawing canvases
+      if (options.drawingCanvasA) {
+        console.log('🧹 [SessionCleanup] Cleaning up drawing canvas A...');
+        try {
+          options.drawingCanvasA.clearAllDrawings();
+          options.drawingCanvasA.disableDrawingMode();
+          if (
+            options.drawingCanvasA.state &&
+            options.drawingCanvasA.state.value
+          ) {
+            options.drawingCanvasA.state.value.activeDrawing = null;
+            options.drawingCanvasA.state.value.isLoadingDrawings = false;
+          }
+        } catch (error) {
+          console.error(
+            '❌ [SessionCleanup] Error cleaning up drawing canvas A:',
+            error
+          );
+        }
+      }
+
+      if (options.drawingCanvasB) {
+        console.log('🧹 [SessionCleanup] Cleaning up drawing canvas B...');
+        try {
+          options.drawingCanvasB.clearAllDrawings();
+          options.drawingCanvasB.disableDrawingMode();
+          if (
+            options.drawingCanvasB.state &&
+            options.drawingCanvasB.state.value
+          ) {
+            options.drawingCanvasB.state.value.activeDrawing = null;
+            options.drawingCanvasB.state.value.isLoadingDrawings = false;
+          }
+        } catch (error) {
+          console.error(
+            '❌ [SessionCleanup] Error cleaning up drawing canvas B:',
+            error
+          );
+        }
+      }
+
+      // 7. Clean up annotation state
+      if (options.annotations) {
+        console.log('🧹 [SessionCleanup] Cleaning up annotations...');
+        try {
+          if (Array.isArray(options.annotations.value)) {
+            options.annotations.value = [];
+          }
+        } catch (error) {
+          console.error(
+            '❌ [SessionCleanup] Error cleaning up annotations:',
+            error
+          );
+        }
+      }
+
+      if (options.videoAnnotations) {
+        console.log('🧹 [SessionCleanup] Cleaning up video annotations...');
+        try {
+          if (options.videoAnnotations.cleanup) {
+            options.videoAnnotations.cleanup();
+          }
+        } catch (error) {
+          console.error(
+            '❌ [SessionCleanup] Error cleaning up video annotations:',
+            error
+          );
+        }
+      }
+
+      if (options.selectedAnnotation) {
+        console.log('🧹 [SessionCleanup] Clearing selected annotation...');
+        try {
+          options.selectedAnnotation.value = null;
+        } catch (error) {
+          console.error(
+            '❌ [SessionCleanup] Error clearing selected annotation:',
+            error
+          );
+        }
+      }
+
+      // 8. Clean up video state
+      if (options.videoState) {
+        console.log('🧹 [SessionCleanup] Resetting video state...');
+        try {
+          Object.assign(options.videoState, {
+            url: '',
+            id: 'sample-video-1',
+            urlInput: '',
+            currentTime: 0,
+            duration: 0,
+            isPlaying: false,
+            dimensions: { width: 1920, height: 1080 },
+            type: null,
+            currentFrame: 0,
+            totalFrames: 0,
+            fps: -1,
+          });
+        } catch (error) {
+          console.error(
+            '❌ [SessionCleanup] Error resetting video state:',
+            error
+          );
+        }
+      }
+
+      if (options.currentVideoId) {
+        console.log('🧹 [SessionCleanup] Clearing current video ID...');
+        try {
+          options.currentVideoId.value = null;
+        } catch (error) {
+          console.error(
+            '❌ [SessionCleanup] Error clearing current video ID:',
+            error
+          );
+        }
+      }
+
+      if (options.currentComparisonId) {
+        console.log('🧹 [SessionCleanup] Clearing current comparison ID...');
+        try {
+          options.currentComparisonId.value = null;
+        } catch (error) {
+          console.error(
+            '❌ [SessionCleanup] Error clearing current comparison ID:',
+            error
+          );
+        }
+      }
+
+      // 9. Clean up realtime and comment state
+      if (options.realtimeAnnotations) {
+        console.log('🧹 [SessionCleanup] Cleaning up realtime annotations...');
+        try {
+          if (options.realtimeAnnotations.cleanup) {
+            options.realtimeAnnotations.cleanup();
+          }
+        } catch (error) {
+          console.error(
+            '❌ [SessionCleanup] Error cleaning up realtime annotations:',
+            error
+          );
+        }
+      }
+
+      if (options.globalComments) {
+        console.log('🧹 [SessionCleanup] Cleaning up global comments...');
+        try {
+          if (options.globalComments.cleanup) {
+            options.globalComments.cleanup();
+          }
+        } catch (error) {
+          console.error(
+            '❌ [SessionCleanup] Error cleaning up global comments:',
+            error
+          );
+        }
+      }
+
+      if (options.commentPermissions) {
+        console.log('🧹 [SessionCleanup] Resetting comment permissions...');
+        try {
+          options.commentPermissions.value = {
+            canComment: false,
+            isAnonymous: false,
+          };
+        } catch (error) {
+          console.error(
+            '❌ [SessionCleanup] Error resetting comment permissions:',
+            error
+          );
+        }
+      }
+
+      if (options.anonymousSession) {
+        console.log('🧹 [SessionCleanup] Clearing anonymous session...');
+        try {
+          options.anonymousSession.value = null;
+        } catch (error) {
+          console.error(
+            '❌ [SessionCleanup] Error clearing anonymous session:',
+            error
+          );
+        }
+      }
+
+      // 10. Run additional cleanup callbacks
       if (
         options.additionalCleanup &&
         Array.isArray(options.additionalCleanup)
@@ -272,10 +486,13 @@ export function useSessionCleanup() {
     for (const landmarker of poseLandmarkers) {
       if (landmarker) {
         try {
-          await landmarker.disablePoseDetection();
-          landmarker.clearAllPoses();
-          if (landmarker.cleanup) {
-            landmarker.cleanup();
+          // Disable pose detection first
+          if (landmarker.disablePoseDetection) {
+            await landmarker.disablePoseDetection();
+          }
+          // Reset pose data using the correct method
+          if (landmarker.reset) {
+            landmarker.reset();
           }
         } catch (error) {
           console.error(
@@ -310,12 +527,201 @@ export function useSessionCleanup() {
     console.log('✅ [SessionCleanup] Drawing data cleanup completed');
   };
 
+  /**
+   * Project switching cleanup - optimized for switching between projects
+   * This is called when switching from one project to another
+   */
+  const cleanupForProjectSwitch = async (
+    currentProjectType: 'single' | 'dual',
+    newProjectType: 'single' | 'dual',
+    options: {
+      poseLandmarker?: any;
+      poseLandmarkerA?: any;
+      poseLandmarkerB?: any;
+      drawingCanvas?: any;
+      drawingCanvasA?: any;
+      drawingCanvasB?: any;
+      dualVideoPlayer?: any;
+      comparisonWorkflow?: any;
+      videoSession?: any;
+      annotations?: any;
+      selectedAnnotation?: any;
+      videoState?: any;
+      currentVideoId?: any;
+      currentComparisonId?: any;
+      additionalCleanup?: (() => void | Promise<void>)[];
+    } = {}
+  ) => {
+    if (isCleaningUp.value) {
+      console.warn(
+        '🧹 [SessionCleanup] Project switch cleanup already in progress, skipping...'
+      );
+      return;
+    }
+
+    try {
+      isCleaningUp.value = true;
+      console.log(
+        `🧹 [SessionCleanup] Starting project switch cleanup: ${currentProjectType} → ${newProjectType}`
+      );
+
+      // Always clean up current video session
+      if (options.videoSession) {
+        try {
+          await options.videoSession.endSession();
+        } catch (error) {
+          console.error(
+            '❌ [SessionCleanup] Error ending video session:',
+            error
+          );
+        }
+      }
+
+      // Clean up pose detection based on current project type
+      if (currentProjectType === 'single' && options.poseLandmarker) {
+        try {
+          if (options.poseLandmarker.disablePoseDetection) {
+            await options.poseLandmarker.disablePoseDetection();
+          }
+          if (options.poseLandmarker.reset) {
+            options.poseLandmarker.reset();
+          }
+        } catch (error) {
+          console.error(
+            '❌ [SessionCleanup] Error cleaning up single pose landmarker:',
+            error
+          );
+        }
+      } else if (currentProjectType === 'dual') {
+        const landmarkers = [
+          options.poseLandmarkerA,
+          options.poseLandmarkerB,
+        ].filter(Boolean);
+        for (const landmarker of landmarkers) {
+          try {
+            if (landmarker.disablePoseDetection) {
+              await landmarker.disablePoseDetection();
+            }
+            if (landmarker.reset) {
+              landmarker.reset();
+            }
+          } catch (error) {
+            console.error(
+              '❌ [SessionCleanup] Error cleaning up dual pose landmarker:',
+              error
+            );
+          }
+        }
+      }
+
+      // Clean up drawing canvases based on current project type
+      if (currentProjectType === 'single' && options.drawingCanvas) {
+        cleanupDrawingData(options.drawingCanvas);
+      } else if (currentProjectType === 'dual') {
+        if (options.drawingCanvasA) cleanupDrawingData(options.drawingCanvasA);
+        if (options.drawingCanvasB) cleanupDrawingData(options.drawingCanvasB);
+      }
+
+      // Clean up dual video player if switching away from dual mode
+      if (currentProjectType === 'dual' && options.dualVideoPlayer) {
+        try {
+          if (options.dualVideoPlayer.cleanup) {
+            options.dualVideoPlayer.cleanup();
+          }
+          if (options.dualVideoPlayer.clearCurrentAnnotationContext) {
+            options.dualVideoPlayer.clearCurrentAnnotationContext();
+          }
+        } catch (error) {
+          console.error(
+            '❌ [SessionCleanup] Error cleaning up dual video player:',
+            error
+          );
+        }
+      }
+
+      // Reset comparison workflow if switching away from dual mode
+      if (currentProjectType === 'dual' && options.comparisonWorkflow) {
+        try {
+          options.comparisonWorkflow.resetWorkflow();
+        } catch (error) {
+          console.error(
+            '❌ [SessionCleanup] Error resetting comparison workflow:',
+            error
+          );
+        }
+      }
+
+      // Clear annotations and selected annotation
+      if (options.annotations && Array.isArray(options.annotations.value)) {
+        options.annotations.value = [];
+      }
+      if (options.selectedAnnotation) {
+        options.selectedAnnotation.value = null;
+      }
+
+      // Reset video state
+      if (options.videoState) {
+        Object.assign(options.videoState, {
+          url: '',
+          id: 'sample-video-1',
+          urlInput: '',
+          currentTime: 0,
+          duration: 0,
+          isPlaying: false,
+          dimensions: { width: 1920, height: 1080 },
+          type: null,
+          currentFrame: 0,
+          totalFrames: 0,
+          fps: -1,
+        });
+      }
+
+      // Clear current IDs
+      if (options.currentVideoId) {
+        options.currentVideoId.value = null;
+      }
+      if (options.currentComparisonId) {
+        options.currentComparisonId.value = null;
+      }
+
+      // Run additional cleanup callbacks
+      if (
+        options.additionalCleanup &&
+        Array.isArray(options.additionalCleanup)
+      ) {
+        for (const cleanupFn of options.additionalCleanup) {
+          try {
+            await cleanupFn();
+          } catch (error) {
+            console.error(
+              '❌ [SessionCleanup] Error in additional cleanup callback:',
+              error
+            );
+          }
+        }
+      }
+
+      console.log(
+        `✅ [SessionCleanup] Project switch cleanup completed: ${currentProjectType} → ${newProjectType}`
+      );
+    } catch (error) {
+      console.error(
+        '❌ [SessionCleanup] Error during project switch cleanup:',
+        error
+      );
+      throw error;
+    } finally {
+      isCleaningUp.value = false;
+    }
+  };
+
   return {
     isCleaningUp: readonly(isCleaningUp),
     cleanupAllSessionData,
     quickCleanup,
     cleanupPoseDetection,
     cleanupDrawingData,
+    cleanupForProjectSwitch,
   };
 }
 

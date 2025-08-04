@@ -852,6 +852,7 @@ import { ComparisonVideoService } from '../services/comparisonVideoService.ts';
 import { CommentService } from '../services/commentService.ts';
 import { useAuth } from '../composables/useAuth.ts';
 import { useGlobalComments } from '../composables/useGlobalComments.ts';
+import { useSessionCleanup } from '../composables/useSessionCleanup.ts';
 import VideoUpload from './VideoUpload.vue';
 
 // Props
@@ -869,6 +870,7 @@ const emit = defineEmits(['close', 'project-selected']);
 const { user } = useAuth();
 const { subscribeToGlobalComments, unsubscribeFromGlobalComments } =
   useGlobalComments();
+const { cleanupForProjectSwitch } = useSessionCleanup();
 
 // State
 const projects = ref<Project[]>([]);
@@ -983,6 +985,12 @@ const selectProject = async (project: Project) => {
 
     // Mark project as viewed (clear new comment indicator)
     markProjectAsViewed(project.id);
+
+    // Note: The actual cleanup will be handled by App.vue's handleProjectSelected
+    // This ensures proper coordination between the modal and the main app
+    console.log(
+      '🔄 [LoadVideoModal] Delegating cleanup to App.vue handleProjectSelected'
+    );
 
     // Emit the project-selected event with the entire project object
     emit('project-selected', project);

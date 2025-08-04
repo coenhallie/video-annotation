@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import {
   ref,
   reactive,
@@ -18,36 +18,33 @@ import UnifiedVideoPlayer from './components/UnifiedVideoPlayer.vue';
 import SpeedVisualization from './components/SpeedVisualization.vue';
 import SpeedChart from './components/SpeedChart.vue';
 import CalibrationControls from './components/CalibrationControls.vue';
-import { useAuth } from './composables/useAuth.ts';
-import { useVideoAnnotations } from './composables/useVideoAnnotations.ts';
-import { useRealtimeAnnotations } from './composables/useRealtimeAnnotations.ts';
-import { useVideoSession } from './composables/useVideoSession.ts';
-import { useDrawingCanvas } from './composables/useDrawingCanvas.ts';
-import { useComparisonVideoWorkflow } from './composables/useComparisonVideoWorkflow.ts';
-import { useDualVideoPlayer } from './composables/useDualVideoPlayer.ts';
-import { usePoseLandmarker } from './composables/usePoseLandmarker.js';
-import { useSessionCleanup } from './composables/useSessionCleanup.ts';
-import { VideoService } from './services/videoService.ts';
-import { AnnotationService } from './services/annotationService.ts';
-import { ShareService } from './services/shareService.ts';
+import { useAuth } from './composables/useAuth';
+import { useVideoAnnotations } from './composables/useVideoAnnotations';
+import { useRealtimeAnnotations } from './composables/useRealtimeAnnotations';
+import { useVideoSession } from './composables/useVideoSession';
+import { useDrawingCanvas } from './composables/useDrawingCanvas';
+import { useComparisonVideoWorkflow } from './composables/useComparisonVideoWorkflow';
+import { useDualVideoPlayer } from './composables/useDualVideoPlayer';
+import { usePoseLandmarker } from './composables/usePoseLandmarker';
+import { useSessionCleanup } from './composables/useSessionCleanup';
+import { VideoService } from './services/videoService';
+import { AnnotationService } from './services/annotationService';
+import { ShareService } from './services/shareService';
 import { supabase } from './composables/useSupabase';
 
+import type { Annotation, Video } from './types/database';
+
 // Helper function to get the correct video URL
-const getVideoUrl = (video) => {
-  // If the video has a URL, use it
+const getVideoUrl = (video: any) => {
   if (video.url && video.url.trim() !== '') {
     return video.url;
   }
-
-  // If it's an uploaded video with a filePath, generate the public URL
   if (video.videoType === 'upload' && video.filePath) {
     const { data } = supabase.storage
       .from('videos')
       .getPublicUrl(video.filePath);
     return data.publicUrl;
   }
-
-  // Fallback to empty string
   return '';
 };
 
@@ -55,16 +52,12 @@ const getVideoUrl = (video) => {
 const hasError = ref(false);
 const errorMessage = ref('');
 
-// Error boundary
-onErrorCaptured((error, instance, info) => {
+onErrorCaptured((error: any, instance: any, info: string) => {
   console.error('App Error Boundary caught error:', error);
   console.error('Component instance:', instance);
   console.error('Error info:', info);
-
   hasError.value = true;
   errorMessage.value = error.message || 'An unexpected error occurred';
-
-  // Prevent the error from propagating further
   return false;
 });
 
@@ -79,25 +72,20 @@ const activeVideoContext = ref('A'); // 'A' or 'B'
 
 // Unified video state management
 const videoState = reactive({
-  // Single video properties
   url: '',
   id: 'sample-video-1',
   urlInput: '',
-
-  // Playback state
   currentTime: 0,
   duration: 0,
   isPlaying: false,
   dimensions: { width: 1920, height: 1080 },
-  type: null, // Track the current video type for proper deduplication
-
-  // Frame-based state
+  type: null as any,
   currentFrame: 0,
   totalFrames: 0,
-  fps: -1, // Will be detected from video
+  fps: -1,
 });
 
-// Backward compatibility refs (to avoid breaking existing code)
+// Backward compatibility refs
 const videoUrl = computed({
   get: () => videoState.url,
   set: (value) => (videoState.url = value),
@@ -144,20 +132,19 @@ const fps = computed({
 });
 
 // Drawing functionality
-const drawingCanvas = useDrawingCanvas(); // For single video mode
-const drawingCanvasA = useDrawingCanvas(); // For dual video mode - Video A
-const drawingCanvasB = useDrawingCanvas(); // For dual video mode - Video B
+const drawingCanvas = useDrawingCanvas();
+const drawingCanvasA = useDrawingCanvas();
+const drawingCanvasB = useDrawingCanvas();
 
 // Dual video player state
 const dualVideoPlayer = useDualVideoPlayer();
 const dualVideoPlayerRef = ref(null);
 
-// Connect drawing canvas instances to dual video player
 dualVideoPlayer.drawingCanvasA.value = drawingCanvasA;
 dualVideoPlayer.drawingCanvasB.value = drawingCanvasB;
 
-// Note: Drawing canvas refs will be set by UnifiedVideoPlayer component
-// via the watcher in UnifiedVideoPlayer.vue lines 1708-1721
+// Comparison video workflow
+const comparisonWorkflow = useComparisonVideoWorkflow();
 
 // Annotations data
 const {
@@ -173,9 +160,8 @@ const {
 } = useVideoAnnotations(
   videoUrl,
   videoId,
-  null,
+  ref(null),
   computed(() => {
-    // Return the actual comparison ID when in dual mode, null otherwise
     if (
       playerMode.value === 'dual' &&
       comparisonWorkflow.currentComparison.value?.id
@@ -186,51 +172,24 @@ const {
   })
 );
 
-// Annotation handler that routes to appropriate method based on mode
-const handleAddAnnotation = async (annotationData) => {
-  try {
-    if (
-      playerMode.value === 'dual' &&
-      comparisonWorkflow.currentComparison.value?.id
-    ) {
-      // In comparison mode, use the useVideoAnnotations addAnnotation method
-      // which will handle both the comparison workflow and updating the UI
-      const newAnnotation = await addAnnotation(annotationData);
-      return newAnnotation;
-    } else {
-      // In single video mode, use the regular annotation system
-      const newAnnotation = await addAnnotation(annotationData);
-      return newAnnotation;
-    }
-  } catch (error) {
-    throw error;
-  }
+const handleAddAnnotation = async (annotationData: any) => {
+  return await addAnnotation(annotationData);
 };
 
-// Selected annotation
 const selectedAnnotation = ref(null);
 
-// Video player reference
+// Component Refs
 const unifiedVideoPlayerRef = ref(null);
-
-// Annotation panel reference
 const annotationPanelRef = ref(null);
 
-// Track if annotation form is currently visible
 const isAnnotationFormVisible = ref(false);
-
-// Load video modal state
 const isLoadModalVisible = ref(false);
-
-// Share modal state
 const isShareModalVisible = ref(false);
 const isChartVisible = ref(false);
 const videoLoaded = ref(false);
-const currentVideoId = ref(null);
+const currentVideoId = ref<string | null>(null);
 const currentComparisonId = ref(null);
 const isSharedComparison = ref(false);
-
-// Shared video state
 const isSharedVideo = ref(false);
 const sharedVideoData = ref(null);
 
@@ -250,13 +209,6 @@ const {
   refreshCommentPermissions,
 } = useVideoSession(currentVideoId);
 
-// Comparison video workflow
-const comparisonWorkflow = useComparisonVideoWorkflow();
-
-/**
- * Single source-of-truth watcher to sync dual video sources from comparison workflow.
- * Cleaned up duplicates and ensured watch is imported once.
- */
 watch(
   () => comparisonWorkflow.currentComparison.value,
   async (comp) => {
@@ -270,7 +222,6 @@ watch(
 
     if (!dualVideoPlayer) return;
 
-    // Clear sources when no comparison
     if (!comp) {
       if (dualVideoPlayer.setVideoSources) {
         dualVideoPlayer.setVideoSources(null, null);
@@ -284,7 +235,7 @@ watch(
     let videoA = comp.videoA || { id: comp.videoAId };
     let videoB = comp.videoB || { id: comp.videoBId };
 
-    const ensureVideoHydrated = async (vid) => {
+    const ensureVideoHydrated = async (vid: any) => {
       if (vid && (vid.url || vid.filePath)) return vid;
       try {
         const { data, error } = await supabase
@@ -331,72 +282,13 @@ watch(
   { immediate: true, deep: true }
 );
 
-// Keep UnifiedVideoPlayer dual sources in sync with workflow
-watch(
-  () => comparisonWorkflow.currentComparison.value,
-  async (comp) => {
-    console.log('🧭 [App] Secondary watcher currentComparison changed');
-    if (!comp) {
-      if (dualVideoPlayer?.setVideoSources) {
-        dualVideoPlayer.setVideoSources(null, null);
-      } else {
-        if (dualVideoPlayer?.videoAUrl) dualVideoPlayer.videoAUrl.value = '';
-        if (dualVideoPlayer?.videoBUrl) dualVideoPlayer.videoBUrl.value = '';
-      }
-      return;
-    }
-
-    let a = comp.videoA || { id: comp.videoAId };
-    let b = comp.videoB || { id: comp.videoBId };
-
-    const ensureVideoHydrated = async (vid) => {
-      if (vid && (vid.url || vid.filePath)) return vid;
-      try {
-        const { data, error } = await supabase
-          .from('videos')
-          .select('*')
-          .eq('id', vid?.id)
-          .single();
-        if (error) return vid || { id: null };
-        return data || vid;
-      } catch {
-        return vid || { id: null };
-      }
-    };
-
-    if (!a?.url && !a?.filePath) a = await ensureVideoHydrated(a);
-    if (!b?.url && !b?.filePath) b = await ensureVideoHydrated(b);
-
-    const aUrl = getVideoUrl(a) || '';
-    const bUrl = getVideoUrl(b) || '';
-    console.log('🧭 [App] Secondary watcher URLs:', { aUrl, bUrl });
-
-    if (dualVideoPlayer?.setVideoSources) {
-      dualVideoPlayer.setVideoSources(
-        { url: aUrl, id: a.id || comp.videoAId || 'video-a' },
-        { url: bUrl, id: b.id || comp.videoBId || 'video-b' }
-      );
-    } else {
-      if (dualVideoPlayer?.videoAUrl) dualVideoPlayer.videoAUrl.value = aUrl;
-      if (dualVideoPlayer?.videoBUrl) dualVideoPlayer.videoBUrl.value = bUrl;
-      if (dualVideoPlayer?.videoAId)
-        dualVideoPlayer.videoAId.value = a.id || comp.videoAId || 'video-a';
-      if (dualVideoPlayer?.videoBId)
-        dualVideoPlayer.videoBId.value = b.id || comp.videoBId || 'video-b';
-    }
-  },
-  { immediate: true, deep: true }
-);
-
 // Enhanced Pose detection functionality with fast movements optimization
-const poseLandmarker = usePoseLandmarker(); // For single video mode
-const poseLandmarkerA = usePoseLandmarker(); // For dual video mode - Video A
-const poseLandmarkerB = usePoseLandmarker(); // For dual video mode - Video B
+const poseLandmarker = usePoseLandmarker();
+const poseLandmarkerA = usePoseLandmarker();
+const poseLandmarkerB = usePoseLandmarker();
 
-// Session cleanup utility
-const { cleanupAllSessionData } = useSessionCleanup();
+const { cleanupAllSessionData, cleanupForProjectSwitch } = useSessionCleanup();
 
-// Access speed calculator for calibration
 const currentSpeedCalculator = computed(() => {
   if (playerMode.value === 'single') {
     return poseLandmarker.speedCalculator;
@@ -407,7 +299,6 @@ const currentSpeedCalculator = computed(() => {
   }
 });
 
-// Calibration state
 const isCourtCalibrating = ref(false);
 const courtCalibrationPoints = ref([]);
 const showCalibrationControls = ref(false);
@@ -417,13 +308,12 @@ const configureFastMovements = () => {
   const landmarkers = [poseLandmarker, poseLandmarkerA, poseLandmarkerB];
 
   landmarkers.forEach((landmarker) => {
-    landmarker.updateSettings({
-      // High performance setup for fast movements
-      roiSmoothingFactor: 0.5, // Less smoothing for responsiveness
-      motionPredictionWeight: 0.4, // Higher prediction weight
-      adaptiveROIExpansionRate: 0.08, // Faster expansion
-      frameSkip: 1, // Process every frame
-      maxFPS: 60, // Higher frame rate
+    Object.assign(landmarker.detectionSettings, {
+      roiSmoothingFactor: 0.5,
+      motionPredictionWeight: 0.4,
+      adaptiveROIExpansionRate: 0.08,
+      frameSkip: 1,
+      maxFPS: 60,
       useAdaptiveROI: true,
       useMotionPrediction: true,
       roiValidationEnabled: true,
@@ -433,33 +323,35 @@ const configureFastMovements = () => {
   });
 };
 
-// Initialize fast movements configuration
 configureFastMovements();
 
 watch(
   annotations,
   (newAnnotations) => {
     if (newAnnotations) {
-      drawingCanvas.loadDrawingsFromAnnotations(newAnnotations);
+      drawingCanvas.loadDrawingsFromAnnotations(newAnnotations as any);
     }
   },
   { immediate: true, deep: true }
 );
 
-const handleChartToggled = (value) => {
+const handleChartToggled = (value: boolean) => {
   isChartVisible.value = value;
 };
 
 // Event handlers for video player events
-const handleTimeUpdate = (data) => {
+const handleTimeUpdate = (data: { currentTime: number; duration: number }) => {
   currentTime.value = data.currentTime;
-  // Also update duration if it's available and not set
   if (data.duration && data.duration > 0 && duration.value !== data.duration) {
     duration.value = data.duration;
   }
 };
 
-const handleFrameUpdate = (data) => {
+const handleFrameUpdate = (data: {
+  currentFrame: number;
+  totalFrames: number;
+  fps: number;
+}) => {
   try {
     if (data && typeof data === 'object') {
       if (typeof data.currentFrame === 'number') {
@@ -472,7 +364,6 @@ const handleFrameUpdate = (data) => {
         fps.value = data.fps;
       }
 
-      // Update drawing canvas current frame with null check
       if (
         drawingCanvas &&
         drawingCanvas.currentFrame &&
@@ -486,7 +377,7 @@ const handleFrameUpdate = (data) => {
   }
 };
 
-const handleFPSDetected = (data) => {
+const handleFPSDetected = (data: { fps: number; totalFrames: number }) => {
   try {
     if (data && typeof data === 'object') {
       if (typeof data.fps === 'number') {
@@ -509,120 +400,102 @@ const handlePause = () => {
   isPlaying.value = false;
 };
 
-const handleError = (error) => {};
+const handleError = (error: Error) => {
+  console.error('Video error:', error);
+};
 
-const handleLoaded = async () => {
-  videoLoaded.value = true;
-  // Get video dimensions from the video element
-  const videoElement =
-    playerMode.value === 'single'
-      ? unifiedVideoPlayerRef.value?.singleVideoElement
-      : unifiedVideoPlayerRef.value?.videoAElement;
-
-  if (videoElement) {
-    videoDimensions.value = {
-      width: videoElement.videoWidth || 1920,
-      height: videoElement.videoHeight || 1080,
-    };
-
-    // Update drawing canvas with video dimensions
-    drawingCanvas.setVideoSize(
-      videoDimensions.value.width,
-      videoDimensions.value.height
-    );
-  }
-
-  if (user.value) {
-    const video = await initializeVideo({
-      fps: fps.value,
-      duration: duration.value,
-      totalFrames: totalFrames.value,
-      videoType: currentVideoType.value, // Preserve video type for proper deduplication
-    });
-
-    // Track the current video ID for sharing
-    if (video && video.id) {
-      currentVideoId.value = video.id;
-    }
-
-    await startSession();
-
-    setupPresenceTracking(user.value.id, user.value.email);
-  } else {
-  }
-
-  // Initialize pose detection for the appropriate mode
+const handleLoaded = async (data: any) => {
   try {
-    if (playerMode.value === 'single') {
-      await poseLandmarker.enablePoseDetection();
-    } else if (playerMode.value === 'dual') {
-      await poseLandmarkerA.enablePoseDetection();
-      await poseLandmarkerB.enablePoseDetection();
+    if (!data) {
+      console.error('handleLoaded called with no data');
+      return;
     }
+
+    videoLoaded.value = true;
+
+    if (data.duration !== undefined) {
+      videoState.duration = data.duration;
+    }
+
+    if (data.dimensions) {
+      videoState.dimensions = data.dimensions;
+    }
+
+    if (data.id) {
+      currentVideoId.value = data.id as string;
+    }
+
+    // Initialize video with complete data object, not just ID
+    if (data) {
+      await initializeVideo(data);
+    }
+
+    await loadAnnotations();
   } catch (error) {
-    console.error('Failed to initialize pose detection:', error);
+    console.error('Error in handleLoaded:', error);
   }
 };
 
-// Timeline event handlers for single video
-const handleSeekToTime = (time) => {
-  if (unifiedVideoPlayerRef.value?.seekTo) {
-    unifiedVideoPlayerRef.value.seekTo(time);
+const handleSeekToTime = (time: number) => {
+  if ((unifiedVideoPlayerRef.value as any)?.seekTo) {
+    (unifiedVideoPlayerRef.value as any).seekTo(time);
   }
 };
 
-// Consolidated dual video event handler
-const handleDualVideoAction = (action, context, ...args) => {
+const handleDualVideoAction = (
+  action: string,
+  context: string,
+  ...args: any[]
+) => {
   if (!dualVideoPlayer) return;
 
   const methodName = `${action}Video${context}`;
-  if (typeof dualVideoPlayer[methodName] === 'function') {
-    dualVideoPlayer[methodName](...args);
+  if (typeof (dualVideoPlayer as any)[methodName] === 'function') {
+    (dualVideoPlayer as any)[methodName](...args);
   }
 };
 
-// Dual timeline event handlers (using consolidated approach)
-const handleSeekVideoA = (time) => handleDualVideoAction('seek', 'A', time);
-const handleSeekVideoB = (time) => handleDualVideoAction('seek', 'B', time);
+const handleSeekVideoA = (time: number) =>
+  handleDualVideoAction('seek', 'A', time);
+const handleSeekVideoB = (time: number) =>
+  handleDualVideoAction('seek', 'B', time);
 const handlePlayVideoA = () => handleDualVideoAction('play', 'A');
 const handlePauseVideoA = () => handleDualVideoAction('pause', 'A');
 const handlePlayVideoB = () => handleDualVideoAction('play', 'B');
 const handlePauseVideoB = () => handleDualVideoAction('pause', 'B');
-const handleFrameStepVideoA = (direction) =>
+const handleFrameStepVideoA = (direction: string) =>
   handleDualVideoAction('stepFrame', 'A', direction);
-const handleFrameStepVideoB = (direction) =>
+const handleFrameStepVideoB = (direction: string) =>
   handleDualVideoAction('stepFrame', 'B', direction);
 
-// Timeline event handlers with fade transition for annotation clicks
-const handleSeekToTimeWithFade = async (time) => {
+const handleSeekToTimeWithFade = async (time: number) => {
   if (playerMode.value === 'dual' && dualVideoPlayer) {
-    // For dual mode, seek both videos to the annotation time
-    dualVideoPlayer.seekVideoA(time);
-    dualVideoPlayer.seekVideoB(time);
+    (dualVideoPlayer as any).seekVideoA?.(time);
+    (dualVideoPlayer as any).seekVideoB?.(time);
   } else {
     if (
-      unifiedVideoPlayerRef.value?.performVideoFadeTransition &&
-      unifiedVideoPlayerRef.value?.seekTo
+      (unifiedVideoPlayerRef.value as any)?.performVideoFadeTransition &&
+      (unifiedVideoPlayerRef.value as any)?.seekTo
     ) {
-      await unifiedVideoPlayerRef.value.performVideoFadeTransition(() => {
-        unifiedVideoPlayerRef.value.seekTo(time);
-      });
-    } else if (unifiedVideoPlayerRef.value?.seekTo) {
-      unifiedVideoPlayerRef.value.seekTo(time);
+      await (unifiedVideoPlayerRef.value as any).performVideoFadeTransition(
+        () => {
+          (unifiedVideoPlayerRef.value as any).seekTo(time);
+        }
+      );
+    } else if ((unifiedVideoPlayerRef.value as any)?.seekTo) {
+      (unifiedVideoPlayerRef.value as any).seekTo(time);
     }
   }
 };
 
-const handleAnnotationClick = async (annotation) => {
+const handleAnnotationClick = async (annotation: any) => {
   selectedAnnotation.value = annotation;
 
   if (playerMode.value === 'dual' && dualVideoPlayer) {
-    // DUAL VIDEO MODE: Restore both videos to their individual frame positions
     if (
       annotation.videoAFrame !== undefined &&
       annotation.videoBFrame !== undefined
     ) {
-      // Use the stored frame numbers for each video
       const videoATime =
         annotation.videoATimestamp ||
         annotation.videoAFrame / (dualVideoPlayer.videoAState?.fps || 30);
@@ -630,64 +503,63 @@ const handleAnnotationClick = async (annotation) => {
         annotation.videoBTimestamp ||
         annotation.videoBFrame / (dualVideoPlayer.videoBState?.fps || 30);
 
-      console.log(`🎯 [handleAnnotationClick] Restoring dual video frames:`, {
-        videoAFrame: annotation.videoAFrame,
-        videoBFrame: annotation.videoBFrame,
-        videoATime,
-        videoBTime,
-      });
-
-      // Seek both videos to their individual positions
-      dualVideoPlayer.seekVideoA(videoATime);
-      dualVideoPlayer.seekVideoB(videoBTime);
+      (dualVideoPlayer as any).seekVideoA?.(videoATime);
+      (dualVideoPlayer as any).seekVideoB?.(videoBTime);
     } else {
-      // Fallback: seek both videos to the same timestamp (legacy annotations)
-      console.log(
-        `🎯 [handleAnnotationClick] Using fallback timestamp for dual video:`,
-        annotation.timestamp
-      );
       await handleSeekToTimeWithFade(annotation.timestamp);
     }
   } else {
-    // SINGLE VIDEO MODE: Use the regular timestamp
     await handleSeekToTimeWithFade(annotation.timestamp);
   }
 };
 
 const handleAnnotationEdit = () => {
-  // If the annotation panel is not visible, do nothing
   if (!annotationPanelRef.value) return;
-
-  // Set the isEditing state on the annotation panel
-  annotationPanelRef.value.isEditing = true;
+  (annotationPanelRef.value as any).isEditing = true;
 };
 
-// Controls the drawing functionality
-const handleDrawingCreated = (drawingData) => {
-  // If the annotation panel is not visible, do nothing
-  if (!annotationPanelRef.value) return;
-
-  // Set the drawing data on the annotation panel
-  annotationPanelRef.value.setDrawingData(drawingData);
+const handleDrawingCreated = (drawing: any, event: Event) => {
+  if (playerMode.value === 'dual') {
+    const videoContext = (event.target as HTMLElement).dataset.videoContext as
+      | 'A'
+      | 'B';
+    (dualVideoPlayer as any).addDrawing?.(drawing, videoContext);
+    // Forward drawing data to annotation panel for dual mode
+    if (annotationPanelRef.value?.onDrawingCreated) {
+      annotationPanelRef.value.onDrawingCreated(drawing, videoContext);
+    }
+  } else {
+    drawingCanvas.addDrawing(drawing);
+    // Forward drawing data to annotation panel for single mode
+    if (annotationPanelRef.value?.onDrawingCreated) {
+      annotationPanelRef.value.onDrawingCreated(drawing);
+    }
+  }
 };
 
-const handleDrawingUpdated = (drawingData) => {
-  // If the annotation panel is not visible, do nothing
-  if (!annotationPanelRef.value) return;
-
-  // Set the drawing data on the annotation panel
-  annotationPanelRef.value.setDrawingData(drawingData);
+const handleDrawingUpdated = (drawing: any, event: Event) => {
+  if (playerMode.value === 'dual') {
+    const videoContext = (event.target as HTMLElement).dataset.videoContext as
+      | 'A'
+      | 'B';
+    (dualVideoPlayer as any).updateDrawing?.(drawing, videoContext);
+  } else {
+    (drawingCanvas as any).updateDrawing?.(drawing);
+  }
 };
 
-const handleDrawingDeleted = () => {
-  // If the annotation panel is not visible, do nothing
-  if (!annotationPanelRef.value) return;
-
-  // Clear the drawing data on the annotation panel
-  annotationPanelRef.value.clearDrawingData();
+const handleDrawingDeleted = (drawingId: string, event: Event) => {
+  if (playerMode.value === 'dual') {
+    const videoContext = (event.target as HTMLElement).dataset.videoContext as
+      | 'A'
+      | 'B';
+    (dualVideoPlayer as any).deleteDrawing?.(drawingId, videoContext);
+  } else {
+    (drawingCanvas as any).deleteDrawing?.(drawingId);
+  }
 };
 
-const handleCreateAnonymousSession = async (displayName) => {
+const handleCreateAnonymousSession = async (displayName: string) => {
   try {
     const session = await createAnonymousSession(displayName);
     return session;
@@ -696,7 +568,6 @@ const handleCreateAnonymousSession = async (displayName) => {
   }
 };
 
-// Controls the annotation form visibility in the AnnotationPanel
 const handleFormShow = () => {
   isAnnotationFormVisible.value = true;
 };
@@ -705,30 +576,28 @@ const handleFormHide = () => {
   isAnnotationFormVisible.value = false;
 };
 
-// Control playback from the timeline
 const handleTimelinePlay = () => {
   if (playerMode.value === 'single' && unifiedVideoPlayerRef.value) {
-    unifiedVideoPlayerRef.value.play();
+    (unifiedVideoPlayerRef.value as any).play();
   } else if (playerMode.value === 'dual' && dualVideoPlayer) {
-    // In dual mode, play both videos synchronously
-    dualVideoPlayer.playVideoA();
-    dualVideoPlayer.playVideoB();
+    (dualVideoPlayer as any).playVideoA?.();
+    (dualVideoPlayer as any).playVideoB?.();
   }
 };
 
 const handleTimelinePause = () => {
   if (playerMode.value === 'single' && unifiedVideoPlayerRef.value) {
-    unifiedVideoPlayerRef.value.pause();
+    (unifiedVideoPlayerRef.value as any).pause();
   } else if (playerMode.value === 'dual' && dualVideoPlayer) {
-    // In dual mode, pause both videos synchronously
-    dualVideoPlayer.pauseVideoA();
-    dualVideoPlayer.pauseVideoB();
+    (dualVideoPlayer as any).pauseVideoA?.();
+    (dualVideoPlayer as any).pauseVideoB?.();
   }
 };
 
-const handleSpeedVisualizationToggled = (isEnabled) => {};
+const handleSpeedVisualizationToggled = (isEnabled: boolean) => {
+  console.log('🔄 [App] Speed visualization toggled:', isEnabled);
+};
 
-// Show/hide the load video modal
 const openLoadModal = () => {
   isLoadModalVisible.value = true;
 };
@@ -737,133 +606,133 @@ const closeLoadModal = () => {
   isLoadModalVisible.value = false;
 };
 
-/**
- * Load a single video (never attempts to drive comparison workflow here).
- * Dual comparisons are loaded via handleProjectSelected with explicit mode switch.
- */
-const loadVideo = (video, type = 'upload') => {
+const loadVideo = (video: any, type = 'upload') => {
   videoLoaded.value = false;
   try {
-    // Always treat this helper as single video loader
     playerMode.value = 'single';
-
-    // Load the video directly
-    urlInput.value = video.url;
+    urlInput.value = video.url || '';
     videoUrl.value = getVideoUrl(video);
-    videoId.value = video.id;
+    videoId.value = video.id || '';
     currentVideoType.value = type;
-
     videoLoaded.value = false;
   } catch (error) {
     console.error('Failed to load video:', error);
   }
 };
 
-// Handle project selection in load modal
-const handleProjectSelected = async (project) => {
-  if (project.projectType === 'single') {
-    // This is a single video project, so we need to load it into the player
-    // and also set the annotations
+const handleProjectSelected = async (project: any) => {
+  try {
+    console.log(
+      '🔄 [App] Project selected:',
+      project.title,
+      'Type:',
+      project.projectType
+    );
 
-    // First, reset any existing comparison workflow to ensure clean state
-    if (comparisonWorkflow) {
-      comparisonWorkflow.resetWorkflow();
+    // Determine current and new project types
+    const currentProjectType = playerMode.value as 'single' | 'dual';
+    const newProjectType = project.projectType as 'single' | 'dual';
+
+    // Perform cleanup if switching between different project types or different projects
+    if (
+      currentProjectType !== newProjectType ||
+      (currentProjectType === 'single' &&
+        currentVideoId.value !== project.video?.id) ||
+      (currentProjectType === 'dual' &&
+        currentComparisonId.value !== project.comparisonVideo?.id)
+    ) {
+      console.log(
+        `🧹 [App] Cleaning up before project switch: ${currentProjectType} → ${newProjectType}`
+      );
+
+      await cleanupForProjectSwitch(currentProjectType, newProjectType, {
+        poseLandmarker,
+        poseLandmarkerA,
+        poseLandmarkerB,
+        drawingCanvas,
+        drawingCanvasA,
+        drawingCanvasB,
+        dualVideoPlayer,
+        comparisonWorkflow,
+        videoSession: { endSession },
+        annotations,
+        selectedAnnotation,
+        videoState,
+        currentVideoId,
+        currentComparisonId,
+        additionalCleanup: [
+          // End current video session
+          async () => {
+            try {
+              await endSession();
+            } catch (error) {
+              console.warn('Error ending session during cleanup:', error);
+            }
+          },
+        ],
+      });
     }
 
-    const video = {
-      id: project.video.id,
-      url: project.video.url, // Use the correct video URL from the project
-    };
+    if (project.projectType === 'single') {
+      console.log('🎬 [App] Loading single video project');
 
-    // Load the video into the player
-    loadVideo(video, 'upload'); // Assuming all projects are from uploads for now
+      // Set player mode first
+      playerMode.value = 'single';
 
-    // Set the current video ID for annotations and sharing
-    currentVideoId.value = project.video.id;
+      const video = {
+        id: project.video.id,
+        url: project.video.url,
+      };
 
-    // Load annotations for the video
-    await loadAnnotations(project.video.id);
-  } else if (project.projectType === 'dual') {
-    // Comparison project selected from modal: set mode first, then load
-    if (comparisonWorkflow) {
-      console.log('🧭 [App] Selecting dual project: switching to dual mode');
+      loadVideo(video, 'upload');
+      currentVideoId.value = project.video.id;
+      currentComparisonId.value = null;
+
+      // Load annotations for the new video
+      await loadAnnotations();
+    } else if (project.projectType === 'dual') {
+      console.log('🎬 [App] Loading dual video project');
+
+      // Set player mode first
       playerMode.value = 'dual';
-      await comparisonWorkflow.loadComparisonVideo(project.comparisonVideo);
+      currentComparisonId.value = project.comparisonVideo?.id || null;
+      currentVideoId.value = null;
 
-      // After load, force-propagate URLs to dualVideoPlayer to avoid any missed watcher race
-      const comp = comparisonWorkflow.currentComparison.value;
-      console.log('🧭 [App] Loaded comparison:', {
-        id: comp?.id,
-        videoAId: comp?.videoAId,
-        videoBId: comp?.videoBId,
-        hasVideoA: !!comp?.videoA,
-        hasVideoB: !!comp?.videoB,
-        videoAUrl: comp?.videoA?.url,
-        videoBUrl: comp?.videoB?.url,
-        videoAPath: comp?.videoA?.filePath,
-        videoBPath: comp?.videoB?.filePath,
-      });
-
-      if (comp && dualVideoPlayer) {
-        const ensureVideoHydrated = async (vid) => {
-          if (vid && (vid.url || vid.filePath)) return vid;
-          try {
-            const { data, error } = await supabase
-              .from('videos')
-              .select('*')
-              .eq('id', vid?.id)
-              .single();
-            if (error) {
-              console.warn(
-                '⚠️ [App] Failed to hydrate video by id:',
-                vid?.id,
-                error
-              );
-              return vid || { id: null };
-            }
-            return data || vid;
-          } catch (e) {
-            console.warn('⚠️ [App] Exception hydrating video:', vid?.id, e);
-            return vid || { id: null };
+      if (comparisonWorkflow) {
+        try {
+          // Initialize pose landmarkers for dual mode if not already initialized
+          if (!poseLandmarkerA.isInitialized.value) {
+            await poseLandmarkerA.initialize();
+            console.log('🎯 [App] Initialized poseLandmarkerA for dual mode');
           }
-        };
-
-        let a = comp.videoA || { id: comp.videoAId };
-        let b = comp.videoB || { id: comp.videoBId };
-        if (!a?.url && !a?.filePath) a = await ensureVideoHydrated(a);
-        if (!b?.url && !b?.filePath) b = await ensureVideoHydrated(b);
-
-        const aUrl = getVideoUrl(a) || '';
-        const bUrl = getVideoUrl(b) || '';
-        console.log('🧭 [App] Computed dual URLs:', { aUrl, bUrl });
-
-        if (dualVideoPlayer.setVideoSources) {
-          dualVideoPlayer.setVideoSources(
-            { url: aUrl, id: a.id || comp.videoAId || 'video-a' },
-            { url: bUrl, id: b.id || comp.videoBId || 'video-b' }
+          if (!poseLandmarkerB.isInitialized.value) {
+            await poseLandmarkerB.initialize();
+            console.log('🎯 [App] Initialized poseLandmarkerB for dual mode');
+          }
+        } catch (error) {
+          console.error(
+            'Failed to initialize dual mode pose landmarkers:',
+            error
           );
-        } else {
-          if (dualVideoPlayer.videoAUrl) dualVideoPlayer.videoAUrl.value = aUrl;
-          if (dualVideoPlayer.videoBUrl) dualVideoPlayer.videoBUrl.value = bUrl;
-          if (dualVideoPlayer.videoAId)
-            dualVideoPlayer.videoAId.value = a.id || comp.videoAId || 'video-a';
-          if (dualVideoPlayer.videoBId)
-            dualVideoPlayer.videoBId.value = b.id || comp.videoBId || 'video-b';
         }
-        console.log('🧭 [App] Applied dual URLs to player');
+
+        await comparisonWorkflow.loadComparisonVideo(project.comparisonVideo);
       }
     }
+
+    console.log('✅ [App] Project switch completed successfully');
+  } catch (error) {
+    console.error('❌ [App] Error during project selection:', error);
+    // You might want to show a user-friendly error message here
   }
 
-  // Close the modal after selection
   closeLoadModal();
 };
 
-// Handle video loaded in dual mode
-const handleDualVideoLoaded = () => {
+const handleDualVideoLoaded = async () => {
   if (dualVideoPlayerRef.value) {
-    const videoAState = dualVideoPlayerRef.value.videoAState;
-    const videoBState = dualVideoPlayerRef.value.videoBState;
+    const videoAState = (dualVideoPlayerRef.value as any).videoAState;
+    const videoBState = (dualVideoPlayerRef.value as any).videoBState;
 
     if (
       videoAState.duration > 0 &&
@@ -872,13 +741,23 @@ const handleDualVideoLoaded = () => {
       videoBState.fps > 0
     ) {
       if (comparisonWorkflow) {
-        comparisonWorkflow.setDualVideoReady(true);
+        (comparisonWorkflow as any).setDualVideoReady?.(true);
+      }
+
+      try {
+        if (!poseLandmarkerA.isInitialized.value) {
+          await poseLandmarkerA.initialize();
+        }
+        if (!poseLandmarkerB.isInitialized.value) {
+          await poseLandmarkerB.initialize();
+        }
+      } catch (error) {
+        console.error('Failed to initialize dual mode pose detection:', error);
       }
     }
   }
 };
 
-// Show/hide the share modal
 const shareModalProps = computed(() => {
   if (playerMode.value === 'dual') {
     return {
@@ -912,7 +791,6 @@ const closeShareModal = () => {
   isShareModalVisible.value = false;
 };
 
-// Handle shared video/comparison link
 onMounted(async () => {
   await initAuth();
 
@@ -921,23 +799,12 @@ onMounted(async () => {
   if (shareInfo.type && shareInfo.id) {
     try {
       if (shareInfo.type === 'video') {
-        // This is a shared video
         isSharedVideo.value = true;
         const shareData =
           await ShareService.getSharedVideoWithCommentPermissions(shareInfo.id);
 
-        sharedVideoData.value = {
-          id: shareData.id,
-          title: shareData.title,
-          description: shareData.description,
-          url: shareData.url,
-          filePath: shareData.filePath,
-          videoType: shareData.videoType,
-          isPublic: shareData.isPublic,
-        };
-
-        // Set the current video ID for comments and annotations
-        currentVideoId.value = shareData.id;
+        sharedVideoData.value = shareData as any;
+        currentVideoId.value = shareData.id as string;
 
         loadVideo(
           {
@@ -947,13 +814,45 @@ onMounted(async () => {
           'shared'
         );
       } else if (shareInfo.type === 'comparison') {
-        // This is a shared comparison
         isSharedComparison.value = true;
-        if (comparisonWorkflow) {
-          await comparisonWorkflow.loadComparisonVideo({
-            id: shareInfo.id,
-          });
-          playerMode.value = 'dual'; // Set to dual mode for comparison
+
+        try {
+          // Load shared comparison video with proper permissions
+          const sharedComparisonData =
+            await ShareService.getSharedComparisonVideoWithCommentPermissions(
+              shareInfo.id
+            );
+
+          // Set the current comparison data
+          currentComparisonId.value = sharedComparisonData.id;
+
+          // Create a comparison video object for the workflow
+          const comparisonVideo = {
+            id: sharedComparisonData.id,
+            title: sharedComparisonData.title,
+            description: sharedComparisonData.description,
+            videoAId: sharedComparisonData.videoA?.id || 'placeholder',
+            videoBId: sharedComparisonData.videoB?.id || 'placeholder',
+            videoA: sharedComparisonData.videoA,
+            videoB: sharedComparisonData.videoB,
+            isPublic: sharedComparisonData.isPublic,
+            userId: '', // Not needed for shared videos
+            createdAt: '',
+            updatedAt: '',
+          };
+
+          if (comparisonWorkflow) {
+            await comparisonWorkflow.loadComparisonVideo(
+              comparisonVideo as any
+            );
+            playerMode.value = 'dual';
+          }
+        } catch (error) {
+          console.error(
+            '❌ [App] Failed to load shared comparison video:',
+            error
+          );
+          throw error;
         }
       }
     } catch (error) {
@@ -962,76 +861,73 @@ onMounted(async () => {
   } else if (!user.value) {
     // If no share link and not logged in, show the login page
   } else if (!videoLoaded.value) {
-    // If no video is loaded, and we are not handling a share link, show the modal
     isLoadModalVisible.value = true;
   }
 });
 
-// Watch for changes in player mode to adjust UI if needed
 watch(playerMode, (newMode) => {
-  // Reset any relevant state when switching modes
   if (newMode === 'single') {
-    // Clear comparison data if switching back to single mode
     if (comparisonWorkflow) {
       comparisonWorkflow.resetWorkflow();
     }
   }
 });
 
-// Enhanced ROI State Management for Fast Movements
-const currentPoseLandmarker = computed(() => {
+const getActivePoseLandmarker = () => {
   if (playerMode.value === 'single') return poseLandmarker;
   if (activeVideoContext.value === 'A') return poseLandmarkerA;
   return poseLandmarkerB;
-});
+};
 
-// Safely guard nested refs for initial render before landmarker is ready
-const isROICalibrating = computed(
-  () => currentPoseLandmarker?.value?.isROICalibrating?.value ?? false
-);
+const currentPoseLandmarker = computed(getActivePoseLandmarker);
 
-const roiPoints = computed(
-  () => currentPoseLandmarker?.value?.roiPoints?.value ?? []
-);
-
-const handleSetROI = (points) => {
-  currentPoseLandmarker?.value?.setROI?.(points);
+const handleSetROI = (roi: any) => {
+  const activeLandmarker = getActivePoseLandmarker();
+  if (activeLandmarker?.setROI) {
+    activeLandmarker.setROI(roi);
+  }
 };
 
 const handleResetROI = () => {
-  currentPoseLandmarker?.value?.resetROI?.();
+  const activeLandmarker = getActivePoseLandmarker();
+  if (activeLandmarker?.resetROI) {
+    activeLandmarker.resetROI();
+  }
 };
 
 const handleToggleROICalibration = () => {
-  currentPoseLandmarker?.value?.toggleROICalibration?.();
+  (currentPoseLandmarker?.value as any)?.toggleROICalibration?.();
 };
 
-const handleKeypointSelection = (keypoint, isSelected) => {
-  currentPoseLandmarker?.value?.updateSelectedKeypoints?.(keypoint, isSelected);
+const handleKeypointSelection = (keypoint: any, isSelected: boolean) => {
+  (currentPoseLandmarker?.value as any)?.updateSelectedKeypoints?.(
+    keypoint,
+    isSelected
+  );
 };
 
 // Calibration Controls
 const handleStartCourtCalibration = () => {
   if (currentSpeedCalculator.value) {
-    currentSpeedCalculator.value.startCourtCalibration();
+    (currentSpeedCalculator.value as any).startCourtCalibration();
   }
 };
 
-const handleSetPlayerHeight = (height) => {
+const handleSetPlayerHeight = (height: number) => {
   if (currentSpeedCalculator.value) {
-    currentSpeedCalculator.value.setPlayerHeight(height);
+    (currentSpeedCalculator.value as any).setPlayerHeight(height);
   }
 };
 
-const handleSetCourtDimensions = (dimensions) => {
+const handleSetCourtDimensions = (dimensions: any) => {
   if (currentSpeedCalculator.value) {
-    currentSpeedCalculator.value.setCourtDimensions(dimensions);
+    (currentSpeedCalculator.value as any).setCourtLength(dimensions.height);
   }
 };
 
-const handleSetCourtReferencePoints = (points) => {
+const handleSetCourtReferencePoints = (points: any) => {
   if (currentSpeedCalculator.value) {
-    currentSpeedCalculator.value.setCourtReferencePoints(points);
+    (currentSpeedCalculator.value as any).setCourtReferencePoints(points);
   }
 };
 
@@ -1041,13 +937,13 @@ const toggleCalibrationControls = () => {
 
 const handleResetCalibration = () => {
   if (currentSpeedCalculator.value) {
-    currentSpeedCalculator.value.resetCalibration();
+    (currentSpeedCalculator.value as any).resetCalibration();
   }
 };
 
-const handleSpeedData = (data) => {
+const handleSpeedData = (data: any) => {
   if (currentSpeedCalculator.value) {
-    currentSpeedCalculator.value.addSpeedData(
+    (currentSpeedCalculator.value as any).addSpeedData(
       data.speed,
       data.timestamp,
       data.frame
@@ -1056,7 +952,25 @@ const handleSpeedData = (data) => {
 };
 
 const currentSpeedMetrics = computed(() => {
-  return currentSpeedCalculator.value?.speedMetrics;
+  let result;
+  if (playerMode.value === 'single') {
+    result = poseLandmarker.speedMetrics;
+  } else if (activeVideoContext.value === 'A') {
+    result = poseLandmarkerA.speedMetrics;
+  } else {
+    result = poseLandmarkerB.speedMetrics;
+  }
+
+  console.log('🔍 [App.vue] currentSpeedMetrics computed:', {
+    playerMode: playerMode.value,
+    activeVideoContext: activeVideoContext.value,
+    result: result?.value,
+    isValid: result?.value?.isValid,
+    hasSpeedProperty: !!(result?.value?.speed !== undefined),
+    speedValue: result?.value?.speed,
+  });
+
+  return result;
 });
 
 // Logout and cleanup
@@ -1072,10 +986,10 @@ const handleSignOut = async () => {
 watch(
   () => user.value,
   (newUser) => {
-    if (newUser && newUser.id) {
+    if (newUser && (newUser as any).id) {
       if (currentVideoId.value) {
         startSession();
-        setupPresenceTracking(newUser.id, newUser.email);
+        setupPresenceTracking((newUser as any).id, (newUser as any).email);
       }
     } else {
       endSession();
@@ -1083,18 +997,6 @@ watch(
   },
   { immediate: true }
 );
-
-// Graceful exit -- DC
-// onBeforeUnmount(async () => {
-//   if (isSessionActive.value) {
-//     console.log('Session is active');
-//     try {
-//       // await endSession(); // MH: This is causing issues with sign out
-//     } catch (error) {
-//       console.error('Failed to end session on unmount:', error);
-//     }
-//   }
-// });
 </script>
 
 <template>
@@ -1271,11 +1173,13 @@ watch(
                 d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
               />
             </svg>
-            <span class="font-medium">{{ user?.email || 'Loading...' }}</span>
+            <span class="font-medium">{{
+              (user as any)?.email || 'Loading...'
+            }}</span>
           </div>
           <button
             class="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
-            @click="signOut"
+            @click="handleSignOut"
           >
             Sign Out
           </button>
@@ -1339,6 +1243,8 @@ watch(
                 @drawing-created="handleDrawingCreated"
                 @drawing-updated="handleDrawingUpdated"
                 @drawing-deleted="handleDrawingDeleted"
+                @set-roi="handleSetROI"
+                @reset-roi="handleResetROI"
               />
 
               <!-- Speed Visualization Overlay -->
@@ -1483,8 +1389,8 @@ watch(
           <div v-if="showCalibrationControls" class="p-4">
             <CalibrationControls
               v-if="currentSpeedCalculator"
-              :calibration-settings="currentSpeedCalculator.calibrationSettings"
-              :speed-metrics="currentSpeedCalculator.speedMetrics"
+              :calibration-settings="(currentSpeedCalculator as any).calibrationSettings"
+              :speed-metrics="(currentSpeedCalculator as any).speedMetrics"
               :video-dimensions="videoDimensions"
               :on-set-player-height="handleSetPlayerHeight"
               :on-set-court-dimensions="handleSetCourtDimensions"
@@ -1507,7 +1413,7 @@ watch(
             :fps="fps || 30"
             :drawing-canvas="drawingCanvas"
             :read-only="(isSharedVideo || isSharedComparison) && !canComment()"
-            :video-id="currentVideoId"
+            :video-id="currentVideoId || ''"
             :loading="annotationsLoading"
             :is-dual-mode="playerMode === 'dual'"
             :drawing-canvas-a="dualVideoPlayer?.drawingCanvasA?.value || null"
@@ -1518,13 +1424,13 @@ watch(
             :is-shared-video="isSharedVideo || isSharedComparison"
             :comment-context="getCommentContext()"
             :drawing-canvas-ref="
-              unifiedVideoPlayerRef?.singleDrawingCanvasRef || null
+              (unifiedVideoPlayerRef as any)?.singleDrawingCanvasRef || null
             "
             :drawing-canvas-a-ref="
-              unifiedVideoPlayerRef?.drawingCanvasARef || null
+              (unifiedVideoPlayerRef as any)?.drawingCanvasARef || null
             "
             :drawing-canvas-b-ref="
-              unifiedVideoPlayerRef?.drawingCanvasBRef || null
+              (unifiedVideoPlayerRef as any)?.drawingCanvasBRef || null
             "
             :video-a-current-frame="
               dualVideoPlayer?.videoACurrentFrame?.value || 0
@@ -1580,7 +1486,7 @@ watch(
     <!-- Share Video Modal -->
     <ShareModal
       :is-visible="isShareModalVisible"
-      :video-id="shareModalProps.videoId"
+      :video-id="shareModalProps.videoId || ''"
       :comparison-id="shareModalProps.comparisonId"
       :share-type="shareModalProps.shareType"
       @close="closeShareModal"
@@ -1598,3 +1504,4 @@ watch(
 <style scoped>
 /* Custom styles if needed */
 </style>
+stroke-width="

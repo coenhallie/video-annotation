@@ -82,6 +82,54 @@ export function useVideoSession(videoId) {
     } catch (error) {}
   };
 
+  /**
+   * Reset all session state for project switching
+   * This clears all session-related data without ending the database session
+   */
+  const resetSessionState = () => {
+    console.log('🧹 [VideoSession] Resetting session state...');
+
+    // Reset session state
+    currentSession.value = null;
+    isSessionActive.value = false;
+    lastActivity.value = new Date();
+
+    // Reset comment-related state
+    commentPermissions.value = {
+      canComment: false,
+      isAnonymous: false,
+    };
+    anonymousSession.value = null;
+    isSharedVideo.value = false;
+
+    // Clean up intervals
+    cleanup();
+
+    console.log('✅ [VideoSession] Session state reset completed');
+  };
+
+  /**
+   * Complete session cleanup including database cleanup
+   * This should be called when completely switching away from video annotation
+   */
+  const completeSessionCleanup = async () => {
+    console.log('🧹 [VideoSession] Starting complete session cleanup...');
+
+    try {
+      // End the database session
+      await endSession();
+
+      // Reset all state
+      resetSessionState();
+
+      console.log('✅ [VideoSession] Complete session cleanup completed');
+    } catch (error) {
+      console.error('❌ [VideoSession] Error during complete cleanup:', error);
+      // Still reset state even if database cleanup fails
+      resetSessionState();
+    }
+  };
+
   const isValidUUID = (str: string) => {
     const uuidRegex =
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -321,6 +369,8 @@ export function useVideoSession(videoId) {
     startSession,
     endSession,
     updateActivity,
+    resetSessionState,
+    completeSessionCleanup,
     // Comment-related exports
     commentPermissions: readonly(commentPermissions),
     anonymousSession: readonly(anonymousSession),

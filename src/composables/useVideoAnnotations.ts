@@ -471,6 +471,26 @@ export function useVideoAnnotations(
     });
   };
 
+  /**
+   * Complete cleanup for project switching
+   * This clears all annotation data and resets to initial state
+   */
+  const cleanup = () => {
+    console.log('🧹 [VideoAnnotations] Starting complete cleanup...');
+
+    // Clear all annotations
+    annotations.value = [];
+
+    // Reset current video
+    currentVideo.value = null;
+
+    // Reset loading and error states
+    isLoading.value = false;
+    error.value = null;
+
+    console.log('✅ [VideoAnnotations] Complete cleanup finished');
+  };
+
   return {
     currentVideo: readonly(currentVideo),
     annotations: readonly(annotations),
@@ -483,5 +503,6 @@ export function useVideoAnnotations(
     addAnnotation,
     updateAnnotation,
     deleteAnnotation,
+    cleanup,
   };
 }
