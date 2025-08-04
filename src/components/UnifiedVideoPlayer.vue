@@ -1314,23 +1314,12 @@ const setROI = (
       : props.poseLandmarker;
 
   if (poseLandmarker?.isInitialized?.value) {
-    const regionOfInterest = roi
-      ? {
-          left: roi.x,
-          top: roi.y,
-          right: roi.x + roi.width,
-          bottom: roi.y + roi.height,
-        }
-      : { left: 0, top: 0, right: 1, bottom: 1 };
-
-    poseLandmarker.setOptions({ regionOfInterest }).catch((err: any) => {
-      console.error(
-        `[UnifiedVideoPlayer] Error setting ROI for ${
-          videoContext || 'single'
-        }:`,
-        err
-      );
-    });
+    // Use the setROI method from the composable which expects ROI format: { x, y, width, height }
+    poseLandmarker.setROI(roi);
+    console.log(
+      `[UnifiedVideoPlayer] ROI set for ${videoContext || 'single'}:`,
+      roi
+    );
   }
 };
 

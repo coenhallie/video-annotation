@@ -1143,25 +1143,15 @@ export function usePoseLandmarker(): UsePoseLandmarker {
   });
 
   const setROI = (roi: ROI | null) => {
-    if (!poseLandmarker) {
-      console.warn(
-        '[usePoseLandmarker] poseLandmarker not initialized, cannot set ROI.'
-      );
-      return;
-    }
+    console.log('[usePoseLandmarker] Setting ROI:', roi);
 
-    const regionOfInterest = roi
-      ? {
-          left: roi.x,
-          top: roi.y,
-          right: roi.x + roi.width,
-          bottom: roi.y + roi.height,
-        }
-      : // Resetting ROI, use full frame
-        { left: 0, top: 0, right: 1, bottom: 1 };
+    // Update detection settings to use the new ROI
+    detectionSettings.useROI = roi !== null;
+    detectionSettings.roiBox = roi;
 
-    poseLandmarker.setOptions({ regionOfInterest }).catch((err: any) => {
-      console.error('[usePoseLandmarker] Error setting ROI:', err);
+    console.log('[usePoseLandmarker] ROI updated in detection settings:', {
+      useROI: detectionSettings.useROI,
+      roiBox: detectionSettings.roiBox,
     });
   };
 
