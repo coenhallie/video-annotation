@@ -191,7 +191,7 @@
           </span>
         </div>
         <div class="flex justify-between items-center">
-          <span class="text-gray-600">CoG Height:</span>
+          <span class="text-gray-600">CoM Height:</span>
           <span class="font-mono text-gray-700">
             {{ speedMetrics.value.centerOfGravityHeight?.toFixed(2) || '0.00' }}
             m
@@ -285,6 +285,68 @@
           <span class="font-mono text-gray-700">{{
             speedMetrics.value.centerOfMass.z.toFixed(3)
           }}</span>
+        </div>
+      </div>
+
+      <!-- Center of Gravity coordinates -->
+      <div
+        v-if="showCoMCoordinates && speedMetrics.value.centerOfGravity"
+        class="text-xs space-y-1 mt-2 pt-2 border-t border-gray-200"
+      >
+        <div class="text-sm font-medium mb-1 text-blue-900">
+          Center of Gravity:
+        </div>
+        <div class="flex justify-between">
+          <span class="text-gray-600">X:</span>
+          <span class="font-mono text-blue-700">{{
+            speedMetrics.value.centerOfGravity.x.toFixed(3)
+          }}</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-gray-600">Y:</span>
+          <span class="font-mono text-blue-700">{{
+            speedMetrics.value.centerOfGravity.y.toFixed(3)
+          }}</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-gray-600">Z:</span>
+          <span class="font-mono text-blue-700">{{
+            speedMetrics.value.centerOfGravity.z.toFixed(3)
+          }}</span>
+        </div>
+
+        <!-- Difference between CoM and CoG -->
+        <div class="mt-2 pt-1 border-t border-gray-100">
+          <div class="text-xs font-medium mb-1 text-purple-900">
+            Difference (CoG - CoM):
+          </div>
+          <div class="flex justify-between">
+            <span class="text-gray-600">ΔX:</span>
+            <span class="font-mono text-purple-700">{{
+              (
+                speedMetrics.value.centerOfGravity.x -
+                speedMetrics.value.centerOfMass.x
+              ).toFixed(3)
+            }}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-gray-600">ΔY:</span>
+            <span class="font-mono text-purple-700">{{
+              (
+                speedMetrics.value.centerOfGravity.y -
+                speedMetrics.value.centerOfMass.y
+              ).toFixed(3)
+            }}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-gray-600">ΔZ:</span>
+            <span class="font-mono text-purple-700">{{
+              (
+                speedMetrics.value.centerOfGravity.z -
+                speedMetrics.value.centerOfMass.z
+              ).toFixed(3)
+            }}</span>
+          </div>
         </div>
       </div>
 

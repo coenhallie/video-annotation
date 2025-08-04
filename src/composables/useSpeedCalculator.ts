@@ -49,6 +49,8 @@ export interface ComprehensiveSpeedMetrics {
   velocity: Vector3D;
   centerOfMass: Vector3D;
   centerOfMassNormalized: Vector2D;
+  centerOfGravity: Vector3D; // Add full center of gravity coordinates
+  centerOfGravityNormalized: Vector2D; // Add normalized center of gravity coordinates
   currentSpeed: number;
   averageSpeed: number;
   samples: number;
@@ -129,6 +131,8 @@ export function useSpeedCalculator(
     velocity: { x: 0, y: 0, z: 0 },
     centerOfMass: { x: 0, y: 0, z: 0 },
     centerOfMassNormalized: { x: 0, y: 0 },
+    centerOfGravity: { x: 0, y: 0, z: 0 },
+    centerOfGravityNormalized: { x: 0, y: 0 },
     currentSpeed: 0,
     averageSpeed: 0,
     samples: 0,
@@ -151,33 +155,71 @@ export function useSpeedCalculator(
       return { x: 0, y: 0, z: 0 };
     }
 
-    // Use torso landmarks for center of mass calculation
-    const torsoIndices = [
-      POSE_LANDMARKS.LEFT_SHOULDER,
-      POSE_LANDMARKS.RIGHT_SHOULDER,
-      POSE_LANDMARKS.LEFT_HIP,
-      POSE_LANDMARKS.RIGHT_HIP,
+    // Use biomechanical weights for center of gravity calculation
+    // Based on body segment mass distribution
+    const bodySegments = [
+      {
+        indices: [POSE_LANDMARKS.LEFT_SHOULDER, POSE_LANDMARKS.RIGHT_SHOULDER],
+        weight: 0.15,
+      }, // Upper torso
+      {
+        indices: [POSE_LANDMARKS.LEFT_HIP, POSE_LANDMARKS.RIGHT_HIP],
+        weight: 0.35,
+      }, // Lower torso/pelvis
+      {
+        indices: [POSE_LANDMARKS.LEFT_KNEE, POSE_LANDMARKS.RIGHT_KNEE],
+        weight: 0.25,
+      }, // Thighs
+      {
+        indices: [POSE_LANDMARKS.LEFT_ANKLE, POSE_LANDMARKS.RIGHT_ANKLE],
+        weight: 0.25,
+      }, // Lower legs
     ];
 
     let totalX = 0;
     let totalY = 0;
     let totalZ = 0;
-    let validCount = 0;
+    let totalWeight = 0;
 
-    for (const index of torsoIndices) {
-      if (index < landmarks.length && landmarks[index]) {
-        const landmark = landmarks[index];
-        if (landmark.visibility === undefined || landmark.visibility > 0.5) {
-          totalX += landmark.x;
-          totalY += landmark.y;
-          totalZ += landmark.z || 0;
-          validCount++;
+    for (const segment of bodySegments) {
+      let segmentX = 0;
+      let segmentY = 0;
+      let segmentZ = 0;
+      let validLandmarks = 0;
+
+      for (const index of segment.indices) {
+        if (index < landmarks.length && landmarks[index]) {
+          const landmark = landmarks[index];
+          if (landmark.visibility === undefined || landmark.visibility > 0.5) {
+            segmentX += landmark.x;
+            segmentY += landmark.y;
+            segmentZ += landmark.z || 0;
+            validLandmarks++;
+          }
         }
+      }
+
+      if (validLandmarks > 0) {
+        // Average the landmarks in this segment
+        segmentX /= validLandmarks;
+        segmentY /= validLandmarks;
+        segmentZ /= validLandmarks;
+
+        // Apply biomechanical weight
+        totalX += segmentX * segment.weight;
+        totalY += segmentY * segment.weight;
+        totalZ += segmentZ * segment.weight;
+        totalWeight += segment.weight;
       }
     }
 
-    if (validCount === 0) {
+    if (totalWeight === 0) {
       // Fallback: use all available landmarks
+      let totalX = 0;
+      let totalY = 0;
+      let totalZ = 0;
+      let validCount = 0;
+
       for (const landmark of landmarks) {
         if (landmark.visibility === undefined || landmark.visibility > 0.5) {
           totalX += landmark.x;
@@ -186,16 +228,22 @@ export function useSpeedCalculator(
           validCount++;
         }
       }
-    }
 
-    if (validCount === 0) {
-      return { x: 0, y: 0, z: 0 };
+      if (validCount === 0) {
+        return { x: 0, y: 0, z: 0 };
+      }
+
+      return {
+        x: totalX / validCount,
+        y: totalY / validCount,
+        z: totalZ / validCount,
+      };
     }
 
     return {
-      x: totalX / validCount,
-      y: totalY / validCount,
-      z: totalZ / validCount,
+      x: totalX / totalWeight,
+      y: totalY / totalWeight,
+      z: totalZ / totalWeight,
     };
   }
 
@@ -204,44 +252,6 @@ export function useSpeedCalculator(
     const dy = p1.y - p2.y;
     const dz = p1.z - p2.z;
     return Math.sqrt(dx * dx + dy * dy + dz * dz);
-  }
-
-  function calculateCoGHeight(worldLandmarks: Landmark[]): number {
-    const leftHip = worldLandmarks?.[POSE_LANDMARKS.LEFT_HIP];
-    const rightHip = worldLandmarks?.[POSE_LANDMARKS.RIGHT_HIP];
-    const leftKnee = worldLandmarks?.[POSE_LANDMARKS.LEFT_KNEE];
-    const rightKnee = worldLandmarks?.[POSE_LANDMARKS.RIGHT_KNEE];
-    const leftAnkle = worldLandmarks?.[POSE_LANDMARKS.LEFT_ANKLE];
-    const rightAnkle = worldLandmarks?.[POSE_LANDMARKS.RIGHT_ANKLE];
-
-    if (
-      !leftHip ||
-      !rightHip ||
-      !leftKnee ||
-      !rightKnee ||
-      !leftAnkle ||
-      !rightAnkle
-    ) {
-      return 0;
-    }
-
-    const hip_y = (leftHip.y + rightHip.y) / 2;
-    const knee_y = (leftKnee.y + rightKnee.y) / 2;
-    const ankle_y = (leftAnkle.y + rightAnkle.y) / 2;
-
-    if (!isFinite(hip_y) || !isFinite(knee_y) || !isFinite(ankle_y)) {
-      return 0;
-    }
-
-    // Weights based on biomechanical data (approximated for a stable CoG)
-    const w_hip = 0.5;
-    const w_knee = 0.3;
-    const w_ankle = 0.2;
-
-    const cog_y = w_hip * hip_y + w_knee * knee_y + w_ankle * ankle_y;
-
-    // CoG height is the distance from the ground plane (y=0 in world coordinates)
-    return Math.abs(cog_y);
   }
 
   function calculateDistance2D(p1: Landmark, p2: Landmark): number {
@@ -323,7 +333,8 @@ export function useSpeedCalculator(
     // Calculate distance in real-world units (meters)
     const dx = currentFootReal.x - prevFootReal.x;
     const dy = currentFootReal.y - prevFootReal.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
+    const dz = currentFootReal.z - prevFootReal.z;
+    const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
     return distance / deltaTime;
   }
@@ -360,6 +371,8 @@ export function useSpeedCalculator(
       velocity: { x: 0, y: 0, z: 0 },
       centerOfMass: { x: 0, y: 0, z: 0 },
       centerOfMassNormalized: { x: 0, y: 0 },
+      centerOfGravity: { x: 0, y: 0, z: 0 },
+      centerOfGravityNormalized: { x: 0, y: 0 },
       currentSpeed: 0,
       averageSpeed: 0,
       samples: 0,
@@ -406,13 +419,29 @@ export function useSpeedCalculator(
       ? calculateCenterOfMass(worldLandmarks)
       : currentCenterOfMass;
 
+    // Calculate center of gravity in normalized coordinates
+    const currentCenterOfGravity = calculateCenterOfMass(landmarks);
+    const currentWorldCenterOfGravity = worldLandmarks
+      ? calculateCenterOfMass(worldLandmarks)
+      : currentCenterOfGravity;
+
     // Convert normalized center of mass to real-world coordinates
     const currentCenterOfMassReal = normalizedToRealWorld(currentCenterOfMass);
+
+    // Convert normalized center of gravity to real-world coordinates
+    const currentCenterOfGravityReal = normalizedToRealWorld(
+      currentCenterOfGravity
+    );
 
     // Calculate normalized coordinates for visualization (keep original for UI)
     const centerOfMassNormalized: Vector2D = {
       x: Math.max(0, Math.min(1, currentCenterOfMass.x)),
       y: Math.max(0, Math.min(1, currentCenterOfMass.y)),
+    };
+
+    const centerOfGravityNormalized: Vector2D = {
+      x: Math.max(0, Math.min(1, currentCenterOfGravity.x)),
+      y: Math.max(0, Math.min(1, currentCenterOfGravity.y)),
     };
 
     let velocity: Vector3D = { x: 0, y: 0, z: 0 };
@@ -504,52 +533,96 @@ export function useSpeedCalculator(
       pushSample(frame, timeSec, 0);
     }
 
-    // Calculate center of gravity height using the specified biomechanical model
+    // Calculate center of gravity height using proper biomechanical principles
     let centerOfGravityHeight = 0;
-    if (worldLandmarks && worldLandmarks.length > 0) {
-      const heightFromWorld = calculateCoGHeight(worldLandmarks);
 
-      // If the calculated height is unrealistic, fall back to normalized calculation
-      if (heightFromWorld < 0.5) {
-        console.warn(
-          '🔧 [CALIBRATION WARNING] World landmark height is unrealistic, falling back to normalized calculation.',
-          { heightFromWorld }
-        );
-        const normalizedHeightFromBottom = Math.max(
-          0,
-          Math.min(1, 1.0 - currentCenterOfMass.y)
-        );
-        const estimatedPersonHeight = calibrationSettings.value
-          .useHeightCalibration
-          ? calibrationSettings.value.playerHeight / 100
-          : 1.7;
-        centerOfGravityHeight =
-          normalizedHeightFromBottom * estimatedPersonHeight;
-      } else {
-        centerOfGravityHeight = heightFromWorld;
-      }
+    // Get estimated person height from calibration or default
+    const estimatedPersonHeight = calibrationSettings.value.useHeightCalibration
+      ? calibrationSettings.value.playerHeight / 100
+      : 1.7; // 1.7m default
+
+    // Calculate ground plane reference using ankle positions
+    const leftAnkle = landmarks[POSE_LANDMARKS.LEFT_ANKLE];
+    const rightAnkle = landmarks[POSE_LANDMARKS.RIGHT_ANKLE];
+
+    let groundPlaneY = 1.0; // Default to bottom of frame
+
+    // Use ankle positions to establish ground plane if available
+    if (
+      leftAnkle &&
+      rightAnkle &&
+      (leftAnkle.visibility ?? 0) > 0.5 &&
+      (rightAnkle.visibility ?? 0) > 0.5
+    ) {
+      groundPlaneY = Math.max(leftAnkle.y, rightAnkle.y);
+    } else if (leftAnkle && (leftAnkle.visibility ?? 0) > 0.5) {
+      groundPlaneY = leftAnkle.y;
+    } else if (rightAnkle && (rightAnkle.visibility ?? 0) > 0.5) {
+      groundPlaneY = rightAnkle.y;
+    }
+
+    // Calculate CoM height relative to ground plane
+    // Center of mass is typically 55-57% of height from ground for standing position
+    const biomechanicalComRatio = 0.56; // 56% is average for adults
+
+    // Convert center of mass position to real-world coordinates
+    const comRealWorld = normalizedToRealWorld({
+      x: currentCenterOfMass.x,
+      y: currentCenterOfMass.y,
+      z: currentCenterOfMass.z,
+      visibility: 1.0,
+    });
+
+    // Convert ground plane to real-world coordinates
+    const groundRealWorld = normalizedToRealWorld({
+      x: 0.5, // Center of frame horizontally
+      y: groundPlaneY,
+      z: 0,
+      visibility: 1.0,
+    });
+
+    // Calculate height above ground plane
+    const heightAboveGround = Math.abs(groundRealWorld.y - comRealWorld.y);
+
+    // Validate against biomechanical expectations
+    const expectedComHeight = estimatedPersonHeight * biomechanicalComRatio;
+    const minComHeight = estimatedPersonHeight * 0.3; // Very low crouch
+    const maxComHeight = estimatedPersonHeight * 0.65; // Standing with arms raised
+
+    // Use calculated height if reasonable, otherwise fall back to biomechanical estimate
+    if (
+      heightAboveGround >= minComHeight &&
+      heightAboveGround <= maxComHeight
+    ) {
+      centerOfGravityHeight = heightAboveGround;
     } else {
-      // Fallback for when no world landmarks are available
-      const normalizedHeightFromBottom = Math.max(
+      // Fall back to biomechanical estimate based on normalized position
+      const normalizedHeightFromGround = Math.max(
         0,
-        Math.min(1, 1.0 - currentCenterOfMass.y)
+        Math.min(1, groundPlaneY - currentCenterOfMass.y)
       );
-
-      // Estimate height based on calibration or a default value
-      const estimatedPersonHeight = calibrationSettings.value
-        .useHeightCalibration
-        ? calibrationSettings.value.playerHeight / 100
-        : 1.7; // 1.7m default
-
-      centerOfGravityHeight =
-        normalizedHeightFromBottom * estimatedPersonHeight;
-      console.log(
-        '🔧 [SPEED DEBUG] CoG Height estimated from normalized landmarks:',
-        {
-          centerOfGravityHeight,
-        }
+      centerOfGravityHeight = Math.max(
+        minComHeight,
+        Math.min(
+          maxComHeight,
+          normalizedHeightFromGround * estimatedPersonHeight
+        )
       );
     }
+
+    console.log(
+      '🔧 [SPEED DEBUG] CoG Height calculated with ground plane calibration:',
+      {
+        centerOfGravityHeight,
+        groundPlaneY,
+        comRealWorld,
+        groundRealWorld,
+        heightAboveGround,
+        expectedComHeight,
+        estimatedPersonHeight,
+        biomechanicalComRatio,
+      }
+    );
 
     // Get current scaling factor for UI display
     const currentScalingFactor = getCalibrationScalingFactor();
@@ -564,6 +637,8 @@ export function useSpeedCalculator(
       velocity,
       centerOfMass: currentCenterOfMass,
       centerOfMassNormalized,
+      centerOfGravity: currentCenterOfGravity,
+      centerOfGravityNormalized,
       currentSpeed: currentSpeed.value,
       averageSpeed: averageSpeed.value,
       samples: samples.value.length,
@@ -778,7 +853,6 @@ export function useSpeedCalculator(
     calibrationSettings,
     speedMetrics: comprehensiveMetrics, // Alias for compatibility
     reset,
-    cleanup,
     pushSample,
     updateWithLandmarks,
     startCourtCalibration,
