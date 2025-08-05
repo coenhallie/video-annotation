@@ -1,13 +1,10 @@
 <template>
-  <div class="speed-chart-container">
-    <!-- Chart Settings -->
-    <div class="chart-settings">
+  <div class="speed-chart-container" :class="{ compact: compactMode }">
+    <!-- Chart Settings (only show in non-compact mode) -->
+    <div v-if="!compactMode" class="chart-settings">
       <label class="setting-item">
         <span class="text-sm text-gray-600">Duration:</span>
-        <select
-          v-model="chartDuration"
-          class="input text-xs"
-        >
+        <select v-model="chartDuration" class="input text-xs">
           <option :value="10">10s</option>
           <option :value="30">30s</option>
           <option :value="60">1min</option>
@@ -16,11 +13,8 @@
       </label>
 
       <label class="setting-item">
-        <span class="text-sm text-gray-600">Max Speed:</span>
-        <select
-          v-model="maxSpeedScale"
-          class="input text-xs"
-        >
+        <span class="text-sm text-gray-600 whitespace-nowrap">Max Speed:</span>
+        <select v-model="maxSpeedScale" class="input text-xs">
           <option :value="1">1 m/s</option>
           <option :value="2">2 m/s</option>
           <option :value="5">5 m/s</option>
@@ -65,10 +59,7 @@
         </div>
       </div>
 
-      <div
-        ref="chartWrapper"
-        class="chart-wrapper"
-      >
+      <div ref="chartWrapper" class="chart-wrapper">
         <svg
           ref="chartSvg"
           class="speed-chart-svg"
@@ -92,11 +83,7 @@
               />
             </pattern>
           </defs>
-          <rect
-            width="100%"
-            height="100%"
-            fill="url(#grid)"
-          />
+          <rect width="100%" height="100%" fill="url(#grid)" />
 
           <!-- Y-axis labels -->
           <g class="y-axis">
@@ -207,18 +194,28 @@
         </svg>
       </div>
 
-      <!-- Chart Stats -->
-      <div class="chart-stats">
+      <!-- Chart Stats (only show in non-compact mode) -->
+      <div v-if="!compactMode" class="chart-stats">
         <div class="stat-item">
-          <span class="text-xs text-gray-500 uppercase tracking-wide">Avg:</span>
-          <span class="text-sm font-medium text-gray-900">{{ averageSpeed.toFixed(2) }} m/s</span>
+          <span class="text-xs text-gray-500 uppercase tracking-wide"
+            >Avg:</span
+          >
+          <span class="text-sm font-medium text-gray-900"
+            >{{ averageSpeed.toFixed(2) }} m/s</span
+          >
         </div>
         <div class="stat-item">
-          <span class="text-xs text-gray-500 uppercase tracking-wide">Max:</span>
-          <span class="text-sm font-medium text-gray-900">{{ maxSpeed.toFixed(2) }} m/s</span>
+          <span class="text-xs text-gray-500 uppercase tracking-wide"
+            >Max:</span
+          >
+          <span class="text-sm font-medium text-gray-900"
+            >{{ maxSpeed.toFixed(2) }} m/s</span
+          >
         </div>
         <div class="stat-item">
-          <span class="text-xs text-gray-500 uppercase tracking-wide">Frame:</span>
+          <span class="text-xs text-gray-500 uppercase tracking-wide"
+            >Frame:</span
+          >
           <span class="text-sm font-medium text-gray-900">{{
             currentFrame
           }}</span>
@@ -248,14 +245,26 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
+  chartDuration: {
+    type: Number,
+    default: 30,
+  },
+  maxSpeedScale: {
+    type: Number,
+    default: 1,
+  },
+  compactMode: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 // Remove emit since we no longer have internal toggle
-// Chart state - now controlled by parent
-const chartDuration = ref(30); // seconds
-const maxSpeedScale = ref(1); // m/s
+// Chart state - now controlled by parent or props
+const chartDuration = computed(() => props.chartDuration);
+const maxSpeedScale = computed(() => props.maxSpeedScale);
 const chartWidth = ref(400);
-const chartHeight = ref(160);
+const chartHeight = ref(props.compactMode ? 120 : 160);
 
 // Chart elements
 const chartWrapper = ref(null);
@@ -467,6 +476,10 @@ onUnmounted(() => {
   pointer-events: auto;
 }
 
+.speed-chart-container.compact {
+  margin-top: 0;
+}
+
 .chart-controls {
   display: flex;
   align-items: center;
@@ -478,8 +491,8 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: white;
-  border: 1px solid #e5e7eb;
+  background-color: rgba(249, 250, 251, 0.5);
+  border: 1px solid rgba(229, 231, 235, 0.5);
   border-radius: 8px;
   padding: 8px 12px;
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
@@ -489,6 +502,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 6px;
+  white-space: nowrap;
 }
 
 .setting-item select {
@@ -496,9 +510,15 @@ onUnmounted(() => {
   padding: 2px 6px;
 }
 
+.chart-settings-compact {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 4px;
+}
+
 .speed-chart {
-  background: white;
-  border: 1px solid #e5e7eb;
+  background-color: rgba(249, 250, 251, 0.5);
+  border: 1px solid rgba(229, 231, 235, 0.5);
   border-radius: 8px;
   padding: 16px;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
@@ -520,8 +540,8 @@ onUnmounted(() => {
 }
 
 .chart-wrapper {
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
+  background-color: rgba(249, 250, 251, 0.5);
+  border: 1px solid rgba(229, 231, 235, 0.5);
   border-radius: 6px;
   overflow: hidden;
   margin-bottom: 12px;

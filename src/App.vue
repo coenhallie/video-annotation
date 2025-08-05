@@ -1077,7 +1077,7 @@ watch(
           <span
             class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 border border-orange-200"
           >
-            ALPHA
+            ALPHA v1.1
           </span>
         </div>
 
@@ -1247,8 +1247,9 @@ watch(
                 @reset-roi="handleResetROI"
               />
 
-              <!-- Speed Visualization Overlay -->
+              <!-- Speed Visualization (only render in single mode) -->
               <SpeedVisualization
+                v-if="playerMode === 'single'"
                 :speed-metrics="currentSpeedMetrics"
                 :canvas-width="videoDimensions.width"
                 :canvas-height="videoDimensions.height"
@@ -1258,6 +1259,7 @@ watch(
                 :show-center-of-mass="true"
                 :show-velocity-vector="true"
                 :show-speed-panel="true"
+                :show-main-speed-panel="true"
                 :show-labels="true"
                 :show-velocity-components="false"
                 :show-co-m-coordinates="false"
@@ -1265,7 +1267,7 @@ watch(
                 :video-loaded="videoLoaded"
                 @speed-visualization-toggled="handleSpeedVisualizationToggled"
                 @chart-toggled="handleChartToggled"
-              />
+              ></SpeedVisualization>
             </div>
           </div>
         </div>

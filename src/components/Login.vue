@@ -38,10 +38,7 @@ const toggleMode = () => {
     class="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100"
   >
     <div class="card-container">
-      <div
-        class="card"
-        :class="{ 'is-flipped': isSigningUp }"
-      >
+      <div class="card" :class="{ 'is-flipped': isSigningUp }">
         <!-- Front Side - Sign In -->
         <div class="card-face card-front">
           <div class="text-center space-y-2 mb-8">
@@ -83,7 +80,7 @@ const toggleMode = () => {
                   required
                   placeholder="Enter your registered email"
                   class="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-white"
-                >
+                />
               </div>
               <div>
                 <label
@@ -114,7 +111,7 @@ const toggleMode = () => {
                   required
                   placeholder="Enter your password"
                   class="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-white"
-                >
+                />
               </div>
               <div>
                 <button
@@ -127,9 +124,7 @@ const toggleMode = () => {
             </div>
           </form>
           <div class="text-center mt-8">
-            <p class="text-sm text-gray-600 mb-3">
-              New to ACCIO?
-            </p>
+            <p class="text-sm text-gray-600 mb-3">New to ACCIO?</p>
             <button
               class="text-blue-600 hover:text-blue-700 font-medium text-sm hover:underline transition-colors duration-200"
               @click="toggleMode"
@@ -145,7 +140,7 @@ const toggleMode = () => {
           <div
             class="absolute top-4 right-4 bg-gray-400 text-white text-xs font-semibold px-2 py-1 rounded-full z-10"
           >
-            ALPHA
+            ALPHA v1.1
           </div>
           <div class="text-center space-y-2 mb-8">
             <h1 class="text-2xl font-bold text-gray-800">
@@ -186,7 +181,7 @@ const toggleMode = () => {
                   required
                   placeholder="Choose your email address"
                   class="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-white"
-                >
+                />
                 <p class="text-xs text-gray-500 mt-1">
                   We'll send you a confirmation email
                 </p>
@@ -220,7 +215,7 @@ const toggleMode = () => {
                   required
                   placeholder="Create a secure password"
                   class="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-white"
-                >
+                />
                 <p class="text-xs text-gray-500 mt-1">
                   Minimum 6 characters recommended
                 </p>
@@ -236,9 +231,7 @@ const toggleMode = () => {
             </div>
           </form>
           <div class="text-center mt-8">
-            <p class="text-sm text-gray-600 mb-3">
-              Already have an account?
-            </p>
+            <p class="text-sm text-gray-600 mb-3">Already have an account?</p>
             <button
               class="text-black hover:text-gray-700 font-medium text-sm hover:underline transition-colors duration-200"
               @click="toggleMode"

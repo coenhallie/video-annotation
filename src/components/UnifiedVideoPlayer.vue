@@ -123,9 +123,14 @@
           @motion-prediction-toggled="handleMotionPredictionToggled"
         />
 
-        <!-- Speed Visualization Overlay for Single Video -->
+        <!-- Speed Visualization Overlay for Single Video (only in single mode) -->
         <SpeedVisualization
-          v-if="videoUrl && poseLandmarker"
+          v-if="
+            videoUrl &&
+            poseLandmarker &&
+            poseLandmarker.isEnabled.value &&
+            mode === 'single'
+          "
           :speed-metrics="poseLandmarker?.speedMetrics"
           :canvas-width="singleVideoElement?.videoWidth || 1920"
           :canvas-height="singleVideoElement?.videoHeight || 1080"
@@ -452,9 +457,9 @@
               "
             />
 
-            <!-- Speed Visualization Overlay for Video A -->
+            <!-- Speed Visualization Overlay for Video A is disabled in dual mode -->
             <SpeedVisualization
-              v-if="videoAUrl && poseLandmarkerA"
+              v-if="false"
               :speed-metrics="poseLandmarkerA?.speedMetrics"
               :canvas-width="videoAElement?.videoWidth || 1920"
               :canvas-height="videoAElement?.videoHeight || 1080"
@@ -463,6 +468,8 @@
               :current-frame="currentFrame"
             />
           </div>
+
+          <!-- External Speed Panel for Video A moved into "Video A - Movement Speed" container -->
         </div>
 
         <!-- Video B -->
@@ -578,9 +585,9 @@
               "
             />
 
-            <!-- Speed Visualization Overlay for Video B -->
+            <!-- Speed Visualization Overlay for Video B is disabled in dual mode -->
             <SpeedVisualization
-              v-if="videoBUrl && poseLandmarkerB"
+              v-if="false"
               :speed-metrics="poseLandmarkerB?.speedMetrics"
               :canvas-width="videoBElement?.videoWidth || 1920"
               :canvas-height="videoBElement?.videoHeight || 1080"
@@ -588,6 +595,365 @@
               :current-timestamp="currentTime"
               :current-frame="currentFrame"
             />
+          </div>
+
+          <!-- External Speed Panel for Video B moved into "Video B - Movement Speed" container -->
+        </div>
+      </div>
+
+      <!-- Movement Speed containers under the dual comparison videos -->
+      <div
+        v-if="
+          (videoAUrl && poseLandmarkerA && poseLandmarkerA.isEnabled.value) ||
+          (videoBUrl && poseLandmarkerB && poseLandmarkerB.isEnabled.value)
+        "
+        class="dual-speed-panels"
+      >
+        <!-- Video A - Movement Speed -->
+        <div
+          v-if="videoAUrl && poseLandmarkerA && poseLandmarkerA.isEnabled.value"
+          class="movement-speed-container"
+        >
+          <div class="dual-speed-content">
+            <!-- Mini-cards on the left -->
+            <div class="speed-mini-cards">
+              <div
+                v-if="
+                  poseLandmarkerA?.speedMetrics &&
+                  poseLandmarkerA.speedMetrics.value &&
+                  poseLandmarkerA.speedMetrics.value.isValid
+                "
+                class="speed-panel-container-dual"
+              >
+                <h3
+                  class="text-sm font-semibold mb-1 text-center text-gray-800"
+                >
+                  Speed (m/s)
+                </h3>
+
+                <!-- 2x2 compact grid: Overall, Horizontal, Right Foot, CoM Height -->
+                <div class="grid grid-cols-2 gap-1 mb-1">
+                  <!-- Overall Speed -->
+                  <div class="mini-card">
+                    <div class="mini-label">Overall</div>
+                    <div
+                      class="mini-value"
+                      :class="
+                        getSpeedColorClass(
+                          poseLandmarkerA.speedMetrics.value.speed
+                        )
+                      "
+                    >
+                      {{ poseLandmarkerA.speedMetrics.value.speed.toFixed(2) }}
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-1 mt-0.5">
+                      <div
+                        class="h-1 rounded-full transition-all duration-300"
+                        :class="
+                          getSpeedBarColorClass(
+                            poseLandmarkerA.speedMetrics.value.speed
+                          )
+                        "
+                        :style="{
+                          width: `${Math.min(
+                            100,
+                            (poseLandmarkerA.speedMetrics.value.speed /
+                              maxSpeedForBar) *
+                              100
+                          )}%`,
+                        }"
+                      />
+                    </div>
+                  </div>
+
+                  <!-- Horizontal Speed -->
+                  <div class="mini-card">
+                    <div class="mini-label">Horizontal</div>
+                    <div class="mini-value text-gray-700">
+                      {{
+                        poseLandmarkerA.speedMetrics.value.generalMovingSpeed?.toFixed(
+                          2
+                        ) || 'N/A'
+                      }}
+                    </div>
+                  </div>
+
+                  <!-- Right Foot Speed -->
+                  <div class="mini-card">
+                    <div class="mini-label">Right Foot</div>
+                    <div class="mini-value text-gray-600">
+                      {{
+                        poseLandmarkerA.speedMetrics.value.rightFootSpeed?.toFixed(
+                          2
+                        ) || 'N/A'
+                      }}
+                    </div>
+                  </div>
+
+                  <!-- CoM Height -->
+                  <div class="mini-card">
+                    <div class="mini-label">CoM Height</div>
+                    <div class="mini-value text-gray-700">
+                      {{
+                        poseLandmarkerA.speedMetrics.value.centerOfGravityHeight?.toFixed(
+                          2
+                        ) || 'N/A'
+                      }}
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Chart Controls (always visible) -->
+                <div class="grid grid-cols-2 gap-1 mt-2">
+                  <!-- Duration Control -->
+                  <div class="mini-card">
+                    <div class="mini-label">Duration</div>
+                    <select v-model="chartDurationA" class="mini-select">
+                      <option :value="10">10s</option>
+                      <option :value="30">30s</option>
+                      <option :value="60">1min</option>
+                      <option :value="120">2min</option>
+                    </select>
+                  </div>
+
+                  <!-- Max Speed Control -->
+                  <div class="mini-card">
+                    <div class="mini-label">Max Speed</div>
+                    <select v-model="maxSpeedScaleA" class="mini-select">
+                      <option :value="1">1 m/s</option>
+                      <option :value="2">2 m/s</option>
+                      <option :value="5">5 m/s</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <div v-else class="speed-panel-container-dual">
+                <h3
+                  class="text-sm font-semibold mb-1 text-center text-gray-800"
+                >
+                  Speed (m/s)
+                </h3>
+                <div class="text-sm text-gray-600 text-center py-2 mb-2">
+                  No speed data available
+                </div>
+
+                <!-- Chart Controls (always visible) -->
+                <div class="grid grid-cols-2 gap-1">
+                  <!-- Duration Control -->
+                  <div class="mini-card">
+                    <div class="mini-label">Duration</div>
+                    <select v-model="chartDurationA" class="mini-select">
+                      <option :value="10">10s</option>
+                      <option :value="30">30s</option>
+                      <option :value="60">1min</option>
+                      <option :value="120">2min</option>
+                    </select>
+                  </div>
+
+                  <!-- Max Speed Control -->
+                  <div class="mini-card">
+                    <div class="mini-label">Max Speed</div>
+                    <select v-model="maxSpeedScaleA" class="mini-select">
+                      <option :value="1">1 m/s</option>
+                      <option :value="2">2 m/s</option>
+                      <option :value="5">5 m/s</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Chart on the right -->
+            <div class="speed-chart-section">
+              <SpeedChart
+                v-if="
+                  poseLandmarkerA?.speedMetrics &&
+                  poseLandmarkerA.speedMetrics.value &&
+                  poseLandmarkerA.speedMetrics.value.isValid
+                "
+                :speed-metrics="poseLandmarkerA.speedMetrics.value"
+                :timestamp="currentTime"
+                :current-frame="currentFrame"
+                :visible="true"
+                :chart-duration="chartDurationA"
+                :max-speed-scale="maxSpeedScaleA"
+                :compact-mode="true"
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- Video B - Movement Speed -->
+        <div
+          v-if="videoBUrl && poseLandmarkerB && poseLandmarkerB.isEnabled.value"
+          class="movement-speed-container"
+        >
+          <div class="dual-speed-content">
+            <!-- Mini-cards on the left -->
+            <div class="speed-mini-cards">
+              <div
+                v-if="
+                  poseLandmarkerB?.speedMetrics &&
+                  poseLandmarkerB.speedMetrics.value &&
+                  poseLandmarkerB.speedMetrics.value.isValid
+                "
+                class="speed-panel-container-dual"
+              >
+                <h3
+                  class="text-sm font-semibold mb-1 text-center text-gray-800"
+                >
+                  Speed (m/s)
+                </h3>
+
+                <!-- 2x2 compact grid: Overall, Horizontal, Right Foot, CoM Height -->
+                <div class="grid grid-cols-2 gap-1 mb-1">
+                  <!-- Overall Speed -->
+                  <div class="mini-card">
+                    <div class="mini-label">Overall</div>
+                    <div
+                      class="mini-value"
+                      :class="
+                        getSpeedColorClass(
+                          poseLandmarkerB.speedMetrics.value.speed
+                        )
+                      "
+                    >
+                      {{ poseLandmarkerB.speedMetrics.value.speed.toFixed(2) }}
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-1 mt-0.5">
+                      <div
+                        class="h-1 rounded-full transition-all duration-300"
+                        :class="
+                          getSpeedBarColorClass(
+                            poseLandmarkerB.speedMetrics.value.speed
+                          )
+                        "
+                        :style="{
+                          width: `${Math.min(
+                            100,
+                            (poseLandmarkerB.speedMetrics.value.speed /
+                              maxSpeedForBar) *
+                              100
+                          )}%`,
+                        }"
+                      />
+                    </div>
+                  </div>
+
+                  <!-- Horizontal Speed -->
+                  <div class="mini-card">
+                    <div class="mini-label">Horizontal</div>
+                    <div class="mini-value text-gray-700">
+                      {{
+                        poseLandmarkerB.speedMetrics.value.generalMovingSpeed?.toFixed(
+                          2
+                        ) || 'N/A'
+                      }}
+                    </div>
+                  </div>
+
+                  <!-- Right Foot Speed -->
+                  <div class="mini-card">
+                    <div class="mini-label">Right Foot</div>
+                    <div class="mini-value text-gray-600">
+                      {{
+                        poseLandmarkerB.speedMetrics.value.rightFootSpeed?.toFixed(
+                          2
+                        ) || 'N/A'
+                      }}
+                    </div>
+                  </div>
+
+                  <!-- CoM Height -->
+                  <div class="mini-card">
+                    <div class="mini-label">CoM Height</div>
+                    <div class="mini-value text-gray-700">
+                      {{
+                        poseLandmarkerB.speedMetrics.value.centerOfGravityHeight?.toFixed(
+                          2
+                        ) || 'N/A'
+                      }}
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Chart Controls (always visible) -->
+                <div class="grid grid-cols-2 gap-1 mt-2">
+                  <!-- Duration Control -->
+                  <div class="mini-card">
+                    <div class="mini-label">Duration</div>
+                    <select v-model="chartDurationB" class="mini-select">
+                      <option :value="10">10s</option>
+                      <option :value="30">30s</option>
+                      <option :value="60">1min</option>
+                      <option :value="120">2min</option>
+                    </select>
+                  </div>
+
+                  <!-- Max Speed Control -->
+                  <div class="mini-card">
+                    <div class="mini-label">Max Speed</div>
+                    <select v-model="maxSpeedScaleB" class="mini-select">
+                      <option :value="1">1 m/s</option>
+                      <option :value="2">2 m/s</option>
+                      <option :value="5">5 m/s</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <div v-else class="speed-panel-container-dual">
+                <h3
+                  class="text-sm font-semibold mb-1 text-center text-gray-800"
+                >
+                  Speed (m/s)
+                </h3>
+                <div class="text-sm text-gray-600 text-center py-2 mb-2">
+                  No speed data available
+                </div>
+
+                <!-- Chart Controls (always visible) -->
+                <div class="grid grid-cols-2 gap-1">
+                  <!-- Duration Control -->
+                  <div class="mini-card">
+                    <div class="mini-label">Duration</div>
+                    <select v-model="chartDurationB" class="mini-select">
+                      <option :value="10">10s</option>
+                      <option :value="30">30s</option>
+                      <option :value="60">1min</option>
+                      <option :value="120">2min</option>
+                    </select>
+                  </div>
+
+                  <!-- Max Speed Control -->
+                  <div class="mini-card">
+                    <div class="mini-label">Max Speed</div>
+                    <select v-model="maxSpeedScaleB" class="mini-select">
+                      <option :value="1">1 m/s</option>
+                      <option :value="2">2 m/s</option>
+                      <option :value="5">5 m/s</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Chart on the right -->
+            <div class="speed-chart-section">
+              <SpeedChart
+                v-if="
+                  poseLandmarkerB?.speedMetrics &&
+                  poseLandmarkerB.speedMetrics.value &&
+                  poseLandmarkerB.speedMetrics.value.isValid
+                "
+                :speed-metrics="poseLandmarkerB.speedMetrics.value"
+                :timestamp="currentTime"
+                :current-frame="currentFrame"
+                :visible="true"
+                :chart-duration="chartDurationB"
+                :max-speed-scale="maxSpeedScaleB"
+                :compact-mode="true"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -892,6 +1258,130 @@
   </div>
 </template>
 
+<style scoped>
+.dual-speed-panels {
+  margin-top: 12px;
+  display: grid;
+  gap: 10px;
+}
+.dual-speed-panels.compact {
+  gap: 8px;
+}
+@media (min-width: 900px) {
+  .dual-speed-panels {
+    grid-template-columns: 1fr 1fr;
+  }
+  /* For large screens, show 2x2 grid rows with smaller card height */
+  .dual-speed-panels.compact {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.movement-speed-container {
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f9fafb;
+}
+.compact-card {
+  padding: 8px 10px;
+}
+.movement-speed-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 8px;
+}
+
+/* New dual speed content layout */
+.dual-speed-content {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.speed-mini-cards {
+  flex: 0 0 auto;
+  min-width: 180px;
+}
+
+.speed-chart-section {
+  flex: 1;
+  min-width: 0;
+}
+
+.speed-panel-container-dual {
+  background-color: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(229, 231, 235, 0.8);
+  border-radius: 8px;
+  padding: 8px;
+  min-width: 180px;
+}
+
+/* Mini card styles */
+.mini-card {
+  background-color: rgba(249, 250, 251, 0.8);
+  border: 1px solid rgba(229, 231, 235, 0.6);
+  border-radius: 6px;
+  padding: 6px 8px;
+  text-align: center;
+}
+
+.mini-label {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: #6b7280;
+  margin-bottom: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.mini-value {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 2px;
+}
+
+.mini-select {
+  font-size: 0.75rem;
+  padding: 2px 4px;
+  border: 1px solid rgba(209, 213, 219, 0.8);
+  border-radius: 4px;
+  background-color: rgba(255, 255, 255, 0.9);
+  color: #374151;
+  width: 100%;
+  margin-top: 2px;
+}
+
+.mini-select:focus {
+  outline: none;
+  border-color: rgba(59, 130, 246, 0.8);
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.2);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .dual-speed-content {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .speed-mini-cards {
+    min-width: auto;
+  }
+}
+:deep(.speed-panel-root) {
+  /* If SpeedVisualization exposes a root class, tighten spacing */
+  --panel-padding: 6px;
+  --panel-gap: 6px;
+  --chip-size: 0.8rem;
+}
+:deep(canvas) {
+  /* ensure any canvas inside is not overly large in compact mode */
+  max-height: 160px;
+}
+</style>
+
 <script setup lang="ts">
 import {
   ref,
@@ -905,6 +1395,7 @@ import {
 import DrawingCanvas from './DrawingCanvas.vue';
 import PoseVisualization from './PoseVisualization.vue';
 import SpeedVisualization from './SpeedVisualization.vue';
+import SpeedChart from './SpeedChart.vue';
 // @ts-ignore: Vue SFC without d.ts
 import ROISelector from './ROISelector.vue';
 import KeypointSelectorModal from './KeypointSelectorModal.vue';
@@ -1151,6 +1642,30 @@ const roiSettingsB = reactive({
   useMotionPrediction: true,
 });
 
+// Speed visualization helper functions and constants
+const maxSpeedForBar = 5; // Maximum speed for progress bar scaling
+
+// Chart control states for dual videos
+const chartDurationA = ref(30); // seconds
+const maxSpeedScaleA = ref(1); // m/s
+const chartDurationB = ref(30); // seconds
+const maxSpeedScaleB = ref(1); // m/s
+
+// Speed color functions - converted to grayscale
+const getSpeedColorClass = (speed: number) => {
+  if (speed < 0.5) return 'text-gray-700';
+  if (speed < 1.5) return 'text-gray-500';
+  if (speed < 3.0) return 'text-gray-400';
+  return 'text-gray-300';
+};
+
+const getSpeedBarColorClass = (speed: number) => {
+  if (speed < 0.5) return 'bg-gray-700';
+  if (speed < 1.5) return 'bg-gray-500';
+  if (speed < 3.0) return 'bg-gray-400';
+  return 'bg-gray-300';
+};
+
 // Optimized pose detection with requestAnimationFrame
 const processPoseDetection = async (
   videoElement: HTMLVideoElement,
@@ -1285,20 +1800,6 @@ const startRAFPoseDetection = (
     },
     videoElement.playbackRate
   );
-};
-
-// Stop RAF-based pose detection
-const stopRAFPoseDetection = (videoContext?: string) => {
-  const poseLandmarker =
-    videoContext === 'A'
-      ? props.poseLandmarkerA
-      : videoContext === 'B'
-      ? props.poseLandmarkerB
-      : props.poseLandmarker;
-
-  if (poseLandmarker) {
-    poseLandmarker.stopPoseDetectionRAF();
-  }
 };
 
 // ROI event handlers
@@ -1645,7 +2146,6 @@ const togglePoseDetectionA = async () => {
     if (props.poseLandmarkerA.isEnabled.value) {
       console.log('🔍 [DEBUG] Disabling pose detection for Video A...');
       await props.poseLandmarkerA.disablePoseDetection();
-      stopRAFPoseDetection('A');
       console.log(
         '🔍 [DEBUG] After disable - isEnabled:',
         props.poseLandmarkerA.isEnabled.value
@@ -1804,7 +2304,6 @@ const togglePoseDetectionB = async () => {
     if (props.poseLandmarkerB.isEnabled.value) {
       console.log('🔍 [DEBUG] Disabling pose detection for Video B...');
       await props.poseLandmarkerB.disablePoseDetection();
-      stopRAFPoseDetection('B');
       console.log(
         '🔍 [DEBUG] After disable - isEnabled:',
         props.poseLandmarkerB.isEnabled.value

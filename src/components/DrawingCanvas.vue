@@ -39,9 +39,12 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import * as fabric from 'fabric';
-/** @typedef {import('@/types/database').DrawingData} DrawingData */
-/** @typedef {import('@/types/database').DrawingPath} DrawingPath */
-/** @typedef {import('@/types/database').SeverityLevel} SeverityLevel */
+import type {
+  DrawingData,
+  DrawingPath,
+  DrawingPoint,
+  SeverityLevel,
+} from '../types/database';
 
 interface Props {
   currentFrame: number;
@@ -286,41 +289,56 @@ const loadDrawingsForFrame = async () => {
   // Wait for fade out to complete
   await new Promise((resolve) => setTimeout(resolve, 150));
 
-  // Clear and load new drawings
-  canvas.value.clear();
-  const frameDrawings =
-    props.existingDrawings?.filter(
-      (drawing) => drawing.frame === props.currentFrame
-    ) || [];
+  // Check if canvas is still available after async delay
+  if (!canvas.value) {
+    isTransitioning.value = false;
+    return;
+  }
 
-  frameDrawings.forEach((drawing, drawingIndex) => {
-    drawing.paths.forEach((path, pathIndex) => {
-      renderDrawingPath(path);
+  // Clear and load new drawings
+  try {
+    canvas.value.clear();
+    const frameDrawings =
+      props.existingDrawings?.filter(
+        (drawing) => drawing.frame === props.currentFrame
+      ) || [];
+
+    frameDrawings.forEach((drawing: DrawingData, drawingIndex: number) => {
+      drawing.paths.forEach((path: DrawingPath, pathIndex: number) => {
+        renderDrawingPath(path);
+      });
     });
-  });
+  } catch (error) {
+    console.warn('Canvas operation failed, component may be unmounted:', error);
+    isTransitioning.value = false;
+    return;
+  }
 
   // Fade in new drawings
   canvasOpacity.value = 1;
 
   // Wait for fade in to complete, then end transition
   setTimeout(() => {
-    isTransitioning.value = false;
+    // Check if component is still mounted before updating state
+    if (canvas.value) {
+      isTransitioning.value = false;
+    }
   }, 150);
 };
 
 // Render a drawing path on canvas
 const renderDrawingPath = (drawingPath: DrawingPath) => {
   if (!canvas.value) return;
-  const points = drawingPath.points.map((point) => ({
+  const points = drawingPath.points.map((point: DrawingPoint) => ({
     x: point.x * canvasWidth.value,
     y: point.y * canvasHeight.value,
   }));
 
   if (points.length < 2) return;
 
-  let pathString = `M ${points[0].x} ${points[0].y}`;
+  let pathString = `M ${points[0]!.x} ${points[0]!.y}`;
   for (let i = 1; i < points.length; i++) {
-    pathString += ` L ${points[i].x} ${points[i].y}`;
+    pathString += ` L ${points[i]!.x} ${points[i]!.y}`;
   }
 
   const fabricPath = new fabric.Path(pathString, {

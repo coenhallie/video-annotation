@@ -1,50 +1,11 @@
 <template>
   <div
-    class="speed-visualization absolute inset-0 pointer-events-none"
-    :style="{ zIndex: 15 }"
+    :class="[
+      'speed-visualization',
+      !isExternalPanel && 'absolute inset-0 pointer-events-none',
+    ]"
+    :style="{ zIndex: !isExternalPanel ? 15 : 'auto' }"
   >
-    <!-- Speed Visualization Toggle Control -->
-    <div
-      v-if="showToggleControl && videoLoaded"
-      class="absolute opacity-95 top-4 left-4 pointer-events-auto"
-    >
-      <button
-        class="btn btn-ghost btn-sm bg-white border border-gray-200 rounded-lg shadow-md"
-        :title="
-          speedVisualizationEnabled
-            ? 'Hide speed visualization'
-            : 'Show speed visualization'
-        "
-        :aria-label="
-          speedVisualizationEnabled
-            ? 'Hide speed visualization'
-            : 'Show speed visualization'
-        "
-        @click="toggleSpeedVisualization"
-      >
-        <svg
-          class="w-4 h-4"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-          :class="{
-            'text-gray-700': speedVisualizationEnabled,
-            'text-gray-400': !speedVisualizationEnabled,
-          }"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M13 10V3L4 14h7v7l9-11h-7z"
-          />
-        </svg>
-        <span class="text-sm font-medium">
-          {{ speedVisualizationEnabled ? 'Speed: ON' : 'Speed: OFF' }}
-        </span>
-      </button>
-    </div>
-
     <!-- Speed metrics overlay -->
     <svg
       v-if="
@@ -137,89 +98,100 @@
         videoLoaded &&
         speedVisualizationEnabled &&
         showSpeedPanel &&
+        showMainSpeedPanel &&
         speedMetrics &&
         speedMetrics.value &&
         speedMetrics.value.isValid
       "
-      class="absolute opacity-95 top-4 right-4 bg-white border border-gray-200 rounded-lg shadow-md p-4 pointer-events-auto"
-      style="min-width: 200px"
+      :class="[
+        'speed-panel-container',
+        !isExternalPanel &&
+          'absolute opacity-90 top-4 right-4 bg-white backdrop-blur-sm border border-gray-200 rounded-lg shadow-md p-2 pointer-events-auto',
+      ]"
+      :style="
+        !isExternalPanel
+          ? {
+              backgroundColor: 'rgba(255, 255, 255, 0.8)',
+              borderColor: 'rgba(229, 231, 235, 0.8)',
+            }
+          : {}
+      "
+      style="min-width: 180px"
       role="region"
       aria-label="Speed metrics display"
     >
-      <h3 class="text-lg font-medium mb-2 text-center text-gray-900">
-        Movement Speed
+      <h3 class="text-sm font-semibold mb-1 text-center text-gray-800">
+        Speed (m/s)
       </h3>
 
-      <!-- Speed gauge -->
-      <div class="mb-3">
-        <div class="flex justify-between items-center mb-1">
-          <span class="text-sm text-gray-600">Overall Speed:</span>
-          <span
-            class="text-xl font-mono"
+      <!-- 2x2 compact grid: Overall, Horizontal, Right Foot, CoM Height -->
+      <div class="grid grid-cols-2 gap-1 mb-1">
+        <!-- Overall Speed -->
+        <div class="mini-card">
+          <div class="mini-label">Overall</div>
+          <div
+            class="mini-value"
             :class="getSpeedColorClass(speedMetrics.value.speed)"
           >
-            {{ speedMetrics.value.speed.toFixed(2) }} m/s
-          </span>
+            {{ speedMetrics.value.speed.toFixed(2) }}
+          </div>
+          <div class="w-full bg-gray-200 rounded-full h-1 mt-0.5">
+            <div
+              class="h-1 rounded-full transition-all duration-300"
+              :class="getSpeedBarColorClass(speedMetrics.value.speed)"
+              :style="{
+                width: `${Math.min(
+                  100,
+                  (speedMetrics.value.speed / maxSpeedForBar) * 100
+                )}%`,
+              }"
+            />
+          </div>
         </div>
-        <div class="w-full bg-gray-200 rounded-full h-2">
-          <div
-            class="h-2 rounded-full transition-all duration-300"
-            :class="getSpeedBarColorClass(speedMetrics.value.speed)"
-            :style="{
-              width: `${Math.min(
-                100,
-                (speedMetrics.value.speed / maxSpeedForBar) * 100
-              )}%`,
-            }"
-          />
-        </div>
-      </div>
 
-      <!-- New speed metrics -->
-      <div class="space-y-2 mb-3 text-sm">
-        <div class="flex justify-between items-center">
-          <span class="text-gray-600">Horizontal Speed:</span>
-          <span class="font-mono text-gray-700">
-            {{ speedMetrics.value.generalMovingSpeed?.toFixed(2) || '0.00' }}
-            m/s
-          </span>
+        <!-- Horizontal Speed -->
+        <div class="mini-card">
+          <div class="mini-label">Horizontal</div>
+          <div class="mini-value text-gray-700">
+            {{ speedMetrics.value.generalMovingSpeed?.toFixed(2) || 'N/A' }}
+          </div>
         </div>
-        <div class="flex justify-between items-center">
-          <span class="text-gray-600">Right Foot Speed:</span>
-          <span class="font-mono text-gray-500">
-            {{ speedMetrics.value.rightFootSpeed?.toFixed(2) || '0.00' }} m/s
-          </span>
+
+        <!-- Right Foot Speed -->
+        <div class="mini-card">
+          <div class="mini-label">Right Foot</div>
+          <div class="mini-value text-gray-600">
+            {{ speedMetrics.value.rightFootSpeed?.toFixed(2) || 'N/A' }}
+          </div>
         </div>
-        <div class="flex justify-between items-center">
-          <span class="text-gray-600">CoM Height:</span>
-          <span class="font-mono text-gray-700">
-            {{ speedMetrics.value.centerOfGravityHeight?.toFixed(2) || '0.00' }}
-            m
-          </span>
+
+        <!-- CoM Height -->
+        <div class="mini-card">
+          <div class="mini-label">CoM Height</div>
+          <div class="mini-value text-gray-700">
+            {{ speedMetrics.value.centerOfGravityHeight?.toFixed(2) || 'N/A' }}
+          </div>
         </div>
       </div>
 
       <!-- Chart Toggle Button -->
-      <div class="mb-3 pt-2 border-t border-gray-200">
+      <div
+        class="mt-1 pt-1 border-t border-gray-200"
+        style="border-color: rgba(229, 231, 235, 0.8)"
+      >
         <button
-          class="w-full btn btn-ghost btn-sm bg-gray-50 border border-gray-200 rounded-lg shadow-sm hover:bg-gray-100 transition-colors duration-200"
-          :title="
-            isChartVisible
-              ? 'Hide horizontal speed chart'
-              : 'Show horizontal speed chart'
-          "
-          :aria-label="
-            isChartVisible
-              ? 'Hide horizontal speed chart'
-              : 'Show horizontal speed chart'
+          class="w-full btn btn-ghost btn-xs bg-gray-50 border-gray-200 rounded-md shadow-sm hover:bg-gray-100 transition-colors"
+          style="
+            background-color: rgba(249, 250, 251, 0.5);
+            border-color: rgba(229, 231, 235, 0.6);
           "
           @click="toggleChart"
         >
           <svg
-            class="w-4 h-4 mr-2"
+            class="w-3 h-3 mr-1"
+            viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            viewBox="0 0 24 24"
             :class="{
               'text-blue-600': isChartVisible,
               'text-gray-500': !isChartVisible,
@@ -232,7 +204,7 @@
               d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
             />
           </svg>
-          <span class="text-sm font-medium">
+          <span class="text-xs font-medium">
             {{ isChartVisible ? 'Hide Chart' : 'Show Chart' }}
           </span>
         </button>
@@ -366,6 +338,7 @@
         videoLoaded &&
         speedVisualizationEnabled &&
         showSpeed &&
+        showMainSpeedPanel &&
         (!speedMetrics || !speedMetrics.value || !speedMetrics.value.isValid) &&
         showNoSpeedIndicator
       "
@@ -420,6 +393,14 @@ const props = defineProps({
   showSpeedPanel: {
     type: Boolean,
     default: true,
+  },
+  showMainSpeedPanel: {
+    type: Boolean,
+    default: true,
+  },
+  isExternalPanel: {
+    type: Boolean,
+    default: false,
   },
   showLabels: {
     type: Boolean,
@@ -510,9 +491,9 @@ const props = defineProps({
 });
 
 // Define emits
-const emit = defineEmits(['speed-visualization-toggled', 'chart-toggled']);
+const emit = defineEmits(['chart-toggled']);
 
-// Speed visualization toggle state
+// Speed visualization is always enabled (no toggle)
 const speedVisualizationEnabled = ref(true);
 
 // Chart visibility toggle state
@@ -543,18 +524,6 @@ watch(
   { immediate: true, deep: true }
 );
 
-// Watch speedVisualizationEnabled for debugging
-watch(
-  () => speedVisualizationEnabled.value,
-  (newValue) => {
-    console.log(
-      '🔍 [SpeedVisualization] speedVisualizationEnabled changed:',
-      newValue
-    );
-  },
-  { immediate: true }
-);
-
 // Watch videoLoaded for debugging
 watch(
   () => props.videoLoaded,
@@ -563,12 +532,6 @@ watch(
   },
   { immediate: true }
 );
-
-// Toggle speed visualization
-const toggleSpeedVisualization = () => {
-  speedVisualizationEnabled.value = !speedVisualizationEnabled.value;
-  emit('speed-visualization-toggled', speedVisualizationEnabled.value);
-};
 
 // Toggle chart visibility
 const toggleChart = () => {
@@ -674,22 +637,33 @@ const onChartToggled = (isVisible) => {
 </script>
 
 <style scoped>
+@import 'tailwindcss' reference;
+
 .speed-visualization {
   user-select: none;
-  /* Optimize rendering performance */
   will-change: transform;
   transform: translateZ(0);
 }
 
-/* Optimize SVG rendering */
 svg {
   shape-rendering: optimizeSpeed;
   text-rendering: optimizeSpeed;
 }
 
-/* Smooth transitions for speed bar */
 .transition-all {
   transition-property: all;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.mini-card {
+  @apply bg-gray-50 p-1.5 rounded text-center shadow-sm border border-gray-200;
+  background-color: rgba(249, 250, 251, 0.5);
+  border-color: rgba(229, 231, 235, 0.5);
+}
+.mini-label {
+  @apply text-xs text-gray-600 font-medium;
+}
+.mini-value {
+  @apply text-sm font-bold tracking-tight;
 }
 </style>
