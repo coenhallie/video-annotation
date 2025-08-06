@@ -273,7 +273,7 @@ const updateCanvasSize = () => {
 
 // Load existing drawings for current frame with fade transition
 const loadDrawingsForFrame = async () => {
-  if (!canvas.value) return;
+  if (!canvas.value || canvas.value.disposed) return;
 
   // Start fade transition
   isTransitioning.value = true;
@@ -284,57 +284,77 @@ const loadDrawingsForFrame = async () => {
   // Wait for fade out to complete
   await new Promise((resolve) => setTimeout(resolve, 150));
 
-  // Clear and load new drawings
-  canvas.value.clear();
-  const frameDrawings =
-    props.existingDrawings?.filter(
-      (drawing) => drawing.frame === props.currentFrame
-    ) || [];
-
-  frameDrawings.forEach((drawing, drawingIndex) => {
-    drawing.paths.forEach((path, pathIndex) => {
-      renderDrawingPath(path);
-    });
-  });
-
-  // Fade in new drawings
-  canvasOpacity.value = 1;
-
-  // Wait for fade in to complete, then end transition
-  setTimeout(() => {
+  // Check again if canvas is still valid after the timeout
+  if (!canvas.value || canvas.value.disposed) {
     isTransitioning.value = false;
-  }, 150);
+    return;
+  }
+
+  try {
+    // Clear and load new drawings
+    canvas.value.clear();
+    const frameDrawings =
+      props.existingDrawings?.filter(
+        (drawing) => drawing.frame === props.currentFrame
+      ) || [];
+
+    frameDrawings.forEach((drawing, drawingIndex) => {
+      drawing.paths.forEach((path, pathIndex) => {
+        renderDrawingPath(path);
+      });
+    });
+
+    // Fade in new drawings
+    canvasOpacity.value = 1;
+
+    // Wait for fade in to complete, then end transition
+    setTimeout(() => {
+      isTransitioning.value = false;
+    }, 150);
+  } catch (error) {
+    console.warn('🎨 [DrawingCanvas] Error loading drawings for frame:', error);
+    isTransitioning.value = false;
+  }
 };
 
 // Render a drawing path on canvas
 const renderDrawingPath = (drawingPath: DrawingPath) => {
-  if (!canvas.value) return;
-  const points = drawingPath.points.map((point) => ({
-    x: point.x * canvasWidth.value,
-    y: point.y * canvasHeight.value,
-  }));
+  if (!canvas.value || canvas.value.disposed) return;
 
-  if (points.length < 2) return;
+  try {
+    const points = drawingPath.points.map((point) => ({
+      x: point.x * canvasWidth.value,
+      y: point.y * canvasHeight.value,
+    }));
 
-  let pathString = `M ${points[0].x} ${points[0].y}`;
-  for (let i = 1; i < points.length; i++) {
-    pathString += ` L ${points[i].x} ${points[i].y}`;
+    if (points.length < 2) return;
+
+    let pathString = `M ${points[0].x} ${points[0].y}`;
+    for (let i = 1; i < points.length; i++) {
+      pathString += ` L ${points[i].x} ${points[i].y}`;
+    }
+
+    const fabricPath = new fabric.Path(pathString, {
+      stroke: drawingPath.color,
+      strokeWidth: drawingPath.strokeWidth,
+      fill: '',
+      selectable: false,
+      evented: false,
+    });
+    canvas.value.add(fabricPath);
+  } catch (error) {
+    console.warn('🎨 [DrawingCanvas] Error rendering drawing path:', error);
   }
-
-  const fabricPath = new fabric.Path(pathString, {
-    stroke: drawingPath.color,
-    strokeWidth: drawingPath.strokeWidth,
-    fill: '',
-    selectable: false,
-    evented: false,
-  });
-  canvas.value.add(fabricPath);
 };
 
 // Clear all drawings
 const clearDrawings = () => {
-  if (canvas.value) {
-    canvas.value.clear();
+  if (canvas.value && !canvas.value.disposed) {
+    try {
+      canvas.value.clear();
+    } catch (error) {
+      console.warn('🎨 [DrawingCanvas] Error clearing canvas:', error);
+    }
   }
 };
 
@@ -398,7 +418,7 @@ watch(
 watch(
   () => props.strokeWidth,
   (newValue) => {
-    if (canvas.value?.freeDrawingBrush) {
+    if (canvas.value?.freeDrawingBrush && !canvas.value.disposed) {
       canvas.value.freeDrawingBrush.width = newValue;
     }
   }
@@ -407,8 +427,11 @@ watch(
 watch(
   () => props.severity,
   (newValue) => {
-    if (canvas.value?.freeDrawingBrush) {
-      canvas.value.freeDrawingBrush.color = severityColors[newValue];
+    if (canvas.value?.freeDrawingBrush && !canvas.value.disposed) {
+      const color = severityColors[newValue as keyof typeof severityColors];
+      if (color) {
+        canvas.value.freeDrawingBrush.color = color;
+      }
     }
   }
 );
@@ -445,8 +468,12 @@ onUnmounted(() => {
   if (resizeObserver.value) {
     resizeObserver.value.disconnect();
   }
-  if (canvas.value) {
-    canvas.value.dispose();
+  if (canvas.value && !canvas.value.disposed) {
+    try {
+      canvas.value.dispose();
+    } catch (error) {
+      console.warn('🎨 [DrawingCanvas] Error disposing canvas:', error);
+    }
   }
   // sessionTimer cleanup removed since we no longer use session timers
 });

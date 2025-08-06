@@ -344,17 +344,33 @@ const startAddAnnotation = () => {
     hasDrawingData.value = false;
     if (props.isDualMode) {
       // In dual mode, disable drawing on both canvases and clear existing drawings for new annotation
-      if (props.drawingCanvasA) props.drawingCanvasA.disableDrawingMode();
-      if (props.drawingCanvasB) props.drawingCanvasB.disableDrawingMode();
+      if (props.drawingCanvasA && props.drawingCanvasA.disableDrawingMode) {
+        props.drawingCanvasA.disableDrawingMode();
+      }
+      if (props.drawingCanvasB && props.drawingCanvasB.disableDrawingMode) {
+        props.drawingCanvasB.disableDrawingMode();
+      }
       // Clear drawings from both canvases to provide clean slate for new annotation
-      if (props.drawingCanvasA)
-        props.drawingCanvasA.clearCurrentFrameDrawings();
-      if (props.drawingCanvasB)
-        props.drawingCanvasB.clearCurrentFrameDrawings();
+      if (props.drawingCanvasARef && props.drawingCanvasARef.clearDrawings) {
+        props.drawingCanvasARef.clearDrawings();
+      }
+      if (props.drawingCanvasBRef && props.drawingCanvasBRef.clearDrawings) {
+        props.drawingCanvasBRef.clearDrawings();
+      }
     } else {
-      primaryDrawingCanvas.value.disableDrawingMode();
+      if (
+        primaryDrawingCanvas.value &&
+        primaryDrawingCanvas.value.disableDrawingMode
+      ) {
+        primaryDrawingCanvas.value.disableDrawingMode();
+      }
       // Clear drawings to provide clean slate for new annotation
-      primaryDrawingCanvas.value.clearCurrentFrameDrawings();
+      if (
+        primaryDrawingCanvas.value &&
+        primaryDrawingCanvas.value.clearCurrentFrameDrawings
+      ) {
+        primaryDrawingCanvas.value.clearCurrentFrameDrawings();
+      }
     }
   }
 
@@ -385,15 +401,15 @@ const startEditAnnotation = (annotation) => {
     // Load the drawing data into the canvas
     if (props.isDualMode) {
       // In dual mode, load drawing data to both canvases if it exists
-      if (props.drawingCanvasA) {
-        props.drawingCanvasA.clearCurrentFrameDrawings();
-        if (annotation.drawingData?.drawingA) {
+      if (props.drawingCanvasARef) {
+        props.drawingCanvasARef.clearDrawings();
+        if (annotation.drawingData?.drawingA && props.drawingCanvasA) {
           props.drawingCanvasA.addDrawing(annotation.drawingData.drawingA);
         }
       }
-      if (props.drawingCanvasB) {
-        props.drawingCanvasB.clearCurrentFrameDrawings();
-        if (annotation.drawingData?.drawingB) {
+      if (props.drawingCanvasBRef) {
+        props.drawingCanvasBRef.clearDrawings();
+        if (annotation.drawingData?.drawingB && props.drawingCanvasB) {
           props.drawingCanvasB.addDrawing(annotation.drawingData.drawingB);
         }
       }
@@ -538,15 +554,25 @@ const cancelForm = () => {
     // Complete any active drawing session before disabling
     if (props.dualVideoPlayer) {
       // Complete any active drawing session by calling the canvas completion method
-      if (props.drawingCanvasA) props.drawingCanvasA.completeDrawingSession();
-      if (props.drawingCanvasB) props.drawingCanvasB.completeDrawingSession();
+      if (props.drawingCanvasARef)
+        props.drawingCanvasARef.completeDrawingSession();
+      if (props.drawingCanvasBRef)
+        props.drawingCanvasBRef.completeDrawingSession();
     }
 
     // In dual mode, disable drawing on both canvases and clear drawings
-    if (props.drawingCanvasA) props.drawingCanvasA.disableDrawingMode();
-    if (props.drawingCanvasB) props.drawingCanvasB.disableDrawingMode();
-    if (props.drawingCanvasA) props.drawingCanvasA.clearCurrentFrameDrawings();
-    if (props.drawingCanvasB) props.drawingCanvasB.clearCurrentFrameDrawings();
+    if (props.drawingCanvasA && props.drawingCanvasA.disableDrawingMode) {
+      props.drawingCanvasA.disableDrawingMode();
+    }
+    if (props.drawingCanvasB && props.drawingCanvasB.disableDrawingMode) {
+      props.drawingCanvasB.disableDrawingMode();
+    }
+    if (props.drawingCanvasARef && props.drawingCanvasARef.clearDrawings) {
+      props.drawingCanvasARef.clearDrawings();
+    }
+    if (props.drawingCanvasBRef && props.drawingCanvasBRef.clearDrawings) {
+      props.drawingCanvasBRef.clearDrawings();
+    }
   } else {
     // In single mode, complete drawing session for the primary canvas
     if (primaryDrawingCanvas.value) {
@@ -588,12 +614,16 @@ const onSeverityChange = () => {
   newAnnotation.value.color = severityInfo.color;
   // Update drawing canvas severity too
   if (props.isDualMode) {
-    if (props.drawingCanvasA)
+    if (props.drawingCanvasA && props.drawingCanvasA.setSeverity) {
       props.drawingCanvasA.setSeverity(newAnnotation.value.severity);
-    if (props.drawingCanvasB)
+    }
+    if (props.drawingCanvasB && props.drawingCanvasB.setSeverity) {
       props.drawingCanvasB.setSeverity(newAnnotation.value.severity);
+    }
   } else {
-    primaryDrawingCanvas.value.setSeverity(newAnnotation.value.severity);
+    if (primaryDrawingCanvas.value && primaryDrawingCanvas.value.setSeverity) {
+      primaryDrawingCanvas.value.setSeverity(newAnnotation.value.severity);
+    }
   }
 };
 
@@ -604,15 +634,28 @@ const toggleDrawingSection = () => {
   if (showDrawingSection.value) {
     if (props.isDualMode) {
       // In dual mode, enable drawing on both canvases
-      if (props.drawingCanvasA) props.drawingCanvasA.enableDrawingMode();
-      if (props.drawingCanvasB) props.drawingCanvasB.enableDrawingMode();
+      if (props.drawingCanvasA && props.drawingCanvasA.enableDrawingMode) {
+        props.drawingCanvasA.enableDrawingMode();
+      }
+      if (props.drawingCanvasB && props.drawingCanvasB.enableDrawingMode) {
+        props.drawingCanvasB.enableDrawingMode();
+      }
     } else {
-      primaryDrawingCanvas.value.enableDrawingMode();
+      if (
+        primaryDrawingCanvas.value &&
+        primaryDrawingCanvas.value.enableDrawingMode
+      ) {
+        primaryDrawingCanvas.value.enableDrawingMode();
+      }
     }
   } else {
     if (props.isDualMode) {
-      if (props.drawingCanvasA) props.drawingCanvasA.disableDrawingMode();
-      if (props.drawingCanvasB) props.drawingCanvasB.disableDrawingMode();
+      if (props.drawingCanvasA && props.drawingCanvasA.disableDrawingMode) {
+        props.drawingCanvasA.disableDrawingMode();
+      }
+      if (props.drawingCanvasB && props.drawingCanvasB.disableDrawingMode) {
+        props.drawingCanvasB.disableDrawingMode();
+      }
     } else {
       primaryDrawingCanvas.value.disableDrawingMode();
     }
@@ -662,8 +705,8 @@ const onDrawingCreated = (drawingData, videoContext = null) => {
 
 const clearDrawing = () => {
   if (props.isDualMode) {
-    if (props.drawingCanvasA) props.drawingCanvasA.clearCurrentFrameDrawings();
-    if (props.drawingCanvasB) props.drawingCanvasB.clearCurrentFrameDrawings();
+    if (props.drawingCanvasARef) props.drawingCanvasARef.clearDrawings();
+    if (props.drawingCanvasBRef) props.drawingCanvasBRef.clearDrawings();
   } else {
     primaryDrawingCanvas.value.clearCurrentFrameDrawings();
   }
@@ -849,8 +892,8 @@ const clearDrawingData = () => {
 
   // Clear drawings from canvas(es)
   if (props.isDualMode) {
-    if (props.drawingCanvasA) props.drawingCanvasA.clearCurrentFrameDrawings();
-    if (props.drawingCanvasB) props.drawingCanvasB.clearCurrentFrameDrawings();
+    if (props.drawingCanvasARef) props.drawingCanvasARef.clearDrawings();
+    if (props.drawingCanvasBRef) props.drawingCanvasBRef.clearDrawings();
   } else {
     if (primaryDrawingCanvas.value) {
       primaryDrawingCanvas.value.clearCurrentFrameDrawings();
