@@ -1,20 +1,24 @@
 <template>
-  <div class="keypoint-selector">
+  <div class="space-y-6">
     <!-- Header with toggle all -->
-    <div class="selector-header">
-      <h3 class="selector-title">
-        Keypoint Selection
-      </h3>
-      <div class="header-controls">
+    <div
+      class="flex items-center justify-between pb-4 border-b border-gray-200"
+    >
+      <h3 class="text-lg font-semibold text-gray-800">Keypoint Selection</h3>
+      <div class="flex items-center space-x-2">
         <button
-          class="toggle-all-btn"
-          :class="{ 'all-selected': allSelected }"
+          class="px-3 py-1 text-sm font-medium rounded-md transition-colors"
+          :class="
+            allSelected
+              ? 'bg-red-500 text-white hover:bg-red-600'
+              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+          "
           @click="toggleAll"
         >
           {{ allSelected ? 'Deselect All' : 'Select All' }}
         </button>
         <button
-          class="reset-btn"
+          class="px-3 py-1 text-sm font-medium bg-gray-200 text-gray-700 hover:bg-gray-300 rounded-md transition-colors"
           @click="resetToDefault"
         >
           Reset
@@ -23,15 +27,13 @@
     </div>
 
     <!-- Quick presets -->
-    <div class="preset-section">
-      <h4 class="preset-title">
-        Quick Presets:
-      </h4>
-      <div class="preset-buttons">
+    <div>
+      <h4 class="text-md font-medium text-gray-700 mb-2">Quick Presets</h4>
+      <div class="flex flex-wrap gap-2">
         <button
           v-for="preset in presets"
           :key="preset.name"
-          class="preset-btn"
+          class="px-2.5 py-1 text-xs font-medium bg-blue-100 text-blue-800 hover:bg-blue-200 rounded-full transition-colors"
           :title="preset.description"
           @click="applyPreset(preset)"
         >
@@ -41,58 +43,85 @@
     </div>
 
     <!-- Keypoint groups -->
-    <div class="keypoint-groups">
+    <div class="space-y-3">
       <div
         v-for="group in keypointGroups"
         :key="group.name"
-        class="keypoint-group"
+        class="border border-gray-200 rounded-lg overflow-hidden"
       >
-        <div class="group-header">
+        <div
+          class="flex items-center bg-gray-50 px-4 py-2 cursor-pointer"
+          @click="toggleGroupExpansion(group.name)"
+        >
           <button
-            class="group-toggle"
-            :class="{ 'group-selected': isGroupSelected(group) }"
-            @click="toggleGroup(group)"
+            class="flex-1 flex items-center justify-between text-left focus:outline-none"
+            @click.stop="toggleGroup(group)"
           >
-            <span class="group-name">{{ group.name }}</span>
-            <span class="group-count">({{ getSelectedInGroup(group) }}/{{
-              group.indices.length
-            }})</span>
+            <span
+              class="font-medium text-gray-800"
+              :class="{
+                'text-blue-600': isGroupSelected(group),
+              }"
+              >{{ group.name }}</span
+            >
+            <span class="text-sm text-gray-500"
+              >{{ getSelectedInGroup(group) }}/{{ group.indices.length }}</span
+            >
           </button>
           <button
-            class="expand-toggle"
-            :class="{ expanded: expandedGroups.includes(group.name) }"
-            @click="toggleGroupExpansion(group.name)"
+            class="ml-3 text-gray-500 hover:text-gray-700 transition-transform transform"
+            :class="{ 'rotate-180': expandedGroups.includes(group.name) }"
           >
-            ▼
+            <svg
+              class="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M19 9l-7 7-7-7"
+              />
+            </svg>
           </button>
         </div>
 
         <div
-          class="group-keypoints"
-          :class="{ 'group-expanded': expandedGroups.includes(group.name) }"
+          v-show="expandedGroups.includes(group.name)"
+          class="p-4 grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2 bg-white"
         >
           <label
             v-for="index in group.indices"
             :key="index"
-            class="keypoint-item"
-            :class="{ 'keypoint-selected': selectedKeypoints.includes(index) }"
+            class="flex items-center space-x-2 p-1.5 rounded-md cursor-pointer transition-colors"
+            :class="
+              selectedKeypoints.includes(index)
+                ? 'bg-blue-50'
+                : 'hover:bg-gray-100'
+            "
           >
             <input
               type="checkbox"
               :checked="selectedKeypoints.includes(index)"
-              class="keypoint-checkbox"
+              class="h-4 w-4 rounded text-blue-600 border-gray-300 focus:ring-blue-500"
               @change="toggleKeypoint(index)"
-            >
-            <span class="keypoint-name">{{ LANDMARK_NAMES[index] }}</span>
-            <span class="keypoint-index">#{{ index }}</span>
+            />
+            <span class="text-sm text-gray-700">{{
+              LANDMARK_NAMES[index]
+            }}</span>
+            <span class="text-xs text-gray-400 font-mono">#{{ index }}</span>
           </label>
         </div>
       </div>
     </div>
 
     <!-- Selected count -->
-    <div class="selection-summary">
-      <span class="selected-count">
+    <div
+      class="pt-4 border-t border-gray-200 text-center text-sm text-gray-600 font-medium"
+    >
+      <span>
         {{ selectedKeypoints.length }} of {{ LANDMARK_NAMES.length }} keypoints
         selected
       </span>
@@ -101,7 +130,7 @@
 </template>
 
 <script setup>
-import { ref, computed, toRefs, defineProps, defineEmits } from 'vue';
+import { ref, computed, toRefs } from 'vue';
 
 const props = defineProps({
   selectedKeypoints: {
@@ -297,230 +326,3 @@ const applyPreset = (preset) => {
   );
 };
 </script>
-
-<style scoped>
-.keypoint-selector {
-  background: #1f2937;
-  border-radius: 8px;
-  padding: 16px;
-  color: #f9fafb;
-  max-height: 600px;
-  overflow-y: auto;
-  font-size: 14px;
-}
-
-.selector-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #374151;
-}
-
-.selector-title {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-  color: #f9fafb;
-}
-
-.header-controls {
-  display: flex;
-  gap: 8px;
-}
-
-.toggle-all-btn,
-.reset-btn {
-  padding: 6px 12px;
-  border: 1px solid #4b5563;
-  border-radius: 4px;
-  background: #374151;
-  color: #f9fafb;
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.toggle-all-btn:hover,
-.reset-btn:hover {
-  background: #4b5563;
-}
-
-.toggle-all-btn.all-selected {
-  background: #dc2626;
-  border-color: #dc2626;
-}
-
-.preset-section {
-  margin-bottom: 16px;
-}
-
-.preset-title {
-  margin: 0 0 8px 0;
-  font-size: 14px;
-  font-weight: 500;
-  color: #d1d5db;
-}
-
-.preset-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.preset-btn {
-  padding: 4px 8px;
-  border: 1px solid #4b5563;
-  border-radius: 4px;
-  background: #374151;
-  color: #f9fafb;
-  font-size: 11px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.preset-btn:hover {
-  background: #4b5563;
-  border-color: #6b7280;
-}
-
-.keypoint-groups {
-  margin-bottom: 16px;
-}
-
-.keypoint-group {
-  margin-bottom: 12px;
-  border: 1px solid #374151;
-  border-radius: 6px;
-  overflow: hidden;
-}
-
-.group-header {
-  display: flex;
-  align-items: center;
-  background: #374151;
-  padding: 8px 12px;
-}
-
-.group-toggle {
-  flex: 1;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: none;
-  border: none;
-  color: #f9fafb;
-  cursor: pointer;
-  text-align: left;
-  padding: 0;
-}
-
-.group-toggle:hover {
-  color: #d1d5db;
-}
-
-.group-toggle.group-selected .group-name {
-  color: #10b981;
-  font-weight: 600;
-}
-
-.group-name {
-  font-weight: 500;
-}
-
-.group-count {
-  font-size: 12px;
-  color: #9ca3af;
-}
-
-.expand-toggle {
-  background: none;
-  border: none;
-  color: #9ca3af;
-  cursor: pointer;
-  padding: 4px;
-  margin-left: 8px;
-  transition: transform 0.2s;
-}
-
-.expand-toggle.expanded {
-  transform: rotate(180deg);
-}
-
-.group-keypoints {
-  max-height: 0;
-  overflow: hidden;
-  transition: max-height 0.3s ease;
-  background: #1f2937;
-}
-
-.group-keypoints.group-expanded {
-  max-height: 400px;
-  padding: 8px;
-}
-
-.keypoint-item {
-  display: flex;
-  align-items: center;
-  padding: 4px 8px;
-  margin: 2px 0;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.keypoint-item:hover {
-  background: #374151;
-}
-
-.keypoint-item.keypoint-selected {
-  background: #065f46;
-}
-
-.keypoint-checkbox {
-  margin-right: 8px;
-  accent-color: #10b981;
-}
-
-.keypoint-name {
-  flex: 1;
-  font-size: 12px;
-}
-
-.keypoint-index {
-  font-size: 11px;
-  color: #9ca3af;
-  font-family: monospace;
-}
-
-.selection-summary {
-  padding-top: 12px;
-  border-top: 1px solid #374151;
-  text-align: center;
-}
-
-.selected-count {
-  font-size: 12px;
-  color: #d1d5db;
-  font-weight: 500;
-}
-
-/* Scrollbar styling */
-.keypoint-selector::-webkit-scrollbar {
-  width: 6px;
-}
-
-.keypoint-selector::-webkit-scrollbar-track {
-  background: #1f2937;
-}
-
-.keypoint-selector::-webkit-scrollbar-thumb {
-  background: #4b5563;
-  border-radius: 3px;
-}
-
-.keypoint-selector::-webkit-scrollbar-thumb:hover {
-  background: #6b7280;
-}
-</style>
