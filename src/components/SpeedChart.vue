@@ -264,7 +264,7 @@ const props = defineProps({
 const chartDuration = computed(() => props.chartDuration);
 const maxSpeedScale = computed(() => props.maxSpeedScale);
 const chartWidth = ref(400);
-const chartHeight = ref(props.compactMode ? 120 : 160);
+const chartHeight = ref(props.compactMode ? 145 : 160);
 
 // Chart elements
 const chartWrapper = ref(null);

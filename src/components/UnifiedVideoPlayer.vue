@@ -72,7 +72,6 @@
           ref="singleDrawingCanvasRef"
           :current-frame="currentFrame"
           :is-drawing-mode="drawingCanvas?.isDrawingMode?.value"
-          :selected-tool="drawingCanvas?.currentTool?.value?.type"
           :stroke-width="drawingCanvas?.currentTool?.value?.strokeWidth"
           :severity="drawingCanvas?.currentTool?.value?.severity"
           :existing-drawings="drawingCanvas?.allDrawings?.value"
@@ -378,7 +377,6 @@
               ref="drawingCanvasARef"
               :current-frame="currentFrame"
               :is-drawing-mode="drawingCanvasA?.isDrawingMode?.value"
-              :selected-tool="drawingCanvasA?.currentTool?.value?.type"
               :stroke-width="drawingCanvasA?.currentTool?.value?.strokeWidth"
               :severity="drawingCanvasA?.currentTool?.value?.severity"
               :existing-drawings="drawingCanvasA?.allDrawings?.value"
@@ -506,7 +504,6 @@
               ref="drawingCanvasBRef"
               :current-frame="currentFrame"
               :is-drawing-mode="drawingCanvasB?.isDrawingMode?.value"
-              :selected-tool="drawingCanvasB?.currentTool?.value?.type"
               :stroke-width="drawingCanvasB?.currentTool?.value?.strokeWidth"
               :severity="drawingCanvasB?.currentTool?.value?.severity"
               :existing-drawings="drawingCanvasB?.allDrawings?.value"
@@ -604,14 +601,31 @@
       <!-- Movement Speed containers under the dual comparison videos -->
       <div
         v-if="
-          (videoAUrl && poseLandmarkerA && poseLandmarkerA.isEnabled.value) ||
-          (videoBUrl && poseLandmarkerB && poseLandmarkerB.isEnabled.value)
+          (videoAUrl &&
+            poseLandmarkerA &&
+            poseLandmarkerA.isEnabled.value &&
+            poseLandmarkerA.speedMetrics &&
+            poseLandmarkerA.speedMetrics.value &&
+            poseLandmarkerA.speedMetrics.value.isValid) ||
+          (videoBUrl &&
+            poseLandmarkerB &&
+            poseLandmarkerB.isEnabled.value &&
+            poseLandmarkerB.speedMetrics &&
+            poseLandmarkerB.speedMetrics.value &&
+            poseLandmarkerB.speedMetrics.value.isValid)
         "
         class="dual-speed-panels"
       >
         <!-- Video A - Movement Speed -->
         <div
-          v-if="videoAUrl && poseLandmarkerA && poseLandmarkerA.isEnabled.value"
+          v-if="
+            videoAUrl &&
+            poseLandmarkerA &&
+            poseLandmarkerA.isEnabled.value &&
+            poseLandmarkerA.speedMetrics &&
+            poseLandmarkerA.speedMetrics.value &&
+            poseLandmarkerA.speedMetrics.value.isValid
+          "
           class="movement-speed-container"
         >
           <div class="dual-speed-content">
@@ -785,7 +799,14 @@
 
         <!-- Video B - Movement Speed -->
         <div
-          v-if="videoBUrl && poseLandmarkerB && poseLandmarkerB.isEnabled.value"
+          v-if="
+            videoBUrl &&
+            poseLandmarkerB &&
+            poseLandmarkerB.isEnabled.value &&
+            poseLandmarkerB.speedMetrics &&
+            poseLandmarkerB.speedMetrics.value &&
+            poseLandmarkerB.speedMetrics.value.isValid
+          "
           class="movement-speed-container"
         >
           <div class="dual-speed-content">
@@ -1375,10 +1396,6 @@
   --panel-padding: 6px;
   --panel-gap: 6px;
   --chip-size: 0.8rem;
-}
-:deep(canvas) {
-  /* ensure any canvas inside is not overly large in compact mode */
-  max-height: 160px;
 }
 </style>
 
@@ -2962,6 +2979,7 @@ defineExpose({
   border-radius: 0.5rem;
   overflow: hidden;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  display: grid;
 }
 
 .video-element {
@@ -2970,6 +2988,11 @@ defineExpose({
   display: block;
   cursor: pointer;
   transition: opacity 150ms ease-in-out;
+}
+
+.video-wrapper > * {
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
 }
 
 .video-element.video-fade-transition {

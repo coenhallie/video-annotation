@@ -39,12 +39,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import * as fabric from 'fabric';
-import type {
-  DrawingData,
-  DrawingPath,
-  DrawingPoint,
-  SeverityLevel,
-} from '../types/database';
+import type { DrawingData, DrawingPath, SeverityLevel } from '@/types/database';
 
 interface Props {
   currentFrame: number;
@@ -289,56 +284,41 @@ const loadDrawingsForFrame = async () => {
   // Wait for fade out to complete
   await new Promise((resolve) => setTimeout(resolve, 150));
 
-  // Check if canvas is still available after async delay
-  if (!canvas.value) {
-    isTransitioning.value = false;
-    return;
-  }
-
   // Clear and load new drawings
-  try {
-    canvas.value.clear();
-    const frameDrawings =
-      props.existingDrawings?.filter(
-        (drawing) => drawing.frame === props.currentFrame
-      ) || [];
+  canvas.value.clear();
+  const frameDrawings =
+    props.existingDrawings?.filter(
+      (drawing) => drawing.frame === props.currentFrame
+    ) || [];
 
-    frameDrawings.forEach((drawing: DrawingData, drawingIndex: number) => {
-      drawing.paths.forEach((path: DrawingPath, pathIndex: number) => {
-        renderDrawingPath(path);
-      });
+  frameDrawings.forEach((drawing, drawingIndex) => {
+    drawing.paths.forEach((path, pathIndex) => {
+      renderDrawingPath(path);
     });
-  } catch (error) {
-    console.warn('Canvas operation failed, component may be unmounted:', error);
-    isTransitioning.value = false;
-    return;
-  }
+  });
 
   // Fade in new drawings
   canvasOpacity.value = 1;
 
   // Wait for fade in to complete, then end transition
   setTimeout(() => {
-    // Check if component is still mounted before updating state
-    if (canvas.value) {
-      isTransitioning.value = false;
-    }
+    isTransitioning.value = false;
   }, 150);
 };
 
 // Render a drawing path on canvas
 const renderDrawingPath = (drawingPath: DrawingPath) => {
   if (!canvas.value) return;
-  const points = drawingPath.points.map((point: DrawingPoint) => ({
+  const points = drawingPath.points.map((point) => ({
     x: point.x * canvasWidth.value,
     y: point.y * canvasHeight.value,
   }));
 
   if (points.length < 2) return;
 
-  let pathString = `M ${points[0]!.x} ${points[0]!.y}`;
+  let pathString = `M ${points[0].x} ${points[0].y}`;
   for (let i = 1; i < points.length; i++) {
-    pathString += ` L ${points[i]!.x} ${points[i]!.y}`;
+    pathString += ` L ${points[i].x} ${points[i].y}`;
   }
 
   const fabricPath = new fabric.Path(pathString, {
@@ -356,35 +336,6 @@ const clearDrawings = () => {
   if (canvas.value) {
     canvas.value.clear();
   }
-};
-
-// Clear drawings for current frame (alias for clearDrawings since we only show current frame)
-const clearCurrentFrameDrawings = () => {
-  if (canvas.value) {
-    canvas.value.clear();
-  }
-  // Also clear any active drawing session for the current frame
-  if (
-    currentDrawingSession.value &&
-    currentDrawingSession.value.frame === props.currentFrame
-  ) {
-    currentDrawingSession.value = null;
-  }
-};
-
-// Add drawing data to the canvas
-const addDrawing = (drawingData: any) => {
-  if (!canvas.value || !drawingData) return;
-
-  // Clear current canvas first
-  canvas.value.clear();
-
-  // Render all paths from the drawing data
-  drawingData.paths.forEach((path: any) => {
-    renderDrawingPath(path);
-  });
-
-  canvas.value.renderAll();
 };
 
 // Check if there are drawings on the current frame
@@ -505,49 +456,12 @@ const getCurrentDrawingSession = () => {
   return currentDrawingSession.value;
 };
 
-// Enable drawing mode
-const enableDrawingMode = () => {
-  if (canvas.value) {
-    canvas.value.isDrawingMode = true;
-    const canvasElement = canvas.value.getElement();
-    canvasElement.style.cursor = 'crosshair';
-    if (canvasContainer.value) {
-      canvasContainer.value.style.cursor = 'crosshair';
-    }
-  }
-};
-
-// Set severity (updates brush color)
-const setSeverity = (severity: any) => {
-  if (canvas.value?.freeDrawingBrush) {
-    canvas.value.freeDrawingBrush.color =
-      severityColors[severity as keyof typeof severityColors];
-  }
-};
-
-// Disable drawing mode
-const disableDrawingMode = () => {
-  if (canvas.value) {
-    canvas.value.isDrawingMode = false;
-    const canvasElement = canvas.value.getElement();
-    canvasElement.style.cursor = 'default';
-    if (canvasContainer.value) {
-      canvasContainer.value.style.cursor = 'default';
-    }
-  }
-};
-
 // Expose methods for parent component
 defineExpose({
   clearDrawings,
-  clearCurrentFrameDrawings,
-  addDrawing,
   completeDrawingSession,
   hasDrawingsOnCurrentFrame,
   getCurrentDrawingSession,
-  enableDrawingMode,
-  disableDrawingMode,
-  setSeverity,
 });
 </script>
 
@@ -582,7 +496,7 @@ defineExpose({
   top: 0;
   left: 0;
   width: 100%;
-  height: 100%;
+  height: 700px;
   transition: opacity 150ms ease-in-out;
 }
 
