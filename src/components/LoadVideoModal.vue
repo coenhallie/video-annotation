@@ -949,7 +949,10 @@ const loadProjects = async () => {
     // Load comment counts for all projects
     if (userProjects.length > 0) {
       console.log('🎬 [LoadVideoModal] Loading comment counts...');
-      const counts = await CommentService.getProjectCommentCounts(userProjects);
+      const projectIds = userProjects.map((project) => project.id);
+      const counts = await CommentService.getCommentCountsForProjects(
+        projectIds
+      );
       commentCounts.value = counts;
       console.log('🎬 [LoadVideoModal] Loaded comment counts:', counts);
 

@@ -718,32 +718,28 @@ export class CommentService {
   /**
    * Get comment counts for multiple projects
    */
-  static async getProjectCommentCounts(
-    projects: any[]
+  static async getCommentCountsForProjects(
+    projectIds: string[]
   ): Promise<Record<string, number>> {
-    try {
-      const commentCounts: Record<string, number> = {};
-
-      // Process projects in parallel for better performance
-      const countPromises = projects.map(async (project) => {
-        const count = await this.getProjectCommentCount(project);
-        return { projectId: project.id, count };
-      });
-
-      const results = await Promise.all(countPromises);
-
-      results.forEach(({ projectId, count }) => {
-        commentCounts[projectId] = count;
-      });
-
-      return commentCounts;
-    } catch (error) {
-      console.error(
-        '❌ [CommentService] Error getting project comment counts:',
-        error
-      );
+    if (projectIds.length === 0) {
       return {};
     }
+    const { data, error } = await supabase.rpc(
+      'get_comment_counts_for_projects',
+      {
+        p_project_ids: projectIds,
+      }
+    );
+
+    if (error) {
+      console.error('Error fetching comment counts:', error);
+      return {};
+    }
+    const counts: Record<string, number> = {};
+    for (const item of data) {
+      counts[item.project_id] = item.comment_count;
+    }
+    return counts;
   }
 
   /**

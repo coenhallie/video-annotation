@@ -1,12 +1,14 @@
 import { ref, reactive, computed } from 'vue';
 import { supabase } from './useSupabase';
 import type { Comment } from '../types/database';
+import { logger } from '../utils/logger';
 
 // Global state for comment tracking across all annotations
 const newCommentsByAnnotation = ref(new Map<string, Set<string>>());
 const commentCountsByAnnotation = ref(new Map<string, number>());
 const globalCommentSubscriptions = ref(new Map<string, any>());
 const isGlobalSubscriptionActive = ref(false);
+const lastViewedTimes = ref<Record<string, string>>({});
 
 export interface GlobalCommentEvent {
   type: 'INSERT' | 'UPDATE' | 'DELETE';
@@ -15,6 +17,32 @@ export interface GlobalCommentEvent {
 }
 
 export function useGlobalComments() {
+  const loadLastViewedTimes = () => {
+    try {
+      const storedTimes = localStorage.getItem('lastViewedTimes');
+      if (storedTimes) {
+        lastViewedTimes.value = JSON.parse(storedTimes);
+      }
+    } catch (e) {
+      logger.error('Failed to load last viewed times:', e);
+      lastViewedTimes.value = {};
+    }
+  };
+
+  const updateLastViewedTime = (projectId: string) => {
+    try {
+      lastViewedTimes.value[projectId] = new Date().toISOString();
+      localStorage.setItem(
+        'lastViewedTimes',
+        JSON.stringify(lastViewedTimes.value)
+      );
+      logger.info(
+        `🎬 [useGlobalComments] Last viewed ${projectId}: ${lastViewedTimes.value[projectId]}`
+      );
+    } catch (e) {
+      logger.error('Failed to update last viewed time:', e);
+    }
+  };
   // Event handlers for global comment events
   const eventHandlers = reactive({
     onNewComment: [] as Array<(event: GlobalCommentEvent) => void>,
@@ -288,6 +316,9 @@ export function useGlobalComments() {
     // State
     isGlobalSubscriptionActive,
     totalNewComments,
+    commentCounts: commentCountsByAnnotation,
+    newCommentIndicators: newCommentsByAnnotation,
+    lastViewedTimes,
 
     // Methods
     setupGlobalCommentSubscription,
@@ -297,6 +328,10 @@ export function useGlobalComments() {
     getTotalCommentCount,
     initializeCommentCounts,
     cleanup,
+    subscribeToGlobalComments: setupGlobalCommentSubscription,
+    unsubscribeFromGlobalComments: cleanup,
+    loadLastViewedTimes,
+    updateLastViewedTime,
 
     // Event handlers
     onNewComment,
