@@ -2,8 +2,10 @@
  * useSpeedCalculator.ts
  * Enhanced speed calculator with comprehensive metrics including center of mass calculation
  * and all properties required by visualization components.
+ * Now integrated with camera calibration for accurate world coordinate transformations.
  */
 import { ref, computed, type Ref } from 'vue';
+import { useCameraCalibration, type Point3D } from './useCameraCalibration';
 
 export interface SpeedSample {
   frame: number;
@@ -72,6 +74,7 @@ export interface UseSpeedCalculator {
   comprehensiveMetrics: Ref<ComprehensiveSpeedMetrics>;
   calibrationSettings: Ref<CalibrationSettings>;
   speedMetrics: Ref<ComprehensiveSpeedMetrics>;
+  cameraCalibration: ReturnType<typeof useCameraCalibration>;
   reset: () => void;
   pushSample: (frame: number, timeSec: number, distanceDelta: number) => void;
   updateWithLandmarks: (
@@ -86,6 +89,7 @@ export interface UseSpeedCalculator {
   setCourtLength: (length: number) => void;
   updateVideoDimensions: (width: number, height: number) => void;
   autoCalibrateBadminton: () => void;
+  setCameraCalibrated: (calibrated: boolean) => void;
 }
 
 // MediaPipe pose landmark indices
@@ -109,6 +113,9 @@ export function useSpeedCalculator(
   // Use actual video dimensions, with fallback to common HD resolution
   const canvasWidth = options.videoWidth ?? options.canvasWidth ?? 1920;
   const canvasHeight = options.videoHeight ?? options.canvasHeight ?? 1080;
+
+  // Initialize camera calibration
+  const cameraCalibration = useCameraCalibration();
 
   const samples = ref<SpeedSample[]>([]);
   const currentSpeed = ref(0);
@@ -273,10 +280,22 @@ export function useSpeedCalculator(
     x: number;
     y: number;
   } {
+    // If camera is calibrated, use homography transformation
+    if (cameraCalibration.isCalibrated.value) {
+      const normalizedPoint = {
+        x: pixelCoord.x / canvasWidth,
+        y: pixelCoord.y / canvasHeight,
+      };
+      const worldPoint = cameraCalibration.transformToWorld(normalizedPoint, 0);
+      return {
+        x: worldPoint.x,
+        y: worldPoint.y,
+      };
+    }
+
+    // Fallback to old scaling method if not calibrated
     const scalingFactor = getCalibrationScalingFactor();
     const basePixelsPerMeter = calibrationSettings.value.pixelsPerMeter;
-
-    // Calculate effective pixels per meter based on calibration
     const effectivePixelsPerMeter = basePixelsPerMeter / scalingFactor;
 
     return {
@@ -291,13 +310,23 @@ export function useSpeedCalculator(
     y: number;
     z: number;
   } {
+    // If camera is calibrated, use the calibration transformation
+    if (cameraCalibration.isCalibrated.value) {
+      const worldPoint = cameraCalibration.transformToWorld(
+        { x: landmark.x, y: landmark.y },
+        landmark.z || 0
+      );
+      return worldPoint;
+    }
+
+    // Fallback to old method if not calibrated
     const pixelCoord = normalizedToPixel(landmark);
     const realWorldCoord = pixelToRealWorld(pixelCoord);
 
     return {
       x: realWorldCoord.x,
       y: realWorldCoord.y,
-      z: (landmark.z || 0) * getCalibrationScalingFactor(), // Scale Z coordinate as well
+      z: (landmark.z || 0) * getCalibrationScalingFactor(),
     };
   }
 
@@ -413,6 +442,15 @@ export function useSpeedCalculator(
     landmarks: Landmark[],
     worldLandmarks?: Landmark[]
   ) {
+    // If camera is calibrated, use the calibration to transform landmarks
+    let transformedWorldLandmarks: Point3D[] | undefined;
+    if (cameraCalibration.isCalibrated.value && landmarks.length > 0) {
+      transformedWorldLandmarks = cameraCalibration.transformLandmarksToWorld(
+        landmarks,
+        worldLandmarks
+      );
+    }
+
     // Calculate center of mass in normalized coordinates
     const currentCenterOfMass = calculateCenterOfMass(landmarks);
     const currentWorldCenterOfMass = worldLandmarks
@@ -459,16 +497,42 @@ export function useSpeedCalculator(
       let currentCoMReal: Vector3D;
       let prevCoMReal: Vector3D;
 
-      if (
+      if (transformedWorldLandmarks && transformedWorldLandmarks.length > 0) {
+        // Use calibrated world coordinates
+        currentCoMReal = calculateCenterOfMass(
+          transformedWorldLandmarks as any
+        );
+
+        // For previous frame, we need to transform those too
+        const prevTransformed = cameraCalibration.isCalibrated.value
+          ? cameraCalibration.transformLandmarksToWorld(
+              previousLandmarks.value,
+              previousWorldLandmarks.value
+            )
+          : null;
+
+        if (prevTransformed && prevTransformed.length > 0) {
+          prevCoMReal = calculateCenterOfMass(prevTransformed as any);
+        } else {
+          prevCoMReal = prevCenterOfMassReal;
+        }
+
+        console.log('🔧 [SPEED DEBUG] Using calibrated world coordinates:', {
+          currentCoMReal,
+          prevCoMReal,
+          deltaTime,
+          calibrated: true,
+        });
+      } else if (
         worldLandmarks &&
         worldLandmarks.length > 0 &&
         previousWorldLandmarks.value.length > 0
       ) {
-        // Use world coordinates directly (already in meters)
+        // Use MediaPipe world coordinates directly (already in meters)
         currentCoMReal = currentWorldCenterOfMass;
         prevCoMReal = calculateCenterOfMass(previousWorldLandmarks.value);
 
-        console.log('🔧 [SPEED DEBUG] Using world coordinates:', {
+        console.log('🔧 [SPEED DEBUG] Using MediaPipe world coordinates:', {
           currentCoMReal,
           prevCoMReal,
           deltaTime,
@@ -837,12 +901,28 @@ export function useSpeedCalculator(
     setPlayerHeight(165); // cm - typical for 15-year-old
     setCourtLength(13.4); // meters - standard badminton court
 
+    // Set court dimensions in camera calibration
+    cameraCalibration.setCourtDimensions({
+      length: 13.4,
+      width: 6.1,
+    });
+
     console.log('🔧 [AUTO-CALIBRATION] Badminton calibration complete:', {
       playerHeight: calibrationSettings.value.playerHeight,
       courtLength: calibrationSettings.value.courtLength,
       useHeightCalibration: calibrationSettings.value.useHeightCalibration,
       useCourtCalibration: calibrationSettings.value.useCourtCalibration,
+      cameraCalibrated: cameraCalibration.isCalibrated.value,
     });
+  }
+
+  // Set camera calibration status
+  function setCameraCalibrated(calibrated: boolean) {
+    if (!calibrated) {
+      cameraCalibration.resetCalibration();
+    }
+    calibrationSettings.value.isCalibrated =
+      calibrated && cameraCalibration.isCalibrated.value;
   }
 
   return {
@@ -852,6 +932,7 @@ export function useSpeedCalculator(
     comprehensiveMetrics,
     calibrationSettings,
     speedMetrics: comprehensiveMetrics, // Alias for compatibility
+    cameraCalibration, // Expose camera calibration for UI integration
     reset,
     pushSample,
     updateWithLandmarks,
@@ -861,5 +942,6 @@ export function useSpeedCalculator(
     setCourtLength,
     updateVideoDimensions,
     autoCalibrateBadminton,
+    setCameraCalibrated,
   };
 }

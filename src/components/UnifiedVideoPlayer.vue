@@ -122,6 +122,15 @@
           @motion-prediction-toggled="handleMotionPredictionToggled"
         />
 
+        <!-- Camera Calibration Overlay for Single Video -->
+        <CameraCalibrationOverlay
+          v-if="videoUrl && singleVideoElement"
+          :video-element="singleVideoElement"
+          :is-active="showCalibrationOverlay"
+          @calibration-complete="handleCalibrationComplete"
+          @calibration-cancelled="showCalibrationOverlay = false"
+        />
+
         <!-- Speed Visualization Overlay for Single Video (only in single mode) -->
         <SpeedVisualization
           v-if="
@@ -292,6 +301,39 @@
                     <line x1="16" y1="13" x2="8" y2="13" />
                     <line x1="16" y1="17" x2="8" y2="17" />
                     <polyline points="10,9 9,9 8,9" />
+                  </svg>
+                </button>
+
+                <!-- Camera Calibration Button (only show when pose detection is enabled) -->
+                <button
+                  v-if="poseLandmarker.isEnabled.value"
+                  @click="toggleCalibration"
+                  class="control-button"
+                  :class="{
+                    'pose-active':
+                      showCalibrationOverlay ||
+                      cameraCalibration.isCalibrated.value,
+                    calibrated: cameraCalibration.isCalibrated.value,
+                  }"
+                  :title="
+                    cameraCalibration.isCalibrated.value
+                      ? 'Camera calibrated - Click to recalibrate'
+                      : 'Calibrate camera angle'
+                  "
+                >
+                  <svg
+                    class="control-icon"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                  >
+                    <!-- Camera with grid overlay icon -->
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <line x1="9" y1="3" x2="9" y2="21" />
+                    <line x1="15" y1="3" x2="15" y2="21" />
+                    <line x1="3" y1="9" x2="21" y2="9" />
+                    <line x1="3" y1="15" x2="21" y2="15" />
+                    <circle cx="12" cy="12" r="2" />
                   </svg>
                 </button>
 
@@ -1380,6 +1422,20 @@
   box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.2);
 }
 
+/* Camera calibration button styles */
+.control-button.calibrated {
+  background-color: rgba(34, 197, 94, 0.1);
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
+.control-button.calibrated .control-icon {
+  color: #22c55e;
+}
+
+.control-button.calibrated:hover {
+  background-color: rgba(34, 197, 94, 0.2);
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .dual-speed-content {
@@ -1416,7 +1472,9 @@ import SpeedChart from './SpeedChart.vue';
 // @ts-ignore: Vue SFC without d.ts
 import ROISelector from './ROISelector.vue';
 import KeypointSelectorModal from './KeypointSelectorModal.vue';
+import CameraCalibrationOverlay from './CameraCalibrationOverlay.vue';
 import { useVideoPlayer } from '../composables/useVideoPlayer.ts';
+import { useCameraCalibration } from '../composables/useCameraCalibration.ts';
 // Fallback local type to satisfy TS if path alias not resolved
 type DrawingData = {
   id?: string;
@@ -1592,6 +1650,10 @@ const showKeypointSelector = ref(false);
 const localSelectedKeypoints = ref<number[]>(
   Array.from({ length: 33 }, (_, i) => i)
 );
+
+// Camera calibration state
+const showCalibrationOverlay = ref(false);
+const cameraCalibration = useCameraCalibration();
 
 // Enhanced ROI state
 const roiSettings = reactive({
@@ -2446,6 +2508,42 @@ const openKeypointSelector = () => {
   // Initialize local state with current selection
   localSelectedKeypoints.value = getCurrentSelectedKeypoints();
   showKeypointSelector.value = true;
+};
+
+// Camera calibration methods
+const toggleCalibration = () => {
+  if (singleVideoElement.value) {
+    // Pause the video during calibration
+    pause();
+    showCalibrationOverlay.value = true;
+  }
+};
+
+const handleCalibrationComplete = (calibrationData: any) => {
+  // Store calibration data
+  if (calibrationData.points && calibrationData.points.length === 4) {
+    cameraCalibration.setCalibrationPoints(calibrationData.points);
+    const success = cameraCalibration.calibrate();
+
+    if (success) {
+      console.log('Camera calibration completed successfully');
+      console.log(
+        'Calibration error:',
+        cameraCalibration.calibrationError.value.toFixed(3),
+        'meters'
+      );
+
+      // Pass calibration to speed calculator if available
+      if (props.poseLandmarker?.speedCalculator) {
+        // The speed calculator will automatically use the calibration through the shared composable
+        console.log('Speed calculator will now use calibrated coordinates');
+      }
+    } else {
+      console.error('Camera calibration failed');
+    }
+  }
+
+  showCalibrationOverlay.value = false;
 };
 
 // Setup video event listeners
