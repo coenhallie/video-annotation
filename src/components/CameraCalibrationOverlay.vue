@@ -16,6 +16,71 @@
       <div class="calibration-instructions">
         <h3 class="text-lg font-semibold mb-3">Camera Calibration</h3>
 
+        <!-- Dynamic Court Visualization -->
+        <div class="court-visualization-container mb-4">
+          <CourtVisualization
+            :calibration-mode="currentCalibrationMode"
+            :court-type="courtType"
+            :court-dimensions="courtDimensions[courtType]"
+            :show-calibration-points="true"
+            :collected-points="collectedPointIds"
+            :show-camera-position="showCameraPosition"
+            :camera-settings="cameraSettings"
+            :width="300"
+            :height="200"
+          />
+        </div>
+
+        <!-- Camera Position Drawer Toggle -->
+        <div class="mb-3">
+          <button
+            @click="showCameraPosition = !showCameraPosition"
+            class="flex items-center justify-between w-full px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+          >
+            <span class="flex items-center gap-2">
+              <svg
+                :class="[
+                  'w-4 h-4 transition-transform',
+                  showCameraPosition ? 'rotate-90' : '',
+                ]"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M9 5l7 7-7 7"
+                />
+              </svg>
+              Camera Position Settings
+            </span>
+            <span v-if="cameraSettings.position" class="text-xs text-gray-500">
+              {{ cameraSettings.height.toFixed(1) }}m high
+            </span>
+          </button>
+
+          <!-- Collapsible Camera Position Selector -->
+          <transition
+            name="drawer"
+            @enter="onDrawerEnter"
+            @leave="onDrawerLeave"
+          >
+            <div v-show="showCameraPosition" class="overflow-hidden">
+              <div class="pt-3 pb-2">
+                <CameraPositionSelector
+                  v-model="cameraSettings"
+                  :calibration-mode="calibrationMode"
+                  :show-calibration-points="true"
+                  :current-calibration-step="currentStep"
+                  @update:modelValue="handleCameraSettingsUpdate"
+                />
+              </div>
+            </div>
+          </transition>
+        </div>
+
         <!-- Calibration Mode Selector -->
         <div class="calibration-mode-selector mb-4">
           <label class="text-sm font-medium text-gray-700 block mb-2">
@@ -141,6 +206,9 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { useCameraCalibration } from '../composables/useCameraCalibration';
+import CameraPositionSelector from './CameraPositionSelector.vue';
+import CourtVisualization from './CourtVisualization.vue';
+import type { CameraSettings } from '../composables/useCameraCalibration';
 
 // Props
 const props = defineProps<{
@@ -171,11 +239,71 @@ const calibrationMode = ref<
   'full-court' | 'half-court' | 'service-line' | 'reference-lines'
 >('full-court');
 
+// Camera position settings
+const showCameraPosition = ref(true);
+const cameraSettings = ref<CameraSettings>({
+  position: { x: 0.1, y: 0.5 }, // Default: side view
+  height: 3.5, // Default: 3.5 meters high
+  viewAngle: 0, // Default: looking straight across
+});
+
 // Court dimensions in meters
 const courtDimensions = {
-  badminton: { length: 13.4, width: 6.1 },
-  tennis: { length: 23.77, width: 8.23 },
+  badminton: {
+    length: 13.4,
+    width: 5.18, // Singles width
+    serviceLineDistance: 1.98,
+    centerLineLength: 4.72,
+    netHeight: 1.55,
+  },
+  tennis: {
+    length: 23.77,
+    width: 8.23, // Singles width
+    serviceLineDistance: 6.4,
+    centerLineLength: 11.89,
+    netHeight: 0.914,
+  },
 };
+
+// Map calibration mode to the mode used in useCameraCalibration
+const currentCalibrationMode = computed(() => {
+  switch (calibrationMode.value) {
+    case 'full-court':
+      return 'enhanced-full';
+    case 'half-court':
+      return 'half-court';
+    case 'service-line':
+      return 'service-courts';
+    case 'reference-lines':
+      return 'minimal';
+    default:
+      return 'enhanced-full';
+  }
+});
+
+// Collected point IDs for visualization
+const collectedPointIds = computed(() => {
+  const pointIdMap: Record<number, string> = {
+    0: 'corner-tl',
+    1: 'corner-tr',
+    2: 'corner-br',
+    3: 'corner-bl',
+  };
+
+  if (calibrationMode.value === 'half-court') {
+    pointIdMap[0] = 'net-left';
+    pointIdMap[1] = 'net-right';
+    pointIdMap[2] = 'service-center-left';
+  } else if (calibrationMode.value === 'service-line') {
+    pointIdMap[0] = 'net-center';
+    pointIdMap[1] = 'service-center-left';
+    pointIdMap[2] = 'sideline-mid-left';
+  }
+
+  return calibrationPoints.value
+    .map((_, index) => pointIdMap[index] || '')
+    .filter(Boolean);
+});
 
 // Get calibration steps based on mode
 const calibrationSteps = computed(() => {
@@ -648,7 +776,10 @@ function performCalibration() {
     cameraCalibration.setCalibrationPoints(calibrationPointPairs);
     cameraCalibration.setCourtDimensions(dims);
 
-    const success = cameraCalibration.calibrate();
+    // Pass camera settings if available
+    const success = cameraCalibration.calibrate(
+      showCameraPosition.value ? cameraSettings.value : undefined
+    );
 
     if (success) {
       calibrationError.value = cameraCalibration.calibrationError.value;
@@ -659,6 +790,21 @@ function performCalibration() {
         calibrationError.value?.toFixed(3),
         'meters'
       );
+
+      // Provide feedback based on error magnitude
+      if (calibrationError.value < 2) {
+        console.log('✅ Excellent calibration accuracy');
+      } else if (calibrationError.value < 5) {
+        console.log('⚠️ Good calibration, but could be improved');
+      } else if (calibrationError.value < 10) {
+        console.log(
+          '⚠️ Moderate calibration error - consider recalibrating with more precise point selection'
+        );
+      } else {
+        console.log(
+          '❌ High calibration error - please recalibrate with better point selection or camera position'
+        );
+      }
     } else {
       console.error('Calibration failed');
       calibrationError.value = Infinity;
@@ -720,6 +866,30 @@ function setCourtType(type: 'badminton' | 'tennis') {
   }
 }
 
+// Handle camera settings update
+function handleCameraSettingsUpdate(settings: CameraSettings) {
+  cameraSettings.value = settings;
+  // Optionally recalibrate if points are already set
+  if (calibrationPoints.value.length === getMaxPointsForMode()) {
+    performCalibration();
+  }
+}
+
+// Drawer animation helpers
+function onDrawerEnter(el: Element) {
+  const element = el as HTMLElement;
+  element.style.height = '0';
+  element.offsetHeight; // Force reflow
+  element.style.height = element.scrollHeight + 'px';
+}
+
+function onDrawerLeave(el: Element) {
+  const element = el as HTMLElement;
+  element.style.height = element.scrollHeight + 'px';
+  element.offsetHeight; // Force reflow
+  element.style.height = '0';
+}
+
 // Animation frame for continuous drawing
 let animationFrameId: number | null = null;
 
@@ -742,6 +912,18 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* Drawer animation */
+.drawer-enter-active,
+.drawer-leave-active {
+  transition: height 0.3s ease-in-out;
+  overflow: hidden;
+}
+
+.drawer-enter-from,
+.drawer-leave-to {
+  height: 0;
+}
+
 .calibration-overlay {
   position: fixed;
   top: 0;
@@ -780,6 +962,15 @@ onUnmounted(() => {
   border-radius: 8px;
   width: 320px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.court-visualization-container {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  padding: 0.5rem;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+  margin-bottom: 1rem;
 }
 
 .instruction-steps {

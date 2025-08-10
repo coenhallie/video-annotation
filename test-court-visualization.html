@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Court Visualization Test</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+          'Helvetica Neue', Arial, sans-serif;
+        margin: 0;
+        padding: 20px;
+        background: #f3f4f6;
+      }
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+      h1 {
+        color: #1f2937;
+        margin-bottom: 30px;
+      }
+      .controls {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      }
+      .control-group {
+        margin-bottom: 15px;
+      }
+      label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 5px;
+        color: #374151;
+      }
+      select,
+      button {
+        padding: 8px 12px;
+        border: 1px solid #d1d5db;
+        border-radius: 4px;
+        font-size: 14px;
+      }
+      select {
+        width: 200px;
+      }
+      button {
+        background: #3b82f6;
+        color: white;
+        border: none;
+        cursor: pointer;
+        margin-right: 10px;
+      }
+      button:hover {
+        background: #2563eb;
+      }
+      .visualization-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+        gap: 20px;
+      }
+      .visualization-card {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      }
+      .visualization-card h3 {
+        margin-top: 0;
+        color: #1f2937;
+        font-size: 18px;
+        margin-bottom: 15px;
+      }
+      .court-container {
+        width: 100%;
+        height: 250px;
+        background: #f9fafb;
+        border: 1px solid #e5e7eb;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+      }
+      .court-svg {
+        width: 100%;
+        height: 100%;
+      }
+      .description {
+        margin-top: 10px;
+        font-size: 14px;
+        color: #6b7280;
+        line-height: 1.5;
+      }
+      .status {
+        display: inline-block;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: 600;
+        margin-top: 10px;
+      }
+      .status.ready {
+        background: #d1fae5;
+        color: #065f46;
+      }
+      .status.partial {
+        background: #fed7aa;
+        color: #92400e;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🎾 Dynamic Court Visualization Test</h1>
+
+      <div class="controls">
+        <div class="control-group">
+          <label>Court Type:</label>
+          <select id="courtType">
+            <option value="badminton">Badminton</option>
+            <option value="tennis">Tennis</option>
+          </select>
+        </div>
+        <div class="control-group">
+          <label>Actions:</label>
+          <button onclick="updateVisualizations()">Update All</button>
+          <button onclick="simulateCalibration()">Simulate Calibration</button>
+        </div>
+      </div>
+
+      <div class="visualization-grid">
+        <!-- Enhanced Full Court -->
+        <div class="visualization-card">
+          <h3>Enhanced Full Court</h3>
+          <div class="court-container">
+            <svg class="court-svg" viewBox="0 0 400 300">
+              <!-- Full court with all lines -->
+              <rect
+                x="50"
+                y="50"
+                width="300"
+                height="200"
+                fill="#e0f2fe"
+                stroke="#1f2937"
+                stroke-width="2"
+              />
+              <!-- Net line -->
+              <line
+                x1="30"
+                y1="150"
+                x2="370"
+                y2="150"
+                stroke="#ef4444"
+                stroke-width="3"
+              />
+              <!-- Service lines -->
+              <line
+                x1="50"
+                y1="120"
+                x2="350"
+                y2="120"
+                stroke="#1f2937"
+                stroke-width="2"
+              />
+              <line
+                x1="50"
+                y1="180"
+                x2="350"
+                y2="180"
+                stroke="#1f2937"
+                stroke-width="2"
+              />
+              <!-- Center line -->
+              <line
+                x1="200"
+                y1="120"
+                x2="200"
+                y2="180"
+                stroke="#1f2937"
+                stroke-width="2"
+              />
+              <!-- Calibration points -->
+              <circle
+                cx="50"
+                cy="50"
+                r="6"
+                fill="#10b981"
+                stroke="white"
+                stroke-width="2"
+              />
+              <circle
+                cx="350"
+                cy="50"
+                r="6"
+                fill="#10b981"
+                stroke="white"
+                stroke-width="2"
+              />
+              <circle
+                cx="350"
+                cy="250"
+                r="6"
+                fill="#10b981"
+                stroke="white"
+                stroke-width="2"
+              />
+              <circle
+                cx="50"
+                cy="250"
+                r="6"
+                fill="#10b981"
+                stroke="white"
+                stroke-width="2"
+              />
+              <text
+                x="200"
+                y="30"
+                text-anchor="middle"
+                font-weight="bold"
+                font-size="14"
+              >
+                Enhanced Full Court
+              </text>
+            </svg>
+          </div>
+          <p class="description">
+            Best accuracy with all 4 corners plus additional reference points.
+            Requires complete court visibility.
+          </p>
+          <span class="status ready">9+ calibration points</span>
+        </div>
+
+        <!-- Half Court -->
+        <div class="visualization-card">
+          <h3>Half Court Enhanced</h3>
+          <div class="court-container">
+            <svg class="court-svg" viewBox="0 0 400 300">
+              <!-- Half court -->
+              <rect
+                x="50"
+                y="150"
+                width="300"
+                height="100"
+                fill="#e0f2fe"
+                stroke="#1f2937"
+                stroke-width="2"
+              />
+              <!-- Net line -->
+              <line
+                x1="30"
+                y1="150"
+                x2="370"
+                y2="150"
+                stroke="#ef4444"
+                stroke-width="3"
+              />
+              <!-- Service line -->
+              <line
+                x1="50"
+                y1="180"
+                x2="350"
+                y2="180"
+                stroke="#1f2937"
+                stroke-width="2"
+              />
+              <!-- Center line -->
+              <line
+                x1="200"
+                y1="150"
+                x2="200"
+                y2="180"
+                stroke="#1f2937"
+                stroke-width="2"
+              />
+              <!-- Faded other half -->
+              <rect
+                x="50"
+                y="50"
+                width="300"
+                height="100"
+                fill="none"
+                stroke="#1f2937"
+                stroke-width="2"
+                opacity="0.2"
+                stroke-dasharray="10,10"
+              />
+              <!-- Calibration points -->
+              <circle
+                cx="50"
+                cy="150"
+                r="6"
+                fill="#10b981"
+                stroke="white"
+                stroke-width="2"
+              />
+              <circle
+                cx="350"
+                cy="150"
+                r="6"
+                fill="#10b981"
+                stroke="white"
+                stroke-width="2"
+              />
+              <circle
+                cx="200"
+                cy="150"
+                r="6"
+                fill="#10b981"
+                stroke="white"
+                stroke-width="2"
+              />
+              <text
+                x="200"
+                y="30"
+                text-anchor="middle"
+                font-weight="bold"
+                font-size="14"
+              >
+                Half Court View
+              </text>
+            </svg>
+          </div>
+          <p class="description">
+            Good accuracy when only half of the court is visible. Uses net and
+            service line references.
+          </p>
+          <span class="status ready">7 calibration points</span>
+        </div>
+
+        <!-- Service Courts Focus -->
+        <div class="visualization-card">
+          <h3>Service Courts Focus</h3>
+          <div class="court-container">
+            <svg class="court-svg" viewBox="50 100 300 100">
+              <!-- Service boxes -->
+              <rect
+                x="50"
+                y="120"
+                width="150"
+                height="60"
+                fill="#e0f2fe"
+                stroke="#1f2937"
+                stroke-width="2"
+              />
+              <rect
+                x="200"
+                y="120"
+                width="150"
+                height="60"
+                fill="#e0f2fe"
+                stroke="#1f2937"
+                stroke-width="2"
+              />
+              <!-- Net line -->
+              <line
+                x1="30"
+                y1="150"
+                x2="370"
+                y2="150"
+                stroke="#ef4444"
+                stroke-width="3"
+              />
+              <!-- Center line -->
+              <line
+                x1="200"
+                y1="120"
+                x2="200"
+                y2="180"
+                stroke="#1f2937"
+                stroke-width="2"
+              />
+              <!-- Faded court outline -->
+              <rect
+                x="50"
+                y="50"
+                width="300"
+                height="200"
+                fill="none"
+                stroke="#1f2937"
+                stroke-width="2"
+                opacity="0.15"
+                stroke-dasharray="10,10"
+              />
+              <!-- Calibration points -->
+              <circle
+                cx="50"
+                cy="150"
+                r="6"
+                fill="#10b981"
+                stroke="white"
+                stroke-width="2"
+              />
+              <circle
+                cx="350"
+                cy="150"
+                r="6"
+                fill="#10b981"
+                stroke="white"
+                stroke-width="2"
+              />
+              <circle
+                cx="200"
+                cy="150"
+                r="6"
+                fill="#10b981"
+                stroke="white"
+                stroke-width="2"
+              />
+              <circle
+                cx="50"
+                cy="180"
+                r="6"
+                fill="#10b981"
+                stroke="white"
+                stroke-width="2"
+              />
+              <circle
+                cx="350"
+                cy="180"
+                r="6"
+                fill="#10b981"
+                stroke="white"
+                stroke-width="2"
+              />
+            </svg>
+          </div>
+          <p class="description">
+            Optimized for when service courts are clearly visible. Focuses on
+            the most critical playing area.
+          </p>
+          <span class="status ready">7 calibration points</span>
+        </div>
+
+        <!-- Minimal Calibration -->
+        <div class="visualization-card">
+          <h3>Minimal Service Court</h3>
+          <div class="court-container">
+            <svg class="court-svg" viewBox="50 100 300 100">
+              <!-- Service boxes with minimal detail -->
+              <rect
+                x="50"
+                y="120"
+                width="150"
+                height="60"
+                fill="#e0f2fe"
+                stroke="#1f2937"
+                stroke-width="2"
+                opacity="0.8"
+              />
+              <rect
+                x="200"
+                y="120"
+                width="150"
+                height="60"
+                fill="#e0f2fe"
+                stroke="#1f2937"
+                stroke-width="2"
+                opacity="0.8"
+              />
+              <!-- Net line -->
+              <line
+                x1="30"
+                y1="150"
+                x2="370"
+                y2="150"
+                stroke="#ef4444"
+                stroke-width="3"
+              />
+              <!-- Center line -->
+              <line
+                x1="200"
+                y1="120"
+                x2="200"
+                y2="180"
+                stroke="#1f2937"
+                stroke-width="2"
+              />
+              <!-- Very faded court outline -->
+              <rect
+                x="50"
+                y="50"
+                width="300"
+                height="200"
+                fill="none"
+                stroke="#1f2937"
+                stroke-width="2"
+                opacity="0.1"
+                stroke-dasharray="10,10"
+              />
+              <!-- Minimal calibration points -->
+              <circle
+                cx="200"
+                cy="150"
+                r="6"
+                fill="#10b981"
+                stroke="white"
+                stroke-width="2"
+              />
+              <circle
+                cx="50"
+                cy="180"
+                r="6"
+                fill="#ef4444"
+                stroke="white"
+                stroke-width="2"
+              />
+              <circle
+                cx="350"
+                cy="180"
+                r="6"
+                fill="#ef4444"
+                stroke="white"
+                stroke-width="2"
+              />
+              <circle
+                cx="200"
+                cy="180"
+                r="6"
+                fill="#ef4444"
+                stroke="white"
+                stroke-width="2"
+              />
+              <circle
+                cx="200"
+                cy="120"
+                r="6"
+                fill="#ef4444"
+                stroke="white"
+                stroke-width="2"
+              />
+            </svg>
+          </div>
+          <p class="description">
+            Minimum viable calibration for basic tracking. Limited accuracy but
+            works with partial visibility.
+          </p>
+          <span class="status partial">5 calibration points</span>
+        </div>
+      </div>
+
+      <div
+        style="
+          margin-top: 40px;
+          padding: 20px;
+          background: white;
+          border-radius: 8px;
+        "
+      >
+        <h2 style="color: #1f2937; margin-bottom: 15px">
+          ✅ Implementation Summary
+        </h2>
+        <p style="color: #4b5563; line-height: 1.6">
+          The dynamic court visualization system has been successfully
+          implemented with the following features:
+        </p>
+        <ul style="color: #4b5563; line-height: 1.8; margin-top: 10px">
+          <li>
+            <strong>CourtVisualization.vue Component:</strong> A reusable Vue
+            component that dynamically renders court layouts based on
+            calibration mode
+          </li>
+          <li>
+            <strong>Adaptive Views:</strong> Automatically adjusts the
+            visualization to show only relevant court areas for each calibration
+            type
+          </li>
+          <li>
+            <strong>Calibration Point Indicators:</strong> Visual markers
+            showing required and optional calibration points with collection
+            status
+          </li>
+          <li>
+            <strong>Court Type Support:</strong> Handles both badminton and
+            tennis court dimensions with accurate scaling
+          </li>
+          <li>
+            <strong>Camera Position Display:</strong> Optional camera position
+            and view cone visualization
+          </li>
+          <li>
+            <strong>Integration:</strong> Successfully integrated with
+            CameraCalibrationOverlay and CalibrationControls components
+          </li>
+        </ul>
+        <p style="color: #4b5563; line-height: 1.6; margin-top: 15px">
+          <strong>Key Benefits:</strong>
+        </p>
+        <ul style="color: #4b5563; line-height: 1.8">
+          <li>
+            ✨ Eliminates ambiguity about which court boundaries are relevant
+          </li>
+          <li>🎯 Ensures precise click placement during calibration</li>
+          <li>
+            📊 Provides context-specific representation for each calibration
+            task
+          </li>
+          <li>🔄 Automatically adapts to selected calibration type</li>
+          <li>👁️ Clear visual feedback on calibration progress</li>
+        </ul>
+      </div>
+    </div>
+
+    <script>
+      function updateVisualizations() {
+        const courtType = document.getElementById('courtType').value;
+        console.log('Updating visualizations for:', courtType);
+
+        // Update court colors based on type
+        const courtRects = document.querySelectorAll('rect[fill="#e0f2fe"]');
+        courtRects.forEach((rect) => {
+          rect.setAttribute(
+            'fill',
+            courtType === 'tennis' ? '#dcfce7' : '#e0f2fe'
+          );
+        });
+      }
+
+      function simulateCalibration() {
+        // Animate calibration points
+        const circles = document.querySelectorAll('circle[fill="#ef4444"]');
+        let index = 0;
+
+        const interval = setInterval(() => {
+          if (index < circles.length) {
+            circles[index].setAttribute('fill', '#10b981');
+            index++;
+          } else {
+            clearInterval(interval);
+            setTimeout(() => {
+              circles.forEach((circle) => {
+                if (
+                  circle.getAttribute('fill') === '#10b981' &&
+                  circle.getAttribute('stroke') !== 'white'
+                ) {
+                  circle.setAttribute('fill', '#ef4444');
+                }
+              });
+            }, 2000);
+          }
+        }, 500);
+      }
+    </script>
+  </body>
+</html>

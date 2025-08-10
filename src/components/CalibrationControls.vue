@@ -50,6 +50,20 @@
         >
       </div>
 
+      <!-- Dynamic Court Visualization -->
+      <div class="mb-4">
+        <CourtVisualization
+          :calibration-mode="calibrationMode"
+          :court-type="courtType"
+          :court-dimensions="currentCourtDimensions"
+          :show-calibration-points="showCalibrationPoints"
+          :collected-points="collectedCalibrationPoints"
+          :show-camera-position="false"
+          :width="280"
+          :height="180"
+        />
+      </div>
+
       <div class="space-y-3">
         <!-- Court Length Input -->
         <div>
@@ -288,10 +302,105 @@
             </div>
           </div>
 
+          <!-- Camera Calibration (Homography) -->
+          <div class="border-b border-gray-200 pb-4">
+            <h3 class="text-lg font-semibold text-gray-800 mb-3">
+              6. Camera Calibration (Homography Transformation)
+            </h3>
+            <div class="bg-gray-50 p-4 rounded-lg mb-3">
+              <p class="text-sm text-gray-700 mb-2">
+                <strong>What it does:</strong>
+              </p>
+              <p class="text-sm text-gray-600 mb-3">
+                Camera calibration uses homography to transform 2D image
+                coordinates (pixels) to real-world 3D coordinates (meters) on
+                the court surface. This enables accurate speed and distance
+                measurements.
+              </p>
+
+              <p class="text-sm text-gray-700 mb-2">
+                <strong>Homography Matrix Calculation (DLT Algorithm):</strong>
+              </p>
+              <div class="font-mono text-sm bg-white p-2 rounded border mb-2">
+                H = [h₁₁ h₁₂ h₁₃] [h₂₁ h₂₂ h₂₃] [h₃₁ h₃₂ h₃₃]
+              </div>
+              <p class="text-sm text-gray-600 mb-3">
+                Computed using 4 court corner points via Direct Linear
+                Transformation (DLT)
+              </p>
+
+              <p class="text-sm text-gray-700 mb-2">
+                <strong>Image to World Transformation:</strong>
+              </p>
+              <div class="font-mono text-sm bg-white p-2 rounded border mb-2">
+                [x_world] [h₁₁ h₁₂ h₁₃] [x_image] [y_world] = [h₂₁ h₂₂ h₂₃] ×
+                [y_image] [ w ] [h₃₁ h₃₂ h₃₃] [ 1 ] Final: x = x_world/w, y =
+                y_world/w
+              </div>
+
+              <p class="text-sm text-gray-700 mb-2 mt-3">
+                <strong>Calibration Process:</strong>
+              </p>
+              <ol
+                class="list-decimal list-inside text-sm text-gray-600 space-y-1"
+              >
+                <li>Mark 4 court corners in the video (image coordinates)</li>
+                <li>
+                  Map to known court dimensions (world coordinates):
+                  <ul class="list-disc list-inside ml-4 mt-1">
+                    <li>Badminton: 13.4m × 6.1m</li>
+                    <li>Tennis: 23.77m × 8.23m</li>
+                  </ul>
+                </li>
+                <li>Calculate homography matrix using SVD</li>
+                <li>Validate with reprojection error (target < 10cm)</li>
+              </ol>
+
+              <p class="text-sm text-gray-700 mb-2 mt-3">
+                <strong>Height Estimation for 3D Points:</strong>
+              </p>
+              <div class="font-mono text-sm bg-white p-2 rounded border">
+                For feet (on court): z = 0 For hips: z ≈ 0.9m For
+                head/shoulders: z ≈ 1.5m For hands (variable): z =
+                MediaPipe_depth × scaling_factor
+              </div>
+            </div>
+
+            <div class="text-sm text-gray-600">
+              <p class="mb-2">
+                <strong>Key Benefits:</strong>
+              </p>
+              <ul class="list-disc list-inside space-y-1">
+                <li>
+                  Converts pixel movements to real-world distances (meters)
+                </li>
+                <li>Accounts for camera perspective and angle</li>
+                <li>
+                  Enables accurate speed calculations regardless of camera
+                  position
+                </li>
+                <li>Handles different court types and dimensions</li>
+              </ul>
+
+              <p class="mt-3">
+                <strong>Calibration Accuracy:</strong>
+              </p>
+              <div class="font-mono text-xs bg-white p-2 rounded border mt-1">
+                error = Σ(√((x_reprojected - x_actual)² + (y_reprojected -
+                y_actual)²)) / n
+              </div>
+              <ul class="list-disc list-inside mt-2 space-y-1">
+                <li>Excellent: < 10cm average error</li>
+                <li>Good: 10-50cm average error</li>
+                <li>Poor: > 50cm average error (recalibration recommended)</li>
+              </ul>
+            </div>
+          </div>
+
           <!-- Current Values -->
           <div>
             <h3 class="text-lg font-semibold text-gray-800 mb-3">
-              6. Current Calculation Values
+              7. Current Calculation Values
             </h3>
 
             <!-- Valid Speed Data -->

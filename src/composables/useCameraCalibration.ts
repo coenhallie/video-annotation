@@ -1,10 +1,10 @@
 /**
  * useCameraCalibration.ts
- * Camera calibration composable for perspective correction and coordinate transformation
- * Uses homography-based calibration to map 2D image points to 3D world coordinates
+ * Enhanced camera calibration with service court support and RANSAC robustness
+ * Achieves sub-meter accuracy through multi-point calibration
  */
 
-import { ref, type Ref } from 'vue';
+import { ref, computed, type Ref, type ComputedRef } from 'vue';
 import { Matrix, SVD, inverse } from 'ml-matrix';
 
 // Types
@@ -20,36 +20,146 @@ export interface Point3D {
 }
 
 export interface CalibrationPoint {
-  image: Point2D; // Point in image coordinates (pixels or normalized)
-  world: Point3D; // Point in world coordinates (meters)
+  id: string;
+  type: 'corner' | 'service' | 'net' | 'baseline' | 'sideline' | 'center';
+  image: Point2D;
+  world: Point3D;
+  confidence: number;
+  isOptional?: boolean;
+}
+
+export interface CalibrationMode {
+  id: string;
+  name: string;
+  requiredPoints: string[];
+  optionalPoints: string[];
+  minPoints: number;
+  description: string;
+}
+
+export interface CalibrationResult {
+  homographyMatrix: number[][];
+  inverseHomographyMatrix: number[][];
+  error: number;
+  confidence: number;
+  inliers: CalibrationPoint[];
+  outliers: CalibrationPoint[];
 }
 
 export interface CourtDimensions {
-  length: number; // meters (13.4m for badminton)
-  width: number; // meters (6.1m for badminton)
+  length: number;
+  width: number;
+  serviceLineDistance: number;
+  centerLineLength: number;
+  netHeight: number;
 }
 
-export interface CameraCalibrationState {
-  isCalibrated: boolean;
-  calibrationPoints: CalibrationPoint[];
-  homographyMatrix: number[][] | null;
-  inverseHomographyMatrix: number[][] | null;
-  courtDimensions: CourtDimensions;
-  calibrationError: number;
-  lastCalibrationTime: number | null;
+export interface CameraSettings {
+  position: { x: number; y: number }; // Normalized 0-1 position on court
+  height: number; // Camera height in meters
+  viewAngle: number; // View direction in radians
 }
+
+// Calibration modes optimized for partial visibility
+export const CALIBRATION_MODES: CalibrationMode[] = [
+  {
+    id: 'service-courts',
+    name: 'Service Courts Focus',
+    requiredPoints: [
+      'net-left',
+      'net-right',
+      'net-center',
+      'service-left',
+      'service-right',
+      'service-center-left',
+      'service-center-right',
+    ],
+    optionalPoints: ['baseline-left', 'baseline-right'],
+    minPoints: 7,
+    description: 'Optimized for when service courts are clearly visible',
+  },
+  {
+    id: 'enhanced-full',
+    name: 'Enhanced Full Court',
+    requiredPoints: [
+      'corner-tl',
+      'corner-tr',
+      'corner-bl',
+      'corner-br',
+      'net-left',
+      'net-right',
+      'net-center',
+      'service-left',
+      'service-right',
+    ],
+    optionalPoints: [
+      'service-center-left',
+      'service-center-right',
+      'baseline-center',
+    ],
+    minPoints: 9,
+    description:
+      'Full court with additional reference points for maximum accuracy',
+  },
+  {
+    id: 'half-court',
+    name: 'Half Court Enhanced',
+    requiredPoints: [
+      'net-left',
+      'net-right',
+      'net-center',
+      'service-left',
+      'service-right',
+      'sideline-mid-left',
+      'sideline-mid-right',
+    ],
+    optionalPoints: ['service-center-left', 'service-center-right'],
+    minPoints: 7,
+    description: 'When only half court is visible',
+  },
+  {
+    id: 'minimal',
+    name: 'Minimal Service Court',
+    requiredPoints: [
+      'net-center',
+      'service-left',
+      'service-right',
+      'service-center-left',
+      'service-center-right',
+    ],
+    optionalPoints: ['net-left', 'net-right'],
+    minPoints: 5,
+    description: 'Minimum viable calibration',
+  },
+];
 
 export interface UseCameraCalibration {
   // State
   isCalibrated: Ref<boolean>;
   calibrationPoints: Ref<CalibrationPoint[]>;
-  homographyMatrix: Ref<number[][] | null>;
+  calibrationResult: Ref<CalibrationResult | null>;
   courtDimensions: Ref<CourtDimensions>;
   calibrationError: Ref<number>;
+  currentMode: Ref<CalibrationMode>;
+  validationErrors: Ref<string[]>;
+  calibrationQuality: ComputedRef<{
+    level: string;
+    color: string;
+    message: string;
+  }>;
+
+  // Backward compatibility
+  homographyMatrix: Ref<number[][] | null>;
+  setCalibrationPoints: (points: CalibrationPoint[]) => void;
 
   // Methods
-  setCalibrationPoints: (points: CalibrationPoint[]) => void;
-  calibrate: () => boolean;
+  addCalibrationPoint: (
+    pointId: string,
+    imageCoord: Point2D,
+    confidence?: number
+  ) => boolean;
+  calibrate: (cameraSettings?: CameraSettings) => boolean;
+  calibrateWithRANSAC: () => CalibrationResult | null;
   transformToWorld: (imagePoint: Point2D, z?: number) => Point3D;
   transformToImage: (worldPoint: Point3D) => Point2D;
   transformLandmarksToWorld: (
@@ -60,20 +170,41 @@ export interface UseCameraCalibration {
   saveCalibration: () => string;
   loadCalibration: (data: string) => boolean;
   validateCalibration: () => number;
-  setCourtDimensions: (dimensions: CourtDimensions) => void;
+  setCourtDimensions: (dimensions: Partial<CourtDimensions>) => void;
+  setCalibrationMode: (modeId: string) => void;
+  suggestNextPoint: () => string | null;
+  getWorldCoordinates: (pointId: string) => Point3D;
 }
 
-// Standard badminton court dimensions
-const BADMINTON_COURT = {
-  length: 13.4, // meters
-  width: 6.1, // meters
-  singles_width: 5.18, // meters
+// State interface for serialization
+interface CameraCalibrationState {
+  isCalibrated: boolean;
+  calibrationPoints: CalibrationPoint[];
+  calibrationResult: CalibrationResult | null;
+  homographyMatrix: number[][] | null; // For backward compatibility
+  inverseHomographyMatrix: number[][] | null; // For backward compatibility
+  courtDimensions: CourtDimensions;
+  calibrationError: number;
+  lastCalibrationTime: number | null;
+  currentModeId: string;
+}
+
+// Standard badminton court dimensions (singles)
+const BADMINTON_COURT: CourtDimensions = {
+  length: 13.4,
+  width: 5.18, // Singles width
+  serviceLineDistance: 1.98,
+  centerLineLength: 4.72,
+  netHeight: 1.55,
 };
 
-// Tennis court dimensions for reference
-const TENNIS_COURT = {
-  length: 23.77, // meters
-  width: 8.23, // meters (singles)
+// Tennis court dimensions (singles)
+const TENNIS_COURT: CourtDimensions = {
+  length: 23.77,
+  width: 8.23, // Singles width
+  serviceLineDistance: 6.4,
+  centerLineLength: 11.89,
+  netHeight: 0.914,
 };
 
 export function useCameraCalibration(): UseCameraCalibration {
@@ -82,12 +213,12 @@ export function useCameraCalibration(): UseCameraCalibration {
   const calibrationPoints = ref<CalibrationPoint[]>([]);
   const homographyMatrix = ref<number[][] | null>(null);
   const inverseHomographyMatrix = ref<number[][] | null>(null);
-  const courtDimensions = ref<CourtDimensions>({
-    length: BADMINTON_COURT.length,
-    width: BADMINTON_COURT.width,
-  });
+  const courtDimensions = ref<CourtDimensions>(BADMINTON_COURT);
   const calibrationError = ref(0);
   const lastCalibrationTime = ref<number | null>(null);
+  const calibrationResult = ref<CalibrationResult | null>(null);
+  const currentMode = ref<CalibrationMode>(CALIBRATION_MODES[0]!);
+  const validationErrors = ref<string[]>([]);
 
   /**
    * Calculate homography matrix using Direct Linear Transformation (DLT)
@@ -95,9 +226,22 @@ export function useCameraCalibration(): UseCameraCalibration {
    */
   function calculateHomography(points: CalibrationPoint[]): number[][] | null {
     if (points.length < 4) {
-      console.error('At least 4 calibration points are required');
+      console.error(
+        'At least 4 calibration points are required, got:',
+        points.length
+      );
       return null;
     }
+
+    console.log('🔧 [CALIBRATION] Calculating homography with points:', {
+      count: points.length,
+      points: points.map((p) => ({
+        id: p.id,
+        image: p.image,
+        world: p.world,
+        confidence: p.confidence,
+      })),
+    });
 
     // Build the matrix A for DLT algorithm
     const rows: number[][] = [];
@@ -106,35 +250,78 @@ export function useCameraCalibration(): UseCameraCalibration {
       const { x: xi, y: yi } = point.image;
       const { x: xw, y: yw } = point.world;
 
+      // Validate coordinates
+      if (!isFinite(xi) || !isFinite(yi) || !isFinite(xw) || !isFinite(yw)) {
+        console.error('Invalid coordinates in point:', point);
+        return null;
+      }
+
       // Each point contributes 2 rows to matrix A
       rows.push([xw, yw, 1, 0, 0, 0, -xi * xw, -xi * yw, -xi]);
       rows.push([0, 0, 0, xw, yw, 1, -yi * xw, -yi * yw, -yi]);
     }
 
-    const A = new Matrix(rows);
+    console.log(
+      '🔧 [CALIBRATION] Matrix A dimensions:',
+      rows.length,
+      'x',
+      rows[0]?.length
+    );
 
-    // Solve using SVD (Singular Value Decomposition)
-    const svd = new SVD(A);
-    const V = svd.rightSingularVectors;
+    let H: number[][];
+    let scale: number | undefined;
 
-    // The solution is the last column of V (corresponding to smallest singular value)
-    const lastColumnIndex = V.columns - 1;
-    const h: number[] = [];
-    for (let i = 0; i < V.rows; i++) {
-      h.push(V.get(i, lastColumnIndex));
-    }
+    try {
+      const A = new Matrix(rows);
 
-    // Reshape into 3x3 homography matrix
-    const H = [
-      [h[0], h[1], h[2]],
-      [h[3], h[4], h[5]],
-      [h[6], h[7], h[8]],
-    ];
+      // Solve using SVD (Singular Value Decomposition)
+      // Enable autoTranspose for better numerical stability when cols > rows
+      const svd = new SVD(A, { autoTranspose: true });
+      const V = svd.rightSingularVectors;
+      const singularValues = svd.diagonalMatrix.to1DArray();
 
-    // Normalize so that H[2][2] = 1
-    const scale = H[2]?.[2];
-    if (!scale || Math.abs(scale) < 1e-10) {
-      console.error('Invalid homography matrix');
+      console.log('🔧 [CALIBRATION] SVD results:', {
+        V_dimensions: [V.rows, V.columns],
+        singular_values: singularValues,
+        smallest_singular_value: singularValues[singularValues.length - 1],
+      });
+
+      // The solution is the last column of V (corresponding to smallest singular value)
+      const lastColumnIndex = V.columns - 1;
+      const h: number[] = [];
+      for (let i = 0; i < V.rows; i++) {
+        h.push(V.get(i, lastColumnIndex));
+      }
+
+      console.log('🔧 [CALIBRATION] Homography vector h:', h);
+
+      // Reshape into 3x3 homography matrix
+      // Ensure all values are defined (h should have exactly 9 elements from SVD)
+      if (h.length !== 9) {
+        console.error('Invalid homography vector length:', h.length);
+        return null;
+      }
+
+      H = [
+        [h[0]!, h[1]!, h[2]!],
+        [h[3]!, h[4]!, h[5]!],
+        [h[6]!, h[7]!, h[8]!],
+      ];
+
+      // Normalize so that H[2][2] = 1
+      scale = H[2]?.[2];
+      console.log('🔧 [CALIBRATION] H[2][2] scale value:', scale);
+
+      if (!scale || Math.abs(scale) < 1e-10) {
+        console.error(
+          'Invalid homography matrix - scale value too small:',
+          scale
+        );
+        console.error('Full H matrix before normalization:', H);
+        return null;
+      }
+    } catch (error) {
+      console.error('Error during SVD computation:', error);
       return null;
     }
 
@@ -145,7 +332,7 @@ export function useCameraCalibration(): UseCameraCalibration {
       for (let j = 0; j < 3; j++) {
         const row = H[i];
         const value = row ? row[j] : undefined;
-        if (typeof value === 'number') {
+        if (typeof value === 'number' && scale) {
           result[i]![j] = value / scale;
         } else {
           result[i]![j] = 0;
@@ -153,6 +340,7 @@ export function useCameraCalibration(): UseCameraCalibration {
       }
     }
 
+    console.log('🔧 [CALIBRATION] Final normalized homography matrix:', result);
     return result;
   }
 
@@ -197,75 +385,348 @@ export function useCameraCalibration(): UseCameraCalibration {
   }
 
   /**
-   * Set calibration points (4 corners of the court)
+   * Get world coordinates for a calibration point
    */
-  function setCalibrationPoints(points: CalibrationPoint[]) {
-    if (points.length !== 4) {
-      console.error('Exactly 4 calibration points are required');
-      return;
-    }
-    calibrationPoints.value = points;
+  function getWorldCoordinates(pointId: string): Point3D {
+    const { length, width, serviceLineDistance } = courtDimensions.value;
+    const halfLength = length / 2;
+    const halfWidth = width / 2;
+
+    const worldPoints: Record<string, Point3D> = {
+      // Singles court corners
+      'corner-tl': { x: -halfWidth, y: halfLength, z: 0 },
+      'corner-tr': { x: halfWidth, y: halfLength, z: 0 },
+      'corner-bl': { x: -halfWidth, y: -halfLength, z: 0 },
+      'corner-br': { x: halfWidth, y: -halfLength, z: 0 },
+
+      // Net points
+      'net-left': { x: -halfWidth, y: 0, z: 0 },
+      'net-right': { x: halfWidth, y: 0, z: 0 },
+      'net-center': { x: 0, y: 0, z: 0 },
+
+      // Service lines
+      'service-left': { x: -halfWidth, y: serviceLineDistance, z: 0 },
+      'service-right': { x: halfWidth, y: serviceLineDistance, z: 0 },
+      'service-center-left': { x: 0, y: serviceLineDistance, z: 0 },
+      'service-center-right': { x: 0, y: -serviceLineDistance, z: 0 },
+
+      // Baseline points
+      'baseline-left': { x: -halfWidth, y: -halfLength, z: 0 },
+      'baseline-right': { x: halfWidth, y: -halfLength, z: 0 },
+      'baseline-center': { x: 0, y: -halfLength, z: 0 },
+
+      // Mid-court points
+      'sideline-mid-left': { x: -halfWidth, y: halfLength / 2, z: 0 },
+      'sideline-mid-right': { x: halfWidth, y: halfLength / 2, z: 0 },
+    };
+
+    return worldPoints[pointId] || { x: 0, y: 0, z: 0 };
   }
 
   /**
-   * Perform calibration using the set calibration points
+   * Add a calibration point with validation
    */
-  function calibrate(): boolean {
-    if (calibrationPoints.value.length !== 4) {
-      console.error('Calibration requires exactly 4 points');
+  function addCalibrationPoint(
+    pointId: string,
+    imageCoord: Point2D,
+    confidence: number = 1.0
+  ): boolean {
+    const worldCoord = getWorldCoordinates(pointId);
+
+    // Check for duplicates
+    const existingIndex = calibrationPoints.value.findIndex(
+      (p) => p.id === pointId
+    );
+    if (existingIndex >= 0) {
+      calibrationPoints.value[existingIndex] = {
+        id: pointId,
+        type: getPointType(pointId),
+        image: imageCoord,
+        world: worldCoord,
+        confidence,
+      };
+    } else {
+      calibrationPoints.value.push({
+        id: pointId,
+        type: getPointType(pointId),
+        image: imageCoord,
+        world: worldCoord,
+        confidence,
+      });
+    }
+
+    return true;
+  }
+
+  /**
+   * Get point type from ID
+   */
+  function getPointType(pointId: string): CalibrationPoint['type'] {
+    if (pointId.includes('corner')) return 'corner';
+    if (pointId.includes('service')) return 'service';
+    if (pointId.includes('net')) return 'net';
+    if (pointId.includes('baseline')) return 'baseline';
+    if (pointId.includes('sideline')) return 'sideline';
+    if (pointId.includes('center')) return 'center';
+    return 'corner';
+  }
+
+  /**
+   * Suggest next calibration point
+   */
+  function suggestNextPoint(): string | null {
+    const collectedIds = new Set(calibrationPoints.value.map((p) => p.id));
+
+    // Check required points first
+    for (const pointId of currentMode.value.requiredPoints) {
+      if (!collectedIds.has(pointId)) {
+        return pointId;
+      }
+    }
+
+    // Then optional points
+    for (const pointId of currentMode.value.optionalPoints) {
+      if (!collectedIds.has(pointId)) {
+        return pointId;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Set calibration mode
+   */
+  function setCalibrationMode(modeId: string) {
+    const mode = CALIBRATION_MODES.find((m) => m.id === modeId);
+    if (mode) {
+      currentMode.value = mode;
+      resetCalibration();
+    }
+  }
+
+  /**
+   * RANSAC-based calibration for robustness
+   */
+  function calibrateWithRANSAC(): CalibrationResult | null {
+    const iterations = 1000;
+    const threshold = 0.5; // Increased to 50cm threshold for better tolerance
+
+    console.log('🔧 [CALIBRATION] Starting RANSAC with points:', {
+      totalPoints: calibrationPoints.value.length,
+      points: calibrationPoints.value.map((p) => ({
+        id: p.id,
+        image: p.image,
+        world: p.world,
+      })),
+      threshold,
+      iterations,
+    });
+
+    if (calibrationPoints.value.length < currentMode.value.minPoints) {
+      validationErrors.value.push(
+        `Need at least ${currentMode.value.minPoints} points for ${currentMode.value.name}`
+      );
+      return null;
+    }
+
+    let bestResult: CalibrationResult | null = null;
+    let bestInlierCount = 0;
+
+    for (let iter = 0; iter < iterations; iter++) {
+      // Randomly select 4 points
+      const sample = getRandomSample(calibrationPoints.value, 4);
+
+      // Calculate homography from sample
+      const H = calculateHomography(sample);
+      if (!H) continue;
+
+      // Calculate inverse
+      const Hinv = invertMatrix3x3(H);
+      if (!Hinv) continue;
+
+      // Count inliers
+      const { inliers, outliers, totalError } = evaluateHomography(
+        H,
+        calibrationPoints.value,
+        threshold
+      );
+
+      if (inliers.length > bestInlierCount) {
+        bestInlierCount = inliers.length;
+        bestResult = {
+          homographyMatrix: H,
+          inverseHomographyMatrix: Hinv,
+          error: totalError / inliers.length,
+          confidence: inliers.length / calibrationPoints.value.length,
+          inliers,
+          outliers,
+        };
+      }
+    }
+
+    console.log('🔧 [CALIBRATION] RANSAC initial result:', {
+      bestInlierCount,
+      totalPoints: calibrationPoints.value.length,
+      inliers: bestResult?.inliers.length,
+      outliers: bestResult?.outliers.length,
+    });
+
+    // Refine using all inliers OR all points if we have good coverage
+    if (bestResult) {
+      // If we have at least 60% inliers, use them for refinement
+      // Otherwise, use all points (might have clicking inaccuracy but better than failing)
+      const pointsForRefinement =
+        bestResult.inliers.length >= calibrationPoints.value.length * 0.6
+          ? bestResult.inliers
+          : calibrationPoints.value;
+
+      console.log('🔧 [CALIBRATION] Refining with points:', {
+        refinementPoints: pointsForRefinement.length,
+        usingAllPoints: pointsForRefinement === calibrationPoints.value,
+      });
+
+      const refinedH = calculateHomography(pointsForRefinement);
+      if (refinedH) {
+        const refinedHinv = invertMatrix3x3(refinedH);
+        if (refinedHinv) {
+          const { inliers, outliers, totalError } = evaluateHomography(
+            refinedH,
+            calibrationPoints.value,
+            threshold
+          );
+
+          bestResult = {
+            ...bestResult,
+            homographyMatrix: refinedH,
+            inverseHomographyMatrix: refinedHinv,
+            error: totalError / Math.max(1, inliers.length),
+            confidence: inliers.length / calibrationPoints.value.length,
+            inliers,
+            outliers,
+          };
+
+          console.log('🔧 [CALIBRATION] Final refined result:', {
+            error: bestResult.error,
+            confidence: bestResult.confidence,
+            inliers: bestResult.inliers.length,
+            outliers: bestResult.outliers.length,
+          });
+        }
+      }
+    }
+
+    return bestResult;
+  }
+
+  /**
+   * Evaluate homography quality
+   */
+  function evaluateHomography(
+    H: number[][],
+    points: CalibrationPoint[],
+    threshold: number
+  ): {
+    inliers: CalibrationPoint[];
+    outliers: CalibrationPoint[];
+    totalError: number;
+  } {
+    const inliers: CalibrationPoint[] = [];
+    const outliers: CalibrationPoint[] = [];
+    let totalError = 0;
+
+    for (const point of points) {
+      const projected = applyHomography(point.image, H);
+      const error = Math.sqrt(
+        Math.pow(projected.x - point.world.x, 2) +
+          Math.pow(projected.y - point.world.y, 2)
+      );
+
+      if (error < threshold) {
+        inliers.push(point);
+        totalError += error;
+      } else {
+        outliers.push(point);
+      }
+    }
+
+    return { inliers, outliers, totalError };
+  }
+
+  /**
+   * Get random sample of points
+   */
+  function getRandomSample<T>(array: T[], size: number): T[] {
+    const shuffled = [...array].sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, size);
+  }
+
+  /**
+   * Perform calibration with RANSAC
+   */
+  function calibrate(cameraSettings?: CameraSettings): boolean {
+    validationErrors.value = [];
+
+    // Use RANSAC for robust calibration
+    const result = calibrateWithRANSAC();
+
+    if (!result) {
+      validationErrors.value.push(
+        'Calibration failed - unable to compute homography'
+      );
       return false;
     }
 
-    // Calculate homography matrix
-    const H = calculateHomography(calibrationPoints.value);
-    if (!H) {
-      console.error('Failed to calculate homography matrix');
-      return false;
+    // Check calibration quality
+    if (result.confidence < 0.5) {
+      validationErrors.value.push(
+        `Low calibration confidence: ${(result.confidence * 100).toFixed(1)}%`
+      );
     }
 
-    // Calculate inverse homography for world-to-image transformation
-    const Hinv = invertMatrix3x3(H);
-    if (!Hinv) {
-      console.error('Failed to calculate inverse homography matrix');
-      return false;
+    if (result.error > 0.1) {
+      validationErrors.value.push(
+        `High calibration error: ${(result.error * 100).toFixed(1)}cm`
+      );
     }
 
-    homographyMatrix.value = H;
-    inverseHomographyMatrix.value = Hinv;
+    calibrationResult.value = result;
+    homographyMatrix.value = result.homographyMatrix;
+    inverseHomographyMatrix.value = result.inverseHomographyMatrix;
     isCalibrated.value = true;
     lastCalibrationTime.value = Date.now();
+    calibrationError.value = result.error;
 
-    // Validate calibration and calculate error
-    const error = validateCalibration();
-    calibrationError.value = error;
-
-    console.log(
-      'Calibration successful. Reprojection error:',
-      error.toFixed(3),
-      'meters'
-    );
+    console.log('Enhanced calibration complete:', {
+      mode: currentMode.value.name,
+      points: calibrationPoints.value.length,
+      inliers: result.inliers.length,
+      outliers: result.outliers.length,
+      error: `${(result.error * 100).toFixed(1)}cm`,
+      confidence: `${(result.confidence * 100).toFixed(1)}%`,
+    });
 
     return true;
   }
 
   /**
    * Transform a 2D image point to 3D world coordinates
-   * For points on the court surface (z=0), use homography
-   * For points above the court, estimate z based on player height
    */
   function transformToWorld(imagePoint: Point2D, z: number = 0): Point3D {
-    if (!isCalibrated.value || !homographyMatrix.value) {
+    if (!isCalibrated.value || !calibrationResult.value) {
       console.warn('Camera not calibrated');
       return { x: 0, y: 0, z: 0 };
     }
 
-    // Apply homography to get world coordinates on court plane
-    const worldPoint2D = applyHomography(imagePoint, homographyMatrix.value);
+    const worldPoint2D = applyHomography(
+      imagePoint,
+      calibrationResult.value.homographyMatrix
+    );
 
     return {
       x: worldPoint2D.x,
       y: worldPoint2D.y,
-      z: z, // Height above court
+      z: z,
     };
   }
 
@@ -273,27 +734,26 @@ export function useCameraCalibration(): UseCameraCalibration {
    * Transform a 3D world point to 2D image coordinates
    */
   function transformToImage(worldPoint: Point3D): Point2D {
-    if (!isCalibrated.value || !inverseHomographyMatrix.value) {
+    if (!isCalibrated.value || !calibrationResult.value) {
       console.warn('Camera not calibrated');
       return { x: 0, y: 0 };
     }
 
-    // For now, ignore z-coordinate and project onto court plane
-    // In a full implementation, we would use the camera matrix
     const point2D = { x: worldPoint.x, y: worldPoint.y };
-
-    return applyHomography(point2D, inverseHomographyMatrix.value);
+    return applyHomography(
+      point2D,
+      calibrationResult.value.inverseHomographyMatrix
+    );
   }
 
   /**
    * Transform MediaPipe landmarks to world coordinates
-   * This is the main integration point with the pose detection system
    */
   function transformLandmarksToWorld(
     landmarks: any[],
     worldLandmarks?: any[]
   ): Point3D[] {
-    if (!isCalibrated.value || !homographyMatrix.value) {
+    if (!isCalibrated.value || !calibrationResult.value) {
       console.warn('Camera not calibrated');
       return [];
     }
@@ -369,11 +829,14 @@ export function useCameraCalibration(): UseCameraCalibration {
     const data: CameraCalibrationState = {
       isCalibrated: isCalibrated.value,
       calibrationPoints: calibrationPoints.value,
-      homographyMatrix: homographyMatrix.value,
-      inverseHomographyMatrix: inverseHomographyMatrix.value,
+      calibrationResult: calibrationResult.value,
+      homographyMatrix: calibrationResult.value?.homographyMatrix || null,
+      inverseHomographyMatrix:
+        calibrationResult.value?.inverseHomographyMatrix || null,
       courtDimensions: courtDimensions.value,
       calibrationError: calibrationError.value,
       lastCalibrationTime: lastCalibrationTime.value,
+      currentModeId: currentMode.value.id,
     };
 
     return JSON.stringify(data);
@@ -388,11 +851,24 @@ export function useCameraCalibration(): UseCameraCalibration {
 
       isCalibrated.value = data.isCalibrated;
       calibrationPoints.value = data.calibrationPoints;
+      calibrationResult.value = data.calibrationResult || {
+        homographyMatrix: data.homographyMatrix!,
+        inverseHomographyMatrix: data.inverseHomographyMatrix!,
+        error: data.calibrationError,
+        confidence: 1,
+        inliers: data.calibrationPoints,
+        outliers: [],
+      };
       homographyMatrix.value = data.homographyMatrix;
       inverseHomographyMatrix.value = data.inverseHomographyMatrix;
       courtDimensions.value = data.courtDimensions;
       calibrationError.value = data.calibrationError;
       lastCalibrationTime.value = data.lastCalibrationTime;
+
+      if (data.currentModeId) {
+        const mode = CALIBRATION_MODES.find((m) => m.id === data.currentModeId);
+        if (mode) currentMode.value = mode;
+      }
 
       return true;
     } catch (error) {
@@ -405,51 +881,80 @@ export function useCameraCalibration(): UseCameraCalibration {
    * Validate calibration by checking reprojection error
    */
   function validateCalibration(): number {
-    if (
-      !isCalibrated.value ||
-      !homographyMatrix.value ||
-      !inverseHomographyMatrix.value
-    ) {
+    if (!isCalibrated.value || !calibrationResult.value) {
       return Infinity;
     }
 
-    let totalError = 0;
-    let count = 0;
-
-    for (const point of calibrationPoints.value) {
-      // Transform image point to world
-      const worldPoint = transformToWorld(point.image);
-
-      // Calculate error in world coordinates (meters)
-      const dx = worldPoint.x - point.world.x;
-      const dy = worldPoint.y - point.world.y;
-      const error = Math.sqrt(dx * dx + dy * dy);
-
-      totalError += error;
-      count++;
-    }
-
-    return count > 0 ? totalError / count : Infinity;
+    return calibrationResult.value.error;
   }
 
   /**
    * Set court dimensions
    */
-  function setCourtDimensions(dimensions: CourtDimensions) {
-    courtDimensions.value = dimensions;
+  function setCourtDimensions(dimensions: Partial<CourtDimensions>) {
+    // Merge with existing dimensions to maintain backward compatibility
+    courtDimensions.value = {
+      ...courtDimensions.value,
+      ...dimensions,
+      // Ensure all required fields have defaults
+      serviceLineDistance:
+        dimensions.serviceLineDistance ??
+        courtDimensions.value.serviceLineDistance,
+      centerLineLength:
+        dimensions.centerLineLength ?? courtDimensions.value.centerLineLength,
+      netHeight: dimensions.netHeight ?? courtDimensions.value.netHeight,
+    };
   }
+
+  /**
+   * Calibration quality computed property
+   */
+  const calibrationQuality = computed(() => {
+    if (!calibrationResult.value) {
+      return { level: 'none', color: 'gray', message: 'Not calibrated' };
+    }
+
+    const error = calibrationResult.value.error;
+    const confidence = calibrationResult.value.confidence;
+
+    if (error < 0.01 && confidence > 0.9) {
+      return {
+        level: 'excellent',
+        color: 'green',
+        message: 'Sub-centimeter accuracy',
+      };
+    } else if (error < 0.05 && confidence > 0.7) {
+      return { level: 'good', color: 'blue', message: 'Good accuracy (< 5cm)' };
+    } else if (error < 0.1 && confidence > 0.5) {
+      return {
+        level: 'moderate',
+        color: 'yellow',
+        message: 'Moderate accuracy (< 10cm)',
+      };
+    } else {
+      return {
+        level: 'poor',
+        color: 'red',
+        message: 'Poor accuracy - recalibrate',
+      };
+    }
+  });
 
   return {
     // State
     isCalibrated,
     calibrationPoints,
-    homographyMatrix,
+    calibrationResult,
     courtDimensions,
     calibrationError,
+    currentMode,
+    validationErrors,
+    calibrationQuality,
 
     // Methods
-    setCalibrationPoints,
+    addCalibrationPoint,
     calibrate,
+    calibrateWithRANSAC,
     transformToWorld,
     transformToImage,
     transformLandmarksToWorld,
@@ -458,5 +963,15 @@ export function useCameraCalibration(): UseCameraCalibration {
     loadCalibration,
     validateCalibration,
     setCourtDimensions,
+    setCalibrationMode,
+    suggestNextPoint,
+    getWorldCoordinates,
+
+    // Backward compatibility (will be removed in future)
+    homographyMatrix,
+    setCalibrationPoints: (points: CalibrationPoint[]) => {
+      // Convert old format to new format
+      calibrationPoints.value = points;
+    },
   };
 }

@@ -122,13 +122,27 @@
           @motion-prediction-toggled="handleMotionPredictionToggled"
         />
 
-        <!-- Camera Calibration Overlay for Single Video -->
-        <CameraCalibrationOverlay
+        <!-- Enhanced Camera Calibration Overlay for Single Video -->
+        <EnhancedCalibrationOverlay
           v-if="videoUrl && singleVideoElement"
           :video-element="singleVideoElement"
           :is-active="showCalibrationOverlay"
           @calibration-complete="handleCalibrationComplete"
           @calibration-cancelled="showCalibrationOverlay = false"
+        />
+
+        <!-- Heatmap Minimap for Position Tracking -->
+        <HeatmapMinimap
+          :is-visible="showHeatmapMinimap"
+          :heatmap-data="positionHeatmap.heatmapData.value"
+          :current-position="positionHeatmap.currentPosition.value"
+          :court-dimensions="cameraCalibration.courtDimensions.value"
+          :total-distance="positionHeatmap.totalDistance.value"
+          :average-speed="positionHeatmap.averageSpeed.value"
+          :most-visited-zone="positionHeatmap.mostVisitedZone.value"
+          :total-samples="positionHeatmap.positionHistory.value.length"
+          :get-zone-name="positionHeatmap.getZoneName"
+          @close="showHeatmapMinimap = false"
         />
 
         <!-- Speed Visualization Overlay for Single Video (only in single mode) -->
@@ -148,7 +162,10 @@
         />
 
         <!-- Custom controls for single video -->
-        <div v-if="controls && videoUrl" class="video-controls">
+        <div
+          v-if="controls && videoUrl && !singleVideoState.isLoading"
+          class="video-controls"
+        >
           <div class="controls-content">
             <div class="controls-left">
               <!-- Play/Pause button -->
@@ -293,14 +310,19 @@
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
+                    stroke-width="1.5"
                   >
+                    <!-- "Tag" icon -->
                     <path
-                      d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z"
                     />
-                    <polyline points="14,2 14,8 20,8" />
-                    <line x1="16" y1="13" x2="8" y2="13" />
-                    <line x1="16" y1="17" x2="8" y2="17" />
-                    <polyline points="10,9 9,9 8,9" />
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M6 6h.008v.008H6V6z"
+                    />
                   </svg>
                 </button>
 
@@ -326,14 +348,83 @@
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
+                    stroke-width="1.5"
                   >
-                    <!-- Camera with grid overlay icon -->
-                    <rect x="3" y="3" width="18" height="18" rx="2" />
-                    <line x1="9" y1="3" x2="9" y2="21" />
-                    <line x1="15" y1="3" x2="15" y2="21" />
-                    <line x1="3" y1="9" x2="21" y2="9" />
-                    <line x1="3" y1="15" x2="21" y2="15" />
-                    <circle cx="12" cy="12" r="2" />
+                    <!-- "Cube Transparent" icon -->
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9"
+                    />
+                  </svg>
+                </button>
+
+                <!-- Heatmap Toggle Button (disabled until calibration is complete) -->
+                <button
+                  @click="toggleHeatmap"
+                  class="control-button"
+                  :class="{
+                    'pose-active':
+                      showHeatmapMinimap || positionHeatmap.isTracking,
+                  }"
+                  :disabled="!cameraCalibration.isCalibrated.value"
+                  :title="
+                    !cameraCalibration.isCalibrated.value
+                      ? 'Calibrate camera first to enable heatmap'
+                      : positionHeatmap.isTracking.value
+                      ? 'Position tracking active - Click to toggle heatmap'
+                      : 'Start position tracking'
+                  "
+                >
+                  <svg
+                    class="control-icon"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <!-- Heatmap icon - simplified grid with heat spots -->
+                    <!-- Grid lines -->
+                    <path d="M3 3h18v18H3z" />
+                    <path d="M3 9h18M3 15h18" />
+                    <path d="M9 3v18M15 3v18" />
+
+                    <!-- Heat spots -->
+                    <circle
+                      cx="6"
+                      cy="6"
+                      r="1.5"
+                      fill="currentColor"
+                      opacity="0.3"
+                    />
+                    <circle
+                      cx="12"
+                      cy="6"
+                      r="1.5"
+                      fill="currentColor"
+                      opacity="0.6"
+                    />
+                    <circle
+                      cx="18"
+                      cy="12"
+                      r="1.5"
+                      fill="currentColor"
+                      opacity="0.9"
+                    />
+                    <circle
+                      cx="6"
+                      cy="18"
+                      r="1.5"
+                      fill="currentColor"
+                      opacity="0.5"
+                    />
+                    <circle
+                      cx="12"
+                      cy="12"
+                      r="2"
+                      fill="currentColor"
+                      opacity="0.8"
+                    />
                   </svg>
                 </button>
 
@@ -1472,9 +1563,11 @@ import SpeedChart from './SpeedChart.vue';
 // @ts-ignore: Vue SFC without d.ts
 import ROISelector from './ROISelector.vue';
 import KeypointSelectorModal from './KeypointSelectorModal.vue';
-import CameraCalibrationOverlay from './CameraCalibrationOverlay.vue';
+import EnhancedCalibrationOverlay from './EnhancedCalibrationOverlay.vue';
 import { useVideoPlayer } from '../composables/useVideoPlayer.ts';
 import { useCameraCalibration } from '../composables/useCameraCalibration.ts';
+import { usePositionHeatmap } from '../composables/usePositionHeatmap';
+import HeatmapMinimap from './HeatmapMinimap.vue';
 // Fallback local type to satisfy TS if path alias not resolved
 type DrawingData = {
   id?: string;
@@ -1655,6 +1748,10 @@ const localSelectedKeypoints = ref<number[]>(
 const showCalibrationOverlay = ref(false);
 const cameraCalibration = useCameraCalibration();
 
+// Position heatmap tracking
+const showHeatmapMinimap = ref(false); // Hide heatmap by default, show only after calibration
+const positionHeatmap = usePositionHeatmap(cameraCalibration.courtDimensions);
+
 // Enhanced ROI state
 const roiSettings = reactive({
   enabled: false,
@@ -1774,6 +1871,47 @@ const processPoseDetection = async (
     );
 
     if (poseData) {
+      // Track position if camera is calibrated and heatmap tracking is enabled
+      if (
+        cameraCalibration.isCalibrated.value &&
+        positionHeatmap.isTracking.value &&
+        poseData.landmarks?.length > 0
+      ) {
+        // Use the center of mass or hip center as the tracking point
+        // MediaPipe landmark indices: 23 (left hip), 24 (right hip)
+        const leftHip = poseData.landmarks[23];
+        const rightHip = poseData.landmarks[24];
+
+        if (leftHip && rightHip) {
+          // Calculate hip center as tracking point
+          const hipCenter = {
+            x: (leftHip.x + rightHip.x) / 2,
+            y: (leftHip.y + rightHip.y) / 2,
+          };
+
+          // Transform to world coordinates using camera calibration
+          const worldPos = cameraCalibration.transformToWorld(hipCenter, 0);
+
+          // Add position sample to heatmap tracker
+          positionHeatmap.addPositionSample(
+            worldPos,
+            hipCenter,
+            poseData.confidence || 0.8,
+            currentFrame.value
+          );
+
+          // Log every 30th frame to avoid spam
+          if (currentFrame.value % 30 === 0) {
+            console.log('🗺️ [Heatmap] Position tracked', {
+              frame: currentFrame.value,
+              hipCenter,
+              worldPos,
+              totalSamples: positionHeatmap.positionHistory.value.length,
+            });
+          }
+        }
+      }
+
       // Update enhanced ROI state if using enhanced pose landmarker
       if (poseLandmarker.getROIInsights) {
         const roiInsights = poseLandmarker.getROIInsights();
@@ -2538,12 +2676,60 @@ const handleCalibrationComplete = (calibrationData: any) => {
         // The speed calculator will automatically use the calibration through the shared composable
         console.log('Speed calculator will now use calibrated coordinates');
       }
+
+      // Don't automatically show heatmap - user can toggle it manually
+      // Start position tracking if pose detection is enabled
+      if (props.poseLandmarker?.isEnabled?.value) {
+        positionHeatmap.startTracking();
+        console.log(
+          'Position tracking ready - use heatmap button to toggle display'
+        );
+      } else {
+        console.log(
+          'Camera calibrated - enable pose detection and heatmap to start tracking'
+        );
+      }
     } else {
       console.error('Camera calibration failed');
     }
   }
 
   showCalibrationOverlay.value = false;
+};
+
+// Heatmap tracking methods
+const toggleHeatmap = () => {
+  console.log('🗺️ [Heatmap] Toggle clicked', {
+    isCalibrated: cameraCalibration.isCalibrated.value,
+    isTracking: positionHeatmap.isTracking.value,
+    showMinimap: showHeatmapMinimap.value,
+  });
+
+  if (!cameraCalibration.isCalibrated.value) {
+    console.warn(
+      '🗺️ [Heatmap] Camera must be calibrated before using heatmap tracking'
+    );
+    return;
+  }
+
+  if (positionHeatmap.isTracking.value) {
+    // Stop tracking and show heatmap
+    console.log('🗺️ [Heatmap] Stopping tracking and generating heatmap');
+    positionHeatmap.stopTracking();
+    positionHeatmap.generateHeatmap();
+    showHeatmapMinimap.value = true;
+  } else {
+    // Start tracking
+    console.log('🗺️ [Heatmap] Starting position tracking');
+    positionHeatmap.startTracking();
+    showHeatmapMinimap.value = true;
+  }
+
+  console.log('🗺️ [Heatmap] Toggle complete', {
+    isTracking: positionHeatmap.isTracking.value,
+    showMinimap: showHeatmapMinimap.value,
+    positionHistory: positionHeatmap.positionHistory.value.length,
+  });
 };
 
 // Setup video event listeners
@@ -3287,8 +3473,17 @@ defineExpose({
   transition: background-color 0.2s;
 }
 
-.control-button:hover {
+.control-button:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.1);
+}
+
+.control-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.control-button:disabled .control-icon {
+  opacity: 0.6;
 }
 
 .control-icon {
