@@ -1,12 +1,15 @@
 <template>
-  <div class="camera-position-selector">
+  <div class="camera-position-selector bg-gray-50 rounded-lg p-4 space-y-4">
     <!-- Court Minimap -->
-    <div class="court-container" @click="handleCourtClick">
+    <div
+      class="court-container bg-gray-800 rounded-md p-2 cursor-pointer border-2 border-dashed border-gray-600 hover:border-blue-500 transition-colors"
+      @click="handleCourtClick"
+    >
       <svg
         ref="courtSvg"
         :width="courtWidth"
         :height="courtHeight"
-        class="court-svg"
+        class="w-full h-auto"
         viewBox="0 0 134 61"
         preserveAspectRatio="xMidYMid meet"
       >
@@ -16,8 +19,8 @@
           y="0"
           width="134"
           height="61"
-          fill="#4a5568"
-          stroke="#e2e8f0"
+          fill="none"
+          stroke="hsl(210 14% 48%)"
           stroke-width="0.5"
         />
 
@@ -29,19 +32,17 @@
           width="134"
           height="61"
           fill="none"
-          stroke="#e2e8f0"
+          stroke="hsl(210 14% 48%)"
           stroke-width="0.5"
         />
 
-        <!-- Singles sidelines (5.18m width) -->
-        <!-- Singles sidelines: (6.1 - 5.18) / 2 = 0.46m offset on each side -->
-        <!-- 0.46m / 6.1m * 61 = 4.6 units offset -->
+        <!-- Singles sidelines -->
         <line
           x1="0"
           y1="4.6"
           x2="134"
           y2="4.6"
-          stroke="#e2e8f0"
+          stroke="hsl(210 14% 48%)"
           stroke-width="0.3"
         />
         <line
@@ -49,18 +50,17 @@
           y1="56.4"
           x2="134"
           y2="56.4"
-          stroke="#e2e8f0"
+          stroke="hsl(210 14% 48%)"
           stroke-width="0.3"
         />
 
-        <!-- Short service lines (1.98m from net on each side) -->
-        <!-- Net is at 67 (center), service lines at 67 ± 19.8 -->
+        <!-- Short service lines -->
         <line
           x1="47.2"
           y1="0"
           x2="47.2"
           y2="61"
-          stroke="#e2e8f0"
+          stroke="hsl(210 14% 48%)"
           stroke-width="0.3"
         />
         <line
@@ -68,18 +68,17 @@
           y1="0"
           x2="86.8"
           y2="61"
-          stroke="#e2e8f0"
+          stroke="hsl(210 14% 48%)"
           stroke-width="0.3"
         />
 
-        <!-- Center service line (divides left and right service courts) -->
-        <!-- Runs from short service line to back boundary -->
+        <!-- Center service line -->
         <line
           x1="67"
           y1="0"
           x2="67"
           y2="47.2"
-          stroke="#e2e8f0"
+          stroke="hsl(210 14% 48%)"
           stroke-width="0.3"
         />
         <line
@@ -87,18 +86,17 @@
           y1="86.8"
           x2="67"
           y2="134"
-          stroke="#e2e8f0"
+          stroke="hsl(210 14% 48%)"
           stroke-width="0.3"
         />
 
-        <!-- Long service line for doubles (0.76m from back) -->
-        <!-- 0.76m / 13.4m * 134 = 7.6 units from each end -->
+        <!-- Long service line for doubles -->
         <line
           x1="7.6"
           y1="0"
           x2="7.6"
           y2="61"
-          stroke="#e2e8f0"
+          stroke="hsl(210 14% 48%)"
           stroke-width="0.2"
         />
         <line
@@ -106,12 +104,9 @@
           y1="0"
           x2="126.4"
           y2="61"
-          stroke="#e2e8f0"
+          stroke="hsl(210 14% 48%)"
           stroke-width="0.2"
         />
-
-        <!-- Long service line for singles (at the back) -->
-        <!-- Singles long service line is at the back boundary -->
 
         <!-- Net -->
         <line
@@ -129,17 +124,16 @@
           :transform="`translate(${cameraPosition.x * 134}, ${
             cameraPosition.y * 61
           })`"
+          class="transition-transform"
         >
-          <!-- Camera icon -->
-          <circle r="3" fill="#ef4444" stroke="#fff" stroke-width="0.5" />
-
-          <!-- Viewing direction arrow -->
+          <circle r="4" fill="#3b82f6" opacity="0.3" class="animate-pulse" />
+          <circle r="2.5" fill="#3b82f6" stroke="#fff" stroke-width="0.5" />
           <line
             :x1="0"
             :y1="0"
             :x2="Math.cos(viewAngle) * 10"
             :y2="Math.sin(viewAngle) * 10"
-            stroke="#ef4444"
+            stroke="#3b82f6"
             stroke-width="1.5"
             marker-end="url(#arrowhead)"
           />
@@ -155,16 +149,38 @@
             refY="3.5"
             orient="auto"
           >
-            <polygon points="0 0, 10 3.5, 0 7" fill="#ef4444" />
+            <polygon points="0 0, 10 3.5, 0 7" fill="#3b82f6" />
           </marker>
         </defs>
 
-        <!-- Position labels (only show when not showing calibration points) -->
+        <!-- Position labels -->
         <g v-if="!showCalibrationPoints">
-          <text x="2" y="30" font-size="3" fill="#cbd5e0">L</text>
-          <text x="130" y="30" font-size="3" fill="#cbd5e0">R</text>
-          <text x="65" y="3" font-size="3" fill="#cbd5e0">Far</text>
-          <text x="64" y="59" font-size="3" fill="#cbd5e0">Near</text>
+          <text x="5" y="32" font-size="4" fill="#6b7280" class="font-sans">
+            L
+          </text>
+          <text x="125" y="32" font-size="4" fill="#6b7280" class="font-sans">
+            R
+          </text>
+          <text
+            x="67"
+            y="7"
+            font-size="4"
+            fill="#6b7280"
+            text-anchor="middle"
+            class="font-sans"
+          >
+            Far
+          </text>
+          <text
+            x="67"
+            y="56"
+            font-size="4"
+            fill="#6b7280"
+            text-anchor="middle"
+            class="font-sans"
+          >
+            Near
+          </text>
         </g>
 
         <!-- Calibration point indicators -->
@@ -175,204 +191,95 @@
             currentCalibrationStep !== undefined
           "
         >
-          <!-- Define calibration points based on mode -->
-          <g v-if="calibrationMode === 'full-court'">
-            <!-- Top-Left Corner indicator -->
+          <g :class="{ 'pulse-animation': isCurrentStep(0) }">
             <circle
+              cx="0"
+              cy="0"
+              r="2"
+              fill="#10b981"
               v-if="currentCalibrationStep === 0"
-              cx="0"
-              cy="0"
-              r="4"
-              fill="none"
-              stroke="#10b981"
-              stroke-width="1.5"
-              class="pulse-animation"
             />
+          </g>
+          <g :class="{ 'pulse-animation': isCurrentStep(1) }">
             <circle
-              v-if="currentCalibrationStep === 0"
-              cx="0"
+              cx="134"
               cy="0"
               r="2"
               fill="#10b981"
-            />
-
-            <!-- Top-Right Corner indicator -->
-            <circle
               v-if="currentCalibrationStep === 1"
-              cx="134"
-              cy="0"
-              r="4"
-              fill="none"
-              stroke="#10b981"
-              stroke-width="1.5"
-              class="pulse-animation"
             />
+          </g>
+          <g :class="{ 'pulse-animation': isCurrentStep(2) }">
             <circle
-              v-if="currentCalibrationStep === 1"
-              cx="134"
-              cy="0"
-              r="2"
-              fill="#10b981"
-            />
-
-            <!-- Bottom-Right Corner indicator -->
-            <circle
-              v-if="currentCalibrationStep === 2"
-              cx="134"
-              cy="61"
-              r="4"
-              fill="none"
-              stroke="#10b981"
-              stroke-width="1.5"
-              class="pulse-animation"
-            />
-            <circle
-              v-if="currentCalibrationStep === 2"
               cx="134"
               cy="61"
               r="2"
               fill="#10b981"
+              v-if="currentCalibrationStep === 2"
             />
-
-            <!-- Bottom-Left Corner indicator -->
+          </g>
+          <g :class="{ 'pulse-animation': isCurrentStep(3) }">
             <circle
-              v-if="currentCalibrationStep === 3"
-              cx="0"
-              cy="61"
-              r="4"
-              fill="none"
-              stroke="#10b981"
-              stroke-width="1.5"
-              class="pulse-animation"
-            />
-            <circle
-              v-if="currentCalibrationStep === 3"
               cx="0"
               cy="61"
               r="2"
               fill="#10b981"
+              v-if="currentCalibrationStep === 3"
             />
           </g>
 
-          <!-- Half-court mode indicators -->
-          <g v-if="calibrationMode === 'half-court'">
-            <!-- Near-Left Corner -->
-            <circle
-              v-if="currentCalibrationStep === 0"
-              cx="0"
-              cy="61"
-              r="4"
-              fill="none"
-              stroke="#10b981"
-              stroke-width="1.5"
-              class="pulse-animation"
-            />
-            <circle
-              v-if="currentCalibrationStep === 0"
-              cx="0"
-              cy="61"
-              r="2"
-              fill="#10b981"
-            />
-
-            <!-- Near-Right Corner -->
-            <circle
-              v-if="currentCalibrationStep === 1"
-              cx="134"
-              cy="61"
-              r="4"
-              fill="none"
-              stroke="#10b981"
-              stroke-width="1.5"
-              class="pulse-animation"
-            />
-            <circle
-              v-if="currentCalibrationStep === 1"
-              cx="134"
-              cy="61"
-              r="2"
-              fill="#10b981"
-            />
-
-            <!-- Net Center -->
-            <circle
-              v-if="currentCalibrationStep === 2"
-              cx="67"
-              cy="30.5"
-              r="4"
-              fill="none"
-              stroke="#10b981"
-              stroke-width="1.5"
-              class="pulse-animation"
-            />
-            <circle
-              v-if="currentCalibrationStep === 2"
-              cx="67"
-              cy="30.5"
-              r="2"
-              fill="#10b981"
-            />
-          </g>
-
-          <!-- Labels for corners -->
-          <text
-            x="67"
-            y="3"
-            font-size="2.5"
-            fill="#6b7280"
-            text-anchor="middle"
-          >
+          <text x="67" y="5" font-size="3" fill="#6b7280" text-anchor="middle">
             Far Baseline
           </text>
-          <text
-            x="67"
-            y="59"
-            font-size="2.5"
-            fill="#6b7280"
-            text-anchor="middle"
-          >
+          <text x="67" y="58" font-size="3" fill="#6b7280" text-anchor="middle">
             Near Baseline
-          </text>
-          <text x="2" y="30" font-size="2.5" fill="#6b7280" writing-mode="tb">
-            Left Side
-          </text>
-          <text x="132" y="30" font-size="2.5" fill="#6b7280" writing-mode="tb">
-            Right Side
           </text>
         </g>
       </svg>
     </div>
 
     <!-- Camera Settings -->
-    <div class="camera-settings mt-3 space-y-2">
+    <div class="camera-settings space-y-3">
       <!-- Height input -->
       <div class="setting-row">
-        <label class="text-xs font-medium text-gray-600">Height (m):</label>
-        <input
-          v-model.number="cameraHeight"
-          type="number"
-          min="1"
-          max="10"
-          step="0.1"
-          class="w-20 px-2 py-1 text-xs border rounded"
-          @change="updateCameraSettings"
-        />
+        <label class="setting-label">Height (m)</label>
+        <div class="flex items-center space-x-2">
+          <input
+            v-model.number="cameraHeight"
+            type="range"
+            min="1"
+            max="10"
+            step="0.1"
+            class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+            @change="updateCameraSettings"
+          />
+          <input
+            v-model.number="cameraHeight"
+            type="number"
+            min="1"
+            max="10"
+            step="0.1"
+            class="w-20 text-center bg-gray-100 border border-gray-300 rounded-md shadow-sm"
+            @change="updateCameraSettings"
+          />
+        </div>
       </div>
 
       <!-- Angle control -->
       <div class="setting-row">
-        <label class="text-xs font-medium text-gray-600">View Direction:</label>
-        <div class="angle-controls flex gap-1">
+        <label class="setting-label">Viewing Direction</label>
+        <div class="grid grid-cols-8 gap-1 p-1 bg-gray-200 rounded-full">
           <button
             v-for="dir in directions"
             :key="dir.name"
             @click="setViewDirection(dir.angle)"
             :class="[
-              'px-2 py-1 text-xs rounded',
+              'p-2 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500',
               Math.abs(viewAngle - dir.angle) < 0.1
-                ? 'bg-blue-500 text-white'
-                : 'bg-gray-200 hover:bg-gray-300',
+                ? 'bg-blue-500 text-white shadow'
+                : 'hover:bg-gray-300',
             ]"
+            :title="`View ${dir.label || dir.name}`"
           >
             {{ dir.name }}
           </button>
@@ -381,15 +288,14 @@
 
       <!-- Position presets -->
       <div class="setting-row">
-        <label class="text-xs font-medium text-gray-600"
-          >Quick Positions:</label
-        >
-        <div class="preset-controls flex flex-wrap gap-1">
+        <label class="setting-label">Position Presets</label>
+        <div class="grid grid-cols-3 gap-2">
           <button
             v-for="preset in presets"
             :key="preset.name"
             @click="applyPreset(preset)"
-            class="px-2 py-1 text-xs bg-gray-200 hover:bg-gray-300 rounded"
+            class="preset-button"
+            :title="`Set camera to ${preset.name} position`"
           >
             {{ preset.name }}
           </button>
@@ -399,14 +305,25 @@
       <!-- Info display -->
       <div
         v-if="cameraPosition"
-        class="info-display text-xs text-gray-600 mt-2"
+        class="p-3 bg-gray-100 rounded-md text-sm text-gray-600 space-y-1"
       >
-        <div>
-          Position: {{ (cameraPosition.x * 13.4).toFixed(1) }}m,
-          {{ (cameraPosition.y * 6.1).toFixed(1) }}m
+        <div class="flex items-center">
+          <span class="w-20">Position:</span>
+          <span class="font-mono"
+            >{{ (cameraPosition.x * 13.4).toFixed(1) }}m,
+            {{ (cameraPosition.y * 6.1).toFixed(1) }}m</span
+          >
         </div>
-        <div>Height: {{ cameraHeight }}m</div>
-        <div>Angle: {{ ((viewAngle * 180) / Math.PI).toFixed(0) }}°</div>
+        <div class="flex items-center">
+          <span class="w-20">Height:</span>
+          <span class="font-mono">{{ cameraHeight.toFixed(1) }}m</span>
+        </div>
+        <div class="flex items-center">
+          <span class="w-20">Angle:</span>
+          <span class="font-mono"
+            >{{ ((viewAngle * 180) / Math.PI).toFixed(0) }}°</span
+          >
+        </div>
       </div>
     </div>
   </div>
@@ -454,16 +371,20 @@ const showCalibrationPoints = computed(
   () => props.showCalibrationPoints ?? true
 );
 
-// Direction presets
+const isCurrentStep = (step: number) => {
+  return props.currentCalibrationStep === step;
+};
+
+// Direction presets with labels
 const directions = [
-  { name: '↑', angle: -Math.PI / 2 }, // Up (towards far side)
-  { name: '↗', angle: -Math.PI / 4 }, // Up-right
-  { name: '→', angle: 0 }, // Right
-  { name: '↘', angle: Math.PI / 4 }, // Down-right
-  { name: '↓', angle: Math.PI / 2 }, // Down (towards near side)
-  { name: '↙', angle: (3 * Math.PI) / 4 }, // Down-left
-  { name: '←', angle: Math.PI }, // Left
-  { name: '↖', angle: (-3 * Math.PI) / 4 }, // Up-left
+  { name: '↑', label: 'Far', angle: -Math.PI / 2 }, // Up (towards far side)
+  { name: '↗', label: 'Far-Right', angle: -Math.PI / 4 }, // Up-right
+  { name: '→', label: 'Right', angle: 0 }, // Right
+  { name: '↘', label: 'Near-Right', angle: Math.PI / 4 }, // Down-right
+  { name: '↓', label: 'Near', angle: Math.PI / 2 }, // Down (towards near side)
+  { name: '↙', label: 'Near-Left', angle: (3 * Math.PI) / 4 }, // Down-left
+  { name: '←', label: 'Left', angle: Math.PI }, // Left
+  { name: '↖', label: 'Far-Left', angle: (-3 * Math.PI) / 4 }, // Up-left
 ];
 
 // Position presets
@@ -554,81 +475,57 @@ watch(
 </script>
 
 <style scoped>
-.camera-position-selector {
-  background: white;
-  border-radius: 6px;
-  padding: 10px;
-  border: 1px solid #e5e7eb;
-}
-
-.court-container {
-  cursor: crosshair;
-  border: 2px solid #e2e8f0;
-  border-radius: 4px;
-  overflow: hidden;
-  background: #2d3748;
-}
-
-.court-svg {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-
-.camera-settings {
-  border-top: 1px solid #e2e8f0;
-  padding-top: 6px;
-}
-
-.controls-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-
-.control-item {
+.setting-row {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 0.25rem;
 }
 
-.angle-controls {
-  max-width: 120px;
+.setting-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: rgb(55 65 81);
 }
 
-.presets-section {
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid #f3f4f6;
+.preset-button {
+  width: 100%;
+  text-align: center;
+  background-color: rgb(229 231 235);
+  border: 1px solid rgb(209 213 219);
+  border-radius: 0.375rem;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: rgb(55 65 81);
+  transition: all 0.15s ease-in-out;
 }
 
-.info-display {
-  background: #f7fafc;
-  padding: 6px;
-  border-radius: 4px;
-  font-family: monospace;
+.preset-button:hover {
+  background-color: rgb(209 213 219);
 }
 
-.calibration-legend {
-  border: 1px solid #e5e7eb;
+.preset-button:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgb(59 130 246), 0 0 0 4px rgb(59 130 246 / 0.1);
+}
+
+.pulse-animation {
+  animation: pulse 2s infinite;
 }
 
 @keyframes pulse {
   0% {
-    r: 4;
-    opacity: 1;
+    stroke-opacity: 1;
+    stroke-width: 1.5;
   }
   50% {
-    r: 6;
-    opacity: 0.5;
+    stroke-opacity: 0.3;
+    stroke-width: 2.5;
   }
   100% {
-    r: 4;
-    opacity: 1;
+    stroke-opacity: 1;
+    stroke-width: 1.5;
   }
-}
-
-.pulse-animation {
-  animation: pulse 1.5s ease-in-out infinite;
 }
 </style>

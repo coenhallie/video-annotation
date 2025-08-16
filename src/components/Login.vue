@@ -2,12 +2,14 @@
 <script setup>
 import { ref } from 'vue';
 import { useAuth } from '../composables/useAuth.ts';
+import ForgotPasswordModal from './ForgotPasswordModal.vue';
 
 const { signIn, signUp } = useAuth();
 
 const email = ref('');
 const password = ref('');
 const isSigningUp = ref(false);
+const showForgotPasswordModal = ref(false);
 
 const handleAuth = async () => {
   try {
@@ -42,9 +44,7 @@ const toggleMode = () => {
         <!-- Front Side - Sign In -->
         <div class="card-face card-front">
           <div class="text-center space-y-2 mb-8">
-            <h1 class="text-2xl font-bold text-gray-800">
-              ACCIO Video Annotation
-            </h1>
+            <h1 class="text-2xl font-bold text-gray-800">Perspecto AI</h1>
             <p class="text-sm text-gray-600">
               Collaborative video analysis platform
             </p>
@@ -113,6 +113,15 @@ const toggleMode = () => {
                   class="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-white"
                 />
               </div>
+              <div class="text-right mb-4">
+                <button
+                  type="button"
+                  @click="showForgotPasswordModal = true"
+                  class="text-sm text-blue-600 hover:text-blue-700 hover:underline transition-colors duration-200"
+                >
+                  Forgot your password?
+                </button>
+              </div>
               <div>
                 <button
                   type="submit"
@@ -124,7 +133,7 @@ const toggleMode = () => {
             </div>
           </form>
           <div class="text-center mt-8">
-            <p class="text-sm text-gray-600 mb-3">New to ACCIO?</p>
+            <p class="text-sm text-gray-600 mb-3">New to Perspecto?</p>
             <button
               class="text-blue-600 hover:text-blue-700 font-medium text-sm hover:underline transition-colors duration-200"
               @click="toggleMode"
@@ -140,12 +149,10 @@ const toggleMode = () => {
           <div
             class="absolute top-4 right-4 bg-gray-400 text-white text-xs font-semibold px-2 py-1 rounded-full z-10"
           >
-            ALPHA v1.1
+            ALPHA v1.4
           </div>
           <div class="text-center space-y-2 mb-8">
-            <h1 class="text-2xl font-bold text-gray-800">
-              ACCIO Video Annotation
-            </h1>
+            <h1 class="text-2xl font-bold text-gray-800">Perspecto AI</h1>
             <p class="text-sm text-gray-600">
               Collaborative video analysis platform
             </p>
@@ -242,6 +249,12 @@ const toggleMode = () => {
         </div>
       </div>
     </div>
+
+    <!-- Forgot Password Modal -->
+    <ForgotPasswordModal
+      :is-open="showForgotPasswordModal"
+      @close="showForgotPasswordModal = false"
+    />
   </div>
 </template>
 

@@ -11,6 +11,7 @@ import Timeline from './components/Timeline.vue';
 import DualTimeline from './components/DualTimeline.vue';
 import AnnotationPanel from './components/AnnotationPanel.vue';
 import Login from './components/Login.vue';
+import ResetPassword from './components/ResetPassword.vue';
 import LoadVideoModal from './components/LoadVideoModal.vue';
 import ShareModal from './components/ShareModal.vue';
 import NotificationToast from './components/NotificationToast.vue';
@@ -62,7 +63,86 @@ onErrorCaptured((error: any, instance: any, info: string) => {
 });
 
 // Auth
-const { user, initAuth, signOut, isLoading } = useAuth();
+const { user, initAuth, signOut, isLoading: authLoading } = useAuth();
+
+// Password reset flow
+const isPasswordReset = ref(false);
+const isAppLoading = ref(true); // Separate loading state for the app
+
+// Computed property to determine overall loading state
+const isLoading = computed(() => {
+  // If we're in password reset mode, don't show loading
+  if (isPasswordReset.value) {
+    return false;
+  }
+  // Otherwise, use the combined loading state
+  return isAppLoading.value || authLoading.value;
+});
+
+// Check for password reset token in URL
+const checkPasswordResetToken = () => {
+  // Supabase appends the recovery token to the hash like:
+  // #access_token=xxx&refresh_token=xxx&expires_in=3600&token_type=bearer&type=recovery
+  const fullHash = window.location.hash;
+  console.log('Checking for password reset token, full hash:', fullHash);
+
+  // Handle both single and double hash scenarios
+  let hash = fullHash.substring(1);
+
+  // If we have double hash like #recovery#access_token=..., extract the second part
+  if (hash.includes('#')) {
+    const parts = hash.split('#');
+    hash = parts[parts.length - 1] || ''; // Get the last part which should have the token
+  }
+
+  const hashParams = new URLSearchParams(hash);
+  const type = hashParams.get('type');
+  const accessToken = hashParams.get('access_token');
+  const error = hashParams.get('error');
+  const errorCode = hashParams.get('error_code');
+
+  console.log('Parsed hash params:', {
+    type,
+    hasAccessToken: !!accessToken,
+    error,
+    errorCode,
+  });
+
+  // Check if this is a password recovery flow
+  if (type === 'recovery' && accessToken) {
+    console.log('Password recovery token detected!');
+    isPasswordReset.value = true;
+    // Store the recovery token for later use
+    sessionStorage.setItem('recovery_token', accessToken);
+    return true;
+  }
+
+  // Also check if the hash contains 'type=recovery'
+  if (fullHash.includes('type=recovery')) {
+    console.log('Recovery type found in hash');
+    isPasswordReset.value = true;
+    return true;
+  }
+
+  // Check if we have a stored recovery session
+  const storedRecoveryToken = sessionStorage.getItem('recovery_token');
+  if (storedRecoveryToken) {
+    console.log('Found stored recovery token');
+    isPasswordReset.value = true;
+    return true;
+  }
+
+  return false;
+};
+
+const handlePasswordResetComplete = () => {
+  isPasswordReset.value = false;
+  // Clear the URL hash and stored recovery token
+  window.location.hash = '';
+  sessionStorage.removeItem('recovery_token');
+  // Reload to properly initialize the app with the new session
+  window.location.reload();
+};
 
 // Player mode management
 const playerMode = ref('single'); // 'single' or 'dual'
@@ -792,76 +872,126 @@ const closeShareModal = () => {
 };
 
 onMounted(async () => {
-  await initAuth();
+  try {
+    isAppLoading.value = true;
 
-  const shareInfo = ShareService.parseShareUrl();
+    // First check for password reset token BEFORE initializing auth
+    const hasResetToken = checkPasswordResetToken();
 
-  if (shareInfo.type && shareInfo.id) {
-    try {
-      if (shareInfo.type === 'video') {
-        isSharedVideo.value = true;
-        const shareData =
-          await ShareService.getSharedVideoWithCommentPermissions(shareInfo.id);
+    // If we have a reset token, don't initialize normal auth flow
+    if (!hasResetToken) {
+      // Initialize auth only if not in password reset flow
+      await initAuth();
+    } else {
+      // For password reset, we need to exchange the recovery token
+      // but prevent automatic login
+      const hashParams = new URLSearchParams(window.location.hash.substring(1));
+      const accessToken = hashParams.get('access_token');
+      const refreshToken = hashParams.get('refresh_token');
 
-        sharedVideoData.value = shareData as any;
-        currentVideoId.value = shareData.id as string;
+      if (accessToken && refreshToken) {
+        // Set the session to enable password update, but stay on reset page
+        const { error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
 
-        loadVideo(
-          {
-            id: shareData.id,
-            url: shareData.url,
-          },
-          'shared'
-        );
-      } else if (shareInfo.type === 'comparison') {
-        isSharedComparison.value = true;
+        if (error) {
+          console.error('Error setting recovery session:', error);
+          isPasswordReset.value = false;
+        }
+      }
+    }
 
-        try {
-          // Load shared comparison video with proper permissions
-          const sharedComparisonData =
-            await ShareService.getSharedComparisonVideoWithCommentPermissions(
+    // Also listen for auth state changes that might indicate password recovery
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        console.log('Auth state change in App:', {
+          event,
+          hasSession: !!session,
+        });
+        if (event === 'PASSWORD_RECOVERY') {
+          console.log('PASSWORD_RECOVERY event detected!');
+          isPasswordReset.value = true;
+          sessionStorage.setItem('recovery_token', session?.access_token || '');
+        }
+      }
+    );
+
+    const shareInfo = ShareService.parseShareUrl();
+
+    if (shareInfo.type && shareInfo.id) {
+      try {
+        if (shareInfo.type === 'video') {
+          isSharedVideo.value = true;
+          const shareData =
+            await ShareService.getSharedVideoWithCommentPermissions(
               shareInfo.id
             );
 
-          // Set the current comparison data
-          currentComparisonId.value = sharedComparisonData.id;
+          sharedVideoData.value = shareData as any;
+          currentVideoId.value = shareData.id as string;
 
-          // Create a comparison video object for the workflow
-          const comparisonVideo = {
-            id: sharedComparisonData.id,
-            title: sharedComparisonData.title,
-            description: sharedComparisonData.description,
-            videoAId: sharedComparisonData.videoA?.id || 'placeholder',
-            videoBId: sharedComparisonData.videoB?.id || 'placeholder',
-            videoA: sharedComparisonData.videoA,
-            videoB: sharedComparisonData.videoB,
-            isPublic: sharedComparisonData.isPublic,
-            userId: '', // Not needed for shared videos
-            createdAt: '',
-            updatedAt: '',
-          };
-
-          if (comparisonWorkflow) {
-            await comparisonWorkflow.loadComparisonVideo(
-              comparisonVideo as any
-            );
-            playerMode.value = 'dual';
-          }
-        } catch (error) {
-          console.error(
-            '❌ [App] Failed to load shared comparison video:',
-            error
+          loadVideo(
+            {
+              id: shareData.id,
+              url: shareData.url,
+            },
+            'shared'
           );
-          throw error;
+        } else if (shareInfo.type === 'comparison') {
+          isSharedComparison.value = true;
+
+          try {
+            // Load shared comparison video with proper permissions
+            const sharedComparisonData =
+              await ShareService.getSharedComparisonVideoWithCommentPermissions(
+                shareInfo.id
+              );
+
+            // Set the current comparison data
+            currentComparisonId.value = sharedComparisonData.id;
+
+            // Create a comparison video object for the workflow
+            const comparisonVideo = {
+              id: sharedComparisonData.id,
+              title: sharedComparisonData.title,
+              description: sharedComparisonData.description,
+              videoAId: sharedComparisonData.videoA?.id || 'placeholder',
+              videoBId: sharedComparisonData.videoB?.id || 'placeholder',
+              videoA: sharedComparisonData.videoA,
+              videoB: sharedComparisonData.videoB,
+              isPublic: sharedComparisonData.isPublic,
+              userId: '', // Not needed for shared videos
+              createdAt: '',
+              updatedAt: '',
+            };
+
+            if (comparisonWorkflow) {
+              await comparisonWorkflow.loadComparisonVideo(
+                comparisonVideo as any
+              );
+              playerMode.value = 'dual';
+            }
+          } catch (error) {
+            console.error(
+              '❌ [App] Failed to load shared comparison video:',
+              error
+            );
+            throw error;
+          }
         }
+      } catch (error) {
+        console.error('Failed to load shared content:', error);
       }
-    } catch (error) {
-      console.error('Failed to load shared content:', error);
+    } else if (!user.value && !isPasswordReset.value) {
+      // If no share link and not logged in (and not in password reset), show the login page
+    } else if (!videoLoaded.value && !isPasswordReset.value) {
+      isLoadModalVisible.value = true;
     }
-  } else if (!user.value) {
-    // If no share link and not logged in, show the login page
-  } else if (!videoLoaded.value) {
-    isLoadModalVisible.value = true;
+  } finally {
+    // Always set app loading to false at the end
+    isAppLoading.value = false;
   }
 });
 
@@ -1062,6 +1192,11 @@ watch(
     </div>
   </div>
 
+  <!-- Password Reset screen when recovery token is present -->
+  <div v-else-if="isPasswordReset">
+    <ResetPassword @complete="handlePasswordResetComplete" />
+  </div>
+
   <!-- Main app when user is authenticated OR when viewing shared video/comparison -->
   <div
     v-else-if="user || isSharedVideo || isSharedComparison"
@@ -1071,13 +1206,11 @@ watch(
     <header class="bg-white border-b border-gray-200 px-6 py-4">
       <div class="flex items-center justify-between">
         <div class="flex items-center space-x-3">
-          <h1 class="text-xl font-medium text-gray-900">
-            ACCIO Video Annotation
-          </h1>
+          <h1 class="text-xl font-medium text-gray-900">Perspecto AI</h1>
           <span
             class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 border border-orange-200"
           >
-            ALPHA v1.1
+            ALPHA v1.4
           </span>
         </div>
 
@@ -1494,6 +1627,11 @@ watch(
       @close="closeShareModal"
     />
   </div>
+  <!-- Password Reset screen when recovery token is present -->
+  <div v-else-if="isPasswordReset">
+    <ResetPassword @complete="handlePasswordResetComplete" />
+  </div>
+
   <!-- Login component when user is not authenticated -->
   <div v-else>
     <Login />

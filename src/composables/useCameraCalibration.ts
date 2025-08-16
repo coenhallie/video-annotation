@@ -79,8 +79,8 @@ export const CALIBRATION_MODES: CalibrationMode[] = [
     description: 'Optimized for when service courts are clearly visible',
   },
   {
-    id: 'enhanced-full',
-    name: 'Enhanced Full Court',
+    id: 'full-court',
+    name: 'Full Court',
     requiredPoints: [
       'corner-tl',
       'corner-tr',
@@ -174,6 +174,8 @@ export interface UseCameraCalibration {
   setCalibrationMode: (modeId: string) => void;
   suggestNextPoint: () => string | null;
   getWorldCoordinates: (pointId: string) => Point3D;
+  getPointDescription: (pointId: string) => string;
+  getPointHint: (pointId: string) => string;
 }
 
 // State interface for serialization
@@ -472,6 +474,83 @@ export function useCameraCalibration(): UseCameraCalibration {
   }
 
   /**
+   * Get human-readable description for a calibration point
+   */
+  function getPointDescription(pointId: string): string {
+    const descriptions: Record<string, string> = {
+      // Corner points
+      'corner-tl': 'Top Left Corner',
+      'corner-tr': 'Top Right Corner',
+      'corner-bl': 'Bottom Left Corner',
+      'corner-br': 'Bottom Right Corner',
+
+      // Net points
+      'net-left': 'Net Left Edge',
+      'net-right': 'Net Right Edge',
+      'net-center': 'Net Center',
+
+      // Service line points
+      'service-left': 'Service Line Left',
+      'service-right': 'Service Line Right',
+      'service-center-left': 'Service Center Line (Near)',
+      'service-center-right': 'Service Center Line (Far)',
+
+      // Baseline points
+      'baseline-left': 'Baseline Left',
+      'baseline-right': 'Baseline Right',
+      'baseline-center': 'Baseline Center',
+
+      // Sideline points
+      'sideline-mid-left': 'Left Sideline Midpoint',
+      'sideline-mid-right': 'Right Sideline Midpoint',
+    };
+
+    return descriptions[pointId] || pointId;
+  }
+
+  /**
+   * Get helpful hint for selecting a calibration point
+   */
+  function getPointHint(pointId: string): string {
+    const hints: Record<string, string> = {
+      // Corner points
+      'corner-tl':
+        'Click on the top-left corner where the baseline meets the sideline',
+      'corner-tr':
+        'Click on the top-right corner where the baseline meets the sideline',
+      'corner-bl':
+        'Click on the bottom-left corner where the baseline meets the sideline',
+      'corner-br':
+        'Click on the bottom-right corner where the baseline meets the sideline',
+
+      // Net points
+      'net-left': 'Click where the net meets the left sideline',
+      'net-right': 'Click where the net meets the right sideline',
+      'net-center':
+        'Click on the center of the net (where center line meets net)',
+
+      // Service line points
+      'service-left': 'Click where the service line meets the left sideline',
+      'service-right': 'Click where the service line meets the right sideline',
+      'service-center-left':
+        'Click where the center line meets the near service line',
+      'service-center-right':
+        'Click where the center line meets the far service line',
+
+      // Baseline points
+      'baseline-left': 'Click where the baseline meets the left sideline',
+      'baseline-right': 'Click where the baseline meets the right sideline',
+      'baseline-center': 'Click on the center of the baseline',
+
+      // Sideline points
+      'sideline-mid-left': 'Click on the midpoint of the left sideline',
+      'sideline-mid-right': 'Click on the midpoint of the right sideline',
+    };
+
+    return hints[pointId] || 'Click on the specified court marking';
+  }
+
+  /**
    * Suggest next calibration point
    */
   function suggestNextPoint(): string | null {
@@ -510,7 +589,7 @@ export function useCameraCalibration(): UseCameraCalibration {
    */
   function calibrateWithRANSAC(): CalibrationResult | null {
     const iterations = 1000;
-    const threshold = 0.5; // Increased to 50cm threshold for better tolerance
+    const threshold = 50; // Reasonable pixel threshold for accurate calibration
 
     console.log('🔧 [CALIBRATION] Starting RANSAC with points:', {
       totalPoints: calibrationPoints.value.length,
@@ -519,7 +598,7 @@ export function useCameraCalibration(): UseCameraCalibration {
         image: p.image,
         world: p.world,
       })),
-      threshold,
+      threshold: `${threshold}px`,
       iterations,
     });
 
@@ -557,7 +636,7 @@ export function useCameraCalibration(): UseCameraCalibration {
         bestResult = {
           homographyMatrix: H,
           inverseHomographyMatrix: Hinv,
-          error: totalError / inliers.length,
+          error: inliers.length > 0 ? totalError / inliers.length : Infinity,
           confidence: inliers.length / calibrationPoints.value.length,
           inliers,
           outliers,
@@ -600,7 +679,7 @@ export function useCameraCalibration(): UseCameraCalibration {
             ...bestResult,
             homographyMatrix: refinedH,
             inverseHomographyMatrix: refinedHinv,
-            error: totalError / Math.max(1, inliers.length),
+            error: inliers.length > 0 ? totalError / inliers.length : Infinity,
             confidence: inliers.length / calibrationPoints.value.length,
             inliers,
             outliers,
@@ -635,11 +714,25 @@ export function useCameraCalibration(): UseCameraCalibration {
     const outliers: CalibrationPoint[] = [];
     let totalError = 0;
 
+    // We need the inverse homography to project world points to image space
+    const Hinv = invertMatrix3x3(H);
+    if (!Hinv) {
+      console.error(
+        '🔧 [CALIBRATION] Failed to invert homography for evaluation'
+      );
+      return { inliers: [], outliers: points, totalError: Infinity };
+    }
+
     for (const point of points) {
-      const projected = applyHomography(point.image, H);
+      // Project world point to image space using inverse homography
+      // Use only x,y from world coordinates (ignore z)
+      const worldPoint2D = { x: point.world.x, y: point.world.y };
+      const projectedImage = applyHomography(worldPoint2D, Hinv);
+
+      // Calculate error in pixel space
       const error = Math.sqrt(
-        Math.pow(projected.x - point.world.x, 2) +
-          Math.pow(projected.y - point.world.y, 2)
+        Math.pow(projectedImage.x - point.image.x, 2) +
+          Math.pow(projectedImage.y - point.image.y, 2)
       );
 
       if (error < threshold) {
@@ -647,6 +740,18 @@ export function useCameraCalibration(): UseCameraCalibration {
         totalError += error;
       } else {
         outliers.push(point);
+      }
+
+      // Enhanced debug logging
+      if (points.indexOf(point) < 5) {
+        console.log(`🔧 [CALIBRATION] Point ${point.id}:`, {
+          world: worldPoint2D,
+          actualImage: point.image,
+          projectedImage: projectedImage,
+          error: error.toFixed(2),
+          threshold: threshold,
+          isInlier: error < threshold,
+        });
       }
     }
 
@@ -711,8 +816,13 @@ export function useCameraCalibration(): UseCameraCalibration {
 
   /**
    * Transform a 2D image point to 3D world coordinates
+   * Enhanced with camera settings for better height estimation
    */
-  function transformToWorld(imagePoint: Point2D, z: number = 0): Point3D {
+  function transformToWorld(
+    imagePoint: Point2D,
+    z: number = 0,
+    cameraSettings?: CameraSettings
+  ): Point3D {
     if (!isCalibrated.value || !calibrationResult.value) {
       console.warn('Camera not calibrated');
       return { x: 0, y: 0, z: 0 };
@@ -723,10 +833,19 @@ export function useCameraCalibration(): UseCameraCalibration {
       calibrationResult.value.homographyMatrix
     );
 
+    // If camera settings available, refine z-coordinate estimation
+    let refinedZ = z;
+    if (cameraSettings && z > 0) {
+      // Use camera height to better estimate object heights
+      // This is a simplified model - in production, use full 3D projection
+      const heightRatio = z / cameraSettings.height;
+      refinedZ = z * (1 + heightRatio * 0.1); // Adjust based on perspective
+    }
+
     return {
       x: worldPoint2D.x,
       y: worldPoint2D.y,
-      z: z,
+      z: refinedZ,
     };
   }
 
@@ -966,6 +1085,8 @@ export function useCameraCalibration(): UseCameraCalibration {
     setCalibrationMode,
     suggestNextPoint,
     getWorldCoordinates,
+    getPointDescription,
+    getPointHint,
 
     // Backward compatibility (will be removed in future)
     homographyMatrix,

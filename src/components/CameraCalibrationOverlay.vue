@@ -26,8 +26,8 @@
             :collected-points="collectedPointIds"
             :show-camera-position="showCameraPosition"
             :camera-settings="cameraSettings"
-            :width="300"
-            :height="200"
+            :width="450"
+            :height="350"
           />
         </div>
 
@@ -269,7 +269,7 @@ const courtDimensions = {
 const currentCalibrationMode = computed(() => {
   switch (calibrationMode.value) {
     case 'full-court':
-      return 'enhanced-full';
+      return 'full-court';
     case 'half-court':
       return 'half-court';
     case 'service-line':
@@ -277,7 +277,7 @@ const currentCalibrationMode = computed(() => {
     case 'reference-lines':
       return 'minimal';
     default:
-      return 'enhanced-full';
+      return 'full-court';
   }
 });
 
@@ -1004,8 +1004,8 @@ onUnmounted(() => {
 }
 
 .step-number {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   background: #e5e7eb;
   color: #6b7280;

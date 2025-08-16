@@ -123,7 +123,7 @@
         />
 
         <!-- Enhanced Camera Calibration Overlay for Single Video -->
-        <EnhancedCalibrationOverlay
+        <CalibrationOverlay
           v-if="videoUrl && singleVideoElement"
           :video-element="singleVideoElement"
           :is-active="showCalibrationOverlay"
@@ -326,9 +326,8 @@
                   </svg>
                 </button>
 
-                <!-- Camera Calibration Button (only show when pose detection is enabled) -->
+                <!-- Camera Calibration Button (always show for debugging) -->
                 <button
-                  v-if="poseLandmarker.isEnabled.value"
                   @click="toggleCalibration"
                   class="control-button"
                   :class="{
@@ -1563,7 +1562,7 @@ import SpeedChart from './SpeedChart.vue';
 // @ts-ignore: Vue SFC without d.ts
 import ROISelector from './ROISelector.vue';
 import KeypointSelectorModal from './KeypointSelectorModal.vue';
-import EnhancedCalibrationOverlay from './EnhancedCalibrationOverlay.vue';
+import CalibrationOverlay from './CalibrationOverlay.vue';
 import { useVideoPlayer } from '../composables/useVideoPlayer.ts';
 import { useCameraCalibration } from '../composables/useCameraCalibration.ts';
 import { usePositionHeatmap } from '../composables/usePositionHeatmap';
@@ -2650,10 +2649,17 @@ const openKeypointSelector = () => {
 
 // Camera calibration methods
 const toggleCalibration = () => {
+  console.log('toggleCalibration called');
+  console.log('singleVideoElement.value:', singleVideoElement.value);
+  console.log('showCalibrationOverlay before:', showCalibrationOverlay.value);
+
   if (singleVideoElement.value) {
     // Pause the video during calibration
     pause();
     showCalibrationOverlay.value = true;
+    console.log('showCalibrationOverlay after:', showCalibrationOverlay.value);
+  } else {
+    console.warn('No video element available for calibration');
   }
 };
 

@@ -1,5 +1,6 @@
 import { supabase } from '../composables/useSupabase';
 import { CommentService } from './commentService';
+import { AnnotationService } from './annotationService';
 import type {
   AnonymousSession,
   SharedComparisonVideoWithCommentPermissions,
@@ -71,23 +72,29 @@ export class ShareService {
         throw new Error('Video not found or not public');
       }
 
-      // Get the annotations for this video
-      const { data: annotations, error: annotationsError } = await supabase
-        .from('annotations')
-        .select('*')
-        .eq('videoId', videoId)
-        .order('timestamp', { ascending: true });
-
-      if (annotationsError) {
+      // Get the annotations for this video with comment counts
+      let mappedAnnotations = [];
+      try {
+        // Use AnnotationService to get annotations with comment counts
+        mappedAnnotations = await AnnotationService.getVideoAnnotations(
+          videoId,
+          undefined,
+          true // includeCommentCounts
+        );
+      } catch (annotationsError) {
         console.error(
           '❌ [ShareService] Error loading annotations:',
           annotationsError
         );
-        throw annotationsError;
-      }
+        // Fallback to basic annotation fetch without comment counts
+        const { data: annotations } = await supabase
+          .from('annotations')
+          .select('*')
+          .eq('videoId', videoId)
+          .order('timestamp', { ascending: true });
 
-      // Database columns are already in camelCase, no mapping needed
-      const mappedAnnotations = annotations || [];
+        mappedAnnotations = annotations || [];
+      }
 
       // Determine comment permissions for shared videos
       const canComment = this.canCommentOnSharedVideo(video);
@@ -285,38 +292,88 @@ export class ShareService {
         'Video B'
       );
 
-      // Get all annotations for the comparison context (comparison-specific + individual video annotations)
-      const [
-        comparisonAnnotationsResult,
-        videoAAnnotationsResult,
-        videoBAnnotationsResult,
-      ] = await Promise.all([
-        supabase
-          .from('annotations')
-          .select('*')
-          .eq('comparisonVideoId', comparisonId)
-          .order('timestamp', { ascending: true }),
-        supabase
-          .from('annotations')
-          .select('*')
-          .eq('videoId', comparison.videoAId)
-          .order('timestamp', { ascending: true }),
-        supabase
-          .from('annotations')
-          .select('*')
-          .eq('videoId', comparison.videoBId)
-          .order('timestamp', { ascending: true }),
-      ]);
+      // Get all annotations for the comparison context with comment counts
+      let mappedAnnotations = [];
+      try {
+        // Fetch annotations with comment counts using AnnotationService
+        const [comparisonAnnotations, videoAAnnotations, videoBAnnotations] =
+          await Promise.all([
+            // For comparison-specific annotations, we need to fetch them directly
+            // then add comment counts separately
+            (async () => {
+              const { data } = await supabase
+                .from('annotations')
+                .select('*')
+                .eq('comparisonVideoId', comparisonId)
+                .order('timestamp', { ascending: true });
 
-      // Combine all annotations
-      const allAnnotations = [
-        ...(comparisonAnnotationsResult.data || []),
-        ...(videoAAnnotationsResult.data || []),
-        ...(videoBAnnotationsResult.data || []),
-      ];
+              if (data && data.length > 0) {
+                // Add comment counts to comparison annotations
+                const annotationIds = data.map((annotation) => annotation.id);
+                const commentCounts = await Promise.all(
+                  annotationIds.map((id) => CommentService.getCommentCount(id))
+                );
 
-      // Database columns are already in camelCase, no mapping needed
-      const mappedAnnotations = allAnnotations || [];
+                return data.map((annotation, index) => ({
+                  ...annotation,
+                  commentCount: commentCounts[index] || 0,
+                }));
+              }
+              return [];
+            })(),
+            // Use AnnotationService for individual video annotations
+            AnnotationService.getVideoAnnotations(
+              comparison.videoAId,
+              undefined,
+              true // includeCommentCounts
+            ),
+            AnnotationService.getVideoAnnotations(
+              comparison.videoBId,
+              undefined,
+              true // includeCommentCounts
+            ),
+          ]);
+
+        // Combine all annotations
+        mappedAnnotations = [
+          ...comparisonAnnotations,
+          ...videoAAnnotations,
+          ...videoBAnnotations,
+        ];
+      } catch (error) {
+        console.error(
+          '❌ [ShareService] Error loading annotations with comment counts:',
+          error
+        );
+        // Fallback to basic annotation fetch without comment counts
+        const [
+          comparisonAnnotationsResult,
+          videoAAnnotationsResult,
+          videoBAnnotationsResult,
+        ] = await Promise.all([
+          supabase
+            .from('annotations')
+            .select('*')
+            .eq('comparisonVideoId', comparisonId)
+            .order('timestamp', { ascending: true }),
+          supabase
+            .from('annotations')
+            .select('*')
+            .eq('videoId', comparison.videoAId)
+            .order('timestamp', { ascending: true }),
+          supabase
+            .from('annotations')
+            .select('*')
+            .eq('videoId', comparison.videoBId)
+            .order('timestamp', { ascending: true }),
+        ]);
+
+        mappedAnnotations = [
+          ...(comparisonAnnotationsResult.data || []),
+          ...(videoAAnnotationsResult.data || []),
+          ...(videoBAnnotationsResult.data || []),
+        ];
+      }
 
       // Comment permissions for comparison videos
       const canComment = comparison.isPublic;

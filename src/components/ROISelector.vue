@@ -1,6 +1,6 @@
 <template>
   <div
-    class="enhanced-roi-selector absolute inset-0 pointer-events-auto"
+    class="roi-selector absolute inset-0 pointer-events-auto"
     :style="{ zIndex: 15 }"
     @mousedown="startSelection"
     @mousemove="updateSelection"
@@ -25,10 +25,7 @@
             Math.round(currentROI.height * canvasHeight)
           }}
         </div>
-        <div
-          v-if="showConfidenceInLabel"
-          class="text-xs opacity-90"
-        >
+        <div v-if="showConfidenceInLabel" class="text-xs opacity-90">
           Confidence: {{ (roiConfidence * 100).toFixed(1) }}% | Stability:
           {{ (stabilityScore * 100).toFixed(1) }}%
         </div>
@@ -103,10 +100,7 @@
     </div>
 
     <!-- ROI History visualization -->
-    <div
-      v-if="showHistory && roiHistory.length > 1"
-      class="roi-history"
-    >
+    <div v-if="showHistory && roiHistory.length > 1" class="roi-history">
       <div
         v-for="(historyItem, index) in recentHistory"
         :key="index"
@@ -127,9 +121,7 @@
       v-if="!currentROI && showInstructions"
       class="instructions absolute top-4 left-4 bg-black bg-opacity-80 text-white px-4 py-3 rounded-lg text-sm max-w-sm"
     >
-      <div class="font-semibold mb-2 text-blue-300">
-        Enhanced ROI Selection
-      </div>
+      <div class="font-semibold mb-2 text-blue-300">ROI Selection</div>
       <div class="text-xs space-y-1">
         <div>• Click and drag to select a region of interest</div>
         <div>• ROI will automatically adapt and track poses</div>
@@ -143,9 +135,7 @@
       v-if="currentROI && showStats"
       class="roi-stats absolute bottom-4 left-4 bg-black bg-opacity-80 text-white px-3 py-2 rounded text-xs max-w-xs"
     >
-      <div class="font-semibold mb-1 text-green-300">
-        ROI Statistics
-      </div>
+      <div class="font-semibold mb-1 text-green-300">ROI Statistics</div>
       <div class="grid grid-cols-2 gap-2 text-xs">
         <div>
           Size: {{ Math.round(currentROI.width * 100) }}% ×
@@ -550,7 +540,7 @@ const toggleMotionPrediction = () => {
 </script>
 
 <style scoped>
-.enhanced-roi-selector {
+.roi-selector {
   cursor: crosshair;
 }
 

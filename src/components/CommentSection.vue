@@ -343,9 +343,14 @@ const handleCommentSubmit = async (commentData) => {
         // Remove optimistic comment
         removeOptimisticComment(optimisticComment.id);
 
-        // Don't add to local array here - let the real-time event handle it
-        // This prevents duplicate comments in the count
+        // Add to local array immediately for display
+        comments.value.push(result);
+        comments.value.sort(
+          (a, b) =>
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        );
 
+        // Emit the event only once here - don't emit again in real-time handler
         emit('comment-added', result);
         console.log('✅ [CommentSection] Comment created:', result);
       } catch (createError) {
@@ -467,17 +472,35 @@ const handleRealtimeCommentInsert = (comment) => {
       (a, b) =>
         new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
     );
+
+    // Only emit for comments from other users (not the current user)
+    // This prevents double counting when the current user adds a comment
+    const isFromCurrentUser =
+      currentUserId.value && comment.userId === currentUserId.value;
+    const isFromCurrentSession =
+      anonymousSession.value &&
+      comment.sessionId === anonymousSession.value.sessionId;
+
+    if (!isFromCurrentUser && !isFromCurrentSession) {
+      // This is a comment from another user, emit the event
+      emit('comment-added', comment);
+    }
   }
 
-  // Add visual indicator for new comment
-  newCommentIndicators.value.add(comment.id);
+  // Add visual indicator for new comment from other users
+  const isOwnComment =
+    (currentUserId.value && comment.userId === currentUserId.value) ||
+    (anonymousSession.value &&
+      comment.sessionId === anonymousSession.value.sessionId);
 
-  // Remove indicator after a delay
-  setTimeout(() => {
-    newCommentIndicators.value.delete(comment.id);
-  }, 3000);
+  if (!isOwnComment) {
+    newCommentIndicators.value.add(comment.id);
 
-  emit('comment-added', comment);
+    // Remove indicator after a delay
+    setTimeout(() => {
+      newCommentIndicators.value.delete(comment.id);
+    }, 3000);
+  }
 };
 
 const handleRealtimeCommentUpdate = (comment, oldComment) => {
@@ -663,10 +686,7 @@ defineExpose({
       <div class="flex items-center space-x-2">
         <h4 class="text-sm font-medium text-gray-900">
           Comments
-          <span
-            v-if="commentCount > 0"
-            class="text-gray-500 font-normal"
-          >
+          <span v-if="commentCount > 0" class="text-gray-500 font-normal">
             ({{ commentCount }})
           </span>
         </h4>
@@ -679,10 +699,7 @@ defineExpose({
         title="Add comment"
         @click="startAddComment"
       >
-        <svg
-          class="icon icon-xs"
-          viewBox="0 0 24 24"
-        >
+        <svg class="icon icon-xs" viewBox="0 0 24 24">
           <path
             d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
           />
@@ -692,32 +709,12 @@ defineExpose({
     </div>
 
     <!-- Error Message -->
-    <div
-      v-if="error"
-      class="p-3 bg-red-50 border-l-4 border-red-400"
-    >
+    <div v-if="error" class="p-3 bg-red-50 border-l-4 border-red-400">
       <div class="flex">
-        <svg
-          class="icon icon-sm text-red-400"
-          viewBox="0 0 24 24"
-        >
-          <circle
-            cx="12"
-            cy="12"
-            r="10"
-          />
-          <line
-            x1="15"
-            y1="9"
-            x2="9"
-            y2="15"
-          />
-          <line
-            x1="9"
-            y1="9"
-            x2="15"
-            y2="15"
-          />
+        <svg class="icon icon-sm text-red-400" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="10" />
+          <line x1="15" y1="9" x2="9" y2="15" />
+          <line x1="9" y1="9" x2="15" y2="15" />
         </svg>
         <div class="ml-2">
           <p class="text-sm text-red-700">
@@ -728,15 +725,9 @@ defineExpose({
     </div>
 
     <!-- Loading State -->
-    <div
-      v-if="isLoading"
-      class="p-4 text-center"
-    >
+    <div v-if="isLoading" class="p-4 text-center">
       <div class="inline-flex items-center space-x-2 text-gray-500">
-        <svg
-          class="animate-spin icon icon-sm"
-          viewBox="0 0 24 24"
-        >
+        <svg class="animate-spin icon icon-sm" viewBox="0 0 24 24">
           <circle
             cx="12"
             cy="12"
@@ -757,10 +748,7 @@ defineExpose({
     </div>
 
     <!-- Comment Form -->
-    <div
-      v-if="showCommentForm"
-      class="border-b border-gray-200"
-    >
+    <div v-if="showCommentForm" class="border-b border-gray-200">
       <CommentForm
         :annotation-id="props.annotationId"
         :editing-comment="editingComment"
@@ -787,21 +775,13 @@ defineExpose({
             d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
           />
         </svg>
-        <p class="text-sm">
-          No comments yet
-        </p>
-        <p
-          v-if="permissions.canComment"
-          class="text-xs text-gray-400 mt-1"
-        >
+        <p class="text-sm">No comments yet</p>
+        <p v-if="permissions.canComment" class="text-xs text-gray-400 mt-1">
           Be the first to add a comment
         </p>
       </div>
 
-      <div
-        v-else
-        class="divide-y divide-gray-100"
-      >
+      <div v-else class="divide-y divide-gray-100">
         <CommentItem
           v-for="comment in sortedComments"
           :key="comment.id"
@@ -823,10 +803,7 @@ defineExpose({
     </div>
 
     <!-- Read-only Notice (removed - comments always allowed) -->
-    <div
-      v-if="false"
-      class="p-3 bg-gray-50 border-t border-gray-200"
-    >
+    <div v-if="false" class="p-3 bg-gray-50 border-t border-gray-200">
       <p class="text-xs text-gray-500 text-center">
         Comments are view-only in this mode
       </p>
@@ -840,7 +817,7 @@ defineExpose({
       <p class="text-xs text-yellow-700 text-center">
         {{
           permissions.reason ||
-            'You do not have permission to comment on this annotation'
+          'You do not have permission to comment on this annotation'
         }}
       </p>
     </div>

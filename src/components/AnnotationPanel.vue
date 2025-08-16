@@ -262,6 +262,23 @@ const sortedAnnotations = computed(() => {
   });
 });
 
+// Computed style for annotations list - scrollable after 7 annotations
+const annotationsListStyle = computed(() => {
+  // Approximate height per annotation card (including margins)
+  const annotationCardHeight = 120; // pixels
+  const maxAnnotations = 7;
+  const maxHeight = annotationCardHeight * maxAnnotations;
+
+  if (sortedAnnotations.value.length > maxAnnotations) {
+    return {
+      maxHeight: `${maxHeight}px`,
+      overflowY: 'auto',
+      overflowX: 'hidden',
+    };
+  }
+  return {};
+});
+
 /**
  * Stable loading state to prevent skeleton flickering
  * DEV: gated mount log
@@ -756,19 +773,21 @@ const isCommentsExpanded = (annotationId) => {
 };
 
 const getCommentCount = (annotation) => {
-  // Use global comment count if available, otherwise fall back to local tracking
+  // Always use global comment count as the single source of truth
   const globalCount = getTotalCommentCount(annotation.id);
-  if (globalCount > 0) {
-    return globalCount;
+
+  // If global count is not yet initialized, use the annotation's stored count
+  // This handles the initial load case before subscriptions are set up
+  if (globalCount === 0 && annotation.commentCount !== undefined) {
+    return annotation.commentCount;
   }
-  return annotation.commentCount || commentCounts.value.get(annotation.id) || 0;
+
+  return globalCount;
 };
 
 const handleCommentAdded = (comment: { annotationId: string }) => {
-  // Update comment count for the annotation
-  const currentCount =
-    (commentCounts.value as Map<string, number>).get(comment.annotationId) || 0;
-  commentCounts.value.set(comment.annotationId, currentCount + 1);
+  // Don't update local count here - let the global comment system handle it
+  // The global subscription will update the count to avoid double-counting
 
   // Add visual indicator for new comment
   const annotation = (props.annotations as any[]).find(
@@ -794,10 +813,8 @@ const handleCommentUpdated = (comment: any) => {
 };
 
 const handleCommentDeleted = (comment: { annotationId: string }) => {
-  // Update comment count for the annotation
-  const currentCount =
-    (commentCounts.value as Map<string, number>).get(comment.annotationId) || 0;
-  commentCounts.value.set(comment.annotationId, Math.max(0, currentCount - 1));
+  // Don't update local count here - let the global comment system handle it
+  // The global subscription will update the count to avoid double-counting
 
   // Emit to parent
   emit('comment-deleted', comment);
@@ -1199,7 +1216,7 @@ defineExpose({
     </div>
 
     <!-- Annotations List -->
-    <div class="p-2">
+    <div class="p-2" :style="annotationsListStyle">
       <!-- Loading Skeleton -->
       <AnnotationSkeleton v-if="shouldShowSkeleton" :skeleton-count="3" />
 
@@ -1320,9 +1337,12 @@ defineExpose({
                 }`"
               ></div>
 
-              <!-- Real-time activity indicator (when comments are expanded) -->
+              <!-- Real-time activity indicator (when comments are expanded and no new comments) -->
               <div
-                v-else-if="isCommentsExpanded(annotation.id)"
+                v-if="
+                  !hasNewComments(annotation.id) &&
+                  isCommentsExpanded(annotation.id)
+                "
                 class="absolute -top-1 -right-1 w-2 h-2 bg-green-400 rounded-full animate-pulse"
                 title="Real-time comments active"
               ></div>
