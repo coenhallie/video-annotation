@@ -1,5 +1,6 @@
 // types/database.ts
 
+// Legacy severity type - kept for backward compatibility but deprecated
 export type SeverityLevel = 'low' | 'medium' | 'high';
 export type AnnotationType = 'text' | 'drawing';
 
@@ -102,6 +103,28 @@ export interface DatabaseComparisonVideo {
   isPublic: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+// Label system interfaces
+export interface DatabaseLabel {
+  id: string;
+  name: string;
+  description?: string;
+  color: string;
+  isDefault: boolean;
+  isActive: boolean;
+  userId?: string;
+  projectId?: string;
+  usageCount?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DatabaseAnnotationLabel {
+  id: string;
+  annotationId: string;
+  labelId: string;
+  createdAt: string;
 }
 
 // Comment system interfaces
@@ -280,6 +303,16 @@ export interface Database {
           Omit<DatabaseAnonymousSession, 'sessionId' | 'createdAt'>
         >;
       };
+      labels: {
+        Row: DatabaseLabel;
+        Insert: Omit<DatabaseLabel, 'id' | 'createdAt' | 'updatedAt'>;
+        Update: Partial<Omit<DatabaseLabel, 'id' | 'createdAt' | 'updatedAt'>>;
+      };
+      annotation_labels: {
+        Row: DatabaseAnnotationLabel;
+        Insert: Omit<DatabaseAnnotationLabel, 'id' | 'createdAt'>;
+        Update: Partial<Omit<DatabaseAnnotationLabel, 'id' | 'createdAt'>>;
+      };
     };
     Functions: {
       get_annotations_at_frame: {
@@ -353,6 +386,12 @@ export type AnonymousSessionInsert =
   Database['public']['Tables']['anonymous_sessions']['Insert'];
 export type AnonymousSessionUpdate =
   Database['public']['Tables']['anonymous_sessions']['Update'];
+export type LabelInsertDB = Database['public']['Tables']['labels']['Insert'];
+export type LabelUpdateDB = Database['public']['Tables']['labels']['Update'];
+export type AnnotationLabelInsertDB =
+  Database['public']['Tables']['annotation_labels']['Insert'];
+export type AnnotationLabelUpdateDB =
+  Database['public']['Tables']['annotation_labels']['Update'];
 
 // Note: Transformation functions removed - database now uses camelCase matching frontend
 

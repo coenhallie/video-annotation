@@ -10,6 +10,7 @@ import {
 import { VideoService } from '../services/videoService';
 import { logger } from '../utils/logger';
 import { AnnotationService } from '../services/annotationService';
+import { AnnotationLabelService } from '../services/annotationLabelService';
 import { useAuth } from './useAuth';
 import { ComparisonVideoService } from '../services/comparisonVideoService';
 import type { Annotation } from '../types/database';
@@ -295,9 +296,14 @@ export function useVideoAnnotations(
         );
         return;
       }
+      // Handle both cases: currentVideo as object with id, or as string id directly
+      const videoIdForLog =
+        typeof currentVideo.value === 'string'
+          ? currentVideo.value
+          : currentVideo.value?.id;
       logger.debug(
         '[useVideoAnnotations] addAnnotation - individual ctx ok',
-        currentVideo.value.id
+        videoIdForLog
       );
     }
 
@@ -331,37 +337,65 @@ export function useVideoAnnotations(
         );
       } else {
         // In individual video context, create individual video annotation
+        // Handle both cases: currentVideo as object with id, or as string id directly
+        const videoIdToUse =
+          typeof currentVideo.value === 'string'
+            ? currentVideo.value
+            : currentVideo.value?.id;
+
         logger.debug(
           '[useVideoAnnotations] creating individual annotation for',
-          currentVideo.value.id
+          videoIdToUse
         );
 
         // Validate frame data before creating annotation (inline to avoid missing helper)
         const _start = annotationData.startFrame ?? annotationData.frame ?? 0;
         const _end = annotationData.endFrame ?? annotationData.frame ?? _start;
 
+        // Extract labels from annotationData (they're handled separately)
+        const { labels, ...annotationWithoutLabels } = annotationData;
+
         const dbAnnotation = {
-          videoId: currentVideo.value.id,
+          videoId: videoIdToUse,
           userId: toValue(user).id,
           projectId: toValue(projectId),
-          content: annotationData.content,
-          title: annotationData.title,
-          severity: annotationData.severity,
-          color: annotationData.color,
-          timestamp: annotationData.timestamp,
-          frame: annotationData.frame,
+          content: annotationWithoutLabels.content,
+          title: annotationWithoutLabels.title,
+          severity: annotationWithoutLabels.severity,
+          color: annotationWithoutLabels.color,
+          timestamp: annotationWithoutLabels.timestamp,
+          frame: annotationWithoutLabels.frame,
           startFrame: _start,
           endFrame: Math.max(_end, _start),
-          duration: annotationData.duration,
-          durationFrames: annotationData.durationFrames,
-          annotationType: annotationData.annotationType,
-          drawingData: annotationData.drawingData,
-          metadata: annotationData.metadata,
+          duration: annotationWithoutLabels.duration,
+          durationFrames: annotationWithoutLabels.durationFrames,
+          annotationType: annotationWithoutLabels.annotationType,
+          drawingData: annotationWithoutLabels.drawingData,
+          metadata: annotationWithoutLabels.metadata,
         };
 
         const createdAnnotation = await AnnotationService.createAnnotation(
           dbAnnotation
         );
+
+        // If there are labels, associate them with the annotation
+        if (labels && labels.length > 0 && createdAnnotation?.id) {
+          try {
+            await AnnotationLabelService.addLabelsToAnnotation(
+              createdAnnotation.id,
+              labels
+            );
+            logger.debug('[useVideoAnnotations] Labels associated:', labels);
+            // Add labels to the created annotation object for immediate display
+            (createdAnnotation as any).labels = labels;
+          } catch (labelError) {
+            logger.error(
+              '[useVideoAnnotations] Failed to associate labels:',
+              labelError
+            );
+            // Continue even if label association fails
+          }
+        }
         logger.debug(
           '[useVideoAnnotations] createAnnotation payload',
           dbAnnotation
@@ -415,21 +449,46 @@ export function useVideoAnnotations(
         throw new Error('Updates object is required');
       }
 
+      // Extract labels from updates (they're handled separately)
+      const { labels, ...updatesWithoutLabels } = actualUpdates;
+
       const dbUpdates = {
-        content: actualUpdates.content || '',
-        title: actualUpdates.title || '',
-        severity: actualUpdates.severity || 'medium',
-        color: actualUpdates.color || '#6b7280',
-        timestamp: actualUpdates.timestamp || 0,
-        frame: actualUpdates.frame || 0,
-        annotationType: actualUpdates.annotationType || 'text',
-        drawingData: actualUpdates.drawingData || null,
+        content: updatesWithoutLabels.content || '',
+        title: updatesWithoutLabels.title || '',
+        severity: updatesWithoutLabels.severity || 'medium',
+        color: updatesWithoutLabels.color || '#6b7280',
+        timestamp: updatesWithoutLabels.timestamp || 0,
+        frame: updatesWithoutLabels.frame || 0,
+        annotationType: updatesWithoutLabels.annotationType || 'text',
+        drawingData: updatesWithoutLabels.drawingData || null,
       };
 
       const updatedAnnotation = await AnnotationService.updateAnnotation(
         actualAnnotationId,
         dbUpdates
       );
+
+      // If labels were provided, update them
+      if (labels !== undefined) {
+        try {
+          await AnnotationLabelService.updateAnnotationLabels(
+            actualAnnotationId,
+            labels || []
+          );
+          logger.debug(
+            '[useVideoAnnotations] Labels updated for annotation:',
+            actualAnnotationId
+          );
+          // Add labels to the updated annotation object for immediate display
+          (updatedAnnotation as any).labels = labels;
+        } catch (labelError) {
+          logger.error(
+            '[useVideoAnnotations] Failed to update labels:',
+            labelError
+          );
+          // Continue even if label update fails
+        }
+      }
 
       const appAnnotation = updatedAnnotation as Annotation;
 
@@ -449,9 +508,17 @@ export function useVideoAnnotations(
 
   const deleteAnnotation = async (annotationId) => {
     try {
-      await AnnotationService.deleteAnnotation(annotationId);
+      // Handle both cases: annotation object or annotation ID string
+      const actualAnnotationId =
+        typeof annotationId === 'object' &&
+        annotationId !== null &&
+        'id' in annotationId
+          ? annotationId.id
+          : annotationId;
+
+      await AnnotationService.deleteAnnotation(actualAnnotationId);
       annotations.value = annotations.value.filter(
-        (a) => a.id !== annotationId
+        (a) => a.id !== actualAnnotationId
       );
     } catch (err) {
       error.value = err.message;

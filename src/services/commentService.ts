@@ -478,7 +478,10 @@ export class CommentService {
       // Check if user can moderate (annotation owner)
       const canModerate = userId && annotation.userId === userId;
 
-      return { canComment, canModerate };
+      return {
+        canComment: canComment === true,
+        canModerate: canModerate === true,
+      };
     } catch (error) {
       console.error('❌ [CommentService] Error checking permissions:', error);
       return {
@@ -498,57 +501,58 @@ export class CommentService {
     sessionId?: string
   ): Promise<boolean> {
     try {
-      const { data: comment, error } = await supabase
+      // Get the comment and its associated annotation
+      const { data: comment, error: commentError } = await supabase
         .from('annotation_comments')
         .select(
           `
           id,
           userId,
           sessionId,
-          annotations!inner(id, userId)
+          annotationId,
+          annotation:annotations(id, userId)
         `
         )
         .eq('id', commentId)
         .single();
 
-      if (error) {
-        console.error('❌ [CommentService] Error getting comment:', error);
+      if (commentError) {
+        console.error(
+          '❌ [CommentService] Error getting comment:',
+          commentError
+        );
         return false;
       }
 
       // User can moderate if:
-      // 1. They are the comment author (authenticated)
-      // 2. They are the comment author (anonymous with matching session)
+      // 1. They are the comment author (authenticated user)
+      // 2. They are the comment author (anonymous user with matching session)
       // 3. They are the annotation owner
-      const annotation = Array.isArray(comment.annotations)
-        ? comment.annotations[0]
-        : comment.annotations;
-      const canModerate =
-        (userId && comment.userId === userId) || // Comment author (authenticated)
-        (sessionId && comment.sessionId === sessionId) || // Comment author (anonymous)
-        (userId && annotation?.userId === userId); // Annotation owner
+      const isCommentAuthor =
+        (userId && comment.userId === userId) ||
+        (sessionId && comment.sessionId === sessionId);
 
-      return canModerate;
+      const isAnnotationOwner =
+        userId &&
+        comment.annotation &&
+        (comment.annotation as any).userId === userId;
+
+      return Boolean(isCommentAuthor || isAnnotationOwner);
     } catch (error) {
-      console.error(
-        '❌ [CommentService] Error checking moderation permissions:',
-        error
-      );
+      console.error('❌ [CommentService] Error checking moderation:', error);
       return false;
     }
   }
 
   /**
-   * Moderate (delete) a comment - allows annotation owners to delete comments
+   * Moderate (delete) a comment with permission check
    */
   static async moderateComment(
     commentId: string,
     userId?: string,
-    sessionId?: string,
-    reason?: string
+    sessionId?: string
   ): Promise<void> {
     try {
-      // Check if user can moderate
       const canModerate = await this.canUserModerateComment(
         commentId,
         userId,
@@ -556,13 +560,9 @@ export class CommentService {
       );
 
       if (!canModerate) {
-        const errorMsg =
-          'User does not have permission to moderate this comment';
-        console.error('❌ [CommentService]', errorMsg);
-        throw new Error(errorMsg);
+        throw new Error('Permission denied: cannot moderate this comment');
       }
 
-      // Delete the comment
       await this.deleteComment(commentId, sessionId);
     } catch (error) {
       console.error('❌ [CommentService] Error moderating comment:', error);
@@ -570,10 +570,10 @@ export class CommentService {
     }
   }
 
-  // ===== UTILITY FUNCTIONS =====
+  // ===== COMMENT COUNTING =====
 
   /**
-   * Get total comment count for an annotation
+   * Get comment count for a specific annotation
    */
   static async getCommentCount(annotationId: string): Promise<number> {
     try {
@@ -587,18 +587,18 @@ export class CommentService {
           '❌ [CommentService] Error getting comment count:',
           error
         );
-        throw error;
+        return 0;
       }
 
       return count || 0;
     } catch (error) {
       console.error('❌ [CommentService] Error getting comment count:', error);
-      throw error;
+      return 0;
     }
   }
 
   /**
-   * Get total comment count for a project (single or dual video)
+   * Get comment count for a project (video or comparison)
    */
   static async getProjectCommentCount(project: any): Promise<number> {
     try {
@@ -724,22 +724,68 @@ export class CommentService {
     if (projectIds.length === 0) {
       return {};
     }
-    const { data, error } = await supabase.rpc(
-      'get_comment_counts_for_projects',
-      {
-        p_project_ids: projectIds,
-      }
-    );
 
-    if (error) {
-      console.error('Error fetching comment counts:', error);
+    try {
+      const counts: Record<string, number> = {};
+
+      // For each project ID, count comments by getting all annotations for that video
+      // and then counting comments for those annotations
+      for (const projectId of projectIds) {
+        try {
+          // Get all annotation IDs for this video (project)
+          const { data: annotations, error: annotationsError } = await supabase
+            .from('annotations')
+            .select('id')
+            .eq('videoId', projectId);
+
+          if (annotationsError) {
+            console.error(
+              `❌ [CommentService] Error getting annotations for project ${projectId}:`,
+              annotationsError
+            );
+            counts[projectId] = 0;
+            continue;
+          }
+
+          if (!annotations || annotations.length === 0) {
+            counts[projectId] = 0;
+            continue;
+          }
+
+          const annotationIds = annotations.map((a) => a.id);
+
+          // Count comments for these annotations
+          const { count, error: countError } = await supabase
+            .from('annotation_comments')
+            .select('*', { count: 'exact', head: true })
+            .in('annotationId', annotationIds);
+
+          if (countError) {
+            console.error(
+              `❌ [CommentService] Error counting comments for project ${projectId}:`,
+              countError
+            );
+            counts[projectId] = 0;
+          } else {
+            counts[projectId] = count || 0;
+          }
+        } catch (projectError) {
+          console.error(
+            `❌ [CommentService] Error processing project ${projectId}:`,
+            projectError
+          );
+          counts[projectId] = 0;
+        }
+      }
+
+      return counts;
+    } catch (error) {
+      console.error(
+        '❌ [CommentService] Error fetching comment counts:',
+        error
+      );
       return {};
     }
-    const counts: Record<string, number> = {};
-    for (const item of data) {
-      counts[item.project_id] = item.comment_count;
-    }
-    return counts;
   }
 
   /**
@@ -773,10 +819,10 @@ export class CommentService {
     }
   }
 
-  // ===== BATCH OPERATIONS =====
+  // ===== BULK OPERATIONS =====
 
   /**
-   * Get comments with user data for multiple annotations
+   * Get comments for multiple annotations at once
    */
   static async getCommentsForAnnotations(
     annotationIds: string[]
@@ -798,37 +844,31 @@ export class CommentService {
         .order('createdAt', { ascending: true });
 
       if (error) {
-        console.error(
-          '❌ [CommentService] Error getting batch comments:',
-          error
-        );
+        console.error('❌ [CommentService] Error getting comments:', error);
         throw error;
       }
 
-      // Group comments by annotationId
+      // Group comments by annotation ID
       const commentsByAnnotation: Record<string, Comment[]> = {};
-
-      annotationIds.forEach((id) => {
-        commentsByAnnotation[id] = [];
-      });
-
       data?.forEach((comment) => {
-        const transformedComment = comment;
         if (!commentsByAnnotation[comment.annotationId]) {
           commentsByAnnotation[comment.annotationId] = [];
         }
-        commentsByAnnotation[comment.annotationId].push(transformedComment);
+        commentsByAnnotation[comment.annotationId]?.push(comment);
       });
 
       return commentsByAnnotation;
     } catch (error) {
-      console.error('❌ [CommentService] Error getting batch comments:', error);
+      console.error(
+        '❌ [CommentService] Error getting comments for annotations:',
+        error
+      );
       throw error;
     }
   }
 
   /**
-   * Delete all comments for an annotation (used when annotation is deleted)
+   * Delete all comments for an annotation (used when deleting annotation)
    */
   static async deleteAnnotationComments(annotationId: string): Promise<void> {
     try {
@@ -853,66 +893,43 @@ export class CommentService {
     }
   }
 
-  // ===== REAL-TIME BROADCASTING =====
+  // ===== REALTIME HELPERS =====
 
   /**
-   * Get real-time permission validation for comment operations
+   * Validate permissions for realtime operations
    */
   static async validateRealtimePermissions(
     annotationId: string,
-    userId?: string,
-    sessionId?: string
-  ): Promise<{
-    canComment: boolean;
-    canModerate: boolean;
-    canSubscribe: boolean;
-    reason?: string;
-  }> {
+    userId?: string
+  ): Promise<boolean> {
     try {
-      // Check basic comment permissions
       const permissions = await this.canUserCommentOnAnnotation(
         annotationId,
         userId
       );
-
-      // Real-time subscription is allowed if user can view the annotation
-      // This includes public videos, video owners, and annotation owners
-      const canSubscribe = permissions.canComment || Boolean(userId);
-
-      return {
-        canComment: permissions.canComment,
-        canModerate: permissions.canModerate,
-        canSubscribe,
-        reason: permissions.reason,
-      };
+      return permissions.canComment;
     } catch (error) {
       console.error(
-        '❌ [CommentService] Error validating real-time permissions:',
+        '❌ [CommentService] Error validating realtime permissions:',
         error
       );
-      return {
-        canComment: false,
-        canModerate: false,
-        canSubscribe: false,
-        reason: 'Permission validation failed',
-      };
+      return false;
     }
   }
 
   /**
-   * Enhanced create comment with real-time (uses postgres_changes)
+   * Create comment with realtime broadcast
    */
   static async createCommentWithRealtime(
     params: CreateCommentParams
   ): Promise<Comment> {
     try {
-      // Create comment using existing method
-      // Real-time events will be automatically triggered by postgres_changes
       const comment = await this.createComment(params);
+      // Realtime broadcasting is handled by database triggers
       return comment;
     } catch (error) {
       console.error(
-        '❌ [CommentService] Error creating comment with real-time:',
+        '❌ [CommentService] Error creating comment with realtime:',
         error
       );
       throw error;
@@ -920,7 +937,7 @@ export class CommentService {
   }
 
   /**
-   * Enhanced update comment with real-time (uses postgres_changes)
+   * Update comment with realtime broadcast
    */
   static async updateCommentWithRealtime(
     commentId: string,
@@ -928,17 +945,12 @@ export class CommentService {
     sessionId?: string
   ): Promise<Comment> {
     try {
-      // Update comment using existing method
-      // Real-time events will be automatically triggered by postgres_changes
-      const updatedComment = await this.updateComment(
-        commentId,
-        params,
-        sessionId
-      );
-      return updatedComment;
+      const comment = await this.updateComment(commentId, params, sessionId);
+      // Realtime broadcasting is handled by database triggers
+      return comment;
     } catch (error) {
       console.error(
-        '❌ [CommentService] Error updating comment with real-time:',
+        '❌ [CommentService] Error updating comment with realtime:',
         error
       );
       throw error;
@@ -946,19 +958,18 @@ export class CommentService {
   }
 
   /**
-   * Enhanced delete comment with real-time (uses postgres_changes)
+   * Delete comment with realtime broadcast
    */
   static async deleteCommentWithRealtime(
     commentId: string,
     sessionId?: string
   ): Promise<void> {
     try {
-      // Delete comment using existing method
-      // Real-time events will be automatically triggered by postgres_changes
       await this.deleteComment(commentId, sessionId);
+      // Realtime broadcasting is handled by database triggers
     } catch (error) {
       console.error(
-        '❌ [CommentService] Error deleting comment with real-time:',
+        '❌ [CommentService] Error deleting comment with realtime:',
         error
       );
       throw error;

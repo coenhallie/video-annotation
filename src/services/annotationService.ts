@@ -32,7 +32,17 @@ export class AnnotationService {
       return [];
     }
 
-    let query = supabase.from('annotations').select('*').eq('videoId', videoId);
+    let query = supabase
+      .from('annotations')
+      .select(
+        `
+        *,
+        annotation_labels (
+          labelId
+        )
+      `
+      )
+      .eq('videoId', videoId);
 
     // Filter by projectId if provided
     if (projectId) {
@@ -45,39 +55,51 @@ export class AnnotationService {
       throw error;
     }
 
+    // Transform the data to include labels array
+    const annotationsWithLabels =
+      data?.map((annotation: any) => ({
+        ...annotation,
+        labels:
+          annotation.annotation_labels?.map((al: any) => al.labelId) || [],
+      })) || [];
+
     // If comment counts are requested, fetch them for all annotations
-    if (includeCommentCounts && data && data.length > 0) {
+    if (
+      includeCommentCounts &&
+      annotationsWithLabels &&
+      annotationsWithLabels.length > 0
+    ) {
       try {
-        const annotationIds = data.map((annotation) => annotation.id);
+        const annotationIds = annotationsWithLabels.map(
+          (annotation) => annotation.id
+        );
         const commentCounts = await Promise.all(
           annotationIds.map((id) => CommentService.getCommentCount(id))
         );
 
         // Add comment counts to annotations
-        return data.map((annotation, index) => ({
+        return annotationsWithLabels.map((annotation, index) => ({
           ...annotation,
           commentCount: commentCounts[index] || 0,
         }));
       } catch (commentError) {
         // Return annotations without comment counts if comment service fails
-        return data;
+        return annotationsWithLabels;
       }
     }
 
-    return data;
+    return annotationsWithLabels;
   }
 
   static async updateAnnotation(
     annotationId: string,
     updates: AnnotationUpdate
   ) {
-    // Remove annotationType from updates object as it should not be included in update requests
     const updatesAny = updates as any;
-    const { annotationType, ...cleanUpdates } = updatesAny;
 
-    // Ensure dual video frame data is included in updates if provided
+    // Ensure dual video frame data and annotationType are included in updates if provided
     const finalUpdates = {
-      ...cleanUpdates,
+      ...updatesAny,
       ...(updatesAny.videoAFrame !== undefined && {
         videoAFrame: updatesAny.videoAFrame,
       }),
@@ -89,6 +111,12 @@ export class AnnotationService {
       }),
       ...(updatesAny.videoBTimestamp !== undefined && {
         videoBTimestamp: updatesAny.videoBTimestamp,
+      }),
+      ...(updatesAny.annotationType !== undefined && {
+        annotationType: updatesAny.annotationType,
+      }),
+      ...(updatesAny.drawingData !== undefined && {
+        drawingData: updatesAny.drawingData,
       }),
     };
 
@@ -107,12 +135,9 @@ export class AnnotationService {
   }
 
   static async deleteAnnotation(annotationId: string) {
-    try {
-      // First, delete all associated comments
-      await CommentService.deleteAnnotationComments(annotationId);
-    } catch (commentError) {
-      // Continue with annotation deletion even if comment cleanup fails
-    }
+    // Note: We don't need to manually delete comments anymore
+    // The database has ON DELETE CASCADE which will automatically
+    // delete all associated comments when the annotation is deleted
 
     const { error } = await supabase
       .from('annotations')
@@ -260,7 +285,14 @@ export class AnnotationService {
 
     const { data, error } = await supabase
       .from('annotations')
-      .select('*')
+      .select(
+        `
+        *,
+        annotation_labels (
+          labelId
+        )
+      `
+      )
       .eq('comparisonVideoId', comparisonVideoId)
       .order('timestamp', { ascending: true });
 
@@ -268,26 +300,40 @@ export class AnnotationService {
       throw error;
     }
 
+    // Transform the data to include labels array
+    const annotationsWithLabels =
+      data?.map((annotation: any) => ({
+        ...annotation,
+        labels:
+          annotation.annotation_labels?.map((al: any) => al.labelId) || [],
+      })) || [];
+
     // If comment counts are requested, fetch them for all annotations
-    if (includeCommentCounts && data && data.length > 0) {
+    if (
+      includeCommentCounts &&
+      annotationsWithLabels &&
+      annotationsWithLabels.length > 0
+    ) {
       try {
-        const annotationIds = data.map((annotation) => annotation.id);
+        const annotationIds = annotationsWithLabels.map(
+          (annotation: any) => annotation.id
+        );
         const commentCounts = await Promise.all(
-          annotationIds.map((id) => CommentService.getCommentCount(id))
+          annotationIds.map((id: string) => CommentService.getCommentCount(id))
         );
 
         // Add comment counts to annotations
-        return data.map((annotation, index) => ({
+        return annotationsWithLabels.map((annotation: any, index: number) => ({
           ...annotation,
           commentCount: commentCounts[index] || 0,
         }));
       } catch (commentError) {
         // Return annotations without comment counts if comment service fails
-        return data || [];
+        return annotationsWithLabels;
       }
     }
 
-    return data || [];
+    return annotationsWithLabels;
   }
 
   /**
@@ -464,18 +510,7 @@ export class AnnotationService {
         throw fetchError;
       }
 
-      // Delete comments for all annotations
-      if (annotations && annotations.length > 0) {
-        await Promise.all(
-          annotations.map((annotation) =>
-            CommentService.deleteAnnotationComments(annotation.id).catch(
-              (error) => {}
-            )
-          )
-        );
-      }
-
-      // Then delete all annotations
+      // Delete all annotations (comments will be cascade deleted automatically)
       const { error } = await supabase
         .from('annotations')
         .delete()
