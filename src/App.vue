@@ -17,7 +17,6 @@ import ShareModal from './components/ShareModal.vue';
 import NotificationToast from './components/NotificationToast.vue';
 import UnifiedVideoPlayer from './components/UnifiedVideoPlayer.vue';
 import SpeedVisualization from './components/SpeedVisualization.vue';
-import SpeedChart from './components/SpeedChart.vue';
 import CalibrationControls from './components/CalibrationControls.vue';
 import { useAuth } from './composables/useAuth';
 import { useVideoAnnotations } from './composables/useVideoAnnotations';
@@ -28,8 +27,6 @@ import { useComparisonVideoWorkflow } from './composables/useComparisonVideoWork
 import { useDualVideoPlayer } from './composables/useDualVideoPlayer';
 import { usePoseLandmarker } from './composables/usePoseLandmarker';
 import { useSessionCleanup } from './composables/useSessionCleanup';
-import { VideoService } from './services/videoService';
-import { AnnotationService } from './services/annotationService';
 import { ShareService } from './services/shareService';
 import { supabase } from './composables/useSupabase';
 
@@ -1326,8 +1323,8 @@ watch(
       <!-- Video Section -->
       <section class="flex-1 flex flex-col bg-black min-w-0 overflow-hidden">
         <div class="flex-1 flex items-center justify-center p-6">
-          <div class="flex flex-col items-center">
-            <div class="relative">
+          <div class="w-full h-full flex flex-col items-center justify-center">
+            <div class="relative w-full h-full max-h-full">
               <!-- Unified Video Player -->
               <UnifiedVideoPlayer
                 ref="unifiedVideoPlayerRef"

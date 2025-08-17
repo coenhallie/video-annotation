@@ -3253,31 +3253,39 @@ defineExpose({
 <style scoped>
 .unified-video-player {
   width: 100%;
-  max-width: 1400px;
+  height: 100%;
   margin: 0 auto;
 }
 
 .single-video-container,
 .dual-video-container {
   width: 100%;
+  height: 100%;
 }
 
 .video-wrapper {
   position: relative;
   width: 100%;
+  height: 100%;
+  min-height: 300px;
   background: black;
   border-radius: 0.5rem;
   overflow: hidden;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
   display: grid;
+  place-items: center;
 }
 
 .video-element {
   width: 100%;
-  height: auto;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
   display: block;
   cursor: pointer;
   transition: opacity 150ms ease-in-out;
+  object-fit: contain;
+  object-position: center;
 }
 
 .video-wrapper > * {
@@ -3414,10 +3422,12 @@ defineExpose({
   grid-template-columns: 1fr 1fr;
   gap: 1rem;
   width: 100%;
+  height: 100%;
 }
 
 .video-section {
   position: relative;
+  height: 100%;
 }
 
 .video-label {
@@ -3675,6 +3685,7 @@ defineExpose({
 @media (max-width: 768px) {
   .videos-grid {
     grid-template-columns: 1fr;
+    height: 100%;
   }
 
   .volume-controls,
@@ -3691,6 +3702,44 @@ defineExpose({
 
   .pose-status-text {
     display: none;
+  }
+}
+
+/* Large screen optimizations for TV displays */
+@media (min-width: 1920px) {
+  .unified-video-player {
+    max-width: none;
+  }
+
+  .video-wrapper {
+    border-radius: 0.75rem;
+    min-height: 400px;
+  }
+
+  .video-element {
+    min-width: 100%;
+    min-height: 100%;
+  }
+}
+
+/* Ultra-wide and TV display support */
+@media (min-width: 2560px) {
+  .video-wrapper {
+    border-radius: 1rem;
+    min-height: 600px;
+  }
+
+  .video-element {
+    min-width: 100%;
+    min-height: 100%;
+  }
+}
+
+/* Force video scaling for all screen sizes */
+@media (min-width: 1200px) {
+  .video-element {
+    min-width: 100%;
+    min-height: 100%;
   }
 }
 </style>
