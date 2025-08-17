@@ -3274,6 +3274,10 @@ defineExpose({
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
   display: grid;
   place-items: center;
+  /* Safari-specific fixes */
+  -webkit-box-sizing: border-box;
+  box-sizing: border-box;
+  contain: layout style;
 }
 
 .video-element {
@@ -3286,6 +3290,13 @@ defineExpose({
   transition: opacity 150ms ease-in-out;
   object-fit: contain;
   object-position: center;
+  /* Safari-specific fixes for video sizing */
+  -webkit-box-sizing: border-box;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  /* Prevent Safari from growing the video beyond container */
+  min-width: 0;
+  min-height: 0;
 }
 
 .video-wrapper > * {
@@ -3423,11 +3434,20 @@ defineExpose({
   gap: 1rem;
   width: 100%;
   height: 100%;
+  /* Safari-specific fixes */
+  -webkit-box-sizing: border-box;
+  box-sizing: border-box;
 }
 
 .video-section {
   position: relative;
   height: 100%;
+  /* Safari-specific fixes for video container growth */
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  -webkit-box-sizing: border-box;
+  box-sizing: border-box;
 }
 
 .video-label {
@@ -3740,6 +3760,71 @@ defineExpose({
   .video-element {
     min-width: 100%;
     min-height: 100%;
+  }
+}
+
+/* Safari-specific fixes */
+@supports (-webkit-appearance: none) {
+  /* Target Safari specifically */
+  .dual-video-container {
+    /* Prevent container growth in Safari */
+    max-height: 100vh;
+    overflow: hidden;
+  }
+
+  .videos-grid {
+    /* Force grid to respect container bounds in Safari */
+    max-height: 100%;
+    grid-template-rows: 1fr;
+  }
+
+  .video-section {
+    /* Prevent video sections from growing beyond grid cell */
+    max-height: 100%;
+    max-width: 100%;
+    contain: layout size;
+  }
+
+  .video-wrapper {
+    /* Strict containment for Safari */
+    max-height: 100%;
+    max-width: 100%;
+    contain: layout size style;
+  }
+
+  .video-element {
+    /* Prevent video element from forcing container growth */
+    max-height: 100% !important;
+    max-width: 100% !important;
+    height: auto;
+    width: auto;
+    object-fit: contain;
+    /* Safari-specific video sizing fix */
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+  }
+}
+
+/* Additional Safari WebKit specific fixes */
+@media screen and (-webkit-min-device-pixel-ratio: 0) {
+  .dual-video-container .video-wrapper {
+    /* Force Safari to respect container dimensions */
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .dual-video-container .video-element {
+    /* Prevent Safari video from growing beyond wrapper */
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    max-height: 100%;
+    max-width: 100%;
+    height: auto;
+    width: auto;
   }
 }
 </style>
