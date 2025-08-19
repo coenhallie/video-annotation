@@ -322,14 +322,42 @@ export function useVideoAnnotations(
           toValue(comparisonVideoId)
         );
 
-        newAnnotation = await AnnotationService.createComparisonAnnotation(
-          toValue(comparisonVideoId),
-          annotationData,
-          toValue(user).id,
-          'comparison',
-          undefined, // synchronizedFrame
-          toValue(projectId)
-        );
+        // Extract labels from annotationData (they're handled separately)
+        const { labels, ...annotationWithoutLabels } = annotationData;
+
+        const createdAnnotation =
+          await AnnotationService.createComparisonAnnotation(
+            toValue(comparisonVideoId),
+            annotationWithoutLabels,
+            toValue(user).id,
+            'comparison',
+            undefined, // synchronizedFrame
+            toValue(projectId)
+          );
+
+        // If there are labels, associate them with the annotation
+        if (labels && labels.length > 0 && createdAnnotation?.id) {
+          try {
+            await AnnotationLabelService.addLabelsToAnnotation(
+              createdAnnotation.id,
+              labels
+            );
+            logger.debug(
+              '[useVideoAnnotations] Labels associated with comparison annotation:',
+              labels
+            );
+            // Add labels to the created annotation object for immediate display
+            (createdAnnotation as any).labels = labels;
+          } catch (labelError) {
+            logger.error(
+              '[useVideoAnnotations] Failed to associate labels with comparison annotation:',
+              labelError
+            );
+            // Continue even if label association fails
+          }
+        }
+
+        newAnnotation = createdAnnotation as Annotation;
         // logger payloads available above; avoid verbose dumps
         logger.debug(
           '[useVideoAnnotations] comparison annotation created',
@@ -424,7 +452,8 @@ export function useVideoAnnotations(
   };
 
   const updateAnnotation = async (annotationId, updates) => {
-    if (!currentVideo.value) return;
+    // In comparison context, we don't need currentVideo
+    if (!isComparisonContext.value && !currentVideo.value) return;
 
     try {
       // Handle both calling patterns: (id, updates) or (annotationObject)
@@ -452,16 +481,63 @@ export function useVideoAnnotations(
       // Extract labels from updates (they're handled separately)
       const { labels, ...updatesWithoutLabels } = actualUpdates;
 
-      const dbUpdates = {
-        content: updatesWithoutLabels.content || '',
-        title: updatesWithoutLabels.title || '',
-        severity: updatesWithoutLabels.severity || 'medium',
-        color: updatesWithoutLabels.color || '#6b7280',
-        timestamp: updatesWithoutLabels.timestamp || 0,
-        frame: updatesWithoutLabels.frame || 0,
-        annotationType: updatesWithoutLabels.annotationType || 'text',
-        drawingData: updatesWithoutLabels.drawingData || null,
-      };
+      // Build updates object, only including fields that are being updated
+      // This prevents sending default values that might violate constraints
+      const dbUpdates: any = {};
+
+      // Only add fields that are explicitly provided in the updates
+      if (updatesWithoutLabels.content !== undefined) {
+        dbUpdates.content = updatesWithoutLabels.content;
+      }
+      if (updatesWithoutLabels.title !== undefined) {
+        dbUpdates.title = updatesWithoutLabels.title;
+      }
+      if (updatesWithoutLabels.severity !== undefined) {
+        dbUpdates.severity = updatesWithoutLabels.severity;
+      }
+      if (updatesWithoutLabels.color !== undefined) {
+        dbUpdates.color = updatesWithoutLabels.color;
+      }
+      if (updatesWithoutLabels.timestamp !== undefined) {
+        // Ensure timestamp is positive (database constraint requires > 0)
+        dbUpdates.timestamp = Math.max(updatesWithoutLabels.timestamp, 0.001);
+      }
+      if (updatesWithoutLabels.frame !== undefined) {
+        dbUpdates.frame = Math.max(updatesWithoutLabels.frame, 0);
+      }
+      if (updatesWithoutLabels.annotationType !== undefined) {
+        dbUpdates.annotationType = updatesWithoutLabels.annotationType;
+      }
+      // Preserve drawingData exactly as provided
+      if (updatesWithoutLabels.drawingData !== undefined) {
+        dbUpdates.drawingData = updatesWithoutLabels.drawingData;
+      }
+      // Include dual video frame data if present
+      if (updatesWithoutLabels.videoAFrame !== undefined) {
+        dbUpdates.videoAFrame = Math.max(updatesWithoutLabels.videoAFrame, 0);
+      }
+      if (updatesWithoutLabels.videoBFrame !== undefined) {
+        dbUpdates.videoBFrame = Math.max(updatesWithoutLabels.videoBFrame, 0);
+      }
+      if (updatesWithoutLabels.videoATimestamp !== undefined) {
+        dbUpdates.videoATimestamp = Math.max(
+          updatesWithoutLabels.videoATimestamp,
+          0.001
+        );
+      }
+      if (updatesWithoutLabels.videoBTimestamp !== undefined) {
+        dbUpdates.videoBTimestamp = Math.max(
+          updatesWithoutLabels.videoBTimestamp,
+          0.001
+        );
+      }
+
+      logger.debug('[useVideoAnnotations] Updating annotation with:', {
+        annotationId: actualAnnotationId,
+        dbUpdates,
+        hasDrawingData: updatesWithoutLabels.drawingData !== undefined,
+        isComparisonContext: isComparisonContext.value,
+      });
 
       const updatedAnnotation = await AnnotationService.updateAnnotation(
         actualAnnotationId,

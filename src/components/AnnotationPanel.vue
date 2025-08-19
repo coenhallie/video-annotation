@@ -494,7 +494,8 @@ const startAddAnnotation = () => {
   const hasExistingDrawings = props.isDualMode
     ? props.drawingCanvasARef?.hasDrawingsOnCurrentFrame() ||
       props.drawingCanvasBRef?.hasDrawingsOnCurrentFrame()
-    : primaryDrawingCanvas.value?.hasDrawingsOnCurrentFrame();
+    : props.drawingCanvasRef?.hasDrawingsOnCurrentFrame() ||
+      primaryDrawingCanvas.value?.hasDrawingsOnCurrentFrame();
 
   if (hasExistingDrawings) {
     // If there are existing drawings, preserve them and set hasDrawingData to true
@@ -612,11 +613,11 @@ const saveAnnotation = async () => {
     // Check if drawing data was explicitly cleared by the user
     let currentDrawingData = null;
 
-    // If the user has explicitly cleared the drawing data, respect that
-    if (newAnnotation.value.drawingData === null) {
-      currentDrawingData = null;
+    // First check if we have drawing data stored in the annotation (from onDrawingCreated)
+    if (newAnnotation.value.drawingData) {
+      currentDrawingData = newAnnotation.value.drawingData;
     } else {
-      // Otherwise, collect drawing data from canvases
+      // Otherwise, try to collect drawing data from canvases
       if (props.isDualMode) {
         // In dual mode, collect from both canvases
         const drawingA = props.drawingCanvasARef?.getCurrentDrawingSession();
@@ -628,8 +629,18 @@ const saveAnnotation = async () => {
           if (drawingB) currentDrawingData.drawingB = drawingB;
         }
       } else {
-        // Single mode: collect from primary canvas using the ref
+        // Single mode: try to get from canvas ref
         const canvasRef = props.drawingCanvasRef;
+
+        // Try to complete any pending drawing session
+        if (
+          canvasRef &&
+          typeof canvasRef.completeDrawingSession === 'function'
+        ) {
+          canvasRef.completeDrawingSession();
+        }
+
+        // Then try to get the session data
         if (
           canvasRef &&
           typeof canvasRef.getCurrentDrawingSession === 'function'
@@ -647,27 +658,21 @@ const saveAnnotation = async () => {
               canvasHeight: drawingSession.canvasHeight,
             };
           }
-        } else if (
-          canvasRef &&
-          typeof canvasRef.completeDrawingSession === 'function'
+        }
+
+        // If still no data, check the drawing canvas composable for current frame drawings
+        if (
+          !currentDrawingData &&
+          primaryDrawingCanvas.value?.getCurrentFrameDrawing
         ) {
-          // Alternative: try to complete the drawing session to get data
-          canvasRef.completeDrawingSession();
-          // After completing, try to get the session data again
-          if (typeof canvasRef.getCurrentDrawingSession === 'function') {
-            const drawingSession = canvasRef.getCurrentDrawingSession();
-            if (
-              drawingSession &&
-              drawingSession.paths &&
-              drawingSession.paths.length > 0
-            ) {
-              currentDrawingData = {
-                paths: drawingSession.paths,
-                frame: drawingSession.frame,
-                canvasWidth: drawingSession.canvasWidth,
-                canvasHeight: drawingSession.canvasHeight,
-              };
-            }
+          const frameDrawing =
+            primaryDrawingCanvas.value.getCurrentFrameDrawing();
+          if (
+            frameDrawing &&
+            frameDrawing.paths &&
+            frameDrawing.paths.length > 0
+          ) {
+            currentDrawingData = frameDrawing;
           }
         }
       }
@@ -706,6 +711,12 @@ const saveAnnotation = async () => {
       durationFrames: Math.max(1, 1),
       labels: baseDraft.labels || [],
     };
+
+    console.log('🎨 [AnnotationPanel] Saving annotation with data:', {
+      annotationType: annotationData.annotationType,
+      hasDrawingData: !!annotationData.drawingData,
+      frame: annotationData.frame,
+    });
 
     // Add dual video frame data if in dual mode
     if (props.isDualMode) {
@@ -805,36 +816,34 @@ const toggleDrawingSection = () => {
   showDrawingSection.value = !showDrawingSection.value;
 
   if (showDrawingSection.value) {
-    // Enable drawing mode on canvases
+    // Enable drawing mode using the composable
     if (props.isDualMode) {
-      if (props.drawingCanvasA && props.drawingCanvasA.enableDrawingMode) {
+      // In dual mode, we need to enable drawing on the composables
+      if (props.drawingCanvasA?.enableDrawingMode) {
         props.drawingCanvasA.enableDrawingMode();
       }
-      if (props.drawingCanvasB && props.drawingCanvasB.enableDrawingMode) {
+      if (props.drawingCanvasB?.enableDrawingMode) {
         props.drawingCanvasB.enableDrawingMode();
       }
     } else {
-      if (
-        primaryDrawingCanvas.value &&
-        primaryDrawingCanvas.value.enableDrawingMode
-      ) {
+      // In single mode, use the primary drawing canvas composable
+      if (primaryDrawingCanvas.value?.enableDrawingMode) {
         primaryDrawingCanvas.value.enableDrawingMode();
       }
     }
   } else {
-    // Disable drawing mode on canvases
+    // Disable drawing mode using the composable
     if (props.isDualMode) {
-      if (props.drawingCanvasA && props.drawingCanvasA.disableDrawingMode) {
+      // In dual mode, we need to disable drawing on the composables
+      if (props.drawingCanvasA?.disableDrawingMode) {
         props.drawingCanvasA.disableDrawingMode();
       }
-      if (props.drawingCanvasB && props.drawingCanvasB.disableDrawingMode) {
+      if (props.drawingCanvasB?.disableDrawingMode) {
         props.drawingCanvasB.disableDrawingMode();
       }
     } else {
-      if (
-        primaryDrawingCanvas.value &&
-        primaryDrawingCanvas.value.disableDrawingMode
-      ) {
+      // In single mode, use the primary drawing canvas composable
+      if (primaryDrawingCanvas.value?.disableDrawingMode) {
         primaryDrawingCanvas.value.disableDrawingMode();
       }
     }
@@ -842,6 +851,13 @@ const toggleDrawingSection = () => {
 };
 
 const onDrawingCreated = (drawingData: any, videoContext = null) => {
+  console.log(
+    '🎨 [AnnotationPanel] onDrawingCreated called with:',
+    drawingData,
+    'context:',
+    videoContext
+  );
+
   if (props.isDualMode) {
     // Initialize drawing data object if it doesn't exist
     if (!newAnnotation.value.drawingData) {
@@ -858,20 +874,17 @@ const onDrawingCreated = (drawingData: any, videoContext = null) => {
       (newAnnotation.value.drawingData as any).drawingA = drawingData;
     }
   } else {
-    // Single mode: merge with existing drawing data
-    const existingDrawing = newAnnotation.value.drawingData as any;
-    if (existingDrawing && existingDrawing.paths) {
-      newAnnotation.value.drawingData = {
-        ...existingDrawing,
-        paths: [...existingDrawing.paths, ...drawingData.paths],
-      };
-    } else {
-      newAnnotation.value.drawingData = drawingData;
-    }
+    // Single mode: store the drawing data directly
+    newAnnotation.value.drawingData = drawingData;
+    console.log(
+      '🎨 [AnnotationPanel] Stored drawing data in annotation:',
+      newAnnotation.value.drawingData
+    );
   }
 
   hasDrawingData.value = true;
-  emit('drawing-created', drawingData, videoContext);
+  // Don't emit drawing-created here as it creates an infinite loop
+  // The drawing data is already stored in newAnnotation.value.drawingData
 };
 
 const clearDrawing = () => {
@@ -1020,6 +1033,11 @@ watch(
   },
   { deep: true }
 );
+
+// Expose methods for parent component access
+defineExpose({
+  onDrawingCreated,
+});
 </script>
 
 <template>

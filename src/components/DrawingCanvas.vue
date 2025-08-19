@@ -209,6 +209,16 @@ const completeDrawingSession = () => {
   currentDrawingSession.value = null;
 };
 
+// Auto-complete drawing session when drawing mode is disabled
+const autoCompleteDrawingSession = () => {
+  if (
+    currentDrawingSession.value &&
+    currentDrawingSession.value.paths.length > 0
+  ) {
+    completeDrawingSession();
+  }
+};
+
 // Convert fabric path to DrawingPath (single path)
 const createDrawingPathFromFabricPath = (path: fabric.Path): DrawingPath => {
   const pathData = path.path || [];
@@ -416,7 +426,16 @@ watch(
         if (canvasContainer.value) {
           canvasContainer.value.style.cursor = 'default';
         }
-        // No need to finish drawing session since we emit drawings immediately
+        // Complete any pending drawing session when drawing mode is disabled
+        if (
+          currentDrawingSession.value &&
+          currentDrawingSession.value.paths.length > 0
+        ) {
+          console.log(
+            '🎨 [DrawingCanvas] Auto-completing drawing session on mode disable'
+          );
+          completeDrawingSession();
+        }
       }
     } else {
       console.warn(
