@@ -331,31 +331,66 @@ export class LabelService {
     const stats: LabelStats[] = [];
 
     for (const label of labels) {
-      const { count, error } = await supabase
+      // Build query to count annotation_labels, filtering by project if specified
+      let countQuery = supabase
         .from('annotation_labels')
         .select('*', { count: 'exact', head: true })
         .eq('labelId', label.id);
 
-      if (error) {
-        console.error(`Error getting stats for label ${label.id}:`, error);
-        continue;
+      // If projectId is specified, join with annotations table to filter by project
+      if (projectId) {
+        const { count, error } = await supabase
+          .from('annotation_labels')
+          .select('annotations!inner(id)', { count: 'exact', head: true })
+          .eq('labelId', label.id)
+          .eq('annotations.projectId', projectId);
+
+        if (error) {
+          console.error(`Error getting stats for label ${label.id}:`, error);
+          continue;
+        }
+
+        // Get last used date within the project
+        const { data: lastUsedData, error: lastUsedError } = await supabase
+          .from('annotation_labels')
+          .select('createdAt, annotations!inner(projectId)')
+          .eq('labelId', label.id)
+          .eq('annotations.projectId', projectId)
+          .order('createdAt', { ascending: false })
+          .limit(1);
+
+        stats.push({
+          labelId: label.id,
+          label,
+          usageCount: count || 0,
+          annotationCount: count || 0,
+          lastUsed: lastUsedData?.[0]?.createdAt,
+        });
+      } else {
+        // Original behavior when no projectId is specified
+        const { count, error } = await countQuery;
+
+        if (error) {
+          console.error(`Error getting stats for label ${label.id}:`, error);
+          continue;
+        }
+
+        // Get last used date
+        const { data: lastUsedData, error: lastUsedError } = await supabase
+          .from('annotation_labels')
+          .select('createdAt')
+          .eq('labelId', label.id)
+          .order('createdAt', { ascending: false })
+          .limit(1);
+
+        stats.push({
+          labelId: label.id,
+          label,
+          usageCount: count || 0,
+          annotationCount: count || 0,
+          lastUsed: lastUsedData?.[0]?.createdAt,
+        });
       }
-
-      // Get last used date
-      const { data: lastUsedData, error: lastUsedError } = await supabase
-        .from('annotation_labels')
-        .select('createdAt')
-        .eq('labelId', label.id)
-        .order('createdAt', { ascending: false })
-        .limit(1);
-
-      stats.push({
-        labelId: label.id,
-        label,
-        usageCount: count || 0,
-        annotationCount: count || 0,
-        lastUsed: lastUsedData?.[0]?.createdAt,
-      });
     }
 
     return stats.sort((a, b) => b.usageCount - a.usageCount);

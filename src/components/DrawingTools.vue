@@ -35,6 +35,55 @@
         />
       </div>
 
+      <!-- Color Picker -->
+      <div class="space-y-2">
+        <label class="text-xs text-gray-600">Drawing Color</label>
+
+        <!-- Current Color Display -->
+        <div class="flex items-center space-x-2">
+          <div
+            class="w-6 h-6 rounded border-2 border-gray-300"
+            :style="{ backgroundColor: getCurrentColor() }"
+          ></div>
+          <span class="text-xs text-gray-500">{{ getCurrentColor() }}</span>
+          <button
+            v-if="currentTool.customColor"
+            @click="clearCustomColor"
+            class="text-xs text-blue-600 hover:text-blue-800"
+          >
+            Reset
+          </button>
+        </div>
+
+        <!-- Predefined Color Palette -->
+        <div class="grid grid-cols-6 gap-1">
+          <button
+            v-for="color in colorPalette"
+            :key="color"
+            @click="setCustomColor(color)"
+            :class="[
+              'w-6 h-6 rounded border-2 transition-all',
+              getCurrentColor() === color
+                ? 'border-gray-800 scale-110'
+                : 'border-gray-300 hover:border-gray-500',
+            ]"
+            :style="{ backgroundColor: color }"
+            :title="color"
+          ></button>
+        </div>
+
+        <!-- Custom Color Input -->
+        <div class="flex items-center space-x-2">
+          <input
+            type="color"
+            :value="getCurrentColor()"
+            @input="setCustomColor(($event.target as HTMLInputElement).value)"
+            class="w-8 h-6 rounded border border-gray-300 cursor-pointer"
+          />
+          <span class="text-xs text-gray-500">Custom</span>
+        </div>
+      </div>
+
       <!-- Severity Level -->
       <div class="space-y-1">
         <label class="text-xs text-gray-600">Severity</label>
@@ -200,9 +249,13 @@ const {
   isDrawingMode,
   currentTool,
   severityColors,
+  colorPalette,
   toggleDrawingMode,
   setStrokeWidth,
   setSeverity,
+  getCurrentColor,
+  setCustomColor,
+  clearCustomColor,
   clearCurrentFrameDrawings,
   clearAllDrawings,
   getTotalDrawingsCount,

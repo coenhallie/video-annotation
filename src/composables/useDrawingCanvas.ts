@@ -10,6 +10,7 @@ export interface DrawingTool {
   type: 'pen';
   strokeWidth: number;
   severity: SeverityLevel;
+  customColor?: string | undefined; // Optional custom color override
 }
 
 export interface DrawingState {
@@ -43,6 +44,42 @@ export function useDrawingCanvas() {
     low: '#34d399', // green-400
     medium: '#fbbf24', // amber-400
     high: '#ef4444', // red-500
+  };
+
+  // Predefined color palette for quick selection
+  const colorPalette = [
+    '#ef4444', // red-500
+    '#f97316', // orange-500
+    '#eab308', // yellow-500
+    '#22c55e', // green-500
+    '#06b6d4', // cyan-500
+    '#3b82f6', // blue-500
+    '#8b5cf6', // violet-500
+    '#ec4899', // pink-500
+    '#000000', // black
+    '#6b7280', // gray-500
+    '#ffffff', // white
+    '#fbbf24', // amber-400 (default medium)
+  ];
+
+  // Get current drawing color (custom color takes precedence over severity color)
+  const getCurrentColor = (): string => {
+    return (
+      state.value.currentTool.customColor ||
+      severityColors[
+        state.value.currentTool.severity as keyof typeof severityColors
+      ]
+    );
+  };
+
+  // Set custom color
+  const setCustomColor = (color: string) => {
+    state.value.currentTool.customColor = color;
+  };
+
+  // Clear custom color (revert to severity-based color)
+  const clearCustomColor = () => {
+    delete state.value.currentTool.customColor;
   };
 
   // Computed properties
@@ -180,7 +217,7 @@ export function useDrawingCanvas() {
       content,
       title,
       severity: state.value.currentTool.severity,
-      color: severityColors[state.value.currentTool.severity],
+      color: getCurrentColor(),
       timestamp,
       frame: drawing.frame,
       annotationType: 'drawing',
@@ -192,10 +229,15 @@ export function useDrawingCanvas() {
   };
 
   // Load drawings from annotations
-  const loadDrawingsFromAnnotations = (annotations: Annotation[]) => {
+  const loadDrawingsFromAnnotations = (
+    annotations: Annotation[],
+    videoContext?: 'A' | 'B'
+  ) => {
     console.log(
       '🎨 [useDrawingCanvas] loadDrawingsFromAnnotations called with:',
-      annotations
+      annotations,
+      'videoContext:',
+      videoContext
     );
     console.log('🎨 [useDrawingCanvas] Annotations count:', annotations.length);
 
@@ -230,12 +272,35 @@ export function useDrawingCanvas() {
       if (annotation.drawingData) {
         const frame = annotation.frame;
         const frameDrawings = state.value.drawings.get(frame) || [];
-        frameDrawings.push(annotation.drawingData);
+
+        // Handle dual mode vs single mode drawing data
+        if (
+          videoContext &&
+          (annotation.drawingData.drawingA || annotation.drawingData.drawingB)
+        ) {
+          // Dual mode: extract the relevant drawing data for this video context
+          const relevantDrawingData =
+            videoContext === 'A'
+              ? annotation.drawingData.drawingA
+              : annotation.drawingData.drawingB;
+
+          if (relevantDrawingData) {
+            frameDrawings.push(relevantDrawingData);
+            console.log(
+              `🎨 [useDrawingCanvas] Added dual mode drawing for video ${videoContext} frame ${frame}:`,
+              relevantDrawingData
+            );
+          }
+        } else {
+          // Single mode: use the drawing data as-is
+          frameDrawings.push(annotation.drawingData);
+          console.log(
+            `🎨 [useDrawingCanvas] Added single mode drawing for frame ${frame}:`,
+            annotation.drawingData
+          );
+        }
+
         state.value.drawings.set(frame, frameDrawings);
-        console.log(
-          `🎨 [useDrawingCanvas] Added drawing for frame ${frame}:`,
-          annotation.drawingData
-        );
       }
     });
 
@@ -341,6 +406,7 @@ export function useDrawingCanvas() {
     currentFrameDrawings,
     allDrawings,
     severityColors,
+    colorPalette,
     isLoadingDrawings: computed(() => state.value.isLoadingDrawings),
 
     // Actions
@@ -352,6 +418,11 @@ export function useDrawingCanvas() {
     setSeverity,
     setCanvasSize,
     setVideoSize,
+
+    // Color management
+    getCurrentColor,
+    setCustomColor,
+    clearCustomColor,
 
     // Drawing management
     addDrawing,

@@ -74,6 +74,10 @@
           :is-drawing-mode="drawingCanvas?.isDrawingMode?.value"
           :stroke-width="drawingCanvas?.currentTool?.value?.strokeWidth"
           :severity="drawingCanvas?.currentTool?.value?.severity"
+          :current-color="
+            drawingCanvas?.getCurrentColor?.value ||
+            drawingCanvas?.getCurrentColor?.()
+          "
           :existing-drawings="drawingCanvas?.allDrawings?.value"
           :is-loading-drawings="drawingCanvas?.isLoadingDrawings?.value"
           @drawing-created="handleDrawingCreated"
@@ -511,6 +515,10 @@
               :is-drawing-mode="drawingCanvasA?.isDrawingMode?.value"
               :stroke-width="drawingCanvasA?.currentTool?.value?.strokeWidth"
               :severity="drawingCanvasA?.currentTool?.value?.severity"
+              :current-color="
+                drawingCanvasA?.getCurrentColor?.value ||
+                drawingCanvasA?.getCurrentColor?.()
+              "
               :existing-drawings="drawingCanvasA?.allDrawings?.value"
               :is-loading-drawings="drawingCanvasA?.isLoadingDrawings?.value"
               @drawing-created="
@@ -638,6 +646,10 @@
               :is-drawing-mode="drawingCanvasB?.isDrawingMode?.value"
               :stroke-width="drawingCanvasB?.currentTool?.value?.strokeWidth"
               :severity="drawingCanvasB?.currentTool?.value?.severity"
+              :current-color="
+                drawingCanvasB?.getCurrentColor?.value ||
+                drawingCanvasB?.getCurrentColor?.()
+              "
               :existing-drawings="drawingCanvasB?.allDrawings?.value"
               :is-loading-drawings="drawingCanvasB?.isLoadingDrawings?.value"
               @drawing-created="

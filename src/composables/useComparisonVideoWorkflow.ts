@@ -162,8 +162,14 @@ export function useComparisonVideoWorkflow() {
     try {
       // Load annotations for both videos
       const [annotationsA, annotationsB] = await Promise.all([
-        AnnotationService.getVideoAnnotations(selectedVideoA.value!.id),
-        AnnotationService.getVideoAnnotations(selectedVideoB.value!.id),
+        AnnotationService.getVideoAnnotations(
+          selectedVideoA.value!.id,
+          selectedVideoA.value!.id
+        ),
+        AnnotationService.getVideoAnnotations(
+          selectedVideoB.value!.id,
+          selectedVideoB.value!.id
+        ),
       ]);
 
       videoAAnnotations.value = annotationsA || [];
@@ -200,8 +206,14 @@ export function useComparisonVideoWorkflow() {
 
       // Load all annotations
       const [annotationsA, annotationsB, compAnnotations] = await Promise.all([
-        AnnotationService.getVideoAnnotations(comparisonVideo.videoAId),
-        AnnotationService.getVideoAnnotations(comparisonVideo.videoBId),
+        AnnotationService.getVideoAnnotations(
+          comparisonVideo.videoAId,
+          comparisonVideo.videoAId
+        ),
+        AnnotationService.getVideoAnnotations(
+          comparisonVideo.videoBId,
+          comparisonVideo.videoBId
+        ),
         AnnotationService.getComparisonVideoAnnotations(comparisonVideo.id),
       ]);
 
@@ -231,8 +243,14 @@ export function useComparisonVideoWorkflow() {
 
     // Load all annotations
     const [annotationsA, annotationsB, compAnnotations] = await Promise.all([
-      AnnotationService.getVideoAnnotations(comparisonVideo.videoAId),
-      AnnotationService.getVideoAnnotations(comparisonVideo.videoBId),
+      AnnotationService.getVideoAnnotations(
+        comparisonVideo.videoAId,
+        comparisonVideo.videoAId
+      ),
+      AnnotationService.getVideoAnnotations(
+        comparisonVideo.videoBId,
+        comparisonVideo.videoBId
+      ),
       AnnotationService.getComparisonVideoAnnotations(comparisonVideo.id),
     ]);
 
@@ -272,6 +290,7 @@ export function useComparisonVideoWorkflow() {
         newAnnotation = await AnnotationService.createAnnotation({
           videoId: selectedVideoA.value.id,
           userId: user.value.id,
+          projectId: selectedVideoA.value.id, // Use videoId as projectId for single video annotations
           content: annotation.content,
           title: annotation.title,
           severity: annotation.severity,
@@ -292,6 +311,7 @@ export function useComparisonVideoWorkflow() {
         newAnnotation = await AnnotationService.createAnnotation({
           videoId: selectedVideoB.value.id,
           userId: user.value.id,
+          projectId: selectedVideoB.value.id, // Use videoId as projectId for single video annotations
           content: annotation.content,
           title: annotation.title,
           severity: annotation.severity,

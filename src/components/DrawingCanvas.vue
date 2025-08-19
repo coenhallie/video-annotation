@@ -46,6 +46,7 @@ interface Props {
   isDrawingMode: boolean;
   strokeWidth: number;
   severity: SeverityLevel;
+  currentColor?: string; // Custom color override
   existingDrawings?: DrawingData[];
   isLoadingDrawings?: boolean;
 }
@@ -93,6 +94,14 @@ const severityColors = {
   high: '#ef4444', // red-500
 };
 
+// Get current drawing color (custom color takes precedence)
+const getCurrentDrawingColor = (): string => {
+  return (
+    props.currentColor ||
+    severityColors[props.severity as keyof typeof severityColors]
+  );
+};
+
 // Initialize Fabric.js canvas
 const initCanvas = () => {
   if (!fabricCanvas.value || !canvasContainer.value) {
@@ -108,7 +117,7 @@ const initCanvas = () => {
     // Configure drawing brush
     const brush = new fabric.PencilBrush(canvas.value);
     brush.width = props.strokeWidth;
-    brush.color = severityColors[props.severity];
+    brush.color = getCurrentDrawingColor();
     canvas.value.freeDrawingBrush = brush;
 
     // DIAGNOSTIC: Check initial cursor state
@@ -208,7 +217,7 @@ const createDrawingPathFromFabricPath = (path: fabric.Path): DrawingPath => {
   return {
     points,
     strokeWidth: props.strokeWidth,
-    color: severityColors[props.severity],
+    color: getCurrentDrawingColor(),
     timestamp: Date.now(),
   };
 };
@@ -356,6 +365,8 @@ const clearDrawings = () => {
       console.warn('🎨 [DrawingCanvas] Error clearing canvas:', error);
     }
   }
+  // Also clear the current drawing session
+  currentDrawingSession.value = null;
 };
 
 // Check if there are drawings on the current frame
@@ -428,10 +439,16 @@ watch(
   () => props.severity,
   (newValue) => {
     if (canvas.value?.freeDrawingBrush && !canvas.value.disposed) {
-      const color = severityColors[newValue as keyof typeof severityColors];
-      if (color) {
-        canvas.value.freeDrawingBrush.color = color;
-      }
+      canvas.value.freeDrawingBrush.color = getCurrentDrawingColor();
+    }
+  }
+);
+
+watch(
+  () => props.currentColor,
+  () => {
+    if (canvas.value?.freeDrawingBrush && !canvas.value.disposed) {
+      canvas.value.freeDrawingBrush.color = getCurrentDrawingColor();
     }
   }
 );

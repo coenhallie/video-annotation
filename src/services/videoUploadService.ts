@@ -38,12 +38,12 @@ export class VideoUploadService {
       };
     }
 
-    // Check file size (200MB limit)
-    const maxSize = 200 * 1024 * 1024; // 200MB in bytes
+    // Check file size (1000MB limit)
+    const maxSize = 1000 * 1024 * 1024; // 1000MB in bytes
     if (file.size > maxSize) {
       return {
         valid: false,
-        error: 'File size too large. Maximum size is 200MB.',
+        error: 'File size too large. Maximum size is 1000MB.',
       };
     }
 

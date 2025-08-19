@@ -217,11 +217,26 @@ const drawingCanvasB = useDrawingCanvas();
 const dualVideoPlayer = useDualVideoPlayer();
 const dualVideoPlayerRef = ref(null);
 
-dualVideoPlayer.drawingCanvasA.value = drawingCanvasA;
-dualVideoPlayer.drawingCanvasB.value = drawingCanvasB;
+dualVideoPlayer.drawingCanvasA = drawingCanvasA;
+dualVideoPlayer.drawingCanvasB = drawingCanvasB;
 
 // Comparison video workflow
 const comparisonWorkflow = useComparisonVideoWorkflow();
+
+// Project ID for annotation isolation
+const currentProjectId = computed(() => {
+  if (
+    playerMode.value === 'dual' &&
+    comparisonWorkflow.currentComparison.value?.id
+  ) {
+    // In dual mode, use comparison ID as project ID
+    return comparisonWorkflow.currentComparison.value.id;
+  } else if (currentVideoId.value) {
+    // In single mode, use video ID as project ID
+    return currentVideoId.value;
+  }
+  return null;
+});
 
 // Annotations data
 const {
@@ -237,7 +252,7 @@ const {
 } = useVideoAnnotations(
   videoUrl,
   videoId,
-  ref(null),
+  currentProjectId,
   computed(() => {
     if (
       playerMode.value === 'dual' &&
@@ -406,7 +421,14 @@ watch(
   annotations,
   (newAnnotations) => {
     if (newAnnotations) {
-      drawingCanvas.loadDrawingsFromAnnotations(newAnnotations as any);
+      if (playerMode.value === 'dual') {
+        // In dual mode, load drawings into both canvas composables with video context
+        drawingCanvasA.loadDrawingsFromAnnotations(newAnnotations as any, 'A');
+        drawingCanvasB.loadDrawingsFromAnnotations(newAnnotations as any, 'B');
+      } else {
+        // In single mode, load into the main drawing canvas
+        drawingCanvas.loadDrawingsFromAnnotations(newAnnotations as any);
+      }
     }
   },
   { immediate: true, deep: true }
@@ -595,15 +617,14 @@ const handleAnnotationEdit = () => {
   (annotationPanelRef.value as any).isEditing = true;
 };
 
-const handleDrawingCreated = (drawing: any, event: Event) => {
+const handleDrawingCreated = (drawing: any, videoContext?: string) => {
   if (playerMode.value === 'dual') {
-    const videoContext = (event.target as HTMLElement).dataset.videoContext as
-      | 'A'
-      | 'B';
-    (dualVideoPlayer as any).addDrawing?.(drawing, videoContext);
+    // videoContext is now passed directly as a parameter from UnifiedVideoPlayer
+    const context = videoContext || 'A'; // default to 'A' if not provided
+    (dualVideoPlayer as any).addDrawing?.(drawing, context);
     // Forward drawing data to annotation panel for dual mode
     if (annotationPanelRef.value?.onDrawingCreated) {
-      annotationPanelRef.value.onDrawingCreated(drawing, videoContext);
+      annotationPanelRef.value.onDrawingCreated(drawing, context);
     }
   } else {
     drawingCanvas.addDrawing(drawing);
@@ -614,23 +635,21 @@ const handleDrawingCreated = (drawing: any, event: Event) => {
   }
 };
 
-const handleDrawingUpdated = (drawing: any, event: Event) => {
+const handleDrawingUpdated = (drawing: any, videoContext?: string) => {
   if (playerMode.value === 'dual') {
-    const videoContext = (event.target as HTMLElement).dataset.videoContext as
-      | 'A'
-      | 'B';
-    (dualVideoPlayer as any).updateDrawing?.(drawing, videoContext);
+    // videoContext is now passed directly as a parameter from UnifiedVideoPlayer
+    const context = videoContext || 'A'; // default to 'A' if not provided
+    (dualVideoPlayer as any).updateDrawing?.(drawing, context);
   } else {
     (drawingCanvas as any).updateDrawing?.(drawing);
   }
 };
 
-const handleDrawingDeleted = (drawingId: string, event: Event) => {
+const handleDrawingDeleted = (drawingId: string, videoContext?: string) => {
   if (playerMode.value === 'dual') {
-    const videoContext = (event.target as HTMLElement).dataset.videoContext as
-      | 'A'
-      | 'B';
-    (dualVideoPlayer as any).deleteDrawing?.(drawingId, videoContext);
+    // videoContext is now passed directly as a parameter from UnifiedVideoPlayer
+    const context = videoContext || 'A'; // default to 'A' if not provided
+    (dualVideoPlayer as any).deleteDrawing?.(drawingId, context);
   } else {
     (drawingCanvas as any).deleteDrawing?.(drawingId);
   }
@@ -1207,7 +1226,7 @@ watch(
           <span
             class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 border border-orange-200"
           >
-            ALPHA v1.5
+            ALPHA v1.6
           </span>
         </div>
 
@@ -1548,8 +1567,8 @@ watch(
             :video-id="currentVideoId || ''"
             :loading="annotationsLoading"
             :is-dual-mode="playerMode === 'dual'"
-            :drawing-canvas-a="dualVideoPlayer?.drawingCanvasA?.value || null"
-            :drawing-canvas-b="dualVideoPlayer?.drawingCanvasB?.value || null"
+            :drawing-canvas-a="dualVideoPlayer?.drawingCanvasA || null"
+            :drawing-canvas-b="dualVideoPlayer?.drawingCanvasB || null"
             :dual-video-player="dualVideoPlayer || null"
             :comment-permissions="commentPermissions || {}"
             :anonymous-session="anonymousSession || null"

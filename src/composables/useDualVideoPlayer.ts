@@ -58,6 +58,11 @@ export interface DualVideoPlayer {
   ) => void;
   setCanvasRefs?: (canvasA: any, canvasB: any) => void;
 
+  // Drawing methods
+  addDrawing?: (drawing: any, videoContext: 'A' | 'B') => void;
+  updateDrawing?: (drawing: any, videoContext: 'A' | 'B') => void;
+  deleteDrawing?: (drawingId: string, videoContext: 'A' | 'B') => void;
+
   // Sync control
   isSyncEnabled?: Ref<boolean>;
   isIndependentMode?: Ref<boolean>;
@@ -427,6 +432,55 @@ export function useDualVideoPlayer(): DualVideoPlayer {
     });
   }
 
+  // Drawing methods for dual video mode
+  function addDrawing(drawing: any, videoContext: 'A' | 'B') {
+    const canvas =
+      videoContext === 'A' ? drawingCanvasA.value : drawingCanvasB.value;
+    if (canvas && canvas.addDrawing) {
+      console.log(
+        `🎨 [useDualVideoPlayer] Adding drawing to video ${videoContext}:`,
+        drawing
+      );
+      canvas.addDrawing(drawing);
+    } else {
+      console.warn(
+        `🎨 [useDualVideoPlayer] No drawing canvas available for video ${videoContext}`
+      );
+    }
+  }
+
+  function updateDrawing(drawing: any, videoContext: 'A' | 'B') {
+    const canvas =
+      videoContext === 'A' ? drawingCanvasA.value : drawingCanvasB.value;
+    if (canvas && canvas.updateDrawing) {
+      console.log(
+        `🎨 [useDualVideoPlayer] Updating drawing on video ${videoContext}:`,
+        drawing
+      );
+      canvas.updateDrawing(drawing);
+    } else {
+      console.warn(
+        `🎨 [useDualVideoPlayer] No drawing canvas available for video ${videoContext}`
+      );
+    }
+  }
+
+  function deleteDrawing(drawingId: string, videoContext: 'A' | 'B') {
+    const canvas =
+      videoContext === 'A' ? drawingCanvasA.value : drawingCanvasB.value;
+    if (canvas && canvas.deleteDrawing) {
+      console.log(
+        `🎨 [useDualVideoPlayer] Deleting drawing from video ${videoContext}:`,
+        drawingId
+      );
+      canvas.deleteDrawing(drawingId);
+    } else {
+      console.warn(
+        `🎨 [useDualVideoPlayer] No drawing canvas available for video ${videoContext}`
+      );
+    }
+  }
+
   // Method to toggle between independent and synchronized timeline modes
   function toggleTimelineMode() {
     isIndependentMode.value = !isIndependentMode.value;
@@ -491,6 +545,10 @@ export function useDualVideoPlayer(): DualVideoPlayer {
     // expose utility methods
     setVideoSources,
     setCanvasRefs,
+    // expose drawing methods
+    addDrawing,
+    updateDrawing,
+    deleteDrawing,
     // expose sync control
     isSyncEnabled,
     isIndependentMode,

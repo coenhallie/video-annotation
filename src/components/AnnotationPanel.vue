@@ -183,6 +183,59 @@ const primaryDrawingCanvas = computed(() => {
   return props.drawingCanvas;
 });
 
+// Color picker functionality
+const colorPalette = [
+  '#ef4444', // red-500
+  '#f97316', // orange-500
+  '#eab308', // yellow-500
+  '#22c55e', // green-500
+  '#06b6d4', // cyan-500
+  '#3b82f6', // blue-500
+  '#8b5cf6', // violet-500
+  '#ec4899', // pink-500
+  '#000000', // black
+  '#6b7280', // gray-500
+  '#ffffff', // white
+  '#fbbf24', // amber-400 (default medium)
+];
+
+// Get current drawing color
+const getCurrentDrawingColor = (): string => {
+  return primaryDrawingCanvas.value?.getCurrentColor?.() || '#6b7280';
+};
+
+// Set custom color on the drawing canvas
+const setCustomColor = (color: string) => {
+  if (primaryDrawingCanvas.value?.setCustomColor) {
+    primaryDrawingCanvas.value.setCustomColor(color);
+  }
+  // Also update both canvases in dual mode
+  if (props.isDualMode) {
+    if (props.drawingCanvasA?.setCustomColor) {
+      props.drawingCanvasA.setCustomColor(color);
+    }
+    if (props.drawingCanvasB?.setCustomColor) {
+      props.drawingCanvasB.setCustomColor(color);
+    }
+  }
+};
+
+// Clear custom color on the drawing canvas
+const clearCustomColor = () => {
+  if (primaryDrawingCanvas.value?.clearCustomColor) {
+    primaryDrawingCanvas.value.clearCustomColor();
+  }
+  // Also clear on both canvases in dual mode
+  if (props.isDualMode) {
+    if (props.drawingCanvasA?.clearCustomColor) {
+      props.drawingCanvasA.clearCustomColor();
+    }
+    if (props.drawingCanvasB?.clearCustomColor) {
+      props.drawingCanvasB.clearCustomColor();
+    }
+  }
+};
+
 // Form state
 const showAddForm = ref(false);
 const editingAnnotation = ref(null);
@@ -511,16 +564,30 @@ const startEditAnnotation = (annotation: any) => {
     // Load the drawing data into the canvas
     if (props.isDualMode) {
       // In dual mode, load drawing data to both canvases if it exists
-      if (props.drawingCanvasARef) {
-        props.drawingCanvasARef.clearDrawings();
-        if (annotation.drawingData?.drawingA && props.drawingCanvasA) {
-          props.drawingCanvasA.addDrawing(annotation.drawingData.drawingA);
+      if (props.drawingCanvasA) {
+        props.drawingCanvasA.clearCurrentFrameDrawings();
+        if (annotation.drawingData?.drawingA) {
+          // Ensure the drawing data has the correct structure for addDrawing
+          const drawingA = {
+            frame: annotation.drawingData.drawingA.frame,
+            paths: annotation.drawingData.drawingA.paths,
+            canvasWidth: annotation.drawingData.drawingA.canvasWidth,
+            canvasHeight: annotation.drawingData.drawingA.canvasHeight,
+          };
+          props.drawingCanvasA.addDrawing(drawingA);
         }
       }
-      if (props.drawingCanvasBRef) {
-        props.drawingCanvasBRef.clearDrawings();
-        if (annotation.drawingData?.drawingB && props.drawingCanvasB) {
-          props.drawingCanvasB.addDrawing(annotation.drawingData.drawingB);
+      if (props.drawingCanvasB) {
+        props.drawingCanvasB.clearCurrentFrameDrawings();
+        if (annotation.drawingData?.drawingB) {
+          // Ensure the drawing data has the correct structure for addDrawing
+          const drawingB = {
+            frame: annotation.drawingData.drawingB.frame,
+            paths: annotation.drawingData.drawingB.paths,
+            canvasWidth: annotation.drawingData.drawingB.canvasWidth,
+            canvasHeight: annotation.drawingData.drawingB.canvasHeight,
+          };
+          props.drawingCanvasB.addDrawing(drawingB);
         }
       }
     } else {
@@ -542,47 +609,31 @@ const startEditAnnotation = (annotation: any) => {
 
 const saveAnnotation = async () => {
   try {
-    // Collect drawing data from canvases
+    // Check if drawing data was explicitly cleared by the user
     let currentDrawingData = null;
 
-    if (props.isDualMode) {
-      // In dual mode, collect from both canvases
-      const drawingA = props.drawingCanvasARef?.getCurrentDrawingData();
-      const drawingB = props.drawingCanvasBRef?.getCurrentDrawingData();
-
-      if (drawingA || drawingB) {
-        currentDrawingData = {} as any;
-        if (drawingA) currentDrawingData.drawingA = drawingA;
-        if (drawingB) currentDrawingData.drawingB = drawingB;
-      }
+    // If the user has explicitly cleared the drawing data, respect that
+    if (newAnnotation.value.drawingData === null) {
+      currentDrawingData = null;
     } else {
-      // Single mode: collect from primary canvas using the ref
-      const canvasRef = props.drawingCanvasRef;
-      if (
-        canvasRef &&
-        typeof canvasRef.getCurrentDrawingSession === 'function'
-      ) {
-        const drawingSession = canvasRef.getCurrentDrawingSession();
-        if (
-          drawingSession &&
-          drawingSession.paths &&
-          drawingSession.paths.length > 0
-        ) {
-          currentDrawingData = {
-            paths: drawingSession.paths,
-            frame: drawingSession.frame,
-            canvasWidth: drawingSession.canvasWidth,
-            canvasHeight: drawingSession.canvasHeight,
-          };
+      // Otherwise, collect drawing data from canvases
+      if (props.isDualMode) {
+        // In dual mode, collect from both canvases
+        const drawingA = props.drawingCanvasARef?.getCurrentDrawingSession();
+        const drawingB = props.drawingCanvasBRef?.getCurrentDrawingSession();
+
+        if (drawingA || drawingB) {
+          currentDrawingData = {} as any;
+          if (drawingA) currentDrawingData.drawingA = drawingA;
+          if (drawingB) currentDrawingData.drawingB = drawingB;
         }
-      } else if (
-        canvasRef &&
-        typeof canvasRef.completeDrawingSession === 'function'
-      ) {
-        // Alternative: try to complete the drawing session to get data
-        canvasRef.completeDrawingSession();
-        // After completing, try to get the session data again
-        if (typeof canvasRef.getCurrentDrawingSession === 'function') {
+      } else {
+        // Single mode: collect from primary canvas using the ref
+        const canvasRef = props.drawingCanvasRef;
+        if (
+          canvasRef &&
+          typeof canvasRef.getCurrentDrawingSession === 'function'
+        ) {
           const drawingSession = canvasRef.getCurrentDrawingSession();
           if (
             drawingSession &&
@@ -595,6 +646,28 @@ const saveAnnotation = async () => {
               canvasWidth: drawingSession.canvasWidth,
               canvasHeight: drawingSession.canvasHeight,
             };
+          }
+        } else if (
+          canvasRef &&
+          typeof canvasRef.completeDrawingSession === 'function'
+        ) {
+          // Alternative: try to complete the drawing session to get data
+          canvasRef.completeDrawingSession();
+          // After completing, try to get the session data again
+          if (typeof canvasRef.getCurrentDrawingSession === 'function') {
+            const drawingSession = canvasRef.getCurrentDrawingSession();
+            if (
+              drawingSession &&
+              drawingSession.paths &&
+              drawingSession.paths.length > 0
+            ) {
+              currentDrawingData = {
+                paths: drawingSession.paths,
+                frame: drawingSession.frame,
+                canvasWidth: drawingSession.canvasWidth,
+                canvasHeight: drawingSession.canvasHeight,
+              };
+            }
           }
         }
       }
@@ -610,16 +683,20 @@ const saveAnnotation = async () => {
       return;
     }
 
-    // Get color from primary label or use default
+    // Get color and title from primary label or use default
     const primaryLabel = availableLabels.value.find((label) =>
       baseDraft.labels?.includes(label.id)
     );
     const annotationColor =
       primaryLabel?.color || baseDraft.color || defaultAnnotationColor;
 
+    // Use label name as title if available, otherwise use content or 'Untitled'
+    const annotationTitle =
+      primaryLabel?.name || baseDraft.content.slice(0, 50) || 'Untitled';
+
     const annotationData = {
       content: baseDraft.content,
-      title: baseDraft.content.slice(0, 50) || 'Untitled',
+      title: annotationTitle,
       color: annotationColor,
       timestamp: baseDraft.frame / props.fps,
       frame: baseDraft.frame,
@@ -709,6 +786,10 @@ const deleteAnnotation = (annotation: any) => {
 };
 
 const selectAnnotation = (annotation: any) => {
+  // Prevent reselecting the same annotation to avoid unnecessary rerenders
+  if (props.selectedAnnotation?.id === annotation.id) {
+    return;
+  }
   emit('select-annotation', annotation);
 };
 
@@ -794,6 +875,7 @@ const onDrawingCreated = (drawingData: any, videoContext = null) => {
 };
 
 const clearDrawing = () => {
+  // Clear the visual canvas(es)
   if (props.isDualMode) {
     // Clear both canvases in dual mode
     if (props.drawingCanvasARef && props.drawingCanvasARef.clearDrawings) {
@@ -803,7 +885,11 @@ const clearDrawing = () => {
       props.drawingCanvasBRef.clearDrawings();
     }
   } else {
-    // Clear single canvas
+    // Clear single canvas - use the canvas ref which has the clearDrawings method
+    if (props.drawingCanvasRef && props.drawingCanvasRef.clearDrawings) {
+      props.drawingCanvasRef.clearDrawings();
+    }
+    // Also clear via the composable method if available
     if (
       primaryDrawingCanvas.value &&
       primaryDrawingCanvas.value.clearCurrentFrameDrawings
@@ -812,9 +898,15 @@ const clearDrawing = () => {
     }
   }
 
-  // Reset drawing data
+  // Reset drawing data in the form
   newAnnotation.value.drawingData = null;
   hasDrawingData.value = false;
+
+  // If we're editing an existing annotation, also clear its drawing data
+  // This ensures that when the annotation is saved, the drawing data will be null
+  if (editingAnnotation.value) {
+    (editingAnnotation.value as any).drawingData = null;
+  }
 };
 
 // Comment management
@@ -985,7 +1077,7 @@ watch(
             title="Filter annotations"
           >
             <svg
-              class="icon icon-sm"
+              class="icon icon-lg"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -1009,8 +1101,7 @@ watch(
           <!-- Filter dropdown -->
           <div
             v-if="showFilterDropdown"
-            class="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200"
-            style="z-index: 9999"
+            class="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-50"
             @click.stop
           >
             <div class="p-4">
@@ -1231,16 +1322,32 @@ watch(
                   />
                 </div>
 
-                <!-- Drawing Color Preview -->
-                <div class="flex items-center space-x-2 text-xs text-gray-600">
-                  <span>Drawing color:</span>
-                  <div
-                    class="w-4 h-4 rounded-full border border-gray-300"
-                    :style="{
-                      backgroundColor: newAnnotation.color,
-                    }"
-                  ></div>
-                  <span>Annotation color</span>
+                <!-- Drawing Color Picker -->
+                <div class="space-y-2">
+                  <label class="text-xs text-gray-600">Drawing Color</label>
+
+                  <!-- Custom Color Input -->
+                  <div class="flex items-center space-x-2">
+                    <input
+                      type="color"
+                      :value="getCurrentDrawingColor()"
+                      @input="
+                        setCustomColor(
+                          ($event.target as HTMLInputElement).value
+                        )
+                      "
+                      class="w-8 h-6 rounded border border-gray-300 cursor-pointer"
+                    />
+                    <button
+                      v-if="
+                        primaryDrawingCanvas?.currentTool?.value?.customColor
+                      "
+                      @click="clearCustomColor"
+                      class="text-xs text-blue-600 hover:text-blue-800"
+                    >
+                      Reset
+                    </button>
+                  </div>
                 </div>
 
                 <!-- Clear Drawing Button -->
@@ -1336,11 +1443,12 @@ watch(
         v-else
         v-for="annotation in sortedAnnotations"
         :key="annotation.id || Math.random().toString(36).slice(2)"
-        class="card card-hover mb-2 p-2 cursor-pointer transition-all duration-200 relative group"
+        class="card mb-2 p-2 transition-all duration-200 relative group"
         :class="{
-          'bg-blue-50 border-blue-300 shadow-md ring-2 ring-blue-200':
+          'bg-blue-50 border-blue-300 shadow-md ring-2 ring-blue-200 cursor-default':
             selectedAnnotation?.id === annotation.id,
-          'bg-white': selectedAnnotation?.id !== annotation.id,
+          'bg-white cursor-pointer card-hover':
+            selectedAnnotation?.id !== annotation.id,
         }"
         :style="{
           borderLeft: `4px solid ${getPrimaryLabelColor(annotation)}`,
@@ -1448,15 +1556,6 @@ watch(
 
         <div>
           <div class="flex items-center space-x-1 mb-0.5">
-            <h4
-              class="text-sm font-medium leading-tight"
-              :class="{
-                'text-blue-900': (selectedAnnotation as any)?.id === annotation.id,
-                'text-gray-900': (selectedAnnotation as any)?.id !== annotation.id,
-              }"
-            >
-              {{ annotation.title }}
-            </h4>
             <!-- Drawing indicator -->
             <div
               v-if="
@@ -1479,7 +1578,7 @@ watch(
           </div>
           <p
             v-if="annotation.content && annotation.content.length"
-            class="text-xs text-gray-600 mb-1 leading-snug"
+            class="text-sm text-gray-600 mb-1 leading-snug"
           >
             {{ annotation.content }}
           </p>

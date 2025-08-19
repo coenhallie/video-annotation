@@ -9,6 +9,13 @@ import { CommentService, type CommentPermissions } from './commentService';
 
 export class AnnotationService {
   static async createAnnotation(annotationData: AnnotationInsert) {
+    // Add validation warning
+    if (!annotationData.projectId) {
+      console.warn(
+        '[AnnotationService] Creating annotation without projectId - this may cause isolation issues'
+      );
+    }
+
     const { data, error } = await supabase
       .from('annotations')
       .insert(annotationData)
@@ -44,9 +51,14 @@ export class AnnotationService {
       )
       .eq('videoId', videoId);
 
-    // Filter by projectId if provided
+    // CRITICAL CHANGE: Filter by projectId
     if (projectId) {
+      // When projectId is provided, only get annotations for this project
       query = query.eq('projectId', projectId);
+    } else {
+      // For backward compatibility: get annotations without projectId
+      // This handles legacy annotations
+      query = query.is('projectId', null);
     }
 
     const { data, error } = await query.order('timestamp', { ascending: true });
@@ -153,18 +165,25 @@ export class AnnotationService {
     projectId?: string,
     includeComments?: boolean
   ) {
-    // Note: The database function get_annotations_at_frame may need to be updated
-    // to support project filtering. For now, we'll use the existing function
-    // and filter results if projectId is provided
-    const { data, error } = await supabase.rpc('get_annotations_at_frame', {
-      p_video_id: videoId,
-      p_frame: frame,
-    });
+    // Direct query instead of using the database function
+    // since the function doesn't support projectId filtering
+    let query = supabase
+      .from('annotations')
+      .select('*')
+      .eq('videoId', videoId)
+      .lte('startFrame', frame)
+      .gte('endFrame', frame);
+
+    // Add projectId filter
+    if (projectId) {
+      query = query.eq('projectId', projectId);
+    } else {
+      query = query.is('projectId', null);
+    }
+
+    const { data, error } = await query;
 
     if (error) throw error;
-
-    // If projectId is provided and we have data, we would need to filter here
-    // However, this requires the database function to be updated to support project filtering
 
     // If comments are requested, fetch them for all annotations at this frame
     if (includeComments && data && data.length > 0) {
