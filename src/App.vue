@@ -434,6 +434,36 @@ watch(
   { immediate: true, deep: true }
 );
 
+// Watch for selected annotation changes to update the drawing canvas frame
+// Only update the frame, don't reload drawings (they're already loaded via annotations watch)
+watch(selectedAnnotation, (newAnnotation, oldAnnotation) => {
+  // Skip if it's the same annotation
+  if (newAnnotation?.id === oldAnnotation?.id) {
+    return;
+  }
+
+  if (newAnnotation && newAnnotation.frame !== undefined) {
+    // Update the current frame for the drawing canvas
+    // The DrawingCanvas component will automatically show the drawings for this frame
+    drawingCanvas.currentFrame.value = newAnnotation.frame;
+
+    if (playerMode.value === 'dual') {
+      // In dual mode, update both canvas frames
+      if (drawingCanvasA.currentFrame) {
+        drawingCanvasA.currentFrame.value =
+          newAnnotation.videoAFrame || newAnnotation.frame;
+      }
+      if (drawingCanvasB.currentFrame) {
+        drawingCanvasB.currentFrame.value =
+          newAnnotation.videoBFrame || newAnnotation.frame;
+      }
+    }
+
+    // No need to reload drawings here - they're already loaded
+    // The DrawingCanvas component watches currentFrame and will display the correct drawings
+  }
+});
+
 const handleChartToggled = (value: boolean) => {
   isChartVisible.value = value;
 };
@@ -590,6 +620,26 @@ const handleSeekToTimeWithFade = async (time: number) => {
 const handleAnnotationClick = async (annotation: any) => {
   selectedAnnotation.value = annotation;
 
+  // Update the current frame for the drawing canvas based on mode
+  if (playerMode.value === 'dual') {
+    // In dual mode, only update canvas frames if specific video frames are defined
+    // This prevents frame misalignment by not falling back to generic frame property
+    if (drawingCanvasA.currentFrame && annotation.videoAFrame !== undefined) {
+      drawingCanvasA.currentFrame.value = annotation.videoAFrame;
+    }
+    if (drawingCanvasB.currentFrame && annotation.videoBFrame !== undefined) {
+      drawingCanvasB.currentFrame.value = annotation.videoBFrame;
+    }
+    // Note: Drawings will be automatically updated via the watch on selectedAnnotation
+  } else {
+    // In single mode, use the generic frame property
+    if (annotation.frame !== undefined) {
+      drawingCanvas.currentFrame.value = annotation.frame;
+    }
+    // Note: Drawings will be automatically updated via the watch on selectedAnnotation
+  }
+
+  // Seek to the annotation's timestamp
   if (playerMode.value === 'dual' && dualVideoPlayer) {
     if (
       annotation.videoAFrame !== undefined &&
@@ -604,10 +654,12 @@ const handleAnnotationClick = async (annotation: any) => {
 
       (dualVideoPlayer as any).seekVideoA?.(videoATime);
       (dualVideoPlayer as any).seekVideoB?.(videoBTime);
-    } else {
+    } else if (annotation.timestamp !== undefined) {
+      // Fallback to timestamp if dual mode frames are not properly set
       await handleSeekToTimeWithFade(annotation.timestamp);
     }
-  } else {
+  } else if (annotation.timestamp !== undefined) {
+    // Single mode: use timestamp
     await handleSeekToTimeWithFade(annotation.timestamp);
   }
 };

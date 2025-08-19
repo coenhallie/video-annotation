@@ -49,6 +49,7 @@ interface Props {
   currentColor?: string; // Custom color override
   existingDrawings?: DrawingData[];
   isLoadingDrawings?: boolean;
+  videoContext?: 'A' | 'B'; // Video context for dual mode
 }
 
 interface Emits {
@@ -291,47 +292,103 @@ const updateCanvasSize = () => {
 };
 
 // Load existing drawings for current frame with fade transition
-const loadDrawingsForFrame = async () => {
+const loadDrawingsForFrame = async (skipTransition: boolean = false) => {
   if (!canvas.value || canvas.value.disposed) return;
 
-  // Start fade transition
-  isTransitioning.value = true;
+  // Skip transition for immediate updates (like when clicking annotations)
+  if (!skipTransition) {
+    // Start fade transition
+    isTransitioning.value = true;
 
-  // Fade out current drawings
-  canvasOpacity.value = 0;
+    // Fade out current drawings
+    canvasOpacity.value = 0;
 
-  // Wait for fade out to complete
-  await new Promise((resolve) => setTimeout(resolve, 150));
+    // Wait for fade out to complete
+    await new Promise((resolve) => setTimeout(resolve, 150));
 
-  // Check again if canvas is still valid after the timeout
-  if (!canvas.value || canvas.value.disposed) {
-    isTransitioning.value = false;
-    return;
+    // Check again if canvas is still valid after the timeout
+    if (!canvas.value || canvas.value.disposed) {
+      isTransitioning.value = false;
+      return;
+    }
   }
 
   try {
     // Clear and load new drawings
     canvas.value.clear();
-    const frameDrawings =
-      props.existingDrawings?.filter(
-        (drawing) => drawing.frame === props.currentFrame
-      ) || [];
+
+    // Filter drawings based on mode (single vs dual)
+    let frameDrawings: DrawingData[] = [];
+
+    if (props.videoContext) {
+      // Dual mode: filter drawings that have the appropriate video-specific data
+      frameDrawings =
+        props.existingDrawings
+          ?.filter((drawing: any) => {
+            // Check if this is a dual mode drawing structure
+            if (drawing.drawingA || drawing.drawingB) {
+              const relevantDrawing =
+                props.videoContext === 'A'
+                  ? drawing.drawingA
+                  : drawing.drawingB;
+              // Check if the relevant drawing exists and matches the current frame
+              return (
+                relevantDrawing && relevantDrawing.frame === props.currentFrame
+              );
+            }
+            // Fallback to regular frame check for backward compatibility
+            return drawing.frame === props.currentFrame;
+          })
+          .map((drawing: any) => {
+            // Extract the relevant drawing data for this video context
+            if (drawing.drawingA || drawing.drawingB) {
+              return props.videoContext === 'A'
+                ? drawing.drawingA
+                : drawing.drawingB;
+            }
+            return drawing;
+          })
+          .filter(Boolean) || [];
+    } else {
+      // Single mode: use simple frame equality check
+      frameDrawings =
+        props.existingDrawings?.filter(
+          (drawing) => drawing.frame === props.currentFrame
+        ) || [];
+    }
+
+    console.log(
+      `🎨 [DrawingCanvas] Loading ${frameDrawings.length} drawings for frame ${
+        props.currentFrame
+      }${props.videoContext ? ` (Video ${props.videoContext})` : ''}`
+    );
 
     frameDrawings.forEach((drawing, drawingIndex) => {
-      drawing.paths.forEach((path, pathIndex) => {
-        renderDrawingPath(path);
-      });
+      if (drawing.paths && Array.isArray(drawing.paths)) {
+        drawing.paths.forEach((path, pathIndex) => {
+          renderDrawingPath(path);
+        });
+      }
     });
 
-    // Fade in new drawings
-    canvasOpacity.value = 1;
+    canvas.value.renderAll(); // Force canvas to render immediately
 
-    // Wait for fade in to complete, then end transition
-    setTimeout(() => {
+    if (!skipTransition) {
+      // Fade in new drawings
+      canvasOpacity.value = 1;
+
+      // Wait for fade in to complete, then end transition
+      setTimeout(() => {
+        isTransitioning.value = false;
+      }, 150);
+    } else {
+      // If skipping transition, ensure opacity is set
+      canvasOpacity.value = 1;
       isTransitioning.value = false;
-    }, 150);
+    }
   } catch (error) {
     console.warn('🎨 [DrawingCanvas] Error loading drawings for frame:', error);
+    canvasOpacity.value = 1;
     isTransitioning.value = false;
   }
 };
@@ -472,11 +529,19 @@ watch(
   }
 );
 
+// Track previous frame to determine if we should skip transition
+const previousFrame = ref<number>(-1);
+
 watch(
   () => props.currentFrame,
-  async () => {
-    // Load drawings for the new frame with fade transition
-    await loadDrawingsForFrame();
+  async (newFrame, oldFrame) => {
+    // Skip transition if jumping to a specific frame (like when clicking an annotation)
+    // Only use transition when playing normally (frame by frame)
+    const skipTransition = Math.abs(newFrame - oldFrame) > 1;
+
+    // Load drawings for the new frame
+    await loadDrawingsForFrame(skipTransition);
+    previousFrame.value = newFrame;
   }
 );
 
@@ -484,9 +549,10 @@ watch(
 watch(
   () => props.existingDrawings,
   async () => {
-    await loadDrawingsForFrame();
+    // Skip transition when drawings are updated (usually from annotation clicks)
+    await loadDrawingsForFrame(true);
   },
-  { deep: true }
+  { deep: true, immediate: true }
 );
 
 // Lifecycle hooks

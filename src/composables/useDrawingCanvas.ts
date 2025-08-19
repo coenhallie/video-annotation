@@ -151,15 +151,75 @@ export function useDrawingCanvas() {
   };
 
   // Add drawing to the frame specified in the drawing data
-  const addDrawing = (drawing: DrawingData) => {
-    const frame = drawing.frame; // Use the frame from the drawing data, not currentFrame
-    const frameDrawings = state.value.drawings.get(frame) || [];
-    frameDrawings.push(drawing);
-    state.value.drawings.set(frame, frameDrawings);
-    console.log(
-      `🎨 [useDrawingCanvas] Added drawing to frame ${frame}:`,
-      drawing
-    );
+  const addDrawing = (drawing: DrawingData, videoContext?: 'A' | 'B') => {
+    // In dual mode, we need to handle the drawing structure differently
+    if (videoContext) {
+      // For dual mode, create a drawing with video-specific data
+      const dualDrawing: DrawingData = {
+        paths: [], // Empty paths at root level for dual mode
+        canvasWidth: drawing.canvasWidth,
+        canvasHeight: drawing.canvasHeight,
+        frame: drawing.frame,
+        drawingA:
+          videoContext === 'A'
+            ? {
+                paths: drawing.paths,
+                canvasWidth: drawing.canvasWidth,
+                canvasHeight: drawing.canvasHeight,
+                frame: drawing.frame,
+              }
+            : undefined,
+        drawingB:
+          videoContext === 'B'
+            ? {
+                paths: drawing.paths,
+                canvasWidth: drawing.canvasWidth,
+                canvasHeight: drawing.canvasHeight,
+                frame: drawing.frame,
+              }
+            : undefined,
+      };
+
+      const frame = drawing.frame;
+      const frameDrawings = state.value.drawings.get(frame) || [];
+
+      // Check if there's already a dual drawing for this frame and merge
+      const existingIndex = frameDrawings.findIndex(
+        (d: DrawingData) => d.drawingA || d.drawingB
+      );
+      if (existingIndex >= 0) {
+        // Merge with existing dual drawing
+        const existing = frameDrawings[existingIndex];
+        if (videoContext === 'A') {
+          existing.drawingA = dualDrawing.drawingA;
+        } else {
+          existing.drawingB = dualDrawing.drawingB;
+        }
+        console.log(
+          `🎨 [useDrawingCanvas] Merged dual mode drawing for video ${videoContext} frame ${frame}:`,
+          existing
+        );
+      } else {
+        // Add new dual drawing
+        frameDrawings.push(dualDrawing);
+        console.log(
+          `🎨 [useDrawingCanvas] Added dual mode drawing for video ${videoContext} frame ${frame}:`,
+          dualDrawing
+        );
+      }
+
+      state.value.drawings.set(frame, frameDrawings);
+    } else {
+      // Single mode - use the drawing as-is
+      const frame = drawing.frame;
+      const frameDrawings = state.value.drawings.get(frame) || [];
+      frameDrawings.push(drawing);
+      state.value.drawings.set(frame, frameDrawings);
+      console.log(
+        `🎨 [useDrawingCanvas] Added single mode drawing to frame ${frame}:`,
+        drawing
+      );
+    }
   };
 
   // Clear drawings for current frame
@@ -207,11 +267,42 @@ export function useDrawingCanvas() {
     videoId: string,
     userId: string,
     title: string = 'Drawing Annotation',
-    content: string = 'Drawing annotation'
+    content: string = 'Drawing annotation',
+    videoContext?: 'A' | 'B'
   ): Omit<Annotation, 'id'> => {
     // Calculate timestamp from frame
     const fps = 30; // Default FPS, should be passed from video metadata
     const timestamp = (drawing.frame / fps) * 1000;
+
+    // For dual mode, ensure the drawing has the proper structure
+    let drawingData = drawing;
+    if (videoContext && !drawing.drawingA && !drawing.drawingB) {
+      // Convert single drawing to dual structure if needed
+      drawingData = {
+        paths: [],
+        canvasWidth: drawing.canvasWidth,
+        canvasHeight: drawing.canvasHeight,
+        frame: drawing.frame,
+        drawingA:
+          videoContext === 'A'
+            ? {
+                paths: drawing.paths,
+                canvasWidth: drawing.canvasWidth,
+                canvasHeight: drawing.canvasHeight,
+                frame: drawing.frame,
+              }
+            : undefined,
+        drawingB:
+          videoContext === 'B'
+            ? {
+                paths: drawing.paths,
+                canvasWidth: drawing.canvasWidth,
+                canvasHeight: drawing.canvasHeight,
+                frame: drawing.frame,
+              }
+            : undefined,
+      };
+    }
 
     return {
       content,
@@ -221,7 +312,7 @@ export function useDrawingCanvas() {
       timestamp,
       frame: drawing.frame,
       annotationType: 'drawing',
-      drawingData: drawing,
+      drawingData,
       userId: userId,
       duration: 0,
       durationFrames: 0,
@@ -345,13 +436,25 @@ export function useDrawingCanvas() {
   };
 
   // Get current frame drawing data (merges all drawings on current frame)
-  const getCurrentFrameDrawing = (): DrawingData | null => {
+  const getCurrentFrameDrawing = (
+    videoContext?: 'A' | 'B'
+  ): DrawingData | null => {
     const frameDrawings = getDrawingsForFrame(currentFrame.value);
     const allPaths: DrawingPath[] = [];
 
     // Add paths from committed drawings
     frameDrawings.forEach((drawing) => {
-      allPaths.push(...drawing.paths);
+      if (videoContext && (drawing.drawingA || drawing.drawingB)) {
+        // Dual mode: extract paths from the appropriate video context
+        const contextDrawing =
+          videoContext === 'A' ? drawing.drawingA : drawing.drawingB;
+        if (contextDrawing && contextDrawing.paths) {
+          allPaths.push(...contextDrawing.paths);
+        }
+      } else if (!videoContext && drawing.paths) {
+        // Single mode: use paths directly
+        allPaths.push(...drawing.paths);
+      }
     });
 
     // CRITICAL: Also check for active drawing that hasn't been committed yet
@@ -366,12 +469,40 @@ export function useDrawingCanvas() {
       return null;
     }
 
-    return {
-      paths: allPaths,
-      canvasWidth: state.value.canvasSize.width,
-      canvasHeight: state.value.canvasSize.height,
-      frame: currentFrame.value,
-    };
+    // Return appropriate structure based on mode
+    if (videoContext) {
+      return {
+        paths: [],
+        canvasWidth: state.value.canvasSize.width,
+        canvasHeight: state.value.canvasSize.height,
+        frame: currentFrame.value,
+        drawingA:
+          videoContext === 'A'
+            ? {
+                paths: allPaths,
+                canvasWidth: state.value.canvasSize.width,
+                canvasHeight: state.value.canvasSize.height,
+                frame: currentFrame.value,
+              }
+            : undefined,
+        drawingB:
+          videoContext === 'B'
+            ? {
+                paths: allPaths,
+                canvasWidth: state.value.canvasSize.width,
+                canvasHeight: state.value.canvasSize.height,
+                frame: currentFrame.value,
+              }
+            : undefined,
+      };
+    } else {
+      return {
+        paths: allPaths,
+        canvasWidth: state.value.canvasSize.width,
+        canvasHeight: state.value.canvasSize.height,
+        frame: currentFrame.value,
+      };
+    }
   };
 
   const getCurrentDrawingSession = (): DrawingData | null => {
@@ -385,13 +516,13 @@ export function useDrawingCanvas() {
   };
 
   // Complete drawing session - compatibility method for AnnotationPanel
-  const completeDrawingSession = () => {
+  const completeDrawingSession = (videoContext?: 'A' | 'B') => {
     // If there's an active drawing, commit it to the drawings Map
     if (
       state.value.activeDrawing &&
       state.value.activeDrawing.paths.length > 0
     ) {
-      addDrawing(state.value.activeDrawing);
+      addDrawing(state.value.activeDrawing, videoContext);
       state.value.activeDrawing = null;
     }
   };

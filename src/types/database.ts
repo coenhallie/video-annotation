@@ -25,6 +25,19 @@ export interface DrawingData {
   canvasWidth: number;
   canvasHeight: number;
   frame: number;
+  // For dual video mode - store video-specific drawing data
+  drawingA?: {
+    paths: DrawingPath[];
+    canvasWidth: number;
+    canvasHeight: number;
+    frame: number;
+  };
+  drawingB?: {
+    paths: DrawingPath[];
+    canvasWidth: number;
+    canvasHeight: number;
+    frame: number;
+  };
 }
 
 // Base interfaces

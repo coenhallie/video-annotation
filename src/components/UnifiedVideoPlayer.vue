@@ -511,7 +511,9 @@
             <DrawingCanvas
               v-if="videoAUrl && drawingCanvasA"
               ref="drawingCanvasARef"
-              :current-frame="currentFrame"
+              :current-frame="
+                props.dualVideoPlayer?.videoACurrentFrame?.value || 0
+              "
               :is-drawing-mode="drawingCanvasA?.isDrawingMode?.value"
               :stroke-width="drawingCanvasA?.currentTool?.value?.strokeWidth"
               :severity="drawingCanvasA?.currentTool?.value?.severity"
@@ -521,6 +523,7 @@
               "
               :existing-drawings="drawingCanvasA?.allDrawings?.value"
               :is-loading-drawings="drawingCanvasA?.isLoadingDrawings?.value"
+              :video-context="'A'"
               @drawing-created="
                 (drawing: any, event: Event) => handleDrawingCreated(drawing, event)
               "
@@ -642,7 +645,9 @@
             <DrawingCanvas
               v-if="videoBUrl && drawingCanvasB"
               ref="drawingCanvasBRef"
-              :current-frame="currentFrame"
+              :current-frame="
+                props.dualVideoPlayer?.videoBCurrentFrame?.value || 0
+              "
               :is-drawing-mode="drawingCanvasB?.isDrawingMode?.value"
               :stroke-width="drawingCanvasB?.currentTool?.value?.strokeWidth"
               :severity="drawingCanvasB?.currentTool?.value?.severity"
@@ -652,6 +657,7 @@
               "
               :existing-drawings="drawingCanvasB?.allDrawings?.value"
               :is-loading-drawings="drawingCanvasB?.isLoadingDrawings?.value"
+              :video-context="'B'"
               @drawing-created="
                 (drawing, event) => handleDrawingCreated(drawing, event)
               "
