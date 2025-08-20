@@ -29,7 +29,7 @@
         </div>
 
         <!-- Placeholder when no video URL -->
-        <div v-if="!videoUrl" class="no-video-placeholder">
+        <div v-if="!props.videoUrl" class="no-video-placeholder">
           <svg
             class="placeholder-icon"
             fill="none"
@@ -56,7 +56,7 @@
           class="video-element"
           :class="{ 'video-fade-transition': isVideoTransitioning }"
           :style="{ opacity: videoOpacity }"
-          :src="videoUrl"
+          :src="props.videoUrl"
           :poster="poster"
           :autoplay="autoplay"
           preload="metadata"
@@ -68,7 +68,7 @@
 
         <!-- Drawing Canvas Overlay for Single Video -->
         <DrawingCanvas
-          v-if="videoUrl && drawingCanvas"
+          v-if="props.videoUrl && drawingCanvas"
           ref="singleDrawingCanvasRef"
           :current-frame="currentFrame"
           :is-drawing-mode="drawingCanvas?.isDrawingMode?.value"
@@ -87,7 +87,7 @@
 
         <!-- Pose Visualization Overlay for Single Video -->
         <PoseVisualization
-          v-if="videoUrl && poseLandmarker"
+          v-if="props.videoUrl && poseLandmarker"
           :current-pose="poseLandmarker.getCurrentPose"
           :canvas-width="singleVideoElement?.videoWidth || 1920"
           :canvas-height="singleVideoElement?.videoHeight || 1080"
@@ -103,7 +103,7 @@
 
         <!-- Enhanced ROI Selector Overlay for Single Video -->
         <ROISelector
-          v-if="videoUrl && poseLandmarker && roiSettings.enabled"
+          v-if="props.videoUrl && poseLandmarker && roiSettings.enabled"
           :canvas-width="singleVideoElement?.videoWidth || 1920"
           :canvas-height="singleVideoElement?.videoHeight || 1080"
           :current-r-o-i="roiSettings.currentROI"
@@ -126,14 +126,7 @@
           @motion-prediction-toggled="handleMotionPredictionToggled"
         />
 
-        <!-- Enhanced Camera Calibration Overlay for Single Video -->
-        <CalibrationOverlay
-          v-if="videoUrl && singleVideoElement"
-          :video-element="singleVideoElement"
-          :is-active="showCalibrationOverlay"
-          @calibration-complete="handleCalibrationComplete"
-          @calibration-cancelled="showCalibrationOverlay = false"
-        />
+        <!-- CalibrationOverlay moved to App.vue level for better positioning -->
 
         <!-- Heatmap Minimap for Position Tracking -->
         <HeatmapMinimap
@@ -152,7 +145,7 @@
         <!-- Speed Visualization Overlay for Single Video (only in single mode) -->
         <SpeedVisualization
           v-if="
-            videoUrl &&
+            props.videoUrl &&
             poseLandmarker &&
             poseLandmarker.isEnabled.value &&
             mode === 'single'
@@ -167,7 +160,7 @@
 
         <!-- Custom controls for single video -->
         <div
-          v-if="controls && videoUrl && !singleVideoState.isLoading"
+          v-if="controls && props.videoUrl && !singleVideoState.isLoading"
           class="video-controls"
         >
           <div class="controls-content">
@@ -330,14 +323,12 @@
                   </svg>
                 </button>
 
-                <!-- Camera Calibration Button (always show for debugging) -->
+                <!-- Camera Calibration Button -->
                 <button
-                  @click="toggleCalibration"
+                  @click="$emit('toggle-calibration')"
                   class="control-button"
                   :class="{
-                    'pose-active':
-                      showCalibrationOverlay ||
-                      cameraCalibration.isCalibrated.value,
+                    'pose-active': cameraCalibration.isCalibrated.value,
                     calibrated: cameraCalibration.isCalibrated.value,
                   }"
                   :title="
@@ -1580,7 +1571,6 @@ import SpeedChart from './SpeedChart.vue';
 // @ts-ignore: Vue SFC without d.ts
 import ROISelector from './ROISelector.vue';
 import KeypointSelectorModal from './KeypointSelectorModal.vue';
-import CalibrationOverlay from './CalibrationOverlay.vue';
 import { useVideoPlayer } from '../composables/useVideoPlayer.ts';
 import { useCameraCalibration } from '../composables/useCameraCalibration.ts';
 import { usePositionHeatmap } from '../composables/usePositionHeatmap';
@@ -1681,6 +1671,7 @@ interface Emits {
   (e: 'video-b-loaded'): void;
   (e: 'pose-detected', poseData: any, videoContext?: string): void;
   (e: 'pose-detection-error', error: string, videoContext?: string): void;
+  (e: 'toggle-calibration'): void;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -1761,8 +1752,7 @@ const localSelectedKeypoints = ref<number[]>(
   Array.from({ length: 33 }, (_, i) => i)
 );
 
-// Camera calibration state
-const showCalibrationOverlay = ref(false);
+// Camera calibration composable (for accessing calibration state)
 const cameraCalibration = useCameraCalibration();
 
 // Position heatmap tracking
@@ -2665,61 +2655,12 @@ const openKeypointSelector = () => {
   showKeypointSelector.value = true;
 };
 
-// Camera calibration methods
-const toggleCalibration = () => {
-  console.log('toggleCalibration called');
-  console.log('singleVideoElement.value:', singleVideoElement.value);
-  console.log('showCalibrationOverlay before:', showCalibrationOverlay.value);
-
-  if (singleVideoElement.value) {
-    // Pause the video during calibration
-    pause();
-    showCalibrationOverlay.value = true;
-    console.log('showCalibrationOverlay after:', showCalibrationOverlay.value);
-  } else {
-    console.warn('No video element available for calibration');
-  }
-};
-
-const handleCalibrationComplete = (calibrationData: any) => {
-  // Store calibration data
-  if (calibrationData.points && calibrationData.points.length === 4) {
-    cameraCalibration.setCalibrationPoints(calibrationData.points);
-    const success = cameraCalibration.calibrate();
-
-    if (success) {
-      console.log('Camera calibration completed successfully');
-      console.log(
-        'Calibration error:',
-        cameraCalibration.calibrationError.value.toFixed(3),
-        'meters'
-      );
-
-      // Pass calibration to speed calculator if available
-      if (props.poseLandmarker?.speedCalculator) {
-        // The speed calculator will automatically use the calibration through the shared composable
-        console.log('Speed calculator will now use calibrated coordinates');
-      }
-
-      // Don't automatically show heatmap - user can toggle it manually
-      // Start position tracking if pose detection is enabled
-      if (props.poseLandmarker?.isEnabled?.value) {
-        positionHeatmap.startTracking();
-        console.log(
-          'Position tracking ready - use heatmap button to toggle display'
-        );
-      } else {
-        console.log(
-          'Camera calibrated - enable pose detection and heatmap to start tracking'
-        );
-      }
-    } else {
-      console.error('Camera calibration failed');
-    }
-  }
-
-  showCalibrationOverlay.value = false;
-};
+// Camera calibration methods moved to App.vue level
+// Expose calibration state for other components
+const getCalibrationState = () => ({
+  isCalibrated: cameraCalibration.isCalibrated.value,
+  calibrationError: cameraCalibration.calibrationError.value,
+});
 
 // Heatmap tracking methods
 const toggleHeatmap = () => {
@@ -3265,6 +3206,15 @@ defineExpose({
   singleDrawingCanvasRef,
   drawingCanvasARef,
   drawingCanvasBRef,
+  // Expose calibration state and video element for calibration
+  getCalibrationState,
+  getCurrentVideoElement: () => {
+    if (props.mode === 'single') {
+      return singleVideoElement.value;
+    }
+    // For dual mode, return the active video element based on context
+    return singleVideoElement.value; // Default fallback
+  },
 });
 </script>
 

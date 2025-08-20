@@ -18,6 +18,7 @@ import NotificationToast from './components/NotificationToast.vue';
 import UnifiedVideoPlayer from './components/UnifiedVideoPlayer.vue';
 import SpeedVisualization from './components/SpeedVisualization.vue';
 import CalibrationControls from './components/CalibrationControls.vue';
+import CalibrationOverlay from './components/CalibrationOverlay.vue';
 import { useAuth } from './composables/useAuth';
 import { useVideoAnnotations } from './composables/useVideoAnnotations';
 import { useRealtimeAnnotations } from './composables/useRealtimeAnnotations';
@@ -394,6 +395,9 @@ const currentSpeedCalculator = computed(() => {
 const isCourtCalibrating = ref(false);
 const courtCalibrationPoints = ref([]);
 const showCalibrationControls = ref(false);
+
+// Camera calibration state
+const showCalibrationOverlay = ref(false);
 
 // Configure all pose landmarkers for fast movements
 const configureFastMovements = () => {
@@ -1106,9 +1110,54 @@ const handleKeypointSelection = (keypoint: any, isSelected: boolean) => {
 
 // Calibration Controls
 const handleStartCourtCalibration = () => {
-  if (currentSpeedCalculator.value) {
-    (currentSpeedCalculator.value as any).startCourtCalibration();
+  console.log('handleStartCourtCalibration called from App.vue');
+  // Show the calibration overlay instead of calling the speed calculator directly
+  if (videoUrl.value) {
+    // Pause the video during calibration if it's playing
+    if (unifiedVideoPlayerRef.value) {
+      unifiedVideoPlayerRef.value.pause();
+    }
+    showCalibrationOverlay.value = true;
+    console.log('showCalibrationOverlay set to:', showCalibrationOverlay.value);
+  } else {
+    console.warn('No video URL available for calibration');
   }
+};
+
+const handleCalibrationComplete = (calibrationData: any) => {
+  console.log('handleCalibrationComplete called with:', calibrationData);
+
+  // Store calibration data in the current speed calculator
+  if (
+    currentSpeedCalculator.value &&
+    calibrationData.points &&
+    calibrationData.points.length === 4
+  ) {
+    // Access the camera calibration composable through the speed calculator
+    const speedCalc = currentSpeedCalculator.value as any;
+    if (speedCalc.cameraCalibration) {
+      speedCalc.cameraCalibration.setCalibrationPoints(calibrationData.points);
+      const success = speedCalc.cameraCalibration.calibrate();
+
+      if (success) {
+        console.log('Camera calibration completed successfully');
+        console.log(
+          'Calibration error:',
+          speedCalc.cameraCalibration.calibrationError.value.toFixed(3),
+          'meters'
+        );
+
+        // Start position tracking if pose detection is enabled
+        if (playerMode.value === 'single' && poseLandmarker?.isEnabled?.value) {
+          console.log('Speed calculator will now use calibrated coordinates');
+        }
+      } else {
+        console.error('Camera calibration failed');
+      }
+    }
+  }
+
+  showCalibrationOverlay.value = false;
 };
 
 const handleSetPlayerHeight = (height: number) => {
@@ -1446,6 +1495,7 @@ watch(
                 @drawing-deleted="handleDrawingDeleted"
                 @set-roi="handleSetROI"
                 @reset-roi="handleResetROI"
+                @toggle-calibration="handleStartCourtCalibration"
               />
 
               <!-- Speed Visualization (only render in single mode) -->
@@ -1693,6 +1743,15 @@ watch(
       :comparison-id="shareModalProps.comparisonId"
       :share-type="shareModalProps.shareType"
       @close="closeShareModal"
+    />
+
+    <!-- Calibration Overlay - Now positioned outside video container for better positioning -->
+    <CalibrationOverlay
+      v-if="videoUrl && (user || isSharedVideo || isSharedComparison)"
+      :video-element="unifiedVideoPlayerRef?.getCurrentVideoElement?.()"
+      :is-active="showCalibrationOverlay"
+      @calibration-complete="handleCalibrationComplete"
+      @calibration-cancelled="showCalibrationOverlay = false"
     />
   </div>
   <!-- Password Reset screen when recovery token is present -->

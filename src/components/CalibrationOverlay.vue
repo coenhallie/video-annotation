@@ -1,5 +1,17 @@
 <template>
-  <div v-show="isCalibrating" class="calibration-overlay">
+  <div
+    v-show="isCalibrating"
+    class="calibration-overlay"
+    style="
+      z-index: 9999;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+    "
+  >
     <!-- Canvas overlay that directly overlays the video (only show for court points step) -->
     <canvas
       v-if="currentStep === 'court-points'"
@@ -430,7 +442,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import {
   useCameraCalibration,
   CALIBRATION_MODES,
@@ -463,11 +475,33 @@ const isCalibrating = ref(false);
 const currentStep = ref<'camera-position' | 'court-points'>('camera-position');
 const cameraSettings = ref<CameraSettings | null>(null);
 
+// Debug watcher for isActive prop
+watch(
+  () => props.isActive,
+  (newValue) => {
+    console.log('CalibrationOverlay: isActive changed to:', newValue);
+    console.log(
+      'CalibrationOverlay: Current isCalibrating value:',
+      isCalibrating.value
+    );
+    isCalibrating.value = newValue;
+    if (newValue) {
+      currentStep.value = 'camera-position';
+      setTimeout(() => updateCanvasDimensions(), 100);
+    }
+  },
+  { immediate: true }
+);
+
 // Initialize calibration state based on props
 onMounted(() => {
+  console.log('CalibrationOverlay mounted, isActive:', props.isActive);
   if (props.isActive) {
     isCalibrating.value = true;
-    console.log('EnhancedCalibrationOverlay: Mounted with active state');
+    currentStep.value = 'camera-position';
+    console.log('CalibrationOverlay: Mounted with active state');
+    // Update canvas dimensions when mounted with active state
+    setTimeout(() => updateCanvasDimensions(), 100);
   }
 });
 const calibrationCanvas = ref<HTMLCanvasElement | null>(null);
@@ -482,7 +516,24 @@ const calibrationMessages = ref<string[]>([]);
 // Draggable Panel State
 const calibrationPanelRef = ref<HTMLElement | null>(null);
 const isDragging = ref(false);
-const panelPosition = ref({ x: window.innerWidth - 340, y: 20 }); // Start on right side
+// Ensure panel starts in a visible position
+// Panel width is approximately 400px, but we need to ensure it fits on screen
+const getInitialPanelPosition = () => {
+  const panelWidth = 400; // Approximate panel width
+  const margin = 20;
+
+  // Position panel on the right side of the screen, but ensure it's fully visible
+  const rightSideX = Math.max(margin, window.innerWidth - panelWidth - margin);
+
+  // If screen is too narrow, position it more towards the center-right
+  const fallbackX = Math.max(margin, window.innerWidth - panelWidth);
+
+  return {
+    x: window.innerWidth > panelWidth + margin * 2 ? rightSideX : fallbackX,
+    y: margin,
+  };
+};
+const panelPosition = ref(getInitialPanelPosition());
 const dragOffset = ref({ x: 0, y: 0 });
 
 // Responsive visual guide
@@ -611,27 +662,53 @@ function proceedToCourtPoints() {
 watch(
   () => props.isActive,
   (active) => {
-    console.log('EnhancedCalibrationOverlay: isActive changed to', active);
-    if (active && props.videoElement) {
+    console.log('CalibrationOverlay: isActive changed to', active);
+    console.log(
+      'CalibrationOverlay: videoElement exists?',
+      !!props.videoElement
+    );
+
+    if (active) {
+      // Set calibrating to true even if video element is not ready yet
       isCalibrating.value = true;
       currentStep.value = 'camera-position'; // Start with camera position
-      console.log('EnhancedCalibrationOverlay: Starting calibration');
-      // Update canvas dimensions when calibration starts
-      setTimeout(() => updateCanvasDimensions(), 100);
-      // Add resize listener
-      window.addEventListener('resize', updateCanvasDimensions);
-
-      // Also observe video element position changes
-      const resizeObserver = new ResizeObserver(() => {
-        updateCanvasDimensions();
+      console.log(
+        'CalibrationOverlay: Starting calibration, isCalibrating:',
+        isCalibrating.value
+      );
+      console.log('CalibrationOverlay: Panel position:', panelPosition.value);
+      console.log('CalibrationOverlay: Window dimensions:', {
+        width: window.innerWidth,
+        height: window.innerHeight,
       });
-      resizeObserver.observe(props.videoElement);
 
-      // Store observer for cleanup
-      (window as any).__calibrationResizeObserver = resizeObserver;
-    } else if (!active) {
+      // Always reset panel position when opening to ensure it's visible
+      // This handles cases where window was resized while modal was closed
+      panelPosition.value = getInitialPanelPosition();
+      console.log(
+        'CalibrationOverlay: Set panel position to:',
+        panelPosition.value
+      );
+
+      // Only set up canvas and observers if video element exists
+      if (props.videoElement) {
+        // Update canvas dimensions when calibration starts
+        setTimeout(() => updateCanvasDimensions(), 100);
+        // Add resize listener
+        window.addEventListener('resize', updateCanvasDimensions);
+
+        // Also observe video element position changes
+        const resizeObserver = new ResizeObserver(() => {
+          updateCanvasDimensions();
+        });
+        resizeObserver.observe(props.videoElement);
+
+        // Store observer for cleanup
+        (window as any).__calibrationResizeObserver = resizeObserver;
+      }
+    } else {
       isCalibrating.value = false;
-      console.log('EnhancedCalibrationOverlay: Stopping calibration');
+      console.log('CalibrationOverlay: Stopping calibration');
       // Remove resize listener
       window.removeEventListener('resize', updateCanvasDimensions);
 
@@ -1015,8 +1092,7 @@ watch(
 
 .calibration-panel {
   position: fixed; /* Fixed positioning for panel */
-  top: 20px;
-  right: 20px; /* Moved to right side to avoid overlapping video controls */
+  /* top and left are set via inline styles for dragging */
   width: 400px; /* Wider panel for better court visualization */
   max-height: calc(100vh - 40px);
   background: white;
@@ -1026,10 +1102,11 @@ watch(
   pointer-events: auto; /* Panel is interactive */
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto; /* Allow vertical scrolling */
+  overflow-x: hidden; /* Prevent horizontal scrolling */
   border: 1px solid #e5e7eb;
   font-size: 0.8rem; /* Slightly bigger base font size */
-  z-index: 10; /* Above canvas */
+  z-index: 10000; /* Very high z-index to ensure visibility */
 }
 
 .panel-header {
