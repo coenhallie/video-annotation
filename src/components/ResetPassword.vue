@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useAuth } from '../composables/useAuth.ts';
 import { supabase } from '../composables/useSupabase';
 
@@ -155,20 +155,30 @@ const getStrengthText = () => {
   <div
     class="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100"
   >
-    <div v-if="isCheckingSession" class="text-center">
+    <div
+      v-if="isCheckingSession"
+      class="text-center"
+    >
       <div
         class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"
-      ></div>
-      <p class="mt-4 text-gray-600">Verifying reset link...</p>
+      />
+      <p class="mt-4 text-gray-600">
+        Verifying reset link...
+      </p>
     </div>
 
-    <div v-else-if="isValidSession" class="w-full max-w-md">
+    <div
+      v-else-if="isValidSession"
+      class="w-full max-w-md"
+    >
       <div class="bg-white rounded-2xl shadow-xl p-8">
         <div class="text-center mb-8">
           <h1 class="text-2xl font-bold text-gray-800 mb-2">
             Create New Password
           </h1>
-          <p class="text-sm text-gray-600">Enter your new password below</p>
+          <p class="text-sm text-gray-600">
+            Enter your new password below
+          </p>
         </div>
 
         <form @submit.prevent="handleSubmit">
@@ -183,13 +193,13 @@ const getStrengthText = () => {
               <input
                 id="new-password"
                 v-model="newPassword"
-                @input="checkPasswordStrength"
                 type="password"
                 required
                 :disabled="isLoading"
                 placeholder="Enter new password"
                 class="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-              />
+                @input="checkPasswordStrength"
+              >
               <p
                 v-if="newPassword"
                 :class="getStrengthColor()"
@@ -209,7 +219,6 @@ const getStrengthText = () => {
               <input
                 id="confirm-password"
                 v-model="confirmPassword"
-                @input="validatePasswords"
                 type="password"
                 required
                 :disabled="isLoading"
@@ -218,7 +227,8 @@ const getStrengthText = () => {
                 :class="{
                   'border-red-500': !passwordsMatch && confirmPassword,
                 }"
-              />
+                @input="validatePasswords"
+              >
               <p
                 v-if="!passwordsMatch && confirmPassword"
                 class="text-red-600 text-xs mt-1"
@@ -232,15 +242,18 @@ const getStrengthText = () => {
                 type="submit"
                 :disabled="
                   isLoading ||
-                  !newPassword ||
-                  !confirmPassword ||
-                  !passwordsMatch ||
-                  newPassword.length < 6
+                    !newPassword ||
+                    !confirmPassword ||
+                    !passwordsMatch ||
+                    newPassword.length < 6
                 "
                 class="w-full px-4 py-3 font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transform hover:scale-[1.02] transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
               >
                 <span v-if="!isLoading">Update Password</span>
-                <span v-else class="flex items-center justify-center">
+                <span
+                  v-else
+                  class="flex items-center justify-center"
+                >
                   <svg
                     class="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
                     xmlns="http://www.w3.org/2000/svg"
@@ -254,12 +267,12 @@ const getStrengthText = () => {
                       r="10"
                       stroke="currentColor"
                       stroke-width="4"
-                    ></circle>
+                    />
                     <path
                       class="opacity-75"
                       fill="currentColor"
                       d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
+                    />
                   </svg>
                   Updating...
                 </span>
@@ -270,8 +283,8 @@ const getStrengthText = () => {
 
         <div class="text-center mt-6">
           <button
-            @click="$emit('complete')"
             class="text-sm text-blue-600 hover:text-blue-700 hover:underline transition-colors duration-200"
+            @click="$emit('complete')"
           >
             Back to Sign In
           </button>
@@ -279,7 +292,10 @@ const getStrengthText = () => {
       </div>
     </div>
 
-    <div v-else class="text-center">
+    <div
+      v-else
+      class="text-center"
+    >
       <div class="bg-white rounded-2xl shadow-xl p-8 max-w-md">
         <svg
           class="w-16 h-16 text-red-500 mx-auto mb-4"
@@ -294,13 +310,15 @@ const getStrengthText = () => {
             d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
           />
         </svg>
-        <h2 class="text-xl font-bold text-gray-800 mb-2">Invalid Reset Link</h2>
+        <h2 class="text-xl font-bold text-gray-800 mb-2">
+          Invalid Reset Link
+        </h2>
         <p class="text-gray-600 mb-6">
           This password reset link is invalid or has expired.
         </p>
         <button
-          @click="$emit('complete')"
           class="inline-block px-6 py-3 font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-all duration-200"
+          @click="$emit('complete')"
         >
           Back to Sign In
         </button>

@@ -10,17 +10,20 @@
     <svg
       v-if="
         speedVisualizationEnabled &&
-        showSpeed &&
-        speedMetrics &&
-        speedMetrics.value &&
-        speedMetrics.value.isValid
+          showSpeed &&
+          speedMetrics &&
+          speedMetrics.value &&
+          speedMetrics.value.isValid
       "
       class="absolute inset-0 w-full h-full pointer-events-none"
       :viewBox="`0 0 ${canvasWidth} ${canvasHeight}`"
       preserveAspectRatio="none"
     >
       <!-- Center of Mass point -->
-      <g v-if="showCenterOfMass" class="center-of-mass">
+      <g
+        v-if="showCenterOfMass"
+        class="center-of-mass"
+      >
         <circle
           :cx="comCanvasCoord.x"
           :cy="comCanvasCoord.y"
@@ -59,7 +62,10 @@
             refY="3.5"
             orient="auto"
           >
-            <polygon points="0 0, 10 3.5, 0 7" :fill="velocityColor" />
+            <polygon
+              points="0 0, 10 3.5, 0 7"
+              :fill="velocityColor"
+            />
           </marker>
         </defs>
 
@@ -96,12 +102,12 @@
     <div
       v-if="
         videoLoaded &&
-        speedVisualizationEnabled &&
-        showSpeedPanel &&
-        showMainSpeedPanel &&
-        speedMetrics &&
-        speedMetrics.value &&
-        speedMetrics.value.isValid
+          speedVisualizationEnabled &&
+          showSpeedPanel &&
+          showMainSpeedPanel &&
+          speedMetrics &&
+          speedMetrics.value &&
+          speedMetrics.value.isValid
       "
       :class="[
         'speed-panel-container',
@@ -111,9 +117,9 @@
       :style="
         !isExternalPanel
           ? {
-              backgroundColor: 'rgba(255, 255, 255, 0.8)',
-              borderColor: 'rgba(229, 231, 235, 0.8)',
-            }
+            backgroundColor: 'rgba(255, 255, 255, 0.8)',
+            borderColor: 'rgba(229, 231, 235, 0.8)',
+          }
           : {}
       "
       style="min-width: 180px"
@@ -128,7 +134,9 @@
       <div class="grid grid-cols-2 gap-1 mb-1">
         <!-- Overall Speed -->
         <div class="mini-card">
-          <div class="mini-label">Overall</div>
+          <div class="mini-label">
+            Overall
+          </div>
           <div
             class="mini-value"
             :class="getSpeedColorClass(speedMetrics.value.speed)"
@@ -151,7 +159,9 @@
 
         <!-- Horizontal Speed -->
         <div class="mini-card">
-          <div class="mini-label">Horizontal</div>
+          <div class="mini-label">
+            Horizontal
+          </div>
           <div class="mini-value text-gray-700">
             {{ speedMetrics.value.generalMovingSpeed?.toFixed(2) || 'N/A' }}
           </div>
@@ -159,7 +169,9 @@
 
         <!-- Right Foot Speed -->
         <div class="mini-card">
-          <div class="mini-label">Right Foot</div>
+          <div class="mini-label">
+            Right Foot
+          </div>
           <div class="mini-value text-gray-600">
             {{ speedMetrics.value.rightFootSpeed?.toFixed(2) || 'N/A' }}
           </div>
@@ -167,7 +179,9 @@
 
         <!-- CoM Height -->
         <div class="mini-card">
-          <div class="mini-label">CoM Height</div>
+          <div class="mini-label">
+            CoM Height
+          </div>
           <div class="mini-value text-gray-700">
             {{ speedMetrics.value.centerOfGravityHeight?.toFixed(2) || 'N/A' }}
           </div>
@@ -211,7 +225,10 @@
       </div>
 
       <!-- Velocity components -->
-      <div v-if="showVelocityComponents" class="text-xs space-y-1">
+      <div
+        v-if="showVelocityComponents"
+        class="text-xs space-y-1"
+      >
         <div class="flex justify-between">
           <span class="text-gray-600">X:</span>
           <span class="font-mono text-gray-700">{{
@@ -336,11 +353,11 @@
     <div
       v-if="
         videoLoaded &&
-        speedVisualizationEnabled &&
-        showSpeed &&
-        showMainSpeedPanel &&
-        (!speedMetrics || !speedMetrics.value || !speedMetrics.value.isValid) &&
-        showNoSpeedIndicator
+          speedVisualizationEnabled &&
+          showSpeed &&
+          showMainSpeedPanel &&
+          (!speedMetrics || !speedMetrics.value || !speedMetrics.value.isValid) &&
+          showNoSpeedIndicator
       "
       class="absolute opacity-95 top-4 right-4 bg-white border border-gray-200 rounded-lg shadow-md px-3 py-2 text-sm text-gray-600 pointer-events-auto"
       role="status"

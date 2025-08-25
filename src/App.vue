@@ -7,8 +7,8 @@ import {
   computed,
   onErrorCaptured,
 } from 'vue';
-import Timeline from './components/Timeline.vue';
 import DualTimeline from './components/DualTimeline.vue';
+import VideoTimeline from './components/VideoTimeline.vue';
 import AnnotationPanel from './components/AnnotationPanel.vue';
 import Login from './components/Login.vue';
 import ResetPassword from './components/ResetPassword.vue';
@@ -30,8 +30,6 @@ import { usePoseLandmarker } from './composables/usePoseLandmarker';
 import { useSessionCleanup } from './composables/useSessionCleanup';
 import { ShareService } from './services/shareService';
 import { supabase } from './composables/useSupabase';
-
-import type { Annotation, Video } from './types/database';
 
 // Helper function to get the correct video URL
 const getVideoUrl = (video: any) => {
@@ -1305,7 +1303,9 @@ watch(
       <div
         class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"
       />
-      <p class="text-gray-600">Loading...</p>
+      <p class="text-gray-600">
+        Loading...
+      </p>
     </div>
   </div>
 
@@ -1323,11 +1323,13 @@ watch(
     <header class="bg-white border-b border-gray-200 px-6 py-4">
       <div class="flex items-center justify-between">
         <div class="flex items-center space-x-3">
-          <h1 class="text-xl font-medium text-gray-900">Perspecto AI</h1>
+          <h1 class="text-xl font-medium text-gray-900">
+            Perspecto AI
+          </h1>
           <span
             class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 border border-orange-200"
           >
-            BETA v1.8
+            BETA v1.9
           </span>
         </div>
 
@@ -1408,7 +1410,10 @@ watch(
         </div>
 
         <!-- User Info and Sign Out (for authenticated users) -->
-        <div v-else-if="user" class="flex items-center space-x-4">
+        <div
+          v-else-if="user"
+          class="flex items-center space-x-4"
+        >
           <div class="flex items-center space-x-2 text-sm text-gray-600">
             <svg
               class="w-4 h-4"
@@ -1518,7 +1523,7 @@ watch(
                 :video-loaded="videoLoaded"
                 @speed-visualization-toggled="handleSpeedVisualizationToggled"
                 @chart-toggled="handleChartToggled"
-              ></SpeedVisualization>
+              />
             </div>
           </div>
         </div>
@@ -1526,7 +1531,7 @@ watch(
         <!-- Timeline -->
         <div class="bg-gray-900 p-4 border-t border-gray-800">
           <!-- Single Video Timeline -->
-          <Timeline
+          <VideoTimeline
             v-if="playerMode === 'single'"
             :current-time="currentTime"
             :duration="duration"
@@ -1639,7 +1644,10 @@ watch(
           </div>
 
           <!-- Calibration Controls Panel -->
-          <div v-if="showCalibrationControls" class="p-4">
+          <div
+            v-if="showCalibrationControls"
+            class="p-4"
+          >
             <CalibrationControls
               v-if="currentSpeedCalculator"
               :calibration-settings="(currentSpeedCalculator as any).calibrationSettings"
@@ -1722,7 +1730,9 @@ watch(
                   d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4"
                 />
               </svg>
-              <p class="text-sm">Initializing annotation panel...</p>
+              <p class="text-sm">
+                Initializing annotation panel...
+              </p>
             </div>
           </div>
         </div>
@@ -1754,10 +1764,6 @@ watch(
       @calibration-cancelled="showCalibrationOverlay = false"
     />
   </div>
-  <!-- Password Reset screen when recovery token is present -->
-  <div v-else-if="isPasswordReset">
-    <ResetPassword @complete="handlePasswordResetComplete" />
-  </div>
 
   <!-- Login component when user is not authenticated -->
   <div v-else>
@@ -1771,4 +1777,3 @@ watch(
 <style scoped>
 /* Custom styles if needed */
 </style>
-stroke-width="

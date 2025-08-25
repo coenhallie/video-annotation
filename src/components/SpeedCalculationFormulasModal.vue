@@ -195,20 +195,20 @@
               <strong>Instantaneous Velocity (Finite Difference):</strong>
             </p>
             <div class="font-mono text-sm bg-white p-3 rounded border">
-              v⃗(t) = [r⃗(t) - r⃗(t-Δt)] / Δt
+              v⃗(t) = [r⃗(t) - r⃗(t-&amp;Delta;t)] / &amp;Delta;t
               <br />
               <br />
-              vₓ = [x(t) - x(t-Δt)] / Δt
+              vₓ = [x(t) - x(t-&amp;Delta;t)] / &amp;Delta;t
               <br />
-              vᵧ = [y(t) - y(t-Δt)] / Δt
+              vᵧ = [y(t) - y(t-&amp;Delta;t)] / &amp;Delta;t
               <br />
-              vᵤ = [z(t) - z(t-Δt)] / Δt
+              vᵤ = [z(t) - z(t-&amp;Delta;t)] / &amp;Delta;t
             </div>
             <p class="text-sm text-gray-700 mb-2 mt-3">
               <strong>Smoothed Velocity (Moving Average):</strong>
             </p>
             <div class="font-mono text-sm bg-white p-3 rounded border">
-              v⃗_smooth(t) = (1/n) × Σᵢ₌₀ⁿ⁻¹ v⃗(t-i×Δt)
+              v⃗_smooth(t) = (1/n) × Σᵢ₌₀ⁿ⁻¹ v⃗(t-i×&amp;Delta;t)
               <br />
               <br />
               where n = smoothing_window (typically 3-5 frames)
@@ -217,7 +217,7 @@
               <strong>Acceleration:</strong>
             </p>
             <div class="font-mono text-sm bg-white p-3 rounded border">
-              a⃗(t) = [v⃗(t) - v⃗(t-Δt)] / Δt
+              a⃗(t) = [v⃗(t) - v⃗(t-&amp;Delta;t)] / &amp;Delta;t
             </div>
           </div>
           <div class="text-sm text-gray-600">
@@ -241,13 +241,13 @@
               <strong>3D Speed (Magnitude):</strong>
             </p>
             <div class="font-mono text-sm bg-white p-3 rounded border">
-              s₃ᴅ = ||v⃗|| = √(vₓ² + vᵧ² + vᵤ²)
+              s₃ᴅ = ||v⃗|| = √(vₓ&sup2; + vᵧ&sup2; + vᵤ&sup2;)
             </div>
             <p class="text-sm text-gray-700 mb-2 mt-3">
               <strong>Horizontal Speed (Court Plane):</strong>
             </p>
             <div class="font-mono text-sm bg-white p-3 rounded border">
-              s_horizontal = √(vₓ² + vᵤ²)
+              s_horizontal = √(vₓ&sup2; + vᵤ&sup2;)
             </div>
             <p class="text-sm text-gray-700 mb-2 mt-3">
               <strong>Vertical Speed Component:</strong>
@@ -259,10 +259,11 @@
               <strong>Individual Landmark Speed (e.g., Racket/Foot):</strong>
             </p>
             <div class="font-mono text-sm bg-white p-3 rounded border">
-              s_landmark = ||Δr⃗_landmark|| / Δt
+              s_landmark = ||&amp;Delta;r⃗_landmark|| / &amp;Delta;t
               <br />
               <br />
-              where Δr⃗_landmark = r⃗_landmark(t) - r⃗_landmark(t-Δt)
+              where &amp;Delta;r⃗_landmark = r⃗_landmark(t) -
+              r⃗_landmark(t-&amp;Delta;t)
             </div>
           </div>
           <div class="text-sm text-gray-600">
@@ -270,7 +271,7 @@
             <ul class="list-disc list-inside mt-2 space-y-1">
               <li>Average Speed: s̄ = (1/T) × ∫₀ᵀ s(t) dt</li>
               <li>Peak Speed: s_max = max(s(t)) for t ∈ [0, T]</li>
-              <li>Speed Variance: σ² = E[(s - s̄)²]</li>
+              <li>Speed Variance: σ&sup2; = E[(s - s̄)&sup2;]</li>
               <li>Speed Percentiles: P₅₀, P₇₅, P₉₅</li>
             </ul>
           </div>
@@ -286,7 +287,7 @@
               <strong>Homography Matrix Computation (DLT Algorithm):</strong>
             </p>
             <div class="font-mono text-sm bg-white p-3 rounded border">
-              Given n ≥ 4 point correspondences:
+              Given n &amp;ge; 4 point correspondences:
               <br />
               {(xᵢ, yᵢ) ↔ (Xᵢ, Yᵢ)} for i = 1...n
               <br />
@@ -408,13 +409,14 @@
               <strong>Sources of Error:</strong>
             </p>
             <div class="font-mono text-sm bg-white p-3 rounded border">
-              σ²_total = σ²_detection + σ²_calibration + σ²_temporal + σ²_depth
+              σ&sup2;_total = σ&sup2;_detection + σ&sup2;_calibration +
+              σ&sup2;_temporal + σ&sup2;_depth
             </div>
             <p class="text-sm text-gray-700 mb-2 mt-3">
               <strong>Error Propagation (Speed):</strong>
             </p>
             <div class="font-mono text-sm bg-white p-3 rounded border">
-              σ_s = s × √[(σ_r/r)² + (σ_t/t)²]
+              σ_s = s × √[(σ_r/r)&sup2; + (σ_t/t)&sup2;]
               <br />
               <br />
               where:
@@ -451,7 +453,7 @@
               <br />
               Speed Calculation: O(1) per frame
               <br />
-              Homography: O(m²) where m = calibration points
+              Homography: O(m&sup2;) where m = calibration points
             </div>
             <p class="text-sm text-gray-700 mb-2 mt-3">
               <strong>Optimization Strategies:</strong>
@@ -496,11 +498,11 @@
               <strong>Time Resolution:</strong>
             </p>
             <div class="font-mono text-sm bg-white p-3 rounded border">
-              Frame interval: Δt = 1/fps seconds
+              Frame interval: &amp;Delta;t = 1/fps seconds
               <br />
-              30 fps → Δt = 33.33 ms
+              30 fps → &amp;Delta;t = 33.33 ms
               <br />
-              60 fps → Δt = 16.67 ms
+              60 fps → &amp;Delta;t = 16.67 ms
             </div>
           </div>
         </div>
@@ -551,8 +553,10 @@
             </p>
             <ul class="list-disc list-inside text-sm space-y-1">
               <li>Minimum visibility threshold: 0.5</li>
-              <li>Required visible landmarks: ≥ 15/33</li>
-              <li>Temporal consistency: Δposition < 0.5m between frames</li>
+              <li>Required visible landmarks: &amp;ge; 15/33</li>
+              <li>
+                Temporal consistency: &Delta;position &lt; 0.5m between frames
+              </li>
               <li>Anatomical constraints: Joint angle limits</li>
             </ul>
             <p class="text-sm text-gray-700 mb-2 mt-3">
@@ -562,7 +566,9 @@
               <li>Maximum human running speed: ~12 m/s (elite athletes)</li>
               <li>Typical badminton court movement: 2-8 m/s</li>
               <li>Racket head speed: up to 130 m/s (smash)</li>
-              <li>Acceleration limits: < 10 m/s² (typical court movement)</li>
+              <li>
+                Acceleration limits: &lt; 10 m/s&sup2; (typical court movement)
+              </li>
             </ul>
           </div>
         </div>

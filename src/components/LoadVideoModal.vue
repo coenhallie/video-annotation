@@ -98,7 +98,7 @@
                       placeholder="Enter MP4 video URL..."
                       class="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                       @keypress="handleUrlKeyPress"
-                    />
+                    >
                     <button
                       :disabled="!urlInput.trim() || isLoadingUrl"
                       class="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 text-gray-400 hover:text-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -165,7 +165,10 @@
         <!-- Load Project Tab -->
         <div v-else-if="activeTab === 'load'">
           <!-- Loading State -->
-          <div v-if="isLoading" class="flex items-center justify-center py-12">
+          <div
+            v-if="isLoading"
+            class="flex items-center justify-center py-12"
+          >
             <div
               class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"
             />
@@ -173,7 +176,10 @@
           </div>
 
           <!-- Error State -->
-          <div v-else-if="error" class="text-center py-12">
+          <div
+            v-else-if="error"
+            class="text-center py-12"
+          >
             <div class="text-red-600 mb-2">
               <svg
                 class="w-12 h-12 mx-auto"
@@ -201,7 +207,10 @@
           </div>
 
           <!-- Empty State -->
-          <div v-else-if="projects.length === 0" class="text-center py-12">
+          <div
+            v-else-if="projects.length === 0"
+            class="text-center py-12"
+          >
             <div class="text-gray-400 mb-4">
               <svg
                 class="w-16 h-16 mx-auto"
@@ -227,7 +236,10 @@
           </div>
 
           <!-- Projects List -->
-          <div v-else class="space-y-4">
+          <div
+            v-else
+            class="space-y-4"
+          >
             <div
               v-for="project in projects"
               :key="project.id"
@@ -325,10 +337,15 @@
                   </div>
 
                   <!-- Dual Video Project Details -->
-                  <div v-else class="text-sm text-gray-600 space-y-2">
+                  <div
+                    v-else
+                    class="text-sm text-gray-600 space-y-2"
+                  >
                     <div class="grid grid-cols-2 gap-4">
                       <div class="space-y-1">
-                        <p class="font-medium text-gray-700">Video A:</p>
+                        <p class="font-medium text-gray-700">
+                          Video A:
+                        </p>
                         <p class="truncate">
                           {{ project.videoA?.title || 'Unknown Video' }}
                         </p>
@@ -336,7 +353,7 @@
                           {{ formatDuration(project.videoA?.duration || 0) }} •
                           {{
                             project.videoA?.fps &&
-                            parseFloat(project.videoA.fps) > 0
+                              parseFloat(project.videoA.fps) > 0
                               ? project.videoA.fps
                               : 'Detecting...'
                           }}
@@ -344,7 +361,9 @@
                         </p>
                       </div>
                       <div class="space-y-1">
-                        <p class="font-medium text-gray-700">Video B:</p>
+                        <p class="font-medium text-gray-700">
+                          Video B:
+                        </p>
                         <p class="truncate">
                           {{ project.videoB?.title || 'Unknown Video' }}
                         </p>
@@ -352,7 +371,7 @@
                           {{ formatDuration(project.videoB?.duration || 0) }} •
                           {{
                             project.videoB?.fps &&
-                            parseFloat(project.videoB.fps) > 0
+                              parseFloat(project.videoB.fps) > 0
                               ? project.videoB.fps
                               : 'Detecting...'
                           }}
@@ -399,7 +418,10 @@
         <!-- Create Comparison Tab -->
         <div v-else-if="activeTab === 'create'">
           <!-- Loading State -->
-          <div v-if="isLoading" class="flex items-center justify-center py-12">
+          <div
+            v-if="isLoading"
+            class="flex items-center justify-center py-12"
+          >
             <div
               class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"
             />
@@ -407,7 +429,10 @@
           </div>
 
           <!-- Error State -->
-          <div v-else-if="error" class="text-center py-12">
+          <div
+            v-else-if="error"
+            class="text-center py-12"
+          >
             <div class="text-red-600 mb-2">
               <svg
                 class="w-12 h-12 mx-auto"
@@ -475,15 +500,13 @@
                       comparisonState.step === 'select-video-a'
                         ? 'border-blue-500 bg-blue-500 text-white'
                         : comparisonState.selectedVideoA
-                        ? 'border-green-500 bg-green-500 text-white'
-                        : 'border-gray-300 text-gray-500',
+                          ? 'border-green-500 bg-green-500 text-white'
+                          : 'border-gray-300 text-gray-500',
                     ]"
                   >
                     1
                   </span>
-                  <span class="ml-2 font-medium text-gray-900"
-                    >Select Video A</span
-                  >
+                  <span class="ml-2 font-medium text-gray-900">Select Video A</span>
                 </div>
                 <div class="flex-1 mx-4 h-0.5 bg-gray-200">
                   <div
@@ -502,15 +525,13 @@
                       comparisonState.step === 'select-video-b'
                         ? 'border-blue-500 bg-blue-500 text-white'
                         : comparisonState.selectedVideoB
-                        ? 'border-green-500 bg-green-500 text-white'
-                        : 'border-gray-300 text-gray-500',
+                          ? 'border-green-500 bg-green-500 text-white'
+                          : 'border-gray-300 text-gray-500',
                     ]"
                   >
                     2
                   </span>
-                  <span class="ml-2 font-medium text-gray-900"
-                    >Select Video B</span
-                  >
+                  <span class="ml-2 font-medium text-gray-900">Select Video B</span>
                 </div>
                 <div class="flex-1 mx-4 h-0.5 bg-gray-200">
                   <div
@@ -527,7 +548,7 @@
                     :class="[
                       'flex items-center justify-center w-8 h-8 rounded-full border-2',
                       comparisonState.step === 'details' ||
-                      comparisonState.step === 'creating'
+                        comparisonState.step === 'creating'
                         ? 'border-blue-500 bg-blue-500 text-white'
                         : 'border-gray-300 text-gray-500',
                     ]"
@@ -585,9 +606,7 @@
                 </h3>
                 <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
                   <div class="flex items-center gap-2">
-                    <span class="text-sm font-medium text-blue-800"
-                      >Video A Selected:</span
-                    >
+                    <span class="text-sm font-medium text-blue-800">Video A Selected:</span>
                     <span class="text-sm text-blue-700">{{
                       comparisonState.selectedVideoA.title
                     }}</span>
@@ -643,7 +662,9 @@
               <!-- Selected Videos Preview -->
               <div class="grid grid-cols-2 gap-4 mb-6">
                 <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <h4 class="font-medium text-blue-800 mb-2">Video A</h4>
+                  <h4 class="font-medium text-blue-800 mb-2">
+                    Video A
+                  </h4>
                   <p class="text-sm text-blue-700">
                     {{ comparisonState.selectedVideoA.title }}
                   </p>
@@ -656,7 +677,7 @@
                     •
                     {{
                       comparisonState.selectedVideoA.video.fps &&
-                      parseFloat(comparisonState.selectedVideoA.video.fps) > 0
+                        parseFloat(comparisonState.selectedVideoA.video.fps) > 0
                         ? comparisonState.selectedVideoA.video.fps
                         : 'Detecting...'
                     }}
@@ -664,7 +685,9 @@
                   </p>
                 </div>
                 <div class="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <h4 class="font-medium text-green-800 mb-2">Video B</h4>
+                  <h4 class="font-medium text-green-800 mb-2">
+                    Video B
+                  </h4>
                   <p class="text-sm text-green-700">
                     {{ comparisonState.selectedVideoB.title }}
                   </p>
@@ -677,7 +700,7 @@
                     •
                     {{
                       comparisonState.selectedVideoB.video.fps &&
-                      parseFloat(comparisonState.selectedVideoB.video.fps) > 0
+                        parseFloat(comparisonState.selectedVideoB.video.fps) > 0
                         ? comparisonState.selectedVideoB.video.fps
                         : 'Detecting...'
                     }}
@@ -702,7 +725,7 @@
                     class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="Enter a title for this comparison"
                     :disabled="comparisonState.isCreating"
-                  />
+                  >
                 </div>
                 <div>
                   <label
@@ -804,7 +827,9 @@
             </svg>
           </div>
           <div class="ml-3">
-            <h3 class="text-lg font-medium text-gray-900">Delete Project</h3>
+            <h3 class="text-lg font-medium text-gray-900">
+              Delete Project
+            </h3>
           </div>
         </div>
 
@@ -812,8 +837,7 @@
           <p class="text-sm text-gray-600">
             Are you sure you want to delete "<strong>{{
               projectToDelete?.title
-            }}</strong
-            >"? This action cannot be undone and will permanently remove the
+            }}</strong>"? This action cannot be undone and will permanently remove the
             project and all its annotations.
           </p>
         </div>
@@ -831,7 +855,10 @@
             class="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
             @click="deleteProject"
           >
-            <span v-if="isDeleting" class="flex items-center">
+            <span
+              v-if="isDeleting"
+              class="flex items-center"
+            >
               <div
                 class="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"
               />
@@ -847,12 +874,12 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
-import { ProjectService } from '../services/projectService.ts';
-import { ComparisonVideoService } from '../services/comparisonVideoService.ts';
-import { CommentService } from '../services/commentService.ts';
-import { useAuth } from '../composables/useAuth.ts';
-import { useGlobalComments } from '../composables/useGlobalComments.ts';
-import { useSessionCleanup } from '../composables/useSessionCleanup.ts';
+import { ProjectService } from '../services/projectService';
+import { ComparisonVideoService } from '../services/comparisonVideoService';
+import { CommentService } from '../services/commentService';
+import { useAuth } from '../composables/useAuth';
+import { useGlobalComments } from '../composables/useGlobalComments';
+import { useSessionCleanup } from '../composables/useSessionCleanup';
 import VideoUpload from './VideoUpload.vue';
 
 // Props

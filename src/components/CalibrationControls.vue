@@ -3,7 +3,9 @@
     class="calibration-controls bg-white border border-gray-200 p-4 rounded-lg"
   >
     <div class="flex items-center justify-between mb-4">
-      <h3 class="text-lg font-medium text-gray-900">Speed Calibration</h3>
+      <h3 class="text-lg font-medium text-gray-900">
+        Speed Calibration
+      </h3>
       <div class="flex items-center space-x-2" />
     </div>
 
@@ -23,7 +25,7 @@
             step="1"
             class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
             @input="onPlayerHeightChange"
-          />
+          >
         </div>
         <div class="flex items-center space-x-2">
           <input
@@ -33,7 +35,7 @@
             max="220"
             class="w-16 px-2 py-1 text-sm bg-white border border-gray-300 rounded focus:border-blue-500 focus:outline-none"
             @input="onPlayerHeightChange"
-          />
+          >
           <span class="text-sm text-gray-500">cm</span>
         </div>
       </div>
@@ -45,9 +47,7 @@
     <!-- Court Calibration -->
     <div class="mb-6">
       <div class="flex items-center justify-between mb-2">
-        <label class="text-sm font-medium text-gray-700"
-          >Court Calibration</label
-        >
+        <label class="text-sm font-medium text-gray-700">Court Calibration</label>
       </div>
 
       <!-- Dynamic Court Visualization -->
@@ -67,9 +67,7 @@
       <div class="space-y-3">
         <!-- Court Length Input -->
         <div>
-          <label class="text-xs text-gray-500 mb-1 block"
-            >Court Length (meters)</label
-          >
+          <label class="text-xs text-gray-500 mb-1 block">Court Length (meters)</label>
           <input
             v-model="courtLength"
             type="number"
@@ -79,14 +77,12 @@
             placeholder="13.4"
             class="w-full px-3 py-2 text-sm bg-white border border-gray-300 rounded focus:border-blue-500 focus:outline-none"
             @input="onCourtDimensionsChange"
-          />
+          >
         </div>
 
         <!-- Court Width Input -->
         <div>
-          <label class="text-xs text-gray-500 mb-1 block"
-            >Court Width (meters)</label
-          >
+          <label class="text-xs text-gray-500 mb-1 block">Court Width (meters)</label>
           <input
             v-model="courtWidth"
             type="number"
@@ -96,7 +92,7 @@
             placeholder="6.1"
             class="w-full px-3 py-2 text-sm bg-white border border-gray-300 rounded focus:border-blue-500 focus:outline-none"
             @input="onCourtDimensionsChange"
-          />
+          >
         </div>
 
         <!-- Preset Buttons -->
@@ -204,14 +200,14 @@
                 Player Height:
                 {{
                   calibrationSettings.value?.playerHeight ||
-                  calibrationSettings.playerHeight
+                    calibrationSettings.playerHeight
                 }}cm
               </p>
               <p class="font-mono">
                 Accuracy:
                 {{
                   calibrationSettings.value?.calibrationAccuracy ||
-                  calibrationSettings.calibrationAccuracy
+                    calibrationSettings.calibrationAccuracy
                 }}%
               </p>
             </div>
@@ -219,25 +215,46 @@
         </div>
 
         <!-- No Speed Data Available -->
-        <div v-else class="bg-gray-50 p-4 rounded-lg">
+        <div
+          v-else
+          class="bg-gray-50 p-4 rounded-lg"
+        >
           <div class="grid grid-cols-2 gap-4 text-sm">
             <div>
               <p><strong>Center of Mass:</strong></p>
-              <p class="font-mono text-gray-500">x: No data</p>
-              <p class="font-mono text-gray-500">y: No data</p>
-              <p class="font-mono text-gray-500">z: No data</p>
+              <p class="font-mono text-gray-500">
+                x: No data
+              </p>
+              <p class="font-mono text-gray-500">
+                y: No data
+              </p>
+              <p class="font-mono text-gray-500">
+                z: No data
+              </p>
             </div>
             <div>
               <p><strong>Velocity (m/s):</strong></p>
-              <p class="font-mono text-gray-500">x: No data</p>
-              <p class="font-mono text-gray-500">y: No data</p>
-              <p class="font-mono text-gray-500">z: No data</p>
+              <p class="font-mono text-gray-500">
+                x: No data
+              </p>
+              <p class="font-mono text-gray-500">
+                y: No data
+              </p>
+              <p class="font-mono text-gray-500">
+                z: No data
+              </p>
             </div>
             <div>
               <p><strong>Speeds (m/s):</strong></p>
-              <p class="font-mono text-gray-500">Overall: No data</p>
-              <p class="font-mono text-gray-500">Horizontal: No data</p>
-              <p class="font-mono text-gray-500">Right Foot: No data</p>
+              <p class="font-mono text-gray-500">
+                Overall: No data
+              </p>
+              <p class="font-mono text-gray-500">
+                Horizontal: No data
+              </p>
+              <p class="font-mono text-gray-500">
+                Right Foot: No data
+              </p>
             </div>
             <div>
               <p><strong>Calibration:</strong></p>
@@ -248,14 +265,14 @@
                 Player Height:
                 {{
                   calibrationSettings.value?.playerHeight ||
-                  calibrationSettings.playerHeight
+                    calibrationSettings.playerHeight
                 }}cm
               </p>
               <p class="font-mono text-gray-500">
                 Accuracy:
                 {{
                   calibrationSettings.value?.calibrationAccuracy ||
-                  calibrationSettings.calibrationAccuracy
+                    calibrationSettings.calibrationAccuracy
                 }}%
               </p>
             </div>
@@ -276,7 +293,9 @@
 
         <!-- Notes -->
         <div class="bg-yellow-50 p-4 rounded-lg mt-4">
-          <h4 class="font-semibold text-yellow-800 mb-2">Important Notes:</h4>
+          <h4 class="font-semibold text-yellow-800 mb-2">
+            Important Notes:
+          </h4>
           <ul class="text-sm text-yellow-700 space-y-1">
             <li>
               • All calculations use MediaPipe Pose landmarks in 3D world

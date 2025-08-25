@@ -1,12 +1,17 @@
 <template>
   <div class="label-management w-full">
     <!-- Loading State -->
-    <div v-if="loading" class="flex items-center justify-center py-12">
+    <div
+      v-if="loading"
+      class="flex items-center justify-center py-12"
+    >
       <div class="text-center">
         <div
           class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"
-        ></div>
-        <p class="mt-2 text-sm text-gray-600">Loading labels...</p>
+        />
+        <p class="mt-2 text-sm text-gray-600">
+          Loading labels...
+        </p>
       </div>
     </div>
 
@@ -15,14 +20,16 @@
       <!-- Header -->
       <div class="flex items-center justify-between mb-6">
         <div>
-          <h2 class="text-xl font-semibold text-gray-900">Label Management</h2>
+          <h2 class="text-xl font-semibold text-gray-900">
+            Label Management
+          </h2>
           <p class="text-sm text-gray-600 mt-1">
             Create and manage custom labels for your annotations
           </p>
         </div>
         <button
-          @click="showCreateForm = true"
           class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          @click="showCreateForm = true"
         >
           <svg
             class="w-4 h-4 mr-2"
@@ -65,7 +72,9 @@
               </div>
             </div>
             <div class="ml-4">
-              <p class="text-sm font-medium text-gray-500">Total Labels</p>
+              <p class="text-sm font-medium text-gray-500">
+                Total Labels
+              </p>
               <p class="text-2xl font-semibold text-gray-900">
                 {{ labels.length }}
               </p>
@@ -95,7 +104,9 @@
               </div>
             </div>
             <div class="ml-4">
-              <p class="text-sm font-medium text-gray-500">Custom Labels</p>
+              <p class="text-sm font-medium text-gray-500">
+                Custom Labels
+              </p>
               <p class="text-2xl font-semibold text-gray-900">
                 {{ customLabels.length }}
               </p>
@@ -125,7 +136,9 @@
               </div>
             </div>
             <div class="ml-4">
-              <p class="text-sm font-medium text-gray-500">Most Used</p>
+              <p class="text-sm font-medium text-gray-500">
+                Most Used
+              </p>
               <p class="text-lg font-semibold text-gray-900">
                 {{ mostUsedLabel?.name || 'None' }}
               </p>
@@ -138,7 +151,10 @@
       <div class="mb-6">
         <div class="flex flex-col sm:flex-row gap-4">
           <div class="flex-1">
-            <label for="search" class="sr-only">Search labels</label>
+            <label
+              for="search"
+              class="sr-only"
+            >Search labels</label>
             <div class="relative">
               <div
                 class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"
@@ -163,7 +179,7 @@
                 type="text"
                 placeholder="Search labels..."
                 class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-              />
+              >
             </div>
           </div>
           <div class="flex gap-2">
@@ -171,9 +187,15 @@
               v-model="filterType"
               class="block w-full pl-3 pr-10 py-2 text-base border border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 rounded-md"
             >
-              <option value="all">All Labels</option>
-              <option value="default">Default Labels</option>
-              <option value="custom">Custom Labels</option>
+              <option value="all">
+                All Labels
+              </option>
+              <option value="default">
+                Default Labels
+              </option>
+              <option value="custom">
+                Custom Labels
+              </option>
             </select>
           </div>
         </div>
@@ -182,13 +204,17 @@
       <!-- Labels List -->
       <div class="bg-white shadow overflow-hidden sm:rounded-md">
         <ul class="divide-y divide-gray-200">
-          <li v-for="label in filteredLabels" :key="label.id" class="px-6 py-4">
+          <li
+            v-for="label in filteredLabels"
+            :key="label.id"
+            class="px-6 py-4"
+          >
             <div class="flex items-center justify-between">
               <div class="flex items-center">
                 <div
                   class="w-4 h-4 rounded-full mr-3 border border-gray-300"
                   :style="{ backgroundColor: label.color }"
-                ></div>
+                />
                 <div class="flex-1">
                   <div class="flex items-center">
                     <p class="text-sm font-medium text-gray-900">
@@ -209,7 +235,10 @@
                   </p>
                   <div class="flex items-center mt-2 text-xs text-gray-400">
                     <span>Created {{ formatDate(label.createdAt) }}</span>
-                    <span v-if="labelStats[label.id]" class="ml-4">
+                    <span
+                      v-if="labelStats[label.id]"
+                      class="ml-4"
+                    >
                       Used {{ labelStats[label.id]?.usageCount || 0 }} times
                     </span>
                   </div>
@@ -218,26 +247,26 @@
               <div class="flex items-center space-x-2">
                 <button
                   v-if="!label.isDefault"
-                  @click="editLabel(label)"
                   class="text-blue-600 hover:text-blue-900 text-sm font-medium"
+                  @click="editLabel(label)"
                 >
                   Edit
                 </button>
                 <button
                   v-if="!label.isDefault"
-                  @click="confirmDeleteLabel(label)"
                   class="text-red-600 hover:text-red-900 text-sm font-medium"
+                  @click="confirmDeleteLabel(label)"
                 >
                   Delete
                 </button>
                 <button
-                  @click="toggleLabelActive(label)"
                   :class="[
                     'text-sm font-medium',
                     label.isActive
                       ? 'text-gray-600 hover:text-gray-900'
                       : 'text-green-600 hover:text-green-900',
                   ]"
+                  @click="toggleLabelActive(label)"
                 >
                   {{ label.isActive ? 'Deactivate' : 'Activate' }}
                 </button>
@@ -246,7 +275,10 @@
           </li>
         </ul>
 
-        <div v-if="filteredLabels.length === 0" class="px-6 py-12 text-center">
+        <div
+          v-if="filteredLabels.length === 0"
+          class="px-6 py-12 text-center"
+        >
           <svg
             class="mx-auto h-12 w-12 text-gray-400"
             fill="none"
@@ -288,7 +320,10 @@
               {{ editingLabel ? 'Edit Label' : 'Create New Label' }}
             </h3>
 
-            <form @submit.prevent="saveLabel" class="space-y-4">
+            <form
+              class="space-y-4"
+              @submit.prevent="saveLabel"
+            >
               <div>
                 <label
                   for="labelName"
@@ -304,7 +339,7 @@
                   maxlength="50"
                   class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   placeholder="Enter label name"
-                />
+                >
               </div>
 
               <div>
@@ -321,7 +356,7 @@
                   maxlength="200"
                   class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   placeholder="Optional description"
-                ></textarea>
+                />
               </div>
 
               <div>
@@ -333,7 +368,6 @@
                     v-for="color in LABEL_COLORS"
                     :key="color"
                     type="button"
-                    @click="labelForm.color = color"
                     :class="[
                       'w-8 h-8 rounded-full border-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500',
                       labelForm.color === color
@@ -341,15 +375,16 @@
                         : 'border-gray-300',
                     ]"
                     :style="{ backgroundColor: color }"
-                  ></button>
+                    @click="labelForm.color = color"
+                  />
                 </div>
               </div>
 
               <div class="flex justify-end space-x-3 pt-4">
                 <button
                   type="button"
-                  @click="closeForm"
                   class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  @click="closeForm"
                 >
                   Cancel
                 </button>
@@ -396,7 +431,9 @@
                 />
               </svg>
             </div>
-            <h3 class="text-lg font-medium text-gray-900 mt-2">Delete Label</h3>
+            <h3 class="text-lg font-medium text-gray-900 mt-2">
+              Delete Label
+            </h3>
             <div class="mt-2 px-7 py-3">
               <p class="text-sm text-gray-500">
                 Are you sure you want to delete "{{ labelToDelete.name }}"?
@@ -409,15 +446,15 @@
             </div>
             <div class="flex justify-center space-x-3 px-4 py-3">
               <button
-                @click="labelToDelete = null"
                 class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                @click="labelToDelete = null"
               >
                 Cancel
               </button>
               <button
-                @click="deleteLabel"
                 :disabled="deleting"
                 class="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                @click="deleteLabel"
               >
                 {{ deleting ? 'Deleting...' : 'Delete' }}
               </button>

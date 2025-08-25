@@ -116,8 +116,8 @@ const toggleMode = () => {
               <div class="text-right mb-4">
                 <button
                   type="button"
-                  @click="showForgotPasswordModal = true"
                   class="text-sm text-blue-600 hover:text-blue-700 hover:underline transition-colors duration-200"
+                  @click="showForgotPasswordModal = true"
                 >
                   Forgot your password?
                 </button>
@@ -149,7 +149,7 @@ const toggleMode = () => {
           <div
             class="absolute top-4 right-4 bg-gray-400 text-white text-xs font-semibold px-2 py-1 rounded-full z-10"
           >
-            BETA v1.8
+            BETA v1.9
           </div>
           <div class="text-center space-y-2 mb-8">
             <h1 class="text-2xl font-bold text-gray-800">Perspecto AI</h1>

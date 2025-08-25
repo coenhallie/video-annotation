@@ -126,8 +126,18 @@
           })`"
           class="transition-transform"
         >
-          <circle r="4" fill="#3b82f6" opacity="0.3" class="animate-pulse" />
-          <circle r="2.5" fill="#3b82f6" stroke="#fff" stroke-width="0.5" />
+          <circle
+            r="4"
+            fill="#3b82f6"
+            opacity="0.3"
+            class="animate-pulse"
+          />
+          <circle
+            r="2.5"
+            fill="#3b82f6"
+            stroke="#fff"
+            stroke-width="0.5"
+          />
           <line
             :x1="0"
             :y1="0"
@@ -149,16 +159,31 @@
             refY="3.5"
             orient="auto"
           >
-            <polygon points="0 0, 10 3.5, 0 7" fill="#3b82f6" />
+            <polygon
+              points="0 0, 10 3.5, 0 7"
+              fill="#3b82f6"
+            />
           </marker>
         </defs>
 
         <!-- Position labels -->
         <g v-if="!showCalibrationPoints">
-          <text x="5" y="32" font-size="4" fill="#6b7280" class="font-sans">
+          <text
+            x="5"
+            y="32"
+            font-size="4"
+            fill="#6b7280"
+            class="font-sans"
+          >
             L
           </text>
-          <text x="125" y="32" font-size="4" fill="#6b7280" class="font-sans">
+          <text
+            x="125"
+            y="32"
+            font-size="4"
+            fill="#6b7280"
+            class="font-sans"
+          >
             R
           </text>
           <text
@@ -187,51 +212,63 @@
         <g
           v-if="
             calibrationMode &&
-            showCalibrationPoints &&
-            currentCalibrationStep !== undefined
+              showCalibrationPoints &&
+              currentCalibrationStep !== undefined
           "
         >
           <g :class="{ 'pulse-animation': isCurrentStep(0) }">
             <circle
+              v-if="currentCalibrationStep === 0"
               cx="0"
               cy="0"
               r="2"
               fill="#10b981"
-              v-if="currentCalibrationStep === 0"
             />
           </g>
           <g :class="{ 'pulse-animation': isCurrentStep(1) }">
             <circle
+              v-if="currentCalibrationStep === 1"
               cx="134"
               cy="0"
               r="2"
               fill="#10b981"
-              v-if="currentCalibrationStep === 1"
             />
           </g>
           <g :class="{ 'pulse-animation': isCurrentStep(2) }">
             <circle
+              v-if="currentCalibrationStep === 2"
               cx="134"
               cy="61"
               r="2"
               fill="#10b981"
-              v-if="currentCalibrationStep === 2"
             />
           </g>
           <g :class="{ 'pulse-animation': isCurrentStep(3) }">
             <circle
+              v-if="currentCalibrationStep === 3"
               cx="0"
               cy="61"
               r="2"
               fill="#10b981"
-              v-if="currentCalibrationStep === 3"
             />
           </g>
 
-          <text x="67" y="5" font-size="3" fill="#6b7280" text-anchor="middle">
+          <text
+            x="67"
+            y="5"
+            font-size="3"
+            fill="#6b7280"
+            text-anchor="middle"
+          >
             Far Baseline
           </text>
-          <text x="67" y="58" font-size="3" fill="#6b7280" text-anchor="middle">
+          <text
+            x="67"
+            y="58"
+            font-size="3"
+            fill="#6b7280"
+            text-anchor="middle"
+          >
             Near Baseline
           </text>
         </g>
@@ -252,7 +289,7 @@
             step="0.1"
             class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
             @change="updateCameraSettings"
-          />
+          >
           <input
             v-model.number="cameraHeight"
             type="number"
@@ -261,7 +298,7 @@
             step="0.1"
             class="w-20 text-center bg-gray-100 border border-gray-300 rounded-md shadow-sm"
             @change="updateCameraSettings"
-          />
+          >
         </div>
       </div>
 
@@ -272,7 +309,6 @@
           <button
             v-for="dir in directions"
             :key="dir.name"
-            @click="setViewDirection(dir.angle)"
             :class="[
               'p-2 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500',
               Math.abs(viewAngle - dir.angle) < 0.1
@@ -280,6 +316,7 @@
                 : 'hover:bg-gray-300',
             ]"
             :title="`View ${dir.label || dir.name}`"
+            @click="setViewDirection(dir.angle)"
           >
             {{ dir.name }}
           </button>
@@ -293,9 +330,9 @@
           <button
             v-for="preset in presets"
             :key="preset.name"
-            @click="applyPreset(preset)"
             class="preset-button"
             :title="`Set camera to ${preset.name} position`"
+            @click="applyPreset(preset)"
           >
             {{ preset.name }}
           </button>
@@ -309,10 +346,8 @@
       >
         <div class="flex items-center">
           <span class="w-20">Position:</span>
-          <span class="font-mono"
-            >{{ (cameraPosition.x * 13.4).toFixed(1) }}m,
-            {{ (cameraPosition.y * 6.1).toFixed(1) }}m</span
-          >
+          <span class="font-mono">{{ (cameraPosition.x * 13.4).toFixed(1) }}m,
+            {{ (cameraPosition.y * 6.1).toFixed(1) }}m</span>
         </div>
         <div class="flex items-center">
           <span class="w-20">Height:</span>
@@ -320,9 +355,7 @@
         </div>
         <div class="flex items-center">
           <span class="w-20">Angle:</span>
-          <span class="font-mono"
-            >{{ ((viewAngle * 180) / Math.PI).toFixed(0) }}°</span
-          >
+          <span class="font-mono">{{ ((viewAngle * 180) / Math.PI).toFixed(0) }}°</span>
         </div>
       </div>
     </div>

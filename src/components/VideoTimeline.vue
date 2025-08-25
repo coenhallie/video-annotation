@@ -5,6 +5,8 @@ import { logger } from '../utils/logger';
 /* Narrow annotation typing for the template to satisfy TS plugin */
 /** @typedef {{ id?: string; title?: string; timestamp: number; severity?: string }} TimelineAnnotation */
 
+const __name = 'VideoTimelineComponent';
+
 const props = defineProps({
   currentTime: {
     type: Number,
@@ -206,22 +208,22 @@ const handlePlayPause = (): void => {
 };
 
 // Optimized timeline markers - only create when needed
-const timeMarkers = computed(() => {
-  if (!props.duration || props.duration < 60) return [];
+// const timeMarkers = computed(() => {
+//   if (!props.duration || props.duration < 60) return [];
 
-  const markers = [];
-  const interval = Math.max(60, Math.floor(props.duration / 10)); // Adaptive interval
+//   const markers = [];
+//   const interval = Math.max(60, Math.floor(props.duration / 10)); // Adaptive interval
 
-  for (let time = 0; time <= props.duration; time += interval) {
-    markers.push({
-      time,
-      position: (time / props.duration) * 100,
-      label: formatTime(time),
-    });
-  }
+//   for (let time = 0; time <= props.duration; time += interval) {
+//     markers.push({
+//       time,
+//       position: (time / props.duration) * 100,
+//       label: formatTime(time),
+//     });
+//   }
 
-  return markers;
-});
+//   return markers;
+// });
 </script>
 
 <template>
@@ -232,9 +234,9 @@ const timeMarkers = computed(() => {
       class="flex items-center justify-center mb-4"
     >
       <button
-        @click="handlePlayPause"
         class="flex items-center justify-center w-12 h-12 bg-gray-800 hover:bg-gray-700 border border-gray-600 rounded-full transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-lg"
         :title="isPlaying ? 'Pause' : 'Play'"
+        @click="handlePlayPause"
       >
         <!-- Play Icon -->
         <svg
@@ -267,19 +269,19 @@ const timeMarkers = computed(() => {
         @mousedown="handleTimelineMouseDown"
       >
         <!-- Background -->
-        <div class="absolute inset-0 bg-gray-800 rounded"></div>
+        <div class="absolute inset-0 bg-gray-800 rounded" />
 
         <!-- Progress -->
         <div
           class="absolute top-0 left-0 bottom-0 bg-white rounded-l"
           :style="{ width: `${progressPercentage}%` }"
-        ></div>
+        />
 
         <!-- Current Time Indicator -->
         <div
           class="absolute -top-1 -bottom-1 w-0.5 bg-white rounded-full transform -translate-x-1/2 shadow-lg z-10"
           :style="{ left: `${progressPercentage}%` }"
-        ></div>
+        />
 
         <!-- Annotations -->
         <div
@@ -303,7 +305,7 @@ const timeMarkers = computed(() => {
                 (selectedAnnotation as any)?.id === (annotation as any)?.id,
             }"
             :style="{ backgroundColor: getSeverityColor((annotation as any)?.severity) }"
-          ></div>
+          />
         </div>
       </div>
     </div>
@@ -344,24 +346,15 @@ const timeMarkers = computed(() => {
       <!-- Severity Legend -->
       <div class="flex space-x-3">
         <div class="flex items-center space-x-1.5 text-xs text-gray-400">
-          <div
-            class="w-2 h-2 rounded-sm"
-            style="background-color: #34d399"
-          ></div>
+          <div class="w-2 h-2 rounded-sm" style="background-color: #34d399" />
           <span>Low</span>
         </div>
         <div class="flex items-center space-x-1.5 text-xs text-gray-400">
-          <div
-            class="w-2 h-2 rounded-sm"
-            style="background-color: #fbbf24"
-          ></div>
+          <div class="w-2 h-2 rounded-sm" style="background-color: #fbbf24" />
           <span>Medium</span>
         </div>
         <div class="flex items-center space-x-1.5 text-xs text-gray-400">
-          <div
-            class="w-2 h-2 rounded-sm"
-            style="background-color: #ef4444"
-          ></div>
+          <div class="w-2 h-2 rounded-sm" style="background-color: #ef4444" />
           <span>High</span>
         </div>
       </div>

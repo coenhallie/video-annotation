@@ -19,10 +19,13 @@
         accept="video/*"
         class="hidden"
         @change="handleFileSelect"
-      />
+      >
 
       <!-- Upload Icon and Text -->
-      <div v-if="!isUploading && !uploadError" class="upload-content">
+      <div
+        v-if="!isUploading && !uploadError"
+        class="upload-content"
+      >
         <svg
           class="upload-icon"
           fill="none"
@@ -36,7 +39,9 @@
             d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
           />
         </svg>
-        <h3 class="upload-title">Upload Video File</h3>
+        <h3 class="upload-title">
+          Upload Video File
+        </h3>
         <p class="upload-description">
           Drag and drop your video file here, or click to browse
         </p>
@@ -46,7 +51,10 @@
       </div>
 
       <!-- Upload Progress -->
-      <div v-if="isUploading" class="upload-progress">
+      <div
+        v-if="isUploading"
+        class="upload-progress"
+      >
         <svg
           class="progress-icon animate-spin"
           fill="none"
@@ -60,9 +68,14 @@
             d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
           />
         </svg>
-        <h3 class="upload-title">Uploading Video...</h3>
+        <h3 class="upload-title">
+          Uploading Video...
+        </h3>
         <div class="progress-bar">
-          <div class="progress-fill" :style="{ width: `${uploadProgress}%` }" />
+          <div
+            class="progress-fill"
+            :style="{ width: `${uploadProgress}%` }"
+          />
         </div>
         <p class="upload-description">
           {{ uploadProgress.toFixed(1) }}% - {{ uploadStatus }}
@@ -70,7 +83,10 @@
       </div>
 
       <!-- Error State -->
-      <div v-if="uploadError" class="upload-error">
+      <div
+        v-if="uploadError"
+        class="upload-error"
+      >
         <svg
           class="error-icon"
           fill="none"
@@ -84,19 +100,33 @@
             d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"
           />
         </svg>
-        <h3 class="upload-title">Upload Failed</h3>
+        <h3 class="upload-title">
+          Upload Failed
+        </h3>
         <p class="upload-description">
           {{ uploadError }}
         </p>
-        <button class="retry-button" @click="resetUpload">Try Again</button>
+        <button
+          class="retry-button"
+          @click="resetUpload"
+        >
+          Try Again
+        </button>
       </div>
     </div>
 
     <!-- Selected File Info -->
-    <div v-if="selectedFile && !isUploading" class="file-info">
+    <div
+      v-if="selectedFile && !isUploading"
+      class="file-info"
+    >
       <div class="file-details">
         <div class="file-icon">
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
             <path
               stroke-linecap="round"
               stroke-linejoin="round"
@@ -117,7 +147,10 @@
 
       <!-- Custom Project Name Input -->
       <div class="project-name-section">
-        <label for="projectName" class="project-name-label">
+        <label
+          for="projectName"
+          class="project-name-label"
+        >
           Project Name
         </label>
         <input
@@ -127,7 +160,7 @@
           class="project-name-input"
           :placeholder="defaultProjectName"
           maxlength="100"
-        />
+        >
         <p class="project-name-hint">
           Enter a custom name for your project, or leave blank to use the
           filename
@@ -158,7 +191,6 @@
 import { ref, computed } from 'vue';
 import { VideoUploadService } from '../services/videoUploadService';
 import { useAuth } from '../composables/useAuth';
-import { logger } from '../utils/logger';
 
 // Props
 const props = defineProps({

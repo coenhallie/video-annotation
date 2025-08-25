@@ -4,7 +4,9 @@
     <div
       class="flex items-center justify-between pb-4 border-b border-gray-200"
     >
-      <h3 class="text-lg font-semibold text-gray-800">Keypoint Selection</h3>
+      <h3 class="text-lg font-semibold text-gray-800">
+        Keypoint Selection
+      </h3>
       <div class="flex items-center space-x-2">
         <button
           class="px-3 py-1 text-sm font-medium rounded-md transition-colors"
@@ -28,7 +30,9 @@
 
     <!-- Quick presets -->
     <div>
-      <h4 class="text-md font-medium text-gray-700 mb-2">Quick Presets</h4>
+      <h4 class="text-md font-medium text-gray-700 mb-2">
+        Quick Presets
+      </h4>
       <div class="flex flex-wrap gap-2">
         <button
           v-for="preset in presets"
@@ -62,11 +66,8 @@
               :class="{
                 'text-blue-600': isGroupSelected(group),
               }"
-              >{{ group.name }}</span
-            >
-            <span class="text-sm text-gray-500"
-              >{{ getSelectedInGroup(group) }}/{{ group.indices.length }}</span
-            >
+            >{{ group.name }}</span>
+            <span class="text-sm text-gray-500">{{ getSelectedInGroup(group) }}/{{ group.indices.length }}</span>
           </button>
           <button
             class="ml-3 text-gray-500 hover:text-gray-700 transition-transform transform"
@@ -107,7 +108,7 @@
               :checked="selectedKeypoints.includes(index)"
               class="h-4 w-4 rounded text-blue-600 border-gray-300 focus:ring-blue-500"
               @change="toggleKeypoint(index)"
-            />
+            >
             <span class="text-sm text-gray-700">{{
               LANDMARK_NAMES[index]
             }}</span>

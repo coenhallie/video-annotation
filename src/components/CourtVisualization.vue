@@ -5,7 +5,12 @@
     xmlns="http://www.w3.org/2000/svg"
   >
     <!-- Background -->
-    <rect :width="svgWidth" :height="svgHeight" fill="#f3f4f6" stroke="none" />
+    <rect
+      :width="svgWidth"
+      :height="svgHeight"
+      fill="#f3f4f6"
+      stroke="none"
+    />
 
     <!-- Court surface -->
     <rect
@@ -238,7 +243,10 @@
     <!-- Calibration points indicators -->
     <g v-if="showCalibrationPoints">
       <!-- Required calibration points based on mode -->
-      <g v-for="point in requiredPoints" :key="point.id">
+      <g
+        v-for="point in requiredPoints"
+        :key="point.id"
+      >
         <!-- Pulsing animation for next point -->
         <g v-if="point.id === nextPoint && !point.collected">
           <circle
@@ -275,8 +283,8 @@
             point.collected
               ? '#10b981'
               : point.id === nextPoint
-              ? '#3b82f6'
-              : '#ef4444'
+                ? '#3b82f6'
+                : '#ef4444'
           "
           :opacity="point.collected ? 0.8 : point.id === nextPoint ? 1 : 0.6"
           stroke="white"
@@ -304,7 +312,10 @@
       </g>
 
       <!-- Optional calibration points -->
-      <g v-for="point in optionalPoints" :key="point.id">
+      <g
+        v-for="point in optionalPoints"
+        :key="point.id"
+      >
         <!-- Pulsing animation for next optional point -->
         <g v-if="point.id === nextPoint && !point.collected">
           <circle
@@ -332,8 +343,8 @@
             point.collected
               ? '#10b981'
               : point.id === nextPoint
-              ? '#3b82f6'
-              : '#6b7280'
+                ? '#3b82f6'
+                : '#6b7280'
           "
           :opacity="point.collected ? 0.6 : point.id === nextPoint ? 0.8 : 0.4"
           stroke="white"

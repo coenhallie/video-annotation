@@ -7,7 +7,11 @@
     <!-- Header with toggle and controls -->
     <div class="minimap-header">
       <div class="minimap-title">
-        <svg class="minimap-icon" viewBox="0 0 24 24" fill="currentColor">
+        <svg
+          class="minimap-icon"
+          viewBox="0 0 24 24"
+          fill="currentColor"
+        >
           <path
             d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"
           />
@@ -16,11 +20,14 @@
       </div>
       <div class="minimap-controls">
         <button
-          @click="toggleExpanded"
           class="control-button"
           :title="isExpanded ? 'Minimize' : 'Expand'"
+          @click="toggleExpanded"
         >
-          <svg viewBox="0 0 24 24" fill="currentColor">
+          <svg
+            viewBox="0 0 24 24"
+            fill="currentColor"
+          >
             <path
               v-if="!isExpanded"
               d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"
@@ -31,8 +38,15 @@
             />
           </svg>
         </button>
-        <button @click="$emit('close')" class="control-button" title="Close">
-          <svg viewBox="0 0 24 24" fill="currentColor">
+        <button
+          class="control-button"
+          title="Close"
+          @click="$emit('close')"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="currentColor"
+          >
             <path
               d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"
             />
@@ -42,7 +56,10 @@
     </div>
 
     <!-- Canvas for heatmap visualization -->
-    <div class="minimap-content" ref="minimapContent">
+    <div
+      ref="minimapContent"
+      class="minimap-content"
+    >
       <canvas
         ref="heatmapCanvas"
         :width="canvasWidth"
@@ -50,7 +67,7 @@
         class="heatmap-canvas"
         @mousemove="handleMouseMove"
         @mouseleave="handleMouseLeave"
-      ></canvas>
+      />
 
       <!-- Current position indicator -->
       <div
@@ -61,8 +78,8 @@
           top: currentPositionPixels.y + 'px',
         }"
       >
-        <div class="position-dot"></div>
-        <div class="position-pulse"></div>
+        <div class="position-dot" />
+        <div class="position-pulse" />
       </div>
 
       <!-- Tooltip -->
@@ -83,7 +100,10 @@
     </div>
 
     <!-- Statistics panel -->
-    <div v-if="showStatistics" class="minimap-stats">
+    <div
+      v-if="showStatistics"
+      class="minimap-stats"
+    >
       <div class="stat-item">
         <span class="stat-label">Total Distance:</span>
         <span class="stat-value">{{ totalDistance.toFixed(1) }}m</span>
@@ -103,29 +123,35 @@
     </div>
 
     <!-- Settings panel -->
-    <div v-if="isExpanded" class="minimap-settings">
+    <div
+      v-if="isExpanded"
+      class="minimap-settings"
+    >
       <div class="settings-row">
         <label>
           <input
-            type="checkbox"
             v-model="showCurrentPosition"
+            type="checkbox"
             @change="updateVisualization"
-          />
+          >
           Show Current Position
         </label>
         <label>
           <input
-            type="checkbox"
             v-model="showStatistics"
+            type="checkbox"
             @change="updateVisualization"
-          />
+          >
           Show Statistics
         </label>
       </div>
       <div class="settings-row">
         <label>
           Color Scheme:
-          <select v-model="colorScheme" @change="updateVisualization">
+          <select
+            v-model="colorScheme"
+            @change="updateVisualization"
+          >
             <option value="heat">Heat</option>
             <option value="cool">Cool</option>
             <option value="rainbow">Rainbow</option>
@@ -137,13 +163,13 @@
         <label>
           Opacity:
           <input
-            type="range"
             v-model.number="heatmapOpacity"
+            type="range"
             min="0.1"
             max="1"
             step="0.1"
             @input="updateVisualization"
-          />
+          >
           {{ (heatmapOpacity * 100).toFixed(0) }}%
         </label>
       </div>
@@ -152,7 +178,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, computed, watch, onMounted, nextTick } from 'vue';
 import type { HeatmapData, Point3D } from '../composables/usePositionHeatmap';
 import type { CourtDimensions } from '../composables/useCameraCalibration';
 

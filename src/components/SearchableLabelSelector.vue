@@ -4,20 +4,26 @@
     <div class="flex items-center justify-between mb-3">
       <label class="block text-sm font-medium text-gray-700">
         Label
-        <span v-if="required" class="text-red-500 ml-1">*</span>
+        <span
+          v-if="required"
+          class="text-red-500 ml-1"
+        >*</span>
       </label>
       <button
         v-if="!readonly && canManageLabels"
-        @click="$emit('manage-labels')"
         type="button"
         class="text-xs text-blue-600 hover:text-blue-800 underline"
+        @click="$emit('manage-labels')"
       >
         Manage Labels
       </button>
     </div>
 
     <!-- Selected Label Display -->
-    <div v-if="selectedLabels.length > 0" class="mb-3">
+    <div
+      v-if="selectedLabels.length > 0"
+      class="mb-3"
+    >
       <div class="flex flex-wrap gap-1">
         <span
           v-for="label in selectedLabelObjects"
@@ -33,13 +39,13 @@
           <div
             class="w-2 h-2 rounded-full mr-1"
             :style="{ backgroundColor: label.color }"
-          ></div>
+          />
           {{ label.name }}
           <button
             v-if="!readonly"
-            @click="removeLabel(label.id)"
             type="button"
             class="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full hover:bg-black hover:bg-opacity-10 focus:outline-none"
+            @click="removeLabel(label.id)"
           >
             <svg
               class="w-3 h-3"
@@ -60,14 +66,17 @@
     </div>
 
     <!-- Multi-Select Search Input -->
-    <div v-if="!readonly" class="relative">
+    <div
+      v-if="!readonly"
+      class="relative"
+    >
       <div
-        @click="focusInput"
         class="min-h-[2.5rem] w-full bg-white border border-gray-300 rounded-md shadow-sm px-3 py-2 cursor-text focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500"
         :class="{
           'rounded-b-none border-b-0': showDropdown,
           'pb-1': selectedLabels.length > 0,
         }"
+        @click="focusInput"
       >
         <!-- Selected Labels as Tags (Alternative Display) -->
         <div
@@ -82,14 +91,18 @@
             <div
               class="w-2 h-2 rounded-full mr-1"
               :style="{ backgroundColor: label.color }"
-            ></div>
+            />
             {{ label.name }}
             <button
-              @click.stop="removeLabel(label.id)"
               type="button"
               class="ml-1 inline-flex items-center justify-center w-3 h-3 rounded-full hover:bg-blue-200 focus:outline-none"
+              @click.stop="removeLabel(label.id)"
             >
-              <svg class="w-2 h-2" fill="currentColor" viewBox="0 0 20 20">
+              <svg
+                class="w-2 h-2"
+                fill="currentColor"
+                viewBox="0 0 20 20"
+              >
                 <path
                   d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"
                 />
@@ -124,22 +137,22 @@
           <input
             ref="searchInput"
             v-model="searchQuery"
-            @focus="openDropdown"
-            @keydown="handleKeydown"
-            @input="handleInput"
             type="text"
             :placeholder="getPlaceholder()"
             class="block w-full pl-8 pr-8 py-0 text-sm bg-transparent border-0 focus:outline-none focus:ring-0 placeholder-gray-500"
             :class="{ 'mt-1': selectedLabels.length > 0 && mode === 'tags' }"
-          />
+            @focus="openDropdown"
+            @keydown="handleKeydown"
+            @input="handleInput"
+          >
           <button
-            @click="toggleDropdown"
             type="button"
             class="absolute right-2 flex items-center justify-center w-6 h-6 hover:bg-gray-100 rounded"
             :class="{
               'top-2': selectedLabels.length === 0 || mode !== 'tags',
               'top-7': selectedLabels.length > 0 && mode === 'tags',
             }"
+            @click="toggleDropdown"
           >
             <svg
               class="h-4 w-4 text-gray-400 transition-transform duration-200"
@@ -171,9 +184,9 @@
         >
           <button
             v-if="canManageLabels"
-            @click="createNewLabel"
             type="button"
             class="w-full text-left text-sm text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 py-1 rounded"
+            @click="createNewLabel"
           >
             <svg
               class="w-4 h-4 inline mr-2"
@@ -204,30 +217,33 @@
           <div
             v-for="(label, index) in filteredDefaultLabels"
             :key="label.id"
-            @click="toggleLabel(label.id)"
-            @mouseenter="highlightedIndex = index"
             class="cursor-pointer select-none relative py-2 pl-3 pr-9 hover:bg-gray-50"
             :class="{ 'bg-blue-50': highlightedIndex === index }"
+            @click="toggleLabel(label.id)"
+            @mouseenter="highlightedIndex = index"
           >
             <div class="flex items-center">
               <div
                 class="w-3 h-3 rounded-full mr-2 border border-gray-300"
                 :style="{ backgroundColor: label.color }"
-              ></div>
+              />
               <span class="block truncate text-sm text-gray-900">{{
                 label.name
               }}</span>
               <span
                 v-if="label.description"
                 class="block text-xs text-gray-500 ml-2"
-                >{{ label.description }}</span
-              >
+              >{{ label.description }}</span>
             </div>
             <span
               v-if="selectedLabels.includes(label.id)"
               class="absolute inset-y-0 right-0 flex items-center pr-4 text-blue-600"
             >
-              <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+              <svg
+                class="h-5 w-5"
+                fill="currentColor"
+                viewBox="0 0 20 20"
+              >
                 <path
                   fill-rule="evenodd"
                   d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
@@ -253,35 +269,38 @@
           <div
             v-for="(label, index) in filteredCustomLabels"
             :key="label.id"
-            @click="toggleLabel(label.id)"
-            @mouseenter="
-              highlightedIndex = filteredDefaultLabels.length + index
-            "
             class="cursor-pointer select-none relative py-2 pl-3 pr-9 hover:bg-gray-50"
             :class="{
               'bg-blue-50':
                 highlightedIndex === filteredDefaultLabels.length + index,
             }"
+            @click="toggleLabel(label.id)"
+            @mouseenter="
+              highlightedIndex = filteredDefaultLabels.length + index
+            "
           >
             <div class="flex items-center">
               <div
                 class="w-3 h-3 rounded-full mr-2 border border-gray-300"
                 :style="{ backgroundColor: label.color }"
-              ></div>
+              />
               <span class="block truncate text-sm text-gray-900">{{
                 label.name
               }}</span>
               <span
                 v-if="label.description"
                 class="block text-xs text-gray-500 ml-2"
-                >{{ label.description }}</span
-              >
+              >{{ label.description }}</span>
             </div>
             <span
               v-if="selectedLabels.includes(label.id)"
               class="absolute inset-y-0 right-0 flex items-center pr-4 text-blue-600"
             >
-              <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+              <svg
+                class="h-5 w-5"
+                fill="currentColor"
+                viewBox="0 0 20 20"
+              >
                 <path
                   fill-rule="evenodd"
                   d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
@@ -310,12 +329,14 @@
               d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"
             />
           </svg>
-          <p class="mt-2 text-sm text-gray-500">No labels available.</p>
+          <p class="mt-2 text-sm text-gray-500">
+            No labels available.
+          </p>
           <button
             v-if="canManageLabels"
-            @click="$emit('manage-labels')"
             type="button"
             class="mt-2 text-sm text-blue-600 hover:text-blue-800 underline"
+            @click="$emit('manage-labels')"
           >
             Create a label
           </button>
@@ -357,9 +378,9 @@
     <!-- Click outside to close dropdown -->
     <div
       v-if="showDropdown"
-      @click="closeDropdown"
       class="fixed inset-0 z-0"
-    ></div>
+      @click="closeDropdown"
+    />
   </div>
 </template>
 

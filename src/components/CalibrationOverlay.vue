@@ -29,11 +29,14 @@
       class="calibration-panel"
       :style="{ top: `${panelPosition.y}px`, left: `${panelPosition.x}px` }"
     >
-      <div class="panel-header" @mousedown="startDrag">
+      <div
+        class="panel-header"
+        @mousedown="startDrag"
+      >
         <h3>Camera Calibration</h3>
         <div
-          class="calibration-quality"
           v-if="calibrationQuality && currentStep === 'court-points'"
+          class="calibration-quality"
         >
           <span
             :class="['quality-badge', `quality-${calibrationQuality.level}`]"
@@ -61,7 +64,7 @@
           <div
             class="step-connector"
             :class="{ completed: cameraSettings !== null }"
-          ></div>
+          />
           <div
             :class="[
               'step',
@@ -92,16 +95,16 @@
 
         <CameraPositionSelector
           v-if="!cameraSettings"
-          @update:model-value="cameraSettings = $event"
           :show-calibration-points="false"
           class="camera-selector-container"
+          @update:model-value="cameraSettings = $event"
         />
         <CameraPositionSelector
           v-else
           :model-value="cameraSettings"
-          @update:model-value="cameraSettings = $event"
           :show-calibration-points="false"
           class="camera-selector-container"
+          @update:model-value="cameraSettings = $event"
         />
 
         <div class="camera-position-benefits">
@@ -117,9 +120,7 @@
                 clip-rule="evenodd"
               />
             </svg>
-            <span style="font-weight: 500; color: #1d4ed8"
-              >Why Camera Position Matters:</span
-            >
+            <span style="font-weight: 500; color: #1d4ed8">Why Camera Position Matters:</span>
           </div>
           <ul class="benefit-list">
             <li>Improves height estimation for 3D tracking</li>
@@ -130,13 +131,16 @@
         </div>
 
         <div class="step-actions">
-          <button @click="skipCameraPosition" class="btn-secondary">
+          <button
+            class="btn-secondary"
+            @click="skipCameraPosition"
+          >
             Skip (Less Accurate)
           </button>
           <button
-            @click="proceedToCourtPoints"
             :disabled="!cameraSettings"
             class="btn-primary"
+            @click="proceedToCourtPoints"
           >
             Next: Court Points
             <svg
@@ -170,9 +174,9 @@
             <button
               v-for="mode in calibrationModes"
               :key="mode.id"
-              @click="selectMode(mode.id)"
               :class="['mode-button', { active: currentMode?.id === mode.id }]"
               :title="mode.description"
+              @click="selectMode(mode.id)"
             >
               <span class="mode-name">{{ mode.name }}</span>
               <span class="mode-points">{{ mode.minPoints }} points</span>
@@ -184,7 +188,10 @@
         <div class="point-instructions">
           <div class="instruction-header">
             <span style="font-weight: 500">Next Point:</span>
-            <span class="point-counter" style="font-size: 0.625rem">
+            <span
+              class="point-counter"
+              style="font-size: 0.625rem"
+            >
               {{ collectedPoints.length }} / {{ totalPointsToCollect }}
               <span
                 v-if="isCollectingOptionalPoints"
@@ -205,11 +212,16 @@
                 (Optional - improves accuracy)
               </span>
             </div>
-            <div class="point-hint">{{ getPointHint(nextPoint) }}</div>
+            <div class="point-hint">
+              {{ getPointHint(nextPoint) }}
+            </div>
           </div>
 
           <!-- Dynamic Court Visualization -->
-          <div ref="visualGuideContainer" class="visual-guide-compact">
+          <div
+            ref="visualGuideContainer"
+            class="visual-guide-compact"
+          >
             <CourtVisualization
               :calibration-mode="currentMode?.id || 'full-court'"
               :court-type="courtType"
@@ -225,13 +237,16 @@
         </div>
 
         <!-- Collected Points List -->
-        <div class="collected-points" v-if="collectedPoints.length > 0">
+        <div
+          v-if="collectedPoints.length > 0"
+          class="collected-points"
+        >
           <div class="points-header">
             <span style="font-weight: 500">Collected Points:</span>
             <button
-              @click="undoLastPoint"
-              class="undo-button"
               v-if="collectedPoints.length > 0"
+              class="undo-button"
+              @click="undoLastPoint"
             >
               <svg
                 fill="none"
@@ -271,7 +286,10 @@
         </div>
 
         <!-- Validation Errors and Messages -->
-        <div v-if="hasMessages" :class="getValidationClass()">
+        <div
+          v-if="hasMessages"
+          :class="getValidationClass()"
+        >
           <div class="error-header">
             <svg
               fill="currentColor"
@@ -306,14 +324,20 @@
             </span>
           </div>
           <ul class="error-list">
-            <li v-for="(error, index) in displayErrors" :key="index">
+            <li
+              v-for="(error, index) in displayErrors"
+              :key="index"
+            >
               {{ error }}
             </li>
           </ul>
         </div>
 
         <!-- Calibration Results -->
-        <div v-if="calibrationResult" class="calibration-results">
+        <div
+          v-if="calibrationResult"
+          class="calibration-results"
+        >
           <div class="results-header">
             <span style="font-weight: 500">Calibration Results:</span>
           </div>
@@ -346,8 +370,8 @@
       <div class="action-buttons">
         <button
           v-if="canCalibrate"
-          @click="performCalibration"
           :class="isCollectingOptionalPoints ? 'btn-primary' : 'btn-primary'"
+          @click="performCalibration"
         >
           <svg
             class="w-4 h-4 mr-2"
@@ -367,8 +391,8 @@
 
         <button
           v-if="isCalibrated"
-          @click="confirmCalibration"
           class="btn-success"
+          @click="confirmCalibration"
         >
           <svg
             class="w-4 h-4 mr-2"
@@ -386,8 +410,15 @@
           Confirm
         </button>
 
-        <button @click="resetCalibration" class="btn-secondary">
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <button
+          class="btn-secondary"
+          @click="resetCalibration"
+        >
+          <svg
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
             <path
               stroke-linecap="round"
               stroke-linejoin="round"
@@ -398,8 +429,15 @@
           Reset
         </button>
 
-        <button @click="cancelCalibration" class="btn-danger">
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <button
+          class="btn-danger"
+          @click="cancelCalibration"
+        >
+          <svg
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
             <path
               stroke-linecap="round"
               stroke-linejoin="round"
@@ -425,9 +463,7 @@
               clip-rule="evenodd"
             />
           </svg>
-          <span style="font-size: 0.5rem; font-weight: 500; color: #1d4ed8"
-            >Tips:</span
-          >
+          <span style="font-size: 0.5rem; font-weight: 500; color: #1d4ed8">Tips:</span>
         </div>
         <ul class="tips-list">
           <li>Click precisely on court line intersections</li>
@@ -442,7 +478,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import {
   useCameraCalibration,
   CALIBRATION_MODES,

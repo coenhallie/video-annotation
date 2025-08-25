@@ -1,10 +1,19 @@
 <template>
-  <div class="speed-chart-container" :class="{ compact: compactMode }">
+  <div
+    class="speed-chart-container"
+    :class="{ compact: compactMode }"
+  >
     <!-- Chart Settings (only show in non-compact mode) -->
-    <div v-if="!compactMode" class="chart-settings">
+    <div
+      v-if="!compactMode"
+      class="chart-settings"
+    >
       <label class="setting-item">
         <span class="text-sm text-gray-600">Duration:</span>
-        <select v-model="chartDuration" class="input text-xs">
+        <select
+          v-model="chartDuration"
+          class="input text-xs"
+        >
           <option :value="10">10s</option>
           <option :value="30">30s</option>
           <option :value="60">1min</option>
@@ -14,7 +23,10 @@
 
       <label class="setting-item">
         <span class="text-sm text-gray-600 whitespace-nowrap">Max Speed:</span>
-        <select v-model="maxSpeedScale" class="input text-xs">
+        <select
+          v-model="maxSpeedScale"
+          class="input text-xs"
+        >
           <option :value="1">1 m/s</option>
           <option :value="2">2 m/s</option>
           <option :value="5">5 m/s</option>
@@ -59,7 +71,10 @@
         </div>
       </div>
 
-      <div ref="chartWrapper" class="chart-wrapper">
+      <div
+        ref="chartWrapper"
+        class="chart-wrapper"
+      >
         <svg
           ref="chartSvg"
           class="speed-chart-svg"
@@ -83,7 +98,11 @@
               />
             </pattern>
           </defs>
-          <rect width="100%" height="100%" fill="url(#grid)" />
+          <rect
+            width="100%"
+            height="100%"
+            fill="url(#grid)"
+          />
 
           <!-- Y-axis labels -->
           <g class="y-axis">
@@ -195,27 +214,20 @@
       </div>
 
       <!-- Chart Stats (only show in non-compact mode) -->
-      <div v-if="!compactMode" class="chart-stats">
+      <div
+        v-if="!compactMode"
+        class="chart-stats"
+      >
         <div class="stat-item">
-          <span class="text-xs text-gray-500 uppercase tracking-wide"
-            >Avg:</span
-          >
-          <span class="text-sm font-medium text-gray-900"
-            >{{ averageSpeed.toFixed(2) }} m/s</span
-          >
+          <span class="text-xs text-gray-500 uppercase tracking-wide">Avg:</span>
+          <span class="text-sm font-medium text-gray-900">{{ averageSpeed.toFixed(2) }} m/s</span>
         </div>
         <div class="stat-item">
-          <span class="text-xs text-gray-500 uppercase tracking-wide"
-            >Max:</span
-          >
-          <span class="text-sm font-medium text-gray-900"
-            >{{ maxSpeed.toFixed(2) }} m/s</span
-          >
+          <span class="text-xs text-gray-500 uppercase tracking-wide">Max:</span>
+          <span class="text-sm font-medium text-gray-900">{{ maxSpeed.toFixed(2) }} m/s</span>
         </div>
         <div class="stat-item">
-          <span class="text-xs text-gray-500 uppercase tracking-wide"
-            >Frame:</span
-          >
+          <span class="text-xs text-gray-500 uppercase tracking-wide">Frame:</span>
           <span class="text-sm font-medium text-gray-900">{{
             currentFrame
           }}</span>

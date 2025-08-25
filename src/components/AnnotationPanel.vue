@@ -1046,7 +1046,10 @@ defineExpose({
     <div
       class="sticky top-0 z-10 flex justify-between items-center p-2 border-b border-gray-200 bg-white"
     >
-      <h3 v-if="readOnly" class="text-sm font-medium text-gray-600">
+      <h3
+        v-if="readOnly"
+        class="text-sm font-medium text-gray-600"
+      >
         Annotations (View Only)
       </h3>
       <h3
@@ -1055,7 +1058,10 @@ defineExpose({
       >
         Annotations (Comments Enabled)
       </h3>
-      <div v-else class="flex-1 flex items-center">
+      <div
+        v-else
+        class="flex-1 flex items-center"
+      >
         <!-- Active filter indicator -->
         <div
           v-if="hasActiveFilters"
@@ -1074,12 +1080,10 @@ defineExpose({
               d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.207A1 1 0 013 6.5V4z"
             />
           </svg>
-          <span
-            >{{ getActiveFilterCount }} filter{{
-              getActiveFilterCount !== 1 ? 's' : ''
-            }}
-            active</span
-          >
+          <span>{{ getActiveFilterCount }} filter{{
+            getActiveFilterCount !== 1 ? 's' : ''
+          }}
+            active</span>
         </div>
       </div>
 
@@ -1087,12 +1091,12 @@ defineExpose({
         <!-- Filter button -->
         <div class="relative">
           <button
-            @click="showFilterDropdown = !showFilterDropdown"
             :class="[
               'btn flex items-center space-x-1 relative',
               hasActiveFilters ? 'btn-secondary' : 'btn-ghost',
             ]"
             title="Filter annotations"
+            @click="showFilterDropdown = !showFilterDropdown"
           >
             <svg
               class="icon icon-lg"
@@ -1128,8 +1132,8 @@ defineExpose({
                   Filter Annotations
                 </h3>
                 <button
-                  @click="showFilterDropdown = false"
                   class="text-gray-400 hover:text-gray-600"
+                  @click="showFilterDropdown = false"
                 >
                   <svg
                     class="w-4 h-4"
@@ -1158,8 +1162,8 @@ defineExpose({
                 class="mt-3 pt-3 border-t border-gray-200"
               >
                 <button
-                  @click="clearAllFilters"
                   class="w-full btn btn-ghost text-sm"
+                  @click="clearAllFilters"
                 >
                   Clear All Filters
                 </button>
@@ -1172,12 +1176,25 @@ defineExpose({
         <button
           v-if="!readOnly && isAuthenticated"
           class="btn btn-primary flex items-center space-x-1"
-          @click="startAddAnnotation"
           title="Add new annotation"
+          @click="startAddAnnotation"
         >
-          <svg class="icon icon-sm" viewBox="0 0 24 24">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
+          <svg
+            class="icon icon-sm"
+            viewBox="0 0 24 24"
+          >
+            <line
+              x1="12"
+              y1="5"
+              x2="12"
+              y2="19"
+            />
+            <line
+              x1="5"
+              y1="12"
+              x2="19"
+              y2="12"
+            />
           </svg>
           <span>Add</span>
         </button>
@@ -1195,10 +1212,26 @@ defineExpose({
         <h4 class="text-sm font-medium text-gray-900">
           {{ editingAnnotation ? 'Edit' : 'New' }} Annotation
         </h4>
-        <button class="btn btn-ghost p-1" @click="cancelForm">
-          <svg class="icon icon-sm" viewBox="0 0 24 24">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
+        <button
+          class="btn btn-ghost p-1"
+          @click="cancelForm"
+        >
+          <svg
+            class="icon icon-sm"
+            viewBox="0 0 24 24"
+          >
+            <line
+              x1="18"
+              y1="6"
+              x2="6"
+              y2="18"
+            />
+            <line
+              x1="6"
+              y1="6"
+              x2="18"
+              y2="18"
+            />
           </svg>
         </button>
       </div>
@@ -1207,33 +1240,32 @@ defineExpose({
         <div class="space-y-3">
           <!-- Frame Position - Different UI for dual vs single mode -->
           <div v-if="!isDualMode">
-            <label class="block text-sm font-medium text-gray-700 mb-1"
-              >Frame Position</label
-            >
+            <label class="block text-sm font-medium text-gray-700 mb-1">Frame Position</label>
             <input
+              v-if="newAnnotation"
               v-model.number="newAnnotation.frame"
               type="number"
-              v-if="newAnnotation"
               min="0"
               step="1"
               class="input"
               placeholder="Enter frame number"
-            />
-            <p class="text-xs text-gray-500 mt-1">@ {{ fps }}fps</p>
+            >
+            <p class="text-xs text-gray-500 mt-1">
+              @ {{ fps }}fps
+            </p>
           </div>
 
           <!-- Dual Video Mode - Show both video frame positions -->
-          <div v-else class="space-y-3">
-            <label class="block text-sm font-medium text-gray-700 mb-1"
-              >Frame Positions</label
-            >
+          <div
+            v-else
+            class="space-y-3"
+          >
+            <label class="block text-sm font-medium text-gray-700 mb-1">Frame Positions</label>
 
             <div class="grid grid-cols-2 gap-3">
               <!-- Video A Frame -->
               <div>
-                <label class="block text-xs font-medium text-gray-600 mb-1"
-                  >Video A Frame</label
-                >
+                <label class="block text-xs font-medium text-gray-600 mb-1">Video A Frame</label>
                 <input
                   :value="videoACurrentFrame"
                   type="number"
@@ -1242,15 +1274,15 @@ defineExpose({
                   class="input text-sm"
                   readonly
                   :title="`Video A is currently at frame ${videoACurrentFrame}`"
-                />
-                <p class="text-xs text-gray-500 mt-1">@ {{ videoAFps }}fps</p>
+                >
+                <p class="text-xs text-gray-500 mt-1">
+                  @ {{ videoAFps }}fps
+                </p>
               </div>
 
               <!-- Video B Frame -->
               <div>
-                <label class="block text-xs font-medium text-gray-600 mb-1"
-                  >Video B Frame</label
-                >
+                <label class="block text-xs font-medium text-gray-600 mb-1">Video B Frame</label>
                 <input
                   :value="videoBCurrentFrame"
                   type="number"
@@ -1259,8 +1291,10 @@ defineExpose({
                   class="input text-sm"
                   readonly
                   :title="`Video B is currently at frame ${videoBCurrentFrame}`"
-                />
-                <p class="text-xs text-gray-500 mt-1">@ {{ videoBFps }}fps</p>
+                >
+                <p class="text-xs text-gray-500 mt-1">
+                  @ {{ videoBFps }}fps
+                </p>
               </div>
             </div>
 
@@ -1285,40 +1319,39 @@ defineExpose({
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1"
-              >Content <span class="text-red-500">*</span></label
-            >
+            <label class="block text-sm font-medium text-gray-700 mb-1">Content <span class="text-red-500">*</span></label>
             <textarea
               v-if="newAnnotation"
               v-model="newAnnotation.content"
               placeholder="Enter annotation content..."
               class="input resize-y min-h-[50px]"
               rows="2"
-            ></textarea>
+            />
           </div>
 
           <!-- Drawing Section -->
           <div class="space-y-2">
             <div class="flex items-center justify-between">
-              <label class="block text-sm font-medium text-gray-700"
-                >Drawing</label
-              >
+              <label class="block text-sm font-medium text-gray-700">Drawing</label>
               <button
                 type="button"
-                @click="toggleDrawingSection"
                 :class="[
                   'px-2 py-1 rounded text-xs font-medium transition-colors',
                   showDrawingSection
                     ? 'bg-blue-600 text-white hover:bg-blue-700'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200',
                 ]"
+                @click="toggleDrawingSection"
               >
                 {{ showDrawingSection ? 'Hide' : 'Add Drawing' }}
               </button>
             </div>
 
             <!-- Drawing Tools and Canvas -->
-            <div v-if="showDrawingSection" class="space-y-3">
+            <div
+              v-if="showDrawingSection"
+              class="space-y-3"
+            >
               <!-- Drawing Tools -->
               <div class="bg-gray-50 p-3 rounded-lg space-y-2">
                 <!-- Stroke Width -->
@@ -1331,13 +1364,13 @@ defineExpose({
                     min="1"
                     max="20"
                     :value="drawingCanvas.currentTool.value.strokeWidth"
+                    class="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer"
                     @input="
                       drawingCanvas.setStrokeWidth(
                         Number(($event.target as HTMLInputElement)?.value ?? 0)
                       )
                     "
-                    class="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                  />
+                  >
                 </div>
 
                 <!-- Drawing Color Picker -->
@@ -1349,19 +1382,19 @@ defineExpose({
                     <input
                       type="color"
                       :value="getCurrentDrawingColor()"
+                      class="w-8 h-6 rounded border border-gray-300 cursor-pointer"
                       @input="
                         setCustomColor(
                           ($event.target as HTMLInputElement).value
                         )
                       "
-                      class="w-8 h-6 rounded border border-gray-300 cursor-pointer"
-                    />
+                    >
                     <button
                       v-if="
                         primaryDrawingCanvas?.currentTool?.value?.customColor
                       "
-                      @click="clearCustomColor"
                       class="text-xs text-blue-600 hover:text-blue-800"
+                      @click="clearCustomColor"
                     >
                       Reset
                     </button>
@@ -1372,9 +1405,9 @@ defineExpose({
                 <div class="flex space-x-2">
                   <button
                     type="button"
-                    @click="clearDrawing"
                     :disabled="!hasDrawingData"
                     class="flex items-center space-x-1 px-2 py-1 rounded text-xs font-medium transition-colors bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    @click="clearDrawing"
                   >
                     <svg
                       class="w-3 h-3"
@@ -1413,12 +1446,15 @@ defineExpose({
           <div class="flex space-x-2 pt-1">
             <button
               class="btn btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
-              @click="saveAnnotation"
               :disabled="isSaveDisabled"
+              @click="saveAnnotation"
             >
               {{ editingAnnotation ? 'Update' : 'Save' }}
             </button>
-            <button class="btn btn-secondary flex-1" @click="cancelForm">
+            <button
+              class="btn btn-secondary flex-1"
+              @click="cancelForm"
+            >
               Cancel
             </button>
           </div>
@@ -1427,9 +1463,15 @@ defineExpose({
     </div>
 
     <!-- Annotations List -->
-    <div class="p-2" :style="annotationsListStyle">
+    <div
+      class="p-2"
+      :style="annotationsListStyle"
+    >
       <!-- Loading Skeleton -->
-      <AnnotationSkeleton v-if="shouldShowSkeleton" :skeleton-count="3" />
+      <AnnotationSkeleton
+        v-if="shouldShowSkeleton"
+        :skeleton-count="3"
+      />
 
       <!-- Empty State -->
       <div
@@ -1444,13 +1486,25 @@ defineExpose({
         >
           <path
             d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
-          ></path>
-          <polyline points="14,2 14,8 20,8"></polyline>
-          <line x1="16" y1="13" x2="8" y2="13"></line>
-          <line x1="16" y1="17" x2="8" y2="17"></line>
-          <polyline points="10,9 9,9 8,9"></polyline>
+          />
+          <polyline points="14,2 14,8 20,8" />
+          <line
+            x1="16"
+            y1="13"
+            x2="8"
+            y2="13"
+          />
+          <line
+            x1="16"
+            y1="17"
+            x2="8"
+            y2="17"
+          />
+          <polyline points="10,9 9,9 8,9" />
         </svg>
-        <p class="text-sm mb-1">No annotations yet</p>
+        <p class="text-sm mb-1">
+          No annotations yet
+        </p>
         <p class="text-xs text-gray-400">
           Click "Add" to create your first annotation
         </p>
@@ -1458,8 +1512,8 @@ defineExpose({
 
       <!-- Annotations -->
       <div
-        v-else
         v-for="annotation in sortedAnnotations"
+        v-else
         :key="annotation.id || Math.random().toString(36).slice(2)"
         class="card mb-2 p-2 transition-all duration-200 relative group"
         :class="{
@@ -1480,7 +1534,7 @@ defineExpose({
               <div
                 class="w-3 h-3 rounded-full border border-gray-300"
                 :style="{ backgroundColor: getPrimaryLabelColor(annotation) }"
-              ></div>
+              />
               <span
                 :class="{
                   'text-blue-700 font-medium':
@@ -1524,17 +1578,17 @@ defineExpose({
                 :title="`${getNewCommentCount(annotation.id)} new comment${
                   getNewCommentCount(annotation.id) > 1 ? 's' : ''
                 }`"
-              ></div>
+              />
 
               <!-- Real-time activity indicator (when comments are expanded and no new comments) -->
               <div
                 v-if="
                   !hasNewComments(annotation.id) &&
-                  isCommentsExpanded(annotation.id)
+                    isCommentsExpanded(annotation.id)
                 "
                 class="absolute -top-1 -right-1 w-2 h-2 bg-green-400 rounded-full animate-pulse"
                 title="Real-time comments active"
-              ></div>
+              />
             </div>
           </div>
           <div
@@ -1544,8 +1598,8 @@ defineExpose({
             <div
               v-if="
                 isDualMode &&
-                (annotation.videoAFrame !== undefined ||
-                  annotation.videoBFrame !== undefined)
+                  (annotation.videoAFrame !== undefined ||
+                    annotation.videoBFrame !== undefined)
               "
               class="text-xs opacity-75 space-y-0.5"
             >
@@ -1564,7 +1618,10 @@ defineExpose({
             </div>
 
             <!-- Single video mode or fallback: Show single frame -->
-            <span v-else class="text-xs opacity-75">{{
+            <span
+              v-else
+              class="text-xs opacity-75"
+            >{{
               annotation.frame !== undefined
                 ? formatFrame(annotation.frame)
                 : formatFrame(timeToFrame(annotation.timestamp))
@@ -1578,7 +1635,7 @@ defineExpose({
             <div
               v-if="
                 annotation.annotationType === 'drawing' ||
-                annotation.drawingData
+                  annotation.drawingData
               "
               class="flex items-center space-x-1 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs"
             >
@@ -1607,12 +1664,12 @@ defineExpose({
           <!-- Comment toggle button (always visible) -->
           <button
             class="btn btn-ghost p-1 text-blue-600 hover:text-blue-700"
-            @click.stop="toggleComments(annotation.id)"
             :title="
               isCommentsExpanded(annotation.id)
                 ? 'Hide comments'
                 : 'Show comments'
             "
+            @click.stop="toggleComments(annotation.id)"
           >
             <svg
               class="icon icon-sm"
@@ -1623,7 +1680,7 @@ defineExpose({
             >
               <path
                 d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
-              ></path>
+              />
             </svg>
             <span class="text-xs ml-1">
               {{ isCommentsExpanded(annotation.id) ? 'Hide' : 'Comments' }}
@@ -1637,28 +1694,34 @@ defineExpose({
           >
             <button
               class="btn btn-ghost p-1"
-              @click.stop="startEditAnnotation(annotation)"
               title="Edit annotation"
+              @click.stop="startEditAnnotation(annotation)"
             >
-              <svg class="icon icon-sm" viewBox="0 0 24 24">
+              <svg
+                class="icon icon-sm"
+                viewBox="0 0 24 24"
+              >
                 <path
                   d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"
-                ></path>
+                />
                 <path
                   d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
-                ></path>
+                />
               </svg>
             </button>
             <button
               class="btn btn-ghost p-1 text-red-600 hover:text-red-700"
-              @click.stop="deleteAnnotation(annotation)"
               title="Delete annotation"
+              @click.stop="deleteAnnotation(annotation)"
             >
-              <svg class="icon icon-sm" viewBox="0 0 24 24">
-                <polyline points="3 6 5 6 21 6"></polyline>
+              <svg
+                class="icon icon-sm"
+                viewBox="0 0 24 24"
+              >
+                <polyline points="3 6 5 6 21 6" />
                 <path
                   d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
-                ></path>
+                />
               </svg>
             </button>
           </div>
@@ -1691,22 +1754,32 @@ defineExpose({
         <span> {{ annotations.length }} annotations </span>
 
         <!-- Single Video Mode -->
-        <div v-if="!isDualMode" class="flex flex-col items-end">
+        <div
+          v-if="!isDualMode"
+          class="flex flex-col items-end"
+        >
           <span>{{ formatTime(currentTime) }}</span>
           <span class="opacity-75">{{ formatFrame(currentFrame) }}</span>
         </div>
 
         <!-- Dual Video Mode -->
-        <div v-else class="flex flex-col items-end space-y-1">
+        <div
+          v-else
+          class="flex flex-col items-end space-y-1"
+        >
           <div class="flex space-x-3">
             <div class="text-right">
-              <div class="text-blue-600">Video A</div>
+              <div class="text-blue-600">
+                Video A
+              </div>
               <div class="opacity-75">
                 {{ formatFrame(videoACurrentFrame) }}
               </div>
             </div>
             <div class="text-right">
-              <div class="text-green-600">Video B</div>
+              <div class="text-green-600">
+                Video B
+              </div>
               <div class="opacity-75">
                 {{ formatFrame(videoBCurrentFrame) }}
               </div>
@@ -1732,7 +1805,7 @@ defineExpose({
           class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
           aria-hidden="true"
           @click="closeLabelManagement"
-        ></div>
+        />
 
         <!-- Modal panel -->
         <div
@@ -1740,9 +1813,9 @@ defineExpose({
         >
           <div class="bg-white relative">
             <button
-              @click="closeLabelManagement"
               type="button"
               class="absolute top-4 right-4 z-10 bg-white rounded-md text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              @click="closeLabelManagement"
             >
               <span class="sr-only">Close</span>
               <svg
