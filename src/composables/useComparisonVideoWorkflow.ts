@@ -120,17 +120,40 @@ export function useComparisonVideoWorkflow() {
       const comparisonVideo =
         await ComparisonVideoService.createComparisonVideo({
           title: comparisonTitle.value.trim(),
-          description: comparisonDescription.value.trim() || undefined,
+          description: comparisonDescription.value.trim() || null,
+          videoAId: selectedVideoA.value!.id,
+          videoBId: selectedVideoB.value!.id,
+          userId: user.value?.id || null,
           videoA: selectedVideoA.value!,
           videoB: selectedVideoB.value!,
         });
 
-      currentComparison.value = comparisonVideo;
+      // Convert ComparisonVideoRecord to ComparisonVideo type
+      const typedComparison: ComparisonVideo = {
+        id: comparisonVideo.id,
+        userId: comparisonVideo.userId || '',
+        title: comparisonVideo.title || '',
+        ...(comparisonVideo.description && {
+          description: comparisonVideo.description,
+        }),
+        videoAId: comparisonVideo.videoAId,
+        videoBId: comparisonVideo.videoBId,
+        isPublic: comparisonVideo.isPublic || false,
+        createdAt: comparisonVideo.createdAt || new Date().toISOString(),
+        updatedAt: comparisonVideo.updatedAt || new Date().toISOString(),
+        ...(comparisonVideo.thumbnailUrl && {
+          thumbnailUrl: comparisonVideo.thumbnailUrl,
+        }),
+        ...(comparisonVideo.videoA && { videoA: comparisonVideo.videoA }),
+        ...(comparisonVideo.videoB && { videoB: comparisonVideo.videoB }),
+      };
+
+      currentComparison.value = typedComparison;
 
       success('Comparison video created successfully');
 
       // Load comparison mode
-      await loadComparisonMode(comparisonVideo);
+      await loadComparisonMode(typedComparison);
 
       return true;
     } catch (err: any) {
@@ -228,7 +251,7 @@ export function useComparisonVideoWorkflow() {
     } catch (err: any) {
       console.error('❌ [ComparisonWorkflow] Failed to load comparison:', err);
       error.value = err.message || 'Failed to load comparison video';
-      notifyError(error.value);
+      notifyError(error.value || 'An error occurred');
       return false;
     } finally {
       isProcessing.value = false;

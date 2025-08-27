@@ -7,6 +7,7 @@ import type {
 } from '../types/database';
 import { isComparisonVideo, isIndividualVideo } from '../types/database';
 import { VideoUploadService } from './videoUploadService';
+import { ThumbnailGenerator } from '../utils/thumbnailGenerator';
 
 export class VideoService {
   static async findExistingUploadedVideo(url: string, ownerId: string) {
@@ -23,6 +24,14 @@ export class VideoService {
     return data && data.length > 0 ? data[0] : null;
   }
   static async createVideo(videoData: VideoInsert) {
+    console.log('🔨 [VideoService] Creating video:', {
+      title: videoData.title,
+      videoType: videoData.videoType,
+      videoId: videoData.videoId,
+      ownerId: videoData.ownerId,
+      hasThumbnail: !!videoData.thumbnailUrl,
+    });
+
     // Validate video data before proceeding
     if (
       videoData.videoType === 'url' &&
@@ -65,8 +74,28 @@ export class VideoService {
       }
     }
 
+    // Generate thumbnail if not provided
+    if (!videoData.thumbnailUrl && videoData.url) {
+      try {
+        console.log('🖼️ Generating thumbnail for video:', videoData.title);
+        const thumbnail = await ThumbnailGenerator.generateSmallThumbnail(
+          videoData.url,
+          320,
+          2
+        );
+        if (thumbnail) {
+          videoData.thumbnailUrl = thumbnail;
+          console.log('✅ Thumbnail generated successfully');
+        }
+      } catch (error) {
+        console.warn('⚠️ Failed to generate thumbnail:', error);
+        // Continue without thumbnail
+      }
+    }
+
     // For uploaded videos, always create new records (no deduplication)
     if (videoData.videoType === 'upload') {
+      console.log('📤 [VideoService] Inserting upload video to database');
       const { data, error } = await supabase
         .from('videos')
         .insert(videoData)
@@ -74,8 +103,15 @@ export class VideoService {
         .single();
 
       if (error) {
+        console.error('❌ [VideoService] Database insert failed:', error);
         throw error;
       }
+
+      console.log('✅ [VideoService] Video created successfully:', {
+        id: data.id,
+        title: data.title,
+        createdAt: data.createdAt,
+      });
 
       return data;
     }
@@ -129,13 +165,66 @@ export class VideoService {
   }
 
   static async getUserVideos(userId: string) {
+    console.log('🔍 [VideoService] Fetching videos for user:', userId);
+
     const { data, error } = await supabase
       .from('videos')
       .select('*')
       .eq('ownerId', userId)
       .order('createdAt', { ascending: false });
 
-    if (error) throw error;
+    if (error) {
+      console.error('❌ [VideoService] Error fetching videos:', error);
+      throw error;
+    }
+
+    console.log(
+      '📊 [VideoService] Fetched videos:',
+      data?.map((v) => ({
+        id: v.id,
+        title: v.title,
+        originalFilename: v.originalFilename,
+        videoType: v.videoType,
+        createdAt: v.createdAt,
+        url: v.url?.substring(0, 50) + '...',
+        hasThumbnail: !!v.thumbnailUrl,
+      }))
+    );
+
+    // Check for potential duplicates
+    if (data) {
+      const urlCounts = new Map<string, number>();
+      const titleCounts = new Map<string, number>();
+
+      data.forEach((video) => {
+        if (video.url) {
+          urlCounts.set(video.url, (urlCounts.get(video.url) || 0) + 1);
+        }
+        if (video.title) {
+          titleCounts.set(video.title, (titleCounts.get(video.title) || 0) + 1);
+        }
+      });
+
+      // Log any duplicates found
+      urlCounts.forEach((count, url) => {
+        if (count > 1) {
+          console.warn(
+            `⚠️ [VideoService] Found ${count} videos with same URL:`,
+            url.substring(0, 50) + '...'
+          );
+          const duplicates = data.filter((v) => v.url === url);
+          console.warn(
+            'Duplicate videos:',
+            duplicates.map((v) => ({
+              id: v.id,
+              title: v.title,
+              createdAt: v.createdAt,
+            }))
+          );
+        }
+      });
+    }
+
     return data;
   }
 
@@ -187,6 +276,23 @@ export class VideoService {
     totalFrames: number,
     originalFilename: string
   ): Promise<Video> {
+    // Generate thumbnail for the video
+    let thumbnailUrl: string | undefined;
+    try {
+      console.log('🖼️ Generating thumbnail for URL video:', title);
+      const thumbnail = await ThumbnailGenerator.generateSmallThumbnail(
+        url,
+        320,
+        2
+      );
+      if (thumbnail) {
+        thumbnailUrl = thumbnail;
+        console.log('✅ Thumbnail generated successfully');
+      }
+    } catch (error) {
+      console.warn('⚠️ Failed to generate thumbnail:', error);
+    }
+
     const videoData: VideoInsert = {
       ownerId,
       url,
@@ -198,6 +304,7 @@ export class VideoService {
       videoType: 'url',
       videoId: '', //This will be handled by the database
       isPublic: false,
+      ...(thumbnailUrl && { thumbnailUrl }),
     };
 
     const { data, error } = await supabase
@@ -323,9 +430,31 @@ export class VideoService {
           './comparisonVideoService'
         );
         try {
-          const comparisonVideo =
-            await ComparisonVideoService.getComparisonVideoById(entityId);
-          return comparisonVideo;
+          const comparisonVideoRecord = await ComparisonVideoService.getById(
+            entityId
+          );
+
+          // Convert ComparisonVideoRecord to ComparisonVideo type
+          if (comparisonVideoRecord) {
+            const comparisonVideo: any = {
+              id: comparisonVideoRecord.id,
+              userId: comparisonVideoRecord.userId || '',
+              title: comparisonVideoRecord.title || '',
+              description: comparisonVideoRecord.description,
+              videoAId: comparisonVideoRecord.videoAId,
+              videoBId: comparisonVideoRecord.videoBId,
+              isPublic: comparisonVideoRecord.isPublic || false,
+              createdAt:
+                comparisonVideoRecord.createdAt || new Date().toISOString(),
+              updatedAt:
+                comparisonVideoRecord.updatedAt || new Date().toISOString(),
+              thumbnailUrl: comparisonVideoRecord.thumbnailUrl,
+              videoA: comparisonVideoRecord.videoA,
+              videoB: comparisonVideoRecord.videoB,
+            };
+            return comparisonVideo;
+          }
+          return null;
         } catch (comparisonError) {
           return null;
         }
@@ -411,7 +540,7 @@ export class VideoService {
   ): Promise<VideoEntity | null> {
     try {
       const entities = await this.getUserVideoEntities(userId);
-      return entities.length > 0 ? entities[0] : null;
+      return entities && entities.length > 0 ? entities[0]! : null;
     } catch (error) {
       throw error;
     }

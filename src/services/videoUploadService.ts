@@ -1,5 +1,7 @@
 import { supabase } from '../composables/useSupabase';
 import type { VideoInsert } from '../types/database';
+import { VideoService } from './videoService';
+import { ThumbnailGenerator } from '../utils/thumbnailGenerator';
 
 export interface UploadProgress {
   loaded: number;
@@ -210,6 +212,34 @@ export class VideoUploadService {
     metadata: VideoMetadata,
     customTitle?: string
   ): Promise<any> {
+    console.log('📝 [VideoUploadService] Creating video record:', {
+      fileName: file.name,
+      customTitle,
+      filePath,
+      url: url.substring(0, 50) + '...',
+      userId,
+    });
+
+    // Generate thumbnail before creating the record
+    let thumbnailUrl: string | null = null;
+    try {
+      console.log(
+        '🖼️ Generating thumbnail for uploaded video:',
+        customTitle || file.name
+      );
+      thumbnailUrl = await ThumbnailGenerator.generateThumbnailFromFile(
+        file,
+        320,
+        2
+      );
+      if (thumbnailUrl) {
+        console.log('✅ Thumbnail generated successfully');
+      }
+    } catch (error) {
+      console.warn('⚠️ Failed to generate thumbnail:', error);
+      // Continue without thumbnail
+    }
+
     const videoData: VideoInsert = {
       ownerId: userId,
       title: customTitle || file.name.replace(/\.[^/.]+$/, ''), // Use custom title or remove file extension
@@ -223,21 +253,34 @@ export class VideoUploadService {
       fileSize: file.size,
       originalFilename: file.name,
       isPublic: false,
+      ...(thumbnailUrl ? { thumbnailUrl } : {}),
     };
 
-    const { data, error } = await supabase
-      .from('videos')
-      .insert(videoData)
-      .select()
-      .single();
+    console.log('📤 [VideoUploadService] Sending video data to VideoService:', {
+      title: videoData.title,
+      videoId: videoData.videoId,
+      hasThumbnail: !!thumbnailUrl,
+    });
 
-    if (error) {
+    try {
+      // Use VideoService.createVideo to ensure consistent behavior
+      // This will handle thumbnail generation if not already done
+      const data = await VideoService.createVideo(videoData);
+      console.log('✅ [VideoUploadService] Video record created:', {
+        id: data.id,
+        title: data.title,
+        createdAt: data.createdAt,
+      });
+      return data;
+    } catch (error: any) {
+      console.error(
+        '❌ [VideoUploadService] Failed to create video record:',
+        error
+      );
       // Clean up uploaded file if database insert fails
       await supabase.storage.from('videos').remove([filePath]);
       throw new Error(`Failed to save video record: ${error.message}`);
     }
-
-    return data;
   }
 
   /**

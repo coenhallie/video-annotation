@@ -12,9 +12,10 @@ import VideoTimeline from './components/VideoTimeline.vue';
 import AnnotationPanel from './components/AnnotationPanel.vue';
 import Login from './components/Login.vue';
 import ResetPassword from './components/ResetPassword.vue';
-import LoadVideoModal from './components/LoadVideoModal.vue';
+import ProjectManagementModal from './components/ProjectManagementModal.vue';
 import ShareModal from './components/ShareModal.vue';
 import NotificationToast from './components/NotificationToast.vue';
+import VideoUpload from './components/VideoUpload.vue';
 import UnifiedVideoPlayer from './components/UnifiedVideoPlayer.vue';
 import SpeedVisualization from './components/SpeedVisualization.vue';
 import CalibrationControls from './components/CalibrationControls.vue';
@@ -276,6 +277,7 @@ const annotationPanelRef = ref(null);
 const isAnnotationFormVisible = ref(false);
 const isLoadModalVisible = ref(false);
 const isShareModalVisible = ref(false);
+const isVideoUploadVisible = ref(false);
 const isChartVisible = ref(false);
 const videoLoaded = ref(false);
 const currentVideoId = ref<string | null>(null);
@@ -558,7 +560,25 @@ const handleLoaded = async (data: any) => {
 
     // Initialize video with complete data object, not just ID
     if (data) {
-      await initializeVideo(data);
+      // For uploaded videos, we need to pass the existing video record
+      // to prevent creating duplicates
+      const initData = {
+        ...data,
+        videoType: currentVideoType.value || 'url',
+        // If we have a stored video object (from loadVideo), use it as existingVideo
+        existingVideo:
+          currentVideoObject.value ||
+          (currentVideoId.value
+            ? {
+                id: currentVideoId.value,
+                url: videoUrl.value,
+                title: data.title || currentVideoObject.value?.title,
+                videoType: currentVideoType.value || 'url',
+                ...currentVideoObject.value,
+              }
+            : null),
+      };
+      await initializeVideo(initData);
     }
 
     await loadAnnotations();
@@ -756,6 +776,47 @@ const closeLoadModal = () => {
   isLoadModalVisible.value = false;
 };
 
+const openVideoUpload = () => {
+  isVideoUploadVisible.value = true;
+};
+
+const closeVideoUpload = () => {
+  isVideoUploadVisible.value = false;
+};
+
+const handleVideoUploadSuccess = async (videoRecord: any) => {
+  console.log('✅ Video upload successful:', videoRecord);
+
+  // Close the upload modal
+  closeVideoUpload();
+
+  // Create a project-like object for the uploaded video
+  const uploadProject = {
+    id: videoRecord.projectId,
+    title:
+      videoRecord.title || videoRecord.originalFilename || 'Uploaded Video',
+    video: videoRecord,
+    videoId: videoRecord.id,
+    createdAt: videoRecord.createdAt,
+    updatedAt: videoRecord.updatedAt,
+  };
+
+  // Handle the project selection
+  await handleProjectSelected(uploadProject);
+
+  // Reopen the project management modal to show the new video
+  // This ensures the user sees their newly uploaded video in the list
+  isLoadModalVisible.value = true;
+};
+
+const handleVideoUploadError = (error: any) => {
+  console.error('❌ Video upload failed:', error);
+  // Error is already handled by the VideoUpload component
+};
+
+// Store the current video object for use in initializeVideo
+const currentVideoObject = ref<any>(null);
+
 const loadVideo = (video: any, type = 'upload') => {
   videoLoaded.value = false;
   try {
@@ -764,6 +825,8 @@ const loadVideo = (video: any, type = 'upload') => {
     videoUrl.value = getVideoUrl(video);
     videoId.value = video.id || '';
     currentVideoType.value = type;
+    // Store the complete video object
+    currentVideoObject.value = video;
     videoLoaded.value = false;
   } catch (error) {
     console.error('Failed to load video:', error);
@@ -829,12 +892,12 @@ const handleProjectSelected = async (project: any) => {
       // Set player mode first
       playerMode.value = 'single';
 
-      const video = {
-        id: project.video.id,
-        url: project.video.url,
-      };
+      // Pass the complete video object to preserve all properties
+      const video = project.video;
 
-      loadVideo(video, 'upload');
+      // Set the video type based on the video's actual type
+      const videoType = project.video.videoType || 'upload';
+      loadVideo(video, videoType);
       currentVideoId.value = project.video.id;
       currentComparisonId.value = null;
 
@@ -1303,9 +1366,7 @@ watch(
       <div
         class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"
       />
-      <p class="text-gray-600">
-        Loading...
-      </p>
+      <p class="text-gray-600">Loading...</p>
     </div>
   </div>
 
@@ -1323,9 +1384,7 @@ watch(
     <header class="bg-white border-b border-gray-200 px-6 py-4">
       <div class="flex items-center justify-between">
         <div class="flex items-center space-x-3">
-          <h1 class="text-xl font-medium text-gray-900">
-            Perspecto AI
-          </h1>
+          <h1 class="text-xl font-medium text-gray-900">Perspecto AI</h1>
           <span
             class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 border border-orange-200"
           >
@@ -1410,10 +1469,7 @@ watch(
         </div>
 
         <!-- User Info and Sign Out (for authenticated users) -->
-        <div
-          v-else-if="user"
-          class="flex items-center space-x-4"
-        >
+        <div v-else-if="user" class="flex items-center space-x-4">
           <div class="flex items-center space-x-2 text-sm text-gray-600">
             <svg
               class="w-4 h-4"
@@ -1644,10 +1700,7 @@ watch(
           </div>
 
           <!-- Calibration Controls Panel -->
-          <div
-            v-if="showCalibrationControls"
-            class="p-4"
-          >
+          <div v-if="showCalibrationControls" class="p-4">
             <CalibrationControls
               v-if="currentSpeedCalculator"
               :calibration-settings="(currentSpeedCalculator as any).calibrationSettings"
@@ -1730,21 +1783,71 @@ watch(
                   d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4"
                 />
               </svg>
-              <p class="text-sm">
-                Initializing annotation panel...
-              </p>
+              <p class="text-sm">Initializing annotation panel...</p>
             </div>
           </div>
         </div>
       </aside>
     </main>
 
-    <!-- Load Video Modal -->
-    <LoadVideoModal
+    <!-- Project Management Modal -->
+    <ProjectManagementModal
       :is-visible="isLoadModalVisible"
       @close="closeLoadModal"
       @project-selected="handleProjectSelected"
+      @upload-video="openVideoUpload"
     />
+
+    <!-- Video Upload Modal -->
+    <Teleport to="body">
+      <Transition name="modal">
+        <div
+          v-if="isVideoUploadVisible"
+          class="fixed inset-0 z-50 flex items-center justify-center p-4"
+        >
+          <!-- Backdrop -->
+          <div
+            class="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            @click="closeVideoUpload"
+          />
+
+          <!-- Modal Content -->
+          <div
+            class="relative bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-auto p-6"
+            @click.stop
+          >
+            <!-- Header -->
+            <div class="flex items-center justify-between mb-6">
+              <h2 class="text-xl font-semibold text-gray-900">Upload Video</h2>
+              <button
+                class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                @click="closeVideoUpload"
+              >
+                <svg
+                  class="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+
+            <!-- Video Upload Component -->
+            <VideoUpload
+              @upload-success="handleVideoUploadSuccess"
+              @upload-error="handleVideoUploadError"
+            />
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
 
     <!-- Share Video Modal -->
     <ShareModal
@@ -1775,5 +1878,27 @@ watch(
 </template>
 
 <style scoped>
-/* Custom styles if needed */
+/* Modal transition styles */
+.modal-enter-active,
+.modal-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.modal-enter-from,
+.modal-leave-to {
+  opacity: 0;
+}
+
+.modal-enter-active .relative,
+.modal-leave-active .relative {
+  transition: transform 0.3s ease;
+}
+
+.modal-enter-from .relative {
+  transform: scale(0.95);
+}
+
+.modal-leave-to .relative {
+  transform: scale(0.95);
+}
 </style>

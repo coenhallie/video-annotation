@@ -1,5 +1,7 @@
 import { VideoService } from './videoService';
 import { ComparisonVideoService } from './comparisonVideoService';
+import { AnnotationService } from './annotationService';
+import { CommentService } from './commentService';
 import type { Project } from '../types/project';
 
 export class ProjectService {
@@ -48,16 +50,38 @@ export class ProjectService {
 
       // Map individual videos to single projects
       if (videos) {
+        console.log(
+          '📊 [ProjectService] Processing videos for projects:',
+          videos.map((v) => ({
+            id: v.id,
+            title: v.title,
+            originalFilename: v.originalFilename,
+            createdAt: v.createdAt,
+            videoType: v.videoType,
+            hasThumbnail: !!v.thumbnailUrl,
+          }))
+        );
+
         for (const video of videos) {
           if (this.isVideoValid(video)) {
-            projects.push({
+            const project = {
               id: video.id,
-              projectType: 'single',
+              projectType: 'single' as const,
               title: video.title,
               thumbnailUrl: video.thumbnailUrl,
               createdAt: video.createdAt,
               video: video,
+            };
+
+            console.log('✅ [ProjectService] Adding project:', {
+              id: project.id,
+              title: project.title,
+              videoTitle: video.title,
+              originalFilename: video.originalFilename,
+              createdAt: project.createdAt,
             });
+
+            projects.push(project);
           } else {
             console.warn(
               '🚨 [ProjectService] Skipping single video with invalid URL:',
@@ -85,12 +109,13 @@ export class ProjectService {
               projects.push({
                 id: comparisonVideo.id,
                 projectType: 'dual',
-                title: comparisonVideo.title,
+                title: comparisonVideo.title || 'Untitled Comparison',
                 thumbnailUrl: comparisonVideo.thumbnailUrl,
-                createdAt: comparisonVideo.createdAt,
+                createdAt:
+                  comparisonVideo.createdAt || new Date().toISOString(),
                 videoA: comparisonVideo.videoA,
                 videoB: comparisonVideo.videoB,
-                comparisonVideo: comparisonVideo,
+                comparisonVideo: comparisonVideo as any,
               });
             } else {
               console.warn(
@@ -156,6 +181,118 @@ export class ProjectService {
     } catch (error) {
       console.error('❌ [ProjectService] Error deleting project:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Get annotation count for a project
+   */
+  static async getProjectAnnotationCount(project: Project): Promise<number> {
+    try {
+      if (project.projectType === 'single') {
+        // For single video projects, get annotations for the video
+        const annotations = await AnnotationService.getVideoAnnotations(
+          project.video.id,
+          project.id
+        );
+        return annotations.length;
+      } else {
+        // For dual video projects, get comparison annotations
+        const annotations =
+          await AnnotationService.getComparisonVideoAnnotations(
+            project.comparisonVideo.id
+          );
+        return annotations.length;
+      }
+    } catch (error) {
+      console.error(
+        '❌ [ProjectService] Error getting annotation count:',
+        error
+      );
+      return 0;
+    }
+  }
+
+  /**
+   * Get comment count for a project
+   */
+  static async getProjectCommentCount(project: Project): Promise<number> {
+    try {
+      if (project.projectType === 'single') {
+        // For single video projects, get all annotations and count their comments
+        const annotations = await AnnotationService.getVideoAnnotations(
+          project.video.id,
+          project.id
+        );
+
+        if (annotations.length === 0) return 0;
+
+        const commentCounts = await Promise.all(
+          annotations.map((annotation) =>
+            CommentService.getCommentCount(annotation.id)
+          )
+        );
+
+        return commentCounts.reduce((total, count) => total + count, 0);
+      } else {
+        // For dual video projects, get comparison annotations and count their comments
+        const annotations =
+          await AnnotationService.getComparisonVideoAnnotations(
+            project.comparisonVideo.id
+          );
+
+        if (annotations.length === 0) return 0;
+
+        const commentCounts = await Promise.all(
+          annotations.map((annotation) =>
+            CommentService.getCommentCount(annotation.id)
+          )
+        );
+
+        return commentCounts.reduce((total, count) => total + count, 0);
+      }
+    } catch (error) {
+      console.error('❌ [ProjectService] Error getting comment count:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * Get annotation and comment counts for multiple projects
+   */
+  static async getProjectCounts(projects: Project[]): Promise<{
+    annotationCounts: Record<string, number>;
+    commentCounts: Record<string, number>;
+  }> {
+    try {
+      const annotationCounts: Record<string, number> = {};
+      const commentCounts: Record<string, number> = {};
+
+      // Get counts for all projects in parallel
+      const countPromises = projects.map(async (project) => {
+        const [annotationCount, commentCount] = await Promise.all([
+          this.getProjectAnnotationCount(project),
+          this.getProjectCommentCount(project),
+        ]);
+
+        return {
+          projectId: project.id,
+          annotationCount,
+          commentCount,
+        };
+      });
+
+      const results = await Promise.all(countPromises);
+
+      results.forEach(({ projectId, annotationCount, commentCount }) => {
+        annotationCounts[projectId] = annotationCount;
+        commentCounts[projectId] = commentCount;
+      });
+
+      return { annotationCounts, commentCounts };
+    } catch (error) {
+      console.error('❌ [ProjectService] Error getting project counts:', error);
+      return { annotationCounts: {}, commentCounts: {} };
     }
   }
 }
