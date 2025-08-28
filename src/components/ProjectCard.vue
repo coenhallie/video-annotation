@@ -158,12 +158,6 @@
         </button>
         <button
           class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-          @click="duplicateProject"
-        >
-          Duplicate
-        </button>
-        <button
-          class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
           @click="shareProject"
         >
           Share
@@ -178,11 +172,29 @@
       </div>
     </div>
   </div>
+
+  <!-- Share Modal -->
+  <ShareModal
+    :is-visible="showShareModal"
+    :video-id="
+      props.project.projectType === 'single' ? props.project.video?.id : ''
+    "
+    :comparison-id="
+      props.project.projectType === 'dual'
+        ? props.project.comparisonVideo?.id
+        : ''
+    "
+    :share-type="
+      props.project.projectType === 'single' ? 'video' : 'comparison'
+    "
+    @close="closeShareModal"
+  />
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
 import type { Project } from '../types/project';
+import ShareModal from './ShareModal.vue';
 
 // Props
 const props = defineProps<{
@@ -205,6 +217,7 @@ const emit = defineEmits<{
 // State
 const showCheckbox = ref(false);
 const showActions = ref(false);
+const showShareModal = ref(false);
 
 // Click outside handler
 const handleClickOutside = (event: MouseEvent) => {
@@ -261,16 +274,23 @@ const openProject = () => {
   emit('open', props.project);
 };
 
-const duplicateProject = () => {
-  showActions.value = false;
-  // Implement duplication logic
-  console.log('Duplicate project:', props.project.title);
-};
-
 const shareProject = () => {
   showActions.value = false;
-  // Implement sharing logic
-  console.log('Share project:', props.project.title);
+  showShareModal.value = true;
+};
+
+const closeShareModal = () => {
+  showShareModal.value = false;
+};
+
+const getVideoIdForSharing = () => {
+  if (props.project.projectType === 'single') {
+    return props.project.video?.id;
+  } else if (props.project.projectType === 'dual') {
+    // For dual projects, we need to share the comparison video
+    return props.project.id; // This should be the comparison video ID
+  }
+  return null;
 };
 
 const deleteProject = (event: Event) => {
@@ -323,7 +343,7 @@ const formatDate = (dateString: string): string => {
   const date = new Date(dateString);
   const now = new Date();
   const diffTime = Math.abs(now.getTime() - date.getTime());
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
 
   if (diffDays === 0) {
     return 'Today';

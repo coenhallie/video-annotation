@@ -229,8 +229,8 @@ export class VideoUploadService {
       );
       thumbnailUrl = await ThumbnailGenerator.generateThumbnailFromFile(
         file,
-        320,
-        2
+        320
+        // Removed seekTime parameter - will use smart frame selection
       );
       if (thumbnailUrl) {
         console.log('✅ Thumbnail generated successfully');

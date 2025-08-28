@@ -76,9 +76,10 @@ export class ShareService {
       let mappedAnnotations = [];
       try {
         // Use AnnotationService to get annotations with comment counts
+        // Pass videoId as projectId since annotations might be associated with the video as a project
         mappedAnnotations = await AnnotationService.getVideoAnnotations(
           videoId,
-          undefined,
+          videoId, // Use videoId as projectId for shared videos
           true // includeCommentCounts
         );
       } catch (annotationsError) {

@@ -13,6 +13,7 @@ import AnnotationPanel from './components/AnnotationPanel.vue';
 import Login from './components/Login.vue';
 import ResetPassword from './components/ResetPassword.vue';
 import ProjectManagementModal from './components/ProjectManagementModal.vue';
+import CreateComparisonModal from './components/CreateComparisonModal.vue';
 import ShareModal from './components/ShareModal.vue';
 import NotificationToast from './components/NotificationToast.vue';
 import VideoUpload from './components/VideoUpload.vue';
@@ -276,6 +277,7 @@ const annotationPanelRef = ref(null);
 
 const isAnnotationFormVisible = ref(false);
 const isLoadModalVisible = ref(false);
+const isComparisonModalVisible = ref(false);
 const isShareModalVisible = ref(false);
 const isVideoUploadVisible = ref(false);
 const isChartVisible = ref(false);
@@ -774,6 +776,32 @@ const openLoadModal = () => {
 
 const closeLoadModal = () => {
   isLoadModalVisible.value = false;
+};
+
+const openLoadModalWithTab = (tab: string) => {
+  // Close the project management modal first
+  isLoadModalVisible.value = false;
+  // If the tab is 'create', open the comparison modal
+  if (tab === 'create') {
+    isComparisonModalVisible.value = true;
+  }
+  // For other tabs, you could handle them differently or show a notification
+};
+
+const closeComparisonModal = () => {
+  isComparisonModalVisible.value = false;
+};
+
+const handleComparisonCreated = (comparison: any) => {
+  // Handle comparison created from ProjectManagementModal
+  handleProjectSelected({
+    projectType: 'dual',
+    id: comparison.id,
+    videoA: comparison.videoA,
+    videoB: comparison.videoB,
+    comparisonVideo: comparison,
+  });
+  closeComparisonModal();
 };
 
 const openVideoUpload = () => {
@@ -1293,11 +1321,20 @@ const handleSignOut = async () => {
 
 watch(
   () => user.value,
-  (newUser) => {
+  (newUser, oldUser) => {
     if (newUser && (newUser as any).id) {
       if (currentVideoId.value) {
         startSession();
         setupPresenceTracking((newUser as any).id, (newUser as any).email);
+      }
+
+      // Auto-open ProjectManagementModal after successful login
+      // Only open if this is a new login (oldUser was null/undefined)
+      if (!oldUser && !isSharedVideo.value && !isSharedComparison.value) {
+        // Small delay to ensure the UI is fully rendered
+        setTimeout(() => {
+          isLoadModalVisible.value = true;
+        }, 100);
       }
     } else {
       endSession();
@@ -1795,6 +1832,15 @@ watch(
       :is-visible="isLoadModalVisible"
       @close="closeLoadModal"
       @project-selected="handleProjectSelected"
+      @upload-video="openVideoUpload"
+      @open-load-modal="openLoadModalWithTab"
+    />
+
+    <!-- Create Comparison Modal -->
+    <CreateComparisonModal
+      :is-visible="isComparisonModalVisible"
+      @close="closeComparisonModal"
+      @comparison-created="handleComparisonCreated"
       @upload-video="openVideoUpload"
     />
 

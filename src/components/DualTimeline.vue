@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
+import VideoTimeline from './VideoTimeline.vue';
 
 const props = defineProps({
   // Video A timeline props

@@ -40,6 +40,42 @@ export const ComparisonVideoService = {
   },
 
   /**
+   * Check if a comparison already exists between two videos
+   */
+  async findExistingComparison(
+    videoAId: string,
+    videoBId: string,
+    userId?: string
+  ): Promise<ComparisonVideoRecord | null> {
+    // Check both combinations since A vs B is the same as B vs A
+    let query = supabase
+      .from('comparison_videos')
+      .select(
+        'id, title, description, createdAt, updatedAt, userId, videoAId, videoBId, isPublic, thumbnailUrl, videoA:videoAId(*), videoB:videoBId(*)'
+      );
+
+    // Add user filter if provided
+    if (userId) {
+      query = query.eq('userId', userId);
+    }
+
+    // Check for both video combinations
+    const { data, error } = await query.or(
+      `and(videoAId.eq.${videoAId},videoBId.eq.${videoBId}),and(videoAId.eq.${videoBId},videoBId.eq.${videoAId})`
+    );
+
+    if (error) {
+      console.warn('Error checking for existing comparison:', error);
+      return null;
+    }
+
+    // Return the first match if any
+    return data && data.length > 0
+      ? (data[0] as unknown as ComparisonVideoRecord)
+      : null;
+  },
+
+  /**
    * Create a comparison video with camelCase columns.
    */
   async createComparisonVideo(params: {
@@ -87,11 +123,33 @@ export const ComparisonVideoService = {
       .from('comparison_videos')
       .insert(payload)
       .select(
-        'id, title, description, createdAt, updatedAt, userId, videoAId, videoBId, isPublic, thumbnailUrl'
+        'id, title, description, createdAt, updatedAt, userId, videoAId, videoBId, isPublic, thumbnailUrl, videoA:videoAId(*), videoB:videoBId(*)'
       )
       .single();
 
-    if (error) throw error;
+    if (error) {
+      // Check if it's a duplicate key error
+      if (
+        error.code === '23505' &&
+        error.message?.includes('comparison_videos_unique_pair')
+      ) {
+        // Try to find the existing comparison
+        const existing = await this.findExistingComparison(
+          params.videoAId,
+          params.videoBId,
+          params.userId || undefined
+        );
+
+        // Create a custom error with the existing comparison info
+        const customError: any = new Error(
+          'A comparison between these videos already exists'
+        );
+        customError.code = 'DUPLICATE_COMPARISON';
+        customError.existingComparison = existing;
+        throw customError;
+      }
+      throw error;
+    }
     return data as unknown as ComparisonVideoRecord;
   },
 

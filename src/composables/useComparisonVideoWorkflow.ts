@@ -222,10 +222,19 @@ export function useComparisonVideoWorkflow() {
     workflowStep.value = 'load';
 
     try {
+      // Validate that the comparison video has the required video references
+      if (
+        !comparisonVideo ||
+        !comparisonVideo.videoA ||
+        !comparisonVideo.videoB
+      ) {
+        throw new Error('Invalid comparison video: missing video references');
+      }
+
       // Set current comparison
       currentComparison.value = comparisonVideo;
-      selectedVideoA.value = comparisonVideo.videoA!;
-      selectedVideoB.value = comparisonVideo.videoB!;
+      selectedVideoA.value = comparisonVideo.videoA;
+      selectedVideoB.value = comparisonVideo.videoB;
 
       // Load all annotations
       const [annotationsA, annotationsB, compAnnotations] = await Promise.all([

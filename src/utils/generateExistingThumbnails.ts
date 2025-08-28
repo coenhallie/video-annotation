@@ -31,8 +31,8 @@ export async function generateThumbnailsForExistingVideos() {
 
           const thumbnail = await ThumbnailGenerator.generateSmallThumbnail(
             video.url,
-            320,
-            2
+            320
+            // Removed seekTime parameter - will use smart frame selection
           );
 
           if (thumbnail) {

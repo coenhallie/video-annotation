@@ -60,35 +60,55 @@
           Dual
         </span>
       </div>
-      <div class="flex items-center gap-4 text-sm text-gray-500">
-        <span>{{ formatDuration(getDuration()) }}</span>
-        <span v-if="project.projectType === 'single' && project.video.fps">
-          {{ project.video.fps }} FPS
-        </span>
-        <span>{{ formatDate(project.createdAt) }}</span>
-        <!-- Comments indicator -->
-        <span
-          v-if="commentCount && commentCount > 0"
-          class="flex items-center gap-1"
-        >
-          <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-            <path
-              fill-rule="evenodd"
-              d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z"
-              clip-rule="evenodd"
-            />
-          </svg>
-          {{ commentCount }}
-        </span>
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-4 text-sm text-gray-500">
+          <span>{{ formatDuration(getDuration()) }}</span>
+          <span v-if="project.projectType === 'single' && project.video.fps">
+            {{ project.video.fps }} FPS
+          </span>
+          <span>{{ formatDate(project.createdAt) }}</span>
+        </div>
+        <div class="flex items-center gap-1">
+          <!-- Annotation count pill -->
+          <span
+            v-if="annotationCount && annotationCount > 0"
+            class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+          >
+            <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+              <path
+                fill-rule="evenodd"
+                d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"
+                clip-rule="evenodd"
+              />
+            </svg>
+            {{ annotationCount }}
+          </span>
+
+          <!-- Comment count pill -->
+          <span
+            v-if="commentCount && commentCount > 0"
+            class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800"
+          >
+            <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+              <path
+                fill-rule="evenodd"
+                d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z"
+                clip-rule="evenodd"
+              />
+            </svg>
+            {{ commentCount }}
+          </span>
+        </div>
       </div>
     </div>
 
     <!-- Actions -->
     <div
-      class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity"
+      class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity ml-2 flex-shrink-0"
+      style="min-width: 140px"
     >
       <button
-        class="p-2 text-gray-600 hover:bg-gray-100 rounded-md"
+        class="p-2 text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
         title="Open"
         @click.stop="openProject"
       >
@@ -113,7 +133,7 @@
         </svg>
       </button>
       <button
-        class="p-2 text-gray-600 hover:bg-gray-100 rounded-md"
+        class="p-2 text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
         title="Share"
         @click.stop="shareProject"
       >
@@ -121,18 +141,18 @@
           class="w-4 h-4"
           fill="none"
           stroke="currentColor"
+          stroke-width="2"
           viewBox="0 0 24 24"
         >
           <path
             stroke-linecap="round"
             stroke-linejoin="round"
-            stroke-width="2"
-            d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m9.032 4.026a3 3 0 10-2.684-5.368m2.684 5.368a3 3 0 00-2.684-5.368M3 12a3 3 0 013-3h12a3 3 0 013 3"
+            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
           />
         </svg>
       </button>
       <button
-        class="p-2 text-red-600 hover:bg-red-50 rounded-md"
+        class="p-2 text-red-600 hover:bg-red-50 rounded-md transition-colors"
         title="Delete"
         @click.stop="deleteProject"
       >
@@ -152,10 +172,29 @@
       </button>
     </div>
   </div>
+
+  <!-- Share Modal -->
+  <ShareModal
+    :is-visible="showShareModal"
+    :video-id="
+      props.project.projectType === 'single' ? props.project.video?.id : ''
+    "
+    :comparison-id="
+      props.project.projectType === 'dual'
+        ? props.project.comparisonVideo?.id
+        : ''
+    "
+    :share-type="
+      props.project.projectType === 'single' ? 'video' : 'comparison'
+    "
+    @close="closeShareModal"
+  />
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue';
 import type { Project } from '../types/project';
+import ShareModal from './ShareModal.vue';
 
 // Props
 const props = defineProps<{
@@ -163,6 +202,7 @@ const props = defineProps<{
   isSelected: boolean;
   isDragging: boolean;
   commentCount?: number;
+  annotationCount?: number;
 }>();
 
 // Emits
@@ -173,6 +213,9 @@ const emit = defineEmits<{
   dragstart: [project: Project, event: DragEvent];
   dragend: [event: DragEvent];
 }>();
+
+// State
+const showShareModal = ref(false);
 
 // Methods
 const handleClick = (event: MouseEvent) => {
@@ -201,8 +244,11 @@ const openProject = () => {
 };
 
 const shareProject = () => {
-  // Implement sharing logic
-  console.log('Share project:', props.project.title);
+  showShareModal.value = true;
+};
+
+const closeShareModal = () => {
+  showShareModal.value = false;
 };
 
 const deleteProject = () => {
@@ -238,7 +284,7 @@ const formatDate = (dateString: string): string => {
   const date = new Date(dateString);
   const now = new Date();
   const diffTime = Math.abs(now.getTime() - date.getTime());
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
 
   if (diffDays === 0) {
     return 'Today';

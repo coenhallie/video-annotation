@@ -2,13 +2,12 @@
   <div class="folder-tree-item">
     <div
       :class="[
-        'folder-item px-2 py-1.5 rounded-md cursor-pointer flex items-center gap-1 hover:bg-gray-100 transition-colors',
+        'folder-item group px-2 py-1.5 rounded-md cursor-pointer flex items-center gap-1 hover:bg-gray-100 transition-colors',
         selectedFolderId === folder.id && 'bg-blue-50 text-blue-700',
         dragOverFolderId === folder.id && 'bg-blue-100 ring-2 ring-blue-400',
       ]"
       :style="{ paddingLeft: `${level * 20 + 8}px` }"
       @click="handleClick"
-      @contextmenu.prevent="showContextMenu"
       @dragover.prevent="handleDragOver"
       @drop="handleDrop"
       @dragleave="handleDragLeave"
@@ -78,7 +77,6 @@
 
       <!-- Actions Menu -->
       <div
-        v-if="showActions"
         class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
       >
         <button
@@ -189,7 +187,6 @@ const emit = defineEmits<{
 const isExpanded = ref(props.folder.isExpanded || false);
 const isRenaming = ref(false);
 const newName = ref(props.folder.name);
-const showActions = ref(false);
 const renameInput = ref<HTMLInputElement | null>(null);
 
 // Methods
@@ -200,11 +197,6 @@ const handleClick = () => {
 const toggleExpanded = () => {
   isExpanded.value = !isExpanded.value;
   props.folder.isExpanded = isExpanded.value;
-};
-
-const showContextMenu = (event: MouseEvent) => {
-  // You could implement a context menu here
-  showActions.value = true;
 };
 
 const createSubfolder = () => {
@@ -231,9 +223,7 @@ const cancelRename = () => {
 };
 
 const deleteFolder = () => {
-  if (confirm(`Delete folder "${props.folder.name}" and all its contents?`)) {
-    emit('delete', props.folder);
-  }
+  emit('delete', props.folder);
 };
 
 const handleDragOver = (event: DragEvent) => {

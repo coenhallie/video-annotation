@@ -80,8 +80,8 @@ export class VideoService {
         console.log('🖼️ Generating thumbnail for video:', videoData.title);
         const thumbnail = await ThumbnailGenerator.generateSmallThumbnail(
           videoData.url,
-          320,
-          2
+          320
+          // Removed seekTime parameter - will use smart frame selection
         );
         if (thumbnail) {
           videoData.thumbnailUrl = thumbnail;
@@ -282,8 +282,8 @@ export class VideoService {
       console.log('🖼️ Generating thumbnail for URL video:', title);
       const thumbnail = await ThumbnailGenerator.generateSmallThumbnail(
         url,
-        320,
-        2
+        320
+        // Removed seekTime parameter - will use smart frame selection
       );
       if (thumbnail) {
         thumbnailUrl = thumbnail;

@@ -213,18 +213,100 @@ export class FolderService {
    */
   static async deleteFolder(folderId: string): Promise<void> {
     try {
-      // Note: This should cascade delete subfolders and project associations
-      // if foreign keys are properly set up in the database
+      console.log('🗑️ [FolderService] Starting folder deletion:', folderId);
+
+      // First, get all subfolders recursively
+      const subfolders = await this.getAllSubfolders(folderId);
+      console.log(
+        '📁 [FolderService] Found subfolders to delete:',
+        subfolders.length
+      );
+
+      // Delete all project associations for this folder and its subfolders
+      const allFolderIds = [folderId, ...subfolders.map((f) => f.id)];
+      console.log(
+        '🔗 [FolderService] Removing project associations for folders:',
+        allFolderIds
+      );
+
+      const { error: projectError } = await supabase
+        .from('project_folders')
+        .delete()
+        .in('folder_id', allFolderIds);
+
+      if (projectError) {
+        console.warn(
+          '⚠️ [FolderService] Error removing project associations (table may not exist):',
+          projectError
+        );
+        // Don't throw error if project_folders table doesn't exist
+        if (projectError.code !== '42P01') {
+          throw projectError;
+        }
+      }
+
+      // Delete all subfolders first (deepest first)
+      const sortedSubfolders = subfolders.sort((a, b) => b.level - a.level);
+      for (const subfolder of sortedSubfolders) {
+        console.log('🗑️ [FolderService] Deleting subfolder:', subfolder.name);
+        const { error: subfolderError } = await supabase
+          .from('folders')
+          .delete()
+          .eq('id', subfolder.id);
+
+        if (subfolderError) throw subfolderError;
+      }
+
+      // Finally, delete the main folder
+      console.log('🗑️ [FolderService] Deleting main folder:', folderId);
       const { error } = await supabase
         .from('folders')
         .delete()
         .eq('id', folderId);
 
       if (error) throw error;
+
+      console.log('✅ [FolderService] Folder deletion completed successfully');
     } catch (error) {
       console.error('❌ [FolderService] Error deleting folder:', error);
       throw error;
     }
+  }
+
+  /**
+   * Get all subfolders recursively with their nesting level
+   */
+  private static async getAllSubfolders(
+    folderId: string
+  ): Promise<Array<{ id: string; name: string; level: number }>> {
+    const allSubfolders: Array<{ id: string; name: string; level: number }> =
+      [];
+
+    const getSubfoldersRecursive = async (
+      parentId: string,
+      level: number = 1
+    ): Promise<void> => {
+      const { data: subfolders, error } = await supabase
+        .from('folders')
+        .select('id, name, parent_id')
+        .eq('parent_id', parentId);
+
+      if (error) throw error;
+
+      for (const subfolder of subfolders || []) {
+        allSubfolders.push({
+          id: subfolder.id,
+          name: subfolder.name,
+          level,
+        });
+
+        // Recursively get subfolders of this subfolder
+        await getSubfoldersRecursive(subfolder.id, level + 1);
+      }
+    };
+
+    await getSubfoldersRecursive(folderId);
+    return allSubfolders;
   }
 
   /**
@@ -235,13 +317,22 @@ export class FolderService {
     folderId: string
   ): Promise<void> {
     try {
-      const { error } = await supabase.from('project_folders').upsert({
+      // Simply insert the project into the folder
+      // The moveProjectToFolder method already removes any existing entries
+      const { error } = await supabase.from('project_folders').insert({
         project_id: projectId,
         folder_id: folderId,
         sort_order: 0,
       });
 
-      if (error) throw error;
+      if (error) {
+        // Ignore unique constraint violations (project already in folder)
+        if (error.code === '23505') {
+          console.log('ℹ️ [FolderService] Project already in folder, skipping');
+          return;
+        }
+        throw error;
+      }
     } catch (error) {
       console.error(
         '❌ [FolderService] Error adding project to folder:',
@@ -284,12 +375,24 @@ export class FolderService {
     toFolderId: string | null
   ): Promise<void> {
     try {
-      // If moving from a folder, remove it first
-      if (fromFolderId) {
-        await this.removeProjectFromFolder(projectId, fromFolderId);
+      // First, remove the project from ALL folders it might be in
+      // This ensures we don't create duplicates
+      const { error: deleteError } = await supabase
+        .from('project_folders')
+        .delete()
+        .eq('project_id', projectId);
+
+      if (deleteError) {
+        // Only log warning if it's not a "table doesn't exist" error
+        if (deleteError.code !== '42P01') {
+          console.warn(
+            '⚠️ [FolderService] Error removing project from folders:',
+            deleteError
+          );
+        }
       }
 
-      // If moving to a folder, add it
+      // If moving to a folder (not root), add it
       if (toFolderId) {
         await this.addProjectToFolder(projectId, toFolderId);
       }
