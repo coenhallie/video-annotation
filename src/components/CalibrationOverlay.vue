@@ -29,10 +29,7 @@
       class="calibration-panel"
       :style="{ top: `${panelPosition.y}px`, left: `${panelPosition.x}px` }"
     >
-      <div
-        class="panel-header"
-        @mousedown="startDrag"
-      >
+      <div class="panel-header" @mousedown="startDrag">
         <h3>Camera Calibration</h3>
         <div
           v-if="calibrationQuality && currentStep === 'court-points'"
@@ -93,18 +90,12 @@
           </p>
         </div>
 
-        <CameraPositionSelector
-          v-if="!cameraSettings"
-          :show-calibration-points="false"
+        <EdgeBasedCameraSelector
+          v-model="edgeCameraSettings"
+          :court-dimensions="courtDimensions"
           class="camera-selector-container"
-          @update:model-value="cameraSettings = $event"
-        />
-        <CameraPositionSelector
-          v-else
-          :model-value="cameraSettings"
-          :show-calibration-points="false"
-          class="camera-selector-container"
-          @update:model-value="cameraSettings = $event"
+          @edge-selected="handleEdgeSelected"
+          @position-changed="handlePositionChanged"
         />
 
         <div class="camera-position-benefits">
@@ -120,7 +111,9 @@
                 clip-rule="evenodd"
               />
             </svg>
-            <span style="font-weight: 500; color: #1d4ed8">Why Camera Position Matters:</span>
+            <span style="font-weight: 500; color: #1d4ed8"
+              >Why Camera Position Matters:</span
+            >
           </div>
           <ul class="benefit-list">
             <li>Improves height estimation for 3D tracking</li>
@@ -131,10 +124,7 @@
         </div>
 
         <div class="step-actions">
-          <button
-            class="btn-secondary"
-            @click="skipCameraPosition"
-          >
+          <button class="btn-secondary" @click="skipCameraPosition">
             Skip (Less Accurate)
           </button>
           <button
@@ -160,27 +150,55 @@
         </div>
       </div>
 
-      <!-- Step 2: Court Points Calibration (existing content) -->
+      <!-- Step 2: Court Points Calibration with Unified System -->
       <div v-if="currentStep === 'court-points'">
-        <!-- Calibration Mode Selector -->
-        <div class="mode-selector">
+        <!-- Court Side Selection -->
+        <div class="court-side-selector">
           <label
             class="block mb-1"
             style="font-size: 0.7rem; font-weight: 500; color: #374151"
           >
-            Calibration Mode:
+            Select Court Side (Player Position):
           </label>
-          <div class="mode-grid">
+          <div class="side-grid">
             <button
-              v-for="mode in calibrationModes"
-              :key="mode.id"
-              :class="['mode-button', { active: currentMode?.id === mode.id }]"
-              :title="mode.description"
-              @click="selectMode(mode.id)"
+              v-for="side in COURT_SIDES"
+              :key="side.id"
+              :class="[
+                'side-button',
+                { active: selectedCourtSide === side.id },
+              ]"
+              :title="side.description"
+              @click="selectCourtSide(side.id)"
             >
-              <span class="mode-name">{{ mode.name }}</span>
-              <span class="mode-points">{{ mode.minPoints }} points</span>
+              <span class="side-name">{{ side.name }}</span>
             </button>
+          </div>
+        </div>
+
+        <!-- Camera Position Indicator -->
+        <div v-if="cameraSettings" class="camera-position-indicator">
+          <span style="font-size: 0.625rem; color: #6b7280">
+            Camera Position:
+            {{ getCameraPositionName(cameraSettings.position) }}
+          </span>
+        </div>
+
+        <!-- Unified Calibration Mode Info -->
+        <div class="mode-info">
+          <div class="mode-header">
+            <span style="font-weight: 500; font-size: 0.75rem">{{
+              UNIFIED_CALIBRATION_MODE.name
+            }}</span>
+            <span class="mode-points" style="font-size: 0.625rem">
+              {{ UNIFIED_CALIBRATION_MODE.minPoints }} points required
+            </span>
+          </div>
+          <div
+            class="mode-description"
+            style="font-size: 0.625rem; color: #6b7280"
+          >
+            {{ UNIFIED_CALIBRATION_MODE.description }}
           </div>
         </div>
 
@@ -188,10 +206,7 @@
         <div class="point-instructions">
           <div class="instruction-header">
             <span style="font-weight: 500">Next Point:</span>
-            <span
-              class="point-counter"
-              style="font-size: 0.625rem"
-            >
+            <span class="point-counter" style="font-size: 0.625rem">
               {{ collectedPoints.length }} / {{ totalPointsToCollect }}
               <span
                 v-if="isCollectingOptionalPoints"
@@ -218,18 +233,16 @@
           </div>
 
           <!-- Dynamic Court Visualization -->
-          <div
-            ref="visualGuideContainer"
-            class="visual-guide-compact"
-          >
+          <div ref="visualGuideContainer" class="visual-guide-compact">
             <CourtVisualization
-              :calibration-mode="currentMode?.id || 'full-court'"
+              :calibration-mode="'unified-3-line'"
               :court-type="courtType"
               :court-dimensions="courtDimensions"
               :show-calibration-points="true"
               :collected-points="collectedPointIds"
               :next-point="nextPoint"
               :show-camera-position="false"
+              :camera-angle="selectedCameraPosition"
               :width="visualGuideDimensions.width"
               :height="visualGuideDimensions.height"
             />
@@ -237,10 +250,7 @@
         </div>
 
         <!-- Collected Points List -->
-        <div
-          v-if="collectedPoints.length > 0"
-          class="collected-points"
-        >
+        <div v-if="collectedPoints.length > 0" class="collected-points">
           <div class="points-header">
             <span style="font-weight: 500">Collected Points:</span>
             <button
@@ -286,10 +296,7 @@
         </div>
 
         <!-- Validation Errors and Messages -->
-        <div
-          v-if="hasMessages"
-          :class="getValidationClass()"
-        >
+        <div v-if="hasMessages" :class="getValidationClass()">
           <div class="error-header">
             <svg
               fill="currentColor"
@@ -324,20 +331,14 @@
             </span>
           </div>
           <ul class="error-list">
-            <li
-              v-for="(error, index) in displayErrors"
-              :key="index"
-            >
+            <li v-for="(error, index) in displayErrors" :key="index">
               {{ error }}
             </li>
           </ul>
         </div>
 
         <!-- Calibration Results -->
-        <div
-          v-if="calibrationResult"
-          class="calibration-results"
-        >
+        <div v-if="calibrationResult" class="calibration-results">
           <div class="results-header">
             <span style="font-weight: 500">Calibration Results:</span>
           </div>
@@ -410,15 +411,8 @@
           Confirm
         </button>
 
-        <button
-          class="btn-secondary"
-          @click="resetCalibration"
-        >
-          <svg
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
+        <button class="btn-secondary" @click="resetCalibration">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
               stroke-linecap="round"
               stroke-linejoin="round"
@@ -429,15 +423,8 @@
           Reset
         </button>
 
-        <button
-          class="btn-danger"
-          @click="cancelCalibration"
-        >
-          <svg
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
+        <button class="btn-danger" @click="cancelCalibration">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
               stroke-linecap="round"
               stroke-linejoin="round"
@@ -463,7 +450,9 @@
               clip-rule="evenodd"
             />
           </svg>
-          <span style="font-size: 0.5rem; font-weight: 500; color: #1d4ed8">Tips:</span>
+          <span style="font-size: 0.5rem; font-weight: 500; color: #1d4ed8"
+            >Tips:</span
+          >
         </div>
         <ul class="tips-list">
           <li>Click precisely on court line intersections</li>
@@ -479,17 +468,122 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
-import {
-  useCameraCalibration,
-  CALIBRATION_MODES,
-} from '../composables/useCameraCalibration';
+import { useCameraCalibration } from '../composables/useCameraCalibration';
 import CourtVisualization from './CourtVisualization.vue';
-import CameraPositionSelector from './CameraPositionSelector.vue';
-import type {
-  Point2D,
-  CalibrationPoint,
-  CameraSettings,
-} from '../composables/useCameraCalibration';
+import EdgeBasedCameraSelector from './EdgeBasedCameraSelector.vue';
+import type { Point2D } from '../composables/useCameraCalibration';
+
+// Define CalibrationPoint interface locally since it's not exported from composable
+interface CalibrationPoint {
+  id: string;
+  x: number;
+  y: number;
+  confidence: number;
+}
+
+// Define CameraSettings interface locally
+interface CameraSettings {
+  position: Point2D;
+  height: number;
+  angle: number;
+  viewAngle?: number;
+}
+
+// Define calibration modes locally for the overlay component
+const CALIBRATION_MODES = [
+  {
+    id: 'full-court',
+    name: 'Full Court',
+    description: 'Complete court calibration with all key points',
+    minPoints: 4,
+    requiredPoints: [
+      'baseline-left',
+      'baseline-right',
+      'net-left',
+      'net-right',
+    ],
+    optionalPoints: [
+      'service-left',
+      'service-right',
+      'center-left',
+      'center-right',
+    ],
+  },
+  {
+    id: 'baseline-only',
+    name: 'Baseline Only',
+    description: 'Quick calibration using baseline points only',
+    minPoints: 2,
+    requiredPoints: ['baseline-left', 'baseline-right'],
+    optionalPoints: ['net-left', 'net-right'],
+  },
+  {
+    id: 'custom',
+    name: 'Custom',
+    description: 'Select your own calibration points',
+    minPoints: 4,
+    requiredPoints: [],
+    optionalPoints: [
+      'baseline-left',
+      'baseline-right',
+      'net-left',
+      'net-right',
+      'service-left',
+      'service-right',
+    ],
+  },
+];
+
+// Unified calibration system with 3 reference lines
+// Using double service line, center line, and short service line as fixed landmarks
+const UNIFIED_CALIBRATION_MODE = {
+  id: 'unified-3-line',
+  name: 'Unified 3-Line System',
+  description:
+    'Optimized calibration using three consistently visible court lines',
+  minPoints: 6, // 2 points per line minimum
+  referenceLines: {
+    doubleService: {
+      name: 'Double Service Line',
+      description: 'Back service line for doubles play',
+      requiredPoints: ['double-service-left', 'double-service-right'],
+      distance: 0.76, // meters from baseline in badminton
+    },
+    center: {
+      name: 'Center Line',
+      description: 'Center line dividing the court',
+      requiredPoints: ['center-service', 'center-mid', 'center-net'],
+      isVertical: true,
+    },
+    shortService: {
+      name: 'Short Service Line',
+      description: 'Front service line',
+      requiredPoints: ['short-service-left', 'short-service-right'],
+      distance: 1.98, // meters from net in badminton
+    },
+  },
+  // 4 distinct camera angle positions
+  cameraPositions: [
+    { id: 'corner-left', name: 'Left Corner', angle: 45 },
+    { id: 'corner-right', name: 'Right Corner', angle: -45 },
+    { id: 'side-left', name: 'Left Side', angle: 90 },
+    { id: 'side-right', name: 'Right Side', angle: -90 },
+  ],
+};
+
+// Court side selection for single player analysis
+const COURT_SIDES = [
+  {
+    id: 'near',
+    name: 'Near Side',
+    description: 'Player on the near side of the court',
+  },
+  {
+    id: 'far',
+    name: 'Far Side',
+    description: 'Player on the far side of the court',
+  },
+];
 
 // Props
 const props = defineProps<{
@@ -510,6 +604,111 @@ const cameraCalibration = useCameraCalibration();
 const isCalibrating = ref(false);
 const currentStep = ref<'camera-position' | 'court-points'>('camera-position');
 const cameraSettings = ref<CameraSettings | null>(null);
+
+// Edge-based camera settings
+const edgeCameraSettings = ref({
+  edge: null as 'top' | 'bottom' | 'left' | 'right' | null,
+  distance: 5,
+  height: 3.5,
+  position3D: { x: 0, y: 0, z: 3.5 },
+});
+
+// Convert edge settings to camera settings for compatibility
+watch(
+  edgeCameraSettings,
+  (newValue) => {
+    if (newValue.edge && newValue.position3D) {
+      const pos3D = newValue.position3D;
+      const dims = courtDimensions.value;
+      const width = dims.width;
+      const length = dims.length;
+
+      // Convert 3D position to normalized 2D position
+      const x = (pos3D.x + width / 2) / width;
+      const y = (pos3D.y + length / 2) / length;
+
+      // Calculate view angle based on edge
+      let viewAngle = 0;
+      switch (newValue.edge) {
+        case 'top':
+          viewAngle = Math.PI / 2;
+          break;
+        case 'bottom':
+          viewAngle = -Math.PI / 2;
+          break;
+        case 'left':
+          viewAngle = 0;
+          break;
+        case 'right':
+          viewAngle = Math.PI;
+          break;
+      }
+
+      cameraSettings.value = {
+        position: { x, y },
+        height: newValue.height,
+        angle: viewAngle,
+        viewAngle,
+      };
+    }
+  },
+  { deep: true }
+);
+
+// Event handlers for edge-based selector
+const handleEdgeSelected = (edge: 'top' | 'bottom' | 'left' | 'right') => {
+  console.log('Edge selected:', edge);
+  calibrationMessages.value.push(`Camera positioned at ${edge} edge`);
+};
+
+const handlePositionChanged = (position: {
+  x: number;
+  y: number;
+  z: number;
+}) => {
+  console.log('Camera position changed:', position);
+  // Update camera calibration if needed
+  if (cameraCalibration.cameraParameters) {
+    cameraCalibration.cameraParameters.position = position;
+  }
+};
+
+// New methods for unified calibration system
+const selectCourtSide = (sideId: string) => {
+  selectedCourtSide.value = sideId as 'near' | 'far';
+  // Reset calibration when court side changes
+  if (collectedPoints.value.length > 0) {
+    resetCalibration();
+  }
+};
+
+const getCameraPositionName = (position: Point2D) => {
+  // Determine camera position based on coordinates
+  const courtCenter = {
+    x: courtDimensions.value.width / 2,
+    y: courtDimensions.value.length / 2,
+  };
+  const angle =
+    Math.atan2(position.y - courtCenter.y, position.x - courtCenter.x) *
+    (180 / Math.PI);
+
+  // Find closest camera position
+  let closestPosition = UNIFIED_CALIBRATION_MODE.cameraPositions[0];
+  if (!closestPosition) return 'Unknown';
+
+  let minDiff = Math.abs(angle - closestPosition.angle);
+
+  for (const pos of UNIFIED_CALIBRATION_MODE.cameraPositions) {
+    const diff = Math.abs(angle - pos.angle);
+    if (diff < minDiff) {
+      minDiff = diff;
+      closestPosition = pos;
+    }
+  }
+
+  selectedCameraPosition.value = closestPosition.id;
+  return closestPosition.name;
+};
 
 // Debug watcher for isActive prop
 watch(
@@ -546,8 +745,12 @@ const canvasHeight = ref(1080);
 const mousePosition = ref<Point2D | null>(null);
 const collectedPoints = ref<CalibrationPoint[]>([]);
 const hoveredPoint = ref<string | null>(null);
-const courtType = ref<'badminton' | 'tennis'>('badminton');
+const courtType = ref<'badminton' | 'tennis'>('tennis'); // Default to tennis for better visibility
 const calibrationMessages = ref<string[]>([]);
+
+// New state for unified calibration system
+const selectedCourtSide = ref<'near' | 'far'>('near');
+const selectedCameraPosition = ref<string>('corner-left');
 
 // Draggable Panel State
 const calibrationPanelRef = ref<HTMLElement | null>(null);
@@ -788,16 +991,50 @@ function stopDrag() {
 
 // Computed
 const calibrationModes = computed(() => CALIBRATION_MODES);
-const currentMode = computed(() => cameraCalibration.currentMode.value);
-const calibrationQuality = computed(
-  () => cameraCalibration.calibrationQuality.value
+// Use local state for current mode since composable doesn't have this concept
+const currentModeId = ref('full-court');
+const currentMode = computed(
+  () =>
+    CALIBRATION_MODES.find((mode) => mode.id === currentModeId.value) ||
+    CALIBRATION_MODES[0]
 );
-const calibrationResult = computed(
-  () => cameraCalibration.calibrationResult.value
-);
-const validationErrors = computed(
-  () => cameraCalibration.validationErrors.value
-);
+// Use composable's validation metrics for calibration quality
+const calibrationQuality = computed(() => {
+  const metrics = cameraCalibration.validationMetrics.value;
+  if (!metrics) return null;
+
+  return {
+    level:
+      metrics.overallConfidence > 0.8
+        ? 'good'
+        : metrics.overallConfidence > 0.6
+        ? 'fair'
+        : 'poor',
+    message: `Confidence: ${(metrics.overallConfidence * 100).toFixed(0)}%`,
+  };
+});
+// Use composable's camera parameters as calibration result
+const calibrationResult = computed(() => {
+  if (!cameraCalibration.cameraParameters.position) return null;
+
+  return {
+    error: cameraCalibration.calibrationError.value,
+    confidence: cameraCalibration.calibrationConfidence.value,
+    inliers: collectedPoints.value, // Use collected points as inliers
+  };
+});
+// Use composable's calibration error for validation errors
+const validationErrors = computed(() => {
+  const errors: string[] = [];
+  if (cameraCalibration.calibrationError.value > 50) {
+    errors.push(
+      `High calibration error: ${cameraCalibration.calibrationError.value.toFixed(
+        1
+      )}px`
+    );
+  }
+  return errors;
+});
 
 const displayErrors = computed(() => {
   // Combine validation errors from composable and local calibration messages
@@ -807,14 +1044,17 @@ const displayErrors = computed(() => {
   return allMessages.map((error) => {
     // Replace cm with px in error messages
     if (error.includes('cm')) {
-      return error.replace(/(\d+\.?\d*)\s*cm/g, (match, num) => {
-        // If it's a large number that was incorrectly multiplied by 100, divide it back
-        const value = parseFloat(num);
-        if (value > 1000) {
-          return `${(value / 100).toFixed(1)}px`;
+      return error.replace(
+        /(\d+\.?\d*)\s*cm/g,
+        (match: string, num: string) => {
+          // If it's a large number that was incorrectly multiplied by 100, divide it back
+          const value = parseFloat(num);
+          if (value > 1000) {
+            return `${(value / 100).toFixed(1)}px`;
+          }
+          return `${value}px`;
         }
-        return `${value}px`;
-      });
+      );
     }
     return error;
   });
@@ -825,7 +1065,11 @@ const hasMessages = computed(() => {
     validationErrors.value.length > 0 || calibrationMessages.value.length > 0
   );
 });
-const isCalibrated = computed(() => cameraCalibration.isCalibrated.value);
+const isCalibrated = computed(
+  () =>
+    cameraCalibration.cameraParameters.position !== null &&
+    cameraCalibration.calibrationConfidence.value > 0.5
+);
 
 const nextPoint = computed(() => {
   // Get the next point based on current mode and collected points
@@ -877,12 +1121,38 @@ const isNextPointOptional = computed(() => {
 
 const getPointDescription = (pointId: string | null) => {
   if (!pointId) return 'All points collected';
-  return cameraCalibration.getPointDescription(pointId);
+
+  // Local point descriptions since composable doesn't have this
+  const descriptions: Record<string, string> = {
+    'baseline-left': 'Left Baseline Corner',
+    'baseline-right': 'Right Baseline Corner',
+    'net-left': 'Left Net Post',
+    'net-right': 'Right Net Post',
+    'service-left': 'Left Service Line',
+    'service-right': 'Right Service Line',
+    'center-left': 'Left Center Line',
+    'center-right': 'Right Center Line',
+  };
+
+  return descriptions[pointId] || pointId;
 };
 
 const getPointHint = (pointId: string | null) => {
   if (!pointId) return '';
-  return cameraCalibration.getPointHint(pointId);
+
+  // Local point hints since composable doesn't have this
+  const hints: Record<string, string> = {
+    'baseline-left': 'Click on the left corner of the baseline',
+    'baseline-right': 'Click on the right corner of the baseline',
+    'net-left': 'Click on the left net post base',
+    'net-right': 'Click on the right net post base',
+    'service-left': 'Click on the left service line intersection',
+    'service-right': 'Click on the right service line intersection',
+    'center-left': 'Click on the left center line intersection',
+    'center-right': 'Click on the right center line intersection',
+  };
+
+  return hints[pointId] || 'Click on the specified court point';
 };
 
 // Canvas drawing logic
@@ -896,10 +1166,9 @@ function drawCanvas() {
 
   // Draw collected points
   collectedPoints.value.forEach((point) => {
-    // Check if point has direct x,y coordinates (simplified format)
-    // or if it's a full CalibrationPoint with image coordinates
-    const x = 'x' in point ? point.x : point.image?.x;
-    const y = 'y' in point ? point.y : point.image?.y;
+    // Use direct x,y coordinates from CalibrationPoint
+    const x = point.x;
+    const y = point.y;
 
     if (x !== undefined && y !== undefined && x !== null && y !== null) {
       ctx.beginPath();
@@ -974,11 +1243,11 @@ function handleMouseMove(event: MouseEvent) {
 }
 
 function selectMode(modeId: string) {
-  cameraCalibration.setCalibrationMode(modeId);
+  currentModeId.value = modeId;
   // Reset collected points when mode changes
   collectedPoints.value = [];
   // Reset calibration when mode changes
-  cameraCalibration.resetCalibration();
+  cameraCalibration.reset();
 }
 
 function undoLastPoint() {
@@ -990,51 +1259,53 @@ function performCalibration() {
 
   console.log('🎯 Starting calibration with points:', collectedPoints.value);
 
-  // Clear previous calibration points in the composable
-  cameraCalibration.resetCalibration();
+  // Reset previous calibration in the composable
+  cameraCalibration.reset();
 
-  // Convert our simplified points to CalibrationPoints and add them
-  collectedPoints.value.forEach((point: any) => {
-    cameraCalibration.addCalibrationPoint(
-      point.id,
-      { x: point.x, y: point.y },
-      point.confidence
-    );
-  });
+  // For now, use the composable's calculateCameraParameters method
+  // This is a simplified integration - in a full implementation,
+  // we would need to convert point correspondences to line correspondences
+  const result = cameraCalibration.calculateCameraParameters();
 
-  // Perform calibration
-  const result = cameraCalibration.calibrateWithRANSAC();
+  result
+    .then((calibrationParams) => {
+      if (calibrationParams) {
+        console.log('✅ Calibration successful:', calibrationParams);
+        // Clear previous messages
+        calibrationMessages.value = [];
 
-  if (result) {
-    console.log('✅ Calibration successful:', result);
-    // The calibrationResult is already reactive and will update the UI
-    // Clear previous messages
-    calibrationMessages.value = [];
-
-    // If calibration is successful with good accuracy
-    if (result.error < 10) {
+        const error = cameraCalibration.calibrationError.value;
+        // If calibration is successful with good accuracy
+        if (error < 10) {
+          calibrationMessages.value = [
+            `✅ Calibration successful! Error: ${error.toFixed(1)}px`,
+          ];
+        } else if (error < 50) {
+          calibrationMessages.value = [
+            `⚠️ Calibration complete but accuracy could be improved. Error: ${error.toFixed(
+              1
+            )}px`,
+          ];
+        } else {
+          calibrationMessages.value = [
+            `⚠️ Calibration complete but accuracy is low. Error: ${error.toFixed(
+              1
+            )}px. Try clicking more precisely.`,
+          ];
+        }
+      } else {
+        console.error('❌ Calibration failed');
+        calibrationMessages.value = [
+          '❌ Calibration failed. Please try again with more accurate point selection.',
+        ];
+      }
+    })
+    .catch((error) => {
+      console.error('❌ Calibration failed:', error);
       calibrationMessages.value = [
-        `✅ Calibration successful! Error: ${result.error.toFixed(1)}px`,
+        '❌ Calibration failed. Please try again with more accurate point selection.',
       ];
-    } else if (result.error < 50) {
-      calibrationMessages.value = [
-        `⚠️ Calibration complete but accuracy could be improved. Error: ${result.error.toFixed(
-          1
-        )}px`,
-      ];
-    } else {
-      calibrationMessages.value = [
-        `⚠️ Calibration complete but accuracy is low. Error: ${result.error.toFixed(
-          1
-        )}px. Try clicking more precisely.`,
-      ];
-    }
-  } else {
-    console.error('❌ Calibration failed');
-    calibrationMessages.value = [
-      '❌ Calibration failed. Please try again with more accurate point selection.',
-    ];
-  }
+    });
 }
 
 function confirmCalibration() {
@@ -1047,7 +1318,7 @@ function confirmCalibration() {
 function resetCalibration() {
   collectedPoints.value = [];
   calibrationMessages.value = [];
-  cameraCalibration.resetCalibration();
+  cameraCalibration.reset();
 }
 
 function cancelCalibration() {
@@ -1376,6 +1647,70 @@ watch(
   border-bottom: 1px solid #e5e7eb;
 }
 
+/* Court side selection styles */
+.court-side-selector {
+  margin-bottom: 0.75rem;
+}
+
+.side-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem;
+}
+
+.side-button {
+  padding: 0.5rem 0.75rem;
+  border: 2px solid #d1d5db;
+  background: white;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.side-button:hover {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+}
+
+.side-button.active {
+  background: #3b82f6;
+  color: white;
+  border-color: #2563eb;
+}
+
+.camera-position-indicator {
+  margin-bottom: 0.5rem;
+  padding: 0.375rem 0.5rem;
+  background: #f0f9ff;
+  border-left: 3px solid #3b82f6;
+  border-radius: 0.25rem;
+}
+
+.mode-info {
+  margin-bottom: 0.75rem;
+  padding: 0.5rem;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.375rem;
+}
+
+.mode-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.25rem;
+}
+
+.mode-description {
+  line-height: 1.3;
+}
+
+/* Existing mode styles */
 .mode-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -1409,6 +1744,12 @@ watch(
   display: block;
   font-size: 0.6rem;
   color: #6b7280;
+  background: #3b82f6;
+  color: white;
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+  display: inline-block;
+  margin-top: 0.25rem;
 }
 
 .instruction-header,

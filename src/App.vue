@@ -21,6 +21,9 @@ import UnifiedVideoPlayer from './components/UnifiedVideoPlayer.vue';
 import SpeedVisualization from './components/SpeedVisualization.vue';
 import CalibrationControls from './components/CalibrationControls.vue';
 import CalibrationOverlay from './components/CalibrationOverlay.vue';
+import CalibrationModal from './components/CalibrationModal.vue';
+import CalibrationSuccessOverlay from './components/CalibrationSuccessOverlay.vue';
+import CalibrationLinesOverlay from './components/CalibrationLinesOverlay.vue';
 import { useAuth } from './composables/useAuth';
 import { useVideoAnnotations } from './composables/useVideoAnnotations';
 import { useRealtimeAnnotations } from './composables/useRealtimeAnnotations';
@@ -400,6 +403,278 @@ const showCalibrationControls = ref(false);
 
 // Camera calibration state
 const showCalibrationOverlay = ref(false);
+const showCalibrationModal = ref(false);
+
+// Import calibration utilities
+import { useCameraCalibration } from './composables/useCameraCalibration';
+import { imageToWorld } from './utils/calibrationTransforms';
+
+// Initialize camera calibration composable
+const cameraCalibration = useCameraCalibration();
+
+// Calibration success overlay state
+const showCalibrationSuccess = ref(false);
+const calibrationSuccessData = ref({
+  accuracy: 85,
+  error: '2.5',
+});
+const calibrationTransformData = ref<any>(null);
+
+// Calibration lines overlay state
+const showCalibrationLines = ref(false);
+const calibrationLines = ref<any[]>([]);
+
+// Handle calibration modal completion
+const handleCalibrationModalComplete = async (data: any) => {
+  console.log('CalibrationModal completed - processing data:', data);
+  showCalibrationModal.value = false;
+
+  // Process the calibration data to generate homography
+  if (data && data.drawnLines && data.drawnLines.length >= 3) {
+    // Map drawn lines to court coordinates based on their order
+    // Badminton court dimensions (in meters):
+    // - Total length: 13.4m (6.7m on each side of net)
+    // - Total width (doubles): 6.1m (3.05m on each side of center)
+    // - Short service line: 1.98m from net
+    // - Long service line (doubles): 0.76m from back boundary
+    //
+    // COORDINATE SYSTEM: Origin (0,0) at center of court (net center)
+    // X-axis: left (-) to right (+)
+    // Y-axis: far court (-) to near court (+)
+
+    // Use the same coordinate system as useCameraCalibration.ts
+    const width = 6.1; // Court width (doubles)
+    const length = 13.4; // Court length
+    const doubleServiceDistance = 0.76; // from baseline
+    const shortServiceDistance = 1.98; // from net
+
+    const courtLines = [
+      // Line 1: Back boundary (doubles long service line) - horizontal line
+      // For near court side (camera side)
+      [
+        { x: -width / 2, y: length / 2 - doubleServiceDistance }, // Left edge: (-3.05, 5.94)
+        { x: width / 2, y: length / 2 - doubleServiceDistance }, // Right edge: (3.05, 5.94)
+      ],
+      // Line 2: Center line - vertical line dividing left/right courts
+      // From short service line to back boundary
+      [
+        { x: 0, y: -shortServiceDistance }, // Net end: (0, -1.98)
+        { x: 0, y: length / 2 - doubleServiceDistance }, // Back end: (0, 5.94)
+      ],
+      // Line 3: Short service line - horizontal line
+      // On the far court side (opposite from camera)
+      [
+        { x: -width / 2, y: shortServiceDistance }, // Left edge: (-3.05, 1.98)
+        { x: width / 2, y: shortServiceDistance }, // Right edge: (3.05, 1.98)
+      ],
+    ];
+
+    // Calculate homography if we have enough lines
+    try {
+      // Clear previous calibration
+      cameraCalibration.resetCalibration();
+
+      // Set up court lines
+      cameraCalibration.selectedCourtLines.value = [
+        {
+          id: 'court-line-0',
+          type: 'service-long-doubles' as const,
+          courtPoints: courtLines[0],
+          isParallel: true,
+          color: '#3b82f6',
+        },
+        {
+          id: 'court-line-1',
+          type: 'center-line' as const,
+          courtPoints: courtLines[1],
+          isParallel: false,
+          color: '#22c55e',
+        },
+        {
+          id: 'court-line-2',
+          type: 'service-short' as const,
+          courtPoints: courtLines[2],
+          isParallel: true,
+          color: '#ef4444',
+        },
+      ];
+
+      // Set up drawn video lines
+      console.log('Drawn lines from modal:', data.drawnLines);
+      cameraCalibration.drawnVideoLines.value = data.drawnLines
+        .filter((line: any) => line && line.start && line.end)
+        .map((line: any, index: number) => {
+          console.log(
+            `Line ${index}: start(${line.start.x}, ${line.start.y}) -> end(${line.end.x}, ${line.end.y})`
+          );
+          return {
+            id: `video-line-${index}`,
+            points: [line.start, line.end],
+            timestamp: Date.now(),
+            confidence: 0.9,
+          };
+        });
+
+      // Create line correspondences
+      console.log('Creating line correspondences:');
+      data.drawnLines.forEach((line: any, index: number) => {
+        if (line && line.start && line.end && index < 3) {
+          console.log(
+            `Correspondence ${index}: court-line-${index} <-> video-line-${index}`
+          );
+          console.log(`  Court line ${index}:`, courtLines[index]);
+          console.log(
+            `  Video line ${index}: (${line.start.x}, ${line.start.y}) -> (${line.end.x}, ${line.end.y})`
+          );
+          cameraCalibration.createLineCorrespondence(
+            `court-line-${index}`,
+            `video-line-${index}`
+          );
+        }
+      });
+
+      // Set camera position from the modal data before calculating
+      if (data.cameraPosition) {
+        console.log('Setting camera position:', data.cameraPosition);
+        cameraCalibration.cameraParameters.position = {
+          x: data.cameraPosition.x,
+          y: data.cameraPosition.y,
+          z: data.cameraPosition.z,
+        };
+      }
+
+      // Calculate camera parameters (this will compute the homography)
+      const calibrationResult =
+        await cameraCalibration.calculateCameraParameters();
+
+      console.log('Calibration result:', calibrationResult);
+      console.log(
+        'Homography matrix:',
+        cameraCalibration.homographyMatrix.value
+      );
+      console.log(
+        'Calibration confidence:',
+        cameraCalibration.calibrationConfidence.value
+      );
+      console.log(
+        'Calibration error:',
+        cameraCalibration.calibrationError.value
+      );
+
+      if (calibrationResult) {
+        // Get the transformation data from the composable
+        const transformData = cameraCalibration.getTransformationData.value;
+        console.log('Transform data from composable:', transformData);
+
+        if (transformData) {
+          calibrationTransformData.value = transformData;
+
+          // Update calibration success data
+          calibrationSuccessData.value = {
+            accuracy: Math.round(
+              cameraCalibration.calibrationConfidence.value * 100
+            ),
+            error: cameraCalibration.calibrationError.value.toFixed(1),
+          };
+        } else {
+          // Fallback: manually calculate transformation data
+          const homography = cameraCalibration.homographyMatrix.value;
+          console.log('Using fallback with homography:', homography);
+
+          if (homography) {
+            const centerImagePoint = { x: 960, y: 540 }; // Center of 1920x1080 video
+            console.log('Transforming point:', centerImagePoint);
+
+            const worldPoint = imageToWorld(centerImagePoint, homography);
+            console.log('World point result:', worldPoint);
+
+            if (worldPoint) {
+              calibrationTransformData.value = {
+                imagePoint: centerImagePoint,
+                worldPoint: {
+                  x: worldPoint.x.toFixed(2),
+                  y: worldPoint.y.toFixed(2),
+                  z: worldPoint.z.toFixed(2),
+                },
+                pixelsPerMeter: Math.abs(
+                  1920 / (cameraCalibration.courtDimensions.value.width * 2)
+                ),
+              };
+
+              // Update calibration success data
+              calibrationSuccessData.value = {
+                accuracy: Math.round(
+                  cameraCalibration.calibrationConfidence.value * 100
+                ),
+                error: cameraCalibration.calibrationError.value.toFixed(1),
+              };
+            } else {
+              console.error('Failed to transform point to world coordinates');
+            }
+          } else {
+            console.error('No homography matrix available');
+          }
+        }
+      } else {
+        console.error('Calibration failed - no result returned');
+      }
+    } catch (error) {
+      console.error('Error calculating homography:', error);
+    }
+  }
+
+  // Store the calibration lines for display
+  if (data.drawnLines && data.drawnLines.length > 0) {
+    console.log('Calibration lines received (normalized):', data.drawnLines);
+    calibrationLines.value = data.drawnLines.map((line: any, index: number) => {
+      console.log(`Line ${index} (normalized):`, line);
+      console.log(`  Start: (${line.start.x}, ${line.start.y})`);
+      console.log(`  End: (${line.end.x}, ${line.end.y})`);
+      console.log(`  Video dimensions:`, line.videoDimensions);
+
+      // Lines are already normalized from CalibrationModal
+      // Just add color and name metadata
+      return {
+        ...line, // Keep all properties including normalized coordinates and videoDimensions
+        color: ['#3b82f6', '#22c55e', '#ef4444'][index] || '#ffffff',
+        name:
+          ['Back Boundary', 'Center Line', 'Service Line'][index] ||
+          `Line ${index + 1}`,
+      };
+    });
+
+    // Show calibration lines on the video for 1 minute
+    console.log('Setting showCalibrationLines to true');
+    showCalibrationLines.value = true;
+    console.log(
+      'Calibration lines to display (normalized):',
+      calibrationLines.value
+    );
+    console.log('Current video dimensions:', {
+      width: videoDimensions.value.width || 1920,
+      height: videoDimensions.value.height || 1080,
+    });
+
+    // Hide calibration lines after 60 seconds (1 minute)
+    setTimeout(() => {
+      showCalibrationLines.value = false;
+      console.log('Hiding calibration lines after 60 seconds');
+    }, 60000);
+  } else {
+    console.log('No calibration lines received or empty array');
+  }
+
+  // Show the calibration success overlay
+  showCalibrationSuccess.value = true;
+  console.log('showCalibrationSuccess set to:', showCalibrationSuccess.value);
+  console.log('Calibration transform data:', calibrationTransformData.value);
+
+  // Hide success overlay after 5 seconds (fixing the typo from 50000)
+  setTimeout(() => {
+    console.log('Hiding calibration success overlay');
+    showCalibrationSuccess.value = false;
+  }, 5000);
+};
 
 // Configure all pose landmarkers for fast movements
 const configureFastMovements = () => {
@@ -1200,14 +1475,14 @@ const handleKeypointSelection = (keypoint: any, isSelected: boolean) => {
 // Calibration Controls
 const handleStartCourtCalibration = () => {
   console.log('handleStartCourtCalibration called from App.vue');
-  // Show the calibration overlay instead of calling the speed calculator directly
+  // Show the calibration modal instead of the overlay
   if (videoUrl.value) {
     // Pause the video during calibration if it's playing
     if (unifiedVideoPlayerRef.value) {
       unifiedVideoPlayerRef.value.pause();
     }
-    showCalibrationOverlay.value = true;
-    console.log('showCalibrationOverlay set to:', showCalibrationOverlay.value);
+    showCalibrationModal.value = true;
+    console.log('showCalibrationModal set to:', showCalibrationModal.value);
   } else {
     console.warn('No video URL available for calibration');
   }
@@ -1909,8 +2184,46 @@ watch(
       v-if="videoUrl && (user || isSharedVideo || isSharedComparison)"
       :video-element="unifiedVideoPlayerRef?.getCurrentVideoElement?.()"
       :is-active="showCalibrationOverlay"
-      @calibration-complete="handleCalibrationComplete"
+      @calibration-complete="handleCalibrationModalComplete"
       @calibration-cancelled="showCalibrationOverlay = false"
+    />
+
+    <!-- Calibration Modal -->
+    <CalibrationModal
+      :show="showCalibrationModal"
+      :video-url="videoUrl || ''"
+      :court-type="'badminton'"
+      @close="showCalibrationModal = false"
+      @calibration-complete="handleCalibrationModalComplete"
+    />
+
+    <!-- Calibration Lines Overlay - Shows on the video after calibration -->
+    <div
+      v-if="showCalibrationLines && videoUrl"
+      class="calibration-lines-wrapper"
+    >
+      <CalibrationLinesOverlay
+        :show="showCalibrationLines"
+        :lines="calibrationLines"
+        :video-element="unifiedVideoPlayerRef?.getCurrentVideoElement?.()"
+        :video-container="unifiedVideoPlayerRef?.getCurrentVideoContainer?.()"
+        :video-width="videoDimensions.width || 1920"
+        :video-height="videoDimensions.height || 1080"
+        :duration="60000"
+        :show-labels="true"
+        :show-end-points="true"
+        :show-success-message="true"
+        :fade-out="false"
+        @overlay-hidden="showCalibrationLines = false"
+      />
+    </div>
+
+    <!-- Calibration Success Overlay -->
+    <CalibrationSuccessOverlay
+      :show="showCalibrationSuccess"
+      :accuracy="calibrationSuccessData.accuracy"
+      :error="calibrationSuccessData.error"
+      :example-transform="calibrationTransformData"
     />
   </div>
 

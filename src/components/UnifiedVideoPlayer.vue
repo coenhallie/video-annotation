@@ -2,67 +2,36 @@
 <template>
   <div class="unified-video-player">
     <!-- Single Video Mode -->
-    <div
-      v-if="mode === 'single'"
-      class="single-video-container"
-    >
-      <div class="video-wrapper">
+    <div v-if="mode === 'single'" class="single-video-container">
+      <div ref="singleVideoContainer" class="video-wrapper">
         <!-- Loading indicator for single video -->
-        <div
-          v-if="singleVideoState.isLoading"
-          class="loading-overlay"
-        >
+        <div v-if="singleVideoState.isLoading" class="loading-overlay">
           <div class="loading-spinner" />
-          <div class="loading-text">
-            Loading video...
-          </div>
+          <div class="loading-text">Loading video...</div>
         </div>
 
         <!-- Error message -->
-        <div
-          v-if="singleVideoState.error"
-          class="error-overlay"
-        >
+        <div v-if="singleVideoState.error" class="error-overlay">
           <svg
             class="error-icon"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
           >
-            <circle
-              cx="12"
-              cy="12"
-              r="10"
-            />
-            <line
-              x1="15"
-              y1="9"
-              x2="9"
-              y2="15"
-            />
-            <line
-              x1="9"
-              y1="9"
-              x2="15"
-              y2="15"
-            />
+            <circle cx="12" cy="12" r="10" />
+            <line x1="15" y1="9" x2="9" y2="15" />
+            <line x1="9" y1="9" x2="15" y2="15" />
           </svg>
           <p class="error-message">
             {{ singleVideoState.error }}
           </p>
-          <button
-            class="retry-button"
-            @click="singleVideoState.error = null"
-          >
+          <button class="retry-button" @click="singleVideoState.error = null">
             Try Again
           </button>
         </div>
 
         <!-- Placeholder when no video URL -->
-        <div
-          v-if="!props.videoUrl"
-          class="no-video-placeholder"
-        >
+        <div v-if="!props.videoUrl" class="no-video-placeholder">
           <svg
             class="placeholder-icon"
             fill="none"
@@ -76,9 +45,7 @@
               d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
             />
           </svg>
-          <h3 class="placeholder-title">
-            No Video Loaded
-          </h3>
+          <h3 class="placeholder-title">No Video Loaded</h3>
           <p class="placeholder-description">
             Please upload a MP4 video to start annotating.
           </p>
@@ -111,7 +78,7 @@
           :severity="drawingCanvas?.currentTool?.value?.severity"
           :current-color="
             drawingCanvas?.getCurrentColor?.value ||
-              drawingCanvas?.getCurrentColor?.()
+            drawingCanvas?.getCurrentColor?.()
           "
           :existing-drawings="drawingCanvas?.allDrawings?.value"
           :is-loading-drawings="drawingCanvas?.isLoadingDrawings?.value"
@@ -177,21 +144,7 @@
           @close="showHeatmapMinimap = false"
         />
 
-        <!-- Speed Visualization Overlay for Single Video (only in single mode) -->
-        <SpeedVisualization
-          v-if="
-            props.videoUrl &&
-              poseLandmarker &&
-              poseLandmarker.isEnabled.value &&
-              mode === 'single'
-          "
-          :speed-metrics="poseLandmarker?.speedMetrics"
-          :canvas-width="singleVideoElement?.videoWidth || 1920"
-          :canvas-height="singleVideoElement?.videoHeight || 1080"
-          :video-loaded="!!videoUrl"
-          :current-timestamp="currentTime"
-          :current-frame="currentFrame"
-        />
+        <!-- Speed Visualization for Single Video is handled by App.vue -->
 
         <!-- Custom controls for single video -->
         <div
@@ -206,29 +159,11 @@
                 :aria-label="isPlaying ? 'Pause' : 'Play'"
                 @click="togglePlayPause"
               >
-                <svg
-                  v-if="isPlaying"
-                  class="control-icon"
-                  viewBox="0 0 24 24"
-                >
-                  <rect
-                    x="6"
-                    y="4"
-                    width="4"
-                    height="16"
-                  />
-                  <rect
-                    x="14"
-                    y="4"
-                    width="4"
-                    height="16"
-                  />
+                <svg v-if="isPlaying" class="control-icon" viewBox="0 0 24 24">
+                  <rect x="6" y="4" width="4" height="16" />
+                  <rect x="14" y="4" width="4" height="16" />
                 </svg>
-                <svg
-                  v-else
-                  class="control-icon"
-                  viewBox="0 0 24 24"
-                >
+                <svg v-else class="control-icon" viewBox="0 0 24 24">
                   <polygon points="5,3 19,12 5,21" />
                 </svg>
               </button>
@@ -240,24 +175,10 @@
                   :aria-label="isMuted ? 'Unmute' : 'Mute'"
                   @click="toggleMute"
                 >
-                  <svg
-                    v-if="isMuted"
-                    class="control-icon"
-                    viewBox="0 0 24 24"
-                  >
+                  <svg v-if="isMuted" class="control-icon" viewBox="0 0 24 24">
                     <polygon points="11,5 6,9 2,9 2,15 6,15 11,19" />
-                    <line
-                      x1="23"
-                      y1="9"
-                      x2="17"
-                      y2="15"
-                    />
-                    <line
-                      x1="17"
-                      y1="9"
-                      x2="23"
-                      y2="15"
-                    />
+                    <line x1="23" y1="9" x2="17" y2="15" />
+                    <line x1="17" y1="9" x2="23" y2="15" />
                   </svg>
                   <svg
                     v-else-if="volume < 0.5"
@@ -267,11 +188,7 @@
                     <polygon points="11,5 6,9 2,9 2,15 6,15 11,19" />
                     <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
                   </svg>
-                  <svg
-                    v-else
-                    class="control-icon"
-                    viewBox="0 0 24 24"
-                  >
+                  <svg v-else class="control-icon" viewBox="0 0 24 24">
                     <polygon points="11,5 6,9 2,9 2,15 6,15 11,19" />
                     <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
                     <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
@@ -286,7 +203,7 @@
                   class="volume-slider"
                   :aria-label="'Volume: ' + Math.round(volume * 100) + '%'"
                   @input="handleVolumeChange"
-                >
+                />
               </div>
 
               <!-- Speed controls -->
@@ -306,35 +223,18 @@
                   "
                 >
                   <!-- @ts-expect-error: DOM typing -->
-                  <option value="0.1">
-                    0.1x
-                  </option>
-                  <option value="0.25">
-                    0.25x
-                  </option>
-                  <option value="0.5">
-                    0.5x
-                  </option>
-                  <option value="1">
-                    1x
-                  </option>
-                  <option value="1.25">
-                    1.25x
-                  </option>
-                  <option value="1.5">
-                    1.5x
-                  </option>
-                  <option value="2">
-                    2x
-                  </option>
+                  <option value="0.1">0.1x</option>
+                  <option value="0.25">0.25x</option>
+                  <option value="0.5">0.5x</option>
+                  <option value="1">1x</option>
+                  <option value="1.25">1.25x</option>
+                  <option value="1.5">1.5x</option>
+                  <option value="2">2x</option>
                 </select>
               </div>
 
               <!-- Pose detection controls -->
-              <div
-                v-if="poseLandmarker"
-                class="pose-controls"
-              >
+              <div v-if="poseLandmarker" class="pose-controls">
                 <button
                   class="control-button"
                   :class="{
@@ -346,8 +246,8 @@
                     poseLandmarker.isLoading.value
                       ? 'Loading pose detection...'
                       : poseLandmarker.isEnabled.value
-                        ? 'Disable pose visualization'
-                        : 'Enable pose visualization'
+                      ? 'Disable pose visualization'
+                      : 'Enable pose visualization'
                   "
                   :title="
                     poseLandmarker.isLoading.value
@@ -369,11 +269,7 @@
                     fill="none"
                     stroke="currentColor"
                   >
-                    <circle
-                      cx="12"
-                      cy="5"
-                      r="2"
-                    />
+                    <circle cx="12" cy="5" r="2" />
                     <path d="M12 7v5" />
                     <path d="M10 12h4" />
                     <path d="M8 17l2-5 2 5" />
@@ -419,11 +315,13 @@
                 <button
                   class="control-button"
                   :class="{
-                    'pose-active': cameraCalibration.isCalibrated.value,
-                    calibrated: cameraCalibration.isCalibrated.value,
+                    'pose-active':
+                      cameraCalibration.cameraParameters.position !== null,
+                    calibrated:
+                      cameraCalibration.cameraParameters.position !== null,
                   }"
                   :title="
-                    cameraCalibration.isCalibrated.value
+                    cameraCalibration.cameraParameters.position !== null
                       ? 'Camera calibrated - Click to recalibrate'
                       : 'Calibrate camera angle'
                   "
@@ -452,13 +350,15 @@
                     'pose-active':
                       showHeatmapMinimap || positionHeatmap.isTracking,
                   }"
-                  :disabled="!cameraCalibration.isCalibrated.value"
+                  :disabled="
+                    cameraCalibration.cameraParameters.position === null
+                  "
                   :title="
-                    !cameraCalibration.isCalibrated.value
+                    cameraCalibration.cameraParameters.position === null
                       ? 'Calibrate camera first to enable heatmap'
                       : positionHeatmap.isTracking.value
-                        ? 'Position tracking active - Click to toggle heatmap'
-                        : 'Start position tracking'
+                      ? 'Position tracking active - Click to toggle heatmap'
+                      : 'Start position tracking'
                   "
                   @click="toggleHeatmap"
                 >
@@ -530,51 +430,15 @@
                     fill="none"
                     stroke="currentColor"
                   >
-                    <circle
-                      cx="12"
-                      cy="12"
-                      r="3"
-                    />
-                    <circle
-                      cx="12"
-                      cy="5"
-                      r="1"
-                    />
-                    <circle
-                      cx="12"
-                      cy="19"
-                      r="1"
-                    />
-                    <circle
-                      cx="5"
-                      cy="12"
-                      r="1"
-                    />
-                    <circle
-                      cx="19"
-                      cy="12"
-                      r="1"
-                    />
-                    <circle
-                      cx="7.5"
-                      cy="7.5"
-                      r="1"
-                    />
-                    <circle
-                      cx="16.5"
-                      cy="7.5"
-                      r="1"
-                    />
-                    <circle
-                      cx="7.5"
-                      cy="16.5"
-                      r="1"
-                    />
-                    <circle
-                      cx="16.5"
-                      cy="16.5"
-                      r="1"
-                    />
+                    <circle cx="12" cy="12" r="3" />
+                    <circle cx="12" cy="5" r="1" />
+                    <circle cx="12" cy="19" r="1" />
+                    <circle cx="5" cy="12" r="1" />
+                    <circle cx="19" cy="12" r="1" />
+                    <circle cx="7.5" cy="7.5" r="1" />
+                    <circle cx="16.5" cy="7.5" r="1" />
+                    <circle cx="7.5" cy="16.5" r="1" />
+                    <circle cx="16.5" cy="16.5" r="1" />
                   </svg>
                 </button>
 
@@ -596,16 +460,11 @@
     </div>
 
     <!-- Dual Video Mode -->
-    <div
-      v-else-if="mode === 'dual'"
-      class="dual-video-container"
-    >
+    <div v-else-if="mode === 'dual'" class="dual-video-container">
       <div class="videos-grid">
         <!-- Video A -->
         <div class="video-section">
-          <div class="video-label">
-            Video A
-          </div>
+          <div class="video-label">Video A</div>
           <div class="video-wrapper">
             <!-- Loading indicator for Video A -->
             <div
@@ -613,9 +472,7 @@
               class="loading-overlay"
             >
               <div class="loading-spinner" />
-              <div class="loading-text">
-                Loading Video A...
-              </div>
+              <div class="loading-text">Loading Video A...</div>
             </div>
 
             <!-- Video A Element -->
@@ -645,7 +502,7 @@
               :severity="drawingCanvasA?.currentTool?.value?.severity"
               :current-color="
                 drawingCanvasA?.getCurrentColor?.value ||
-                  drawingCanvasA?.getCurrentColor?.()
+                drawingCanvasA?.getCurrentColor?.()
               "
               :existing-drawings="drawingCanvasA?.allDrawings?.value"
               :is-loading-drawings="drawingCanvasA?.isLoadingDrawings?.value"
@@ -662,10 +519,7 @@
             />
 
             <!-- Pose Detection Error Overlay for Video A -->
-            <div
-              v-if="poseDetectionErrorA"
-              class="pose-error-overlay"
-            >
+            <div v-if="poseDetectionErrorA" class="pose-error-overlay">
               <div class="pose-error-content">
                 <svg
                   class="pose-error-icon"
@@ -673,23 +527,9 @@
                   fill="none"
                   stroke="currentColor"
                 >
-                  <circle
-                    cx="12"
-                    cy="12"
-                    r="10"
-                  />
-                  <line
-                    x1="15"
-                    y1="9"
-                    x2="9"
-                    y2="15"
-                  />
-                  <line
-                    x1="9"
-                    y1="9"
-                    x2="15"
-                    y2="15"
-                  />
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="15" y1="9" x2="9" y2="15" />
+                  <line x1="9" y1="9" x2="15" y2="15" />
                 </svg>
                 <p class="pose-error-message">
                   {{ poseDetectionErrorA }}
@@ -760,9 +600,7 @@
 
         <!-- Video B -->
         <div class="video-section">
-          <div class="video-label">
-            Video B
-          </div>
+          <div class="video-label">Video B</div>
           <div class="video-wrapper">
             <!-- Loading indicator for Video B -->
             <div
@@ -770,9 +608,7 @@
               class="loading-overlay"
             >
               <div class="loading-spinner" />
-              <div class="loading-text">
-                Loading Video B...
-              </div>
+              <div class="loading-text">Loading Video B...</div>
             </div>
 
             <!-- Video B Element -->
@@ -802,7 +638,7 @@
               :severity="drawingCanvasB?.currentTool?.value?.severity"
               :current-color="
                 drawingCanvasB?.getCurrentColor?.value ||
-                  drawingCanvasB?.getCurrentColor?.()
+                drawingCanvasB?.getCurrentColor?.()
               "
               :existing-drawings="drawingCanvasB?.allDrawings?.value"
               :is-loading-drawings="drawingCanvasB?.isLoadingDrawings?.value"
@@ -819,10 +655,7 @@
             />
 
             <!-- Pose Detection Error Overlay for Video B -->
-            <div
-              v-if="poseDetectionErrorB"
-              class="pose-error-overlay"
-            >
+            <div v-if="poseDetectionErrorB" class="pose-error-overlay">
               <div class="pose-error-content">
                 <svg
                   class="pose-error-icon"
@@ -830,23 +663,9 @@
                   fill="none"
                   stroke="currentColor"
                 >
-                  <circle
-                    cx="12"
-                    cy="12"
-                    r="10"
-                  />
-                  <line
-                    x1="15"
-                    y1="9"
-                    x2="9"
-                    y2="15"
-                  />
-                  <line
-                    x1="9"
-                    y1="9"
-                    x2="15"
-                    y2="15"
-                  />
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="15" y1="9" x2="9" y2="15" />
+                  <line x1="9" y1="9" x2="15" y2="15" />
                 </svg>
                 <p class="pose-error-message">
                   {{ poseDetectionErrorB }}
@@ -925,12 +744,12 @@
             poseLandmarkerA.speedMetrics &&
             poseLandmarkerA.speedMetrics.value &&
             poseLandmarkerA.speedMetrics.value.isValid) ||
-            (videoBUrl &&
-              poseLandmarkerB &&
-              poseLandmarkerB.isEnabled.value &&
-              poseLandmarkerB.speedMetrics &&
-              poseLandmarkerB.speedMetrics.value &&
-              poseLandmarkerB.speedMetrics.value.isValid)
+          (videoBUrl &&
+            poseLandmarkerB &&
+            poseLandmarkerB.isEnabled.value &&
+            poseLandmarkerB.speedMetrics &&
+            poseLandmarkerB.speedMetrics.value &&
+            poseLandmarkerB.speedMetrics.value.isValid)
         "
         class="dual-speed-panels"
       >
@@ -938,11 +757,11 @@
         <div
           v-if="
             videoAUrl &&
-              poseLandmarkerA &&
-              poseLandmarkerA.isEnabled.value &&
-              poseLandmarkerA.speedMetrics &&
-              poseLandmarkerA.speedMetrics.value &&
-              poseLandmarkerA.speedMetrics.value.isValid
+            poseLandmarkerA &&
+            poseLandmarkerA.isEnabled.value &&
+            poseLandmarkerA.speedMetrics &&
+            poseLandmarkerA.speedMetrics.value &&
+            poseLandmarkerA.speedMetrics.value.isValid
           "
           class="movement-speed-container"
         >
@@ -952,8 +771,8 @@
               <div
                 v-if="
                   poseLandmarkerA?.speedMetrics &&
-                    poseLandmarkerA.speedMetrics.value &&
-                    poseLandmarkerA.speedMetrics.value.isValid
+                  poseLandmarkerA.speedMetrics.value &&
+                  poseLandmarkerA.speedMetrics.value.isValid
                 "
                 class="speed-panel-container-dual"
               >
@@ -967,9 +786,7 @@
                 <div class="grid grid-cols-2 gap-1 mb-1">
                   <!-- Overall Speed -->
                   <div class="mini-card">
-                    <div class="mini-label">
-                      Overall
-                    </div>
+                    <div class="mini-label">Overall</div>
                     <div
                       class="mini-value"
                       :class="
@@ -1002,9 +819,7 @@
 
                   <!-- Horizontal Speed -->
                   <div class="mini-card">
-                    <div class="mini-label">
-                      Horizontal
-                    </div>
+                    <div class="mini-label">Horizontal</div>
                     <div class="mini-value text-gray-700">
                       {{
                         poseLandmarkerA.speedMetrics.value.generalMovingSpeed?.toFixed(
@@ -1016,9 +831,7 @@
 
                   <!-- Right Foot Speed -->
                   <div class="mini-card">
-                    <div class="mini-label">
-                      Right Foot
-                    </div>
+                    <div class="mini-label">Right Foot</div>
                     <div class="mini-value text-gray-600">
                       {{
                         poseLandmarkerA.speedMetrics.value.rightFootSpeed?.toFixed(
@@ -1030,9 +843,7 @@
 
                   <!-- CoM Height -->
                   <div class="mini-card">
-                    <div class="mini-label">
-                      CoM Height
-                    </div>
+                    <div class="mini-label">CoM Height</div>
                     <div class="mini-value text-gray-700">
                       {{
                         poseLandmarkerA.speedMetrics.value.centerOfGravityHeight?.toFixed(
@@ -1047,54 +858,27 @@
                 <div class="grid grid-cols-2 gap-1 mt-2">
                   <!-- Duration Control -->
                   <div class="mini-card">
-                    <div class="mini-label">
-                      Duration
-                    </div>
-                    <select
-                      v-model="chartDurationA"
-                      class="mini-select"
-                    >
-                      <option :value="10">
-                        10s
-                      </option>
-                      <option :value="30">
-                        30s
-                      </option>
-                      <option :value="60">
-                        1min
-                      </option>
-                      <option :value="120">
-                        2min
-                      </option>
+                    <div class="mini-label">Duration</div>
+                    <select v-model="chartDurationA" class="mini-select">
+                      <option :value="10">10s</option>
+                      <option :value="30">30s</option>
+                      <option :value="60">1min</option>
+                      <option :value="120">2min</option>
                     </select>
                   </div>
 
                   <!-- Max Speed Control -->
                   <div class="mini-card">
-                    <div class="mini-label">
-                      Max Speed
-                    </div>
-                    <select
-                      v-model="maxSpeedScaleA"
-                      class="mini-select"
-                    >
-                      <option :value="1">
-                        1 m/s
-                      </option>
-                      <option :value="2">
-                        2 m/s
-                      </option>
-                      <option :value="5">
-                        5 m/s
-                      </option>
+                    <div class="mini-label">Max Speed</div>
+                    <select v-model="maxSpeedScaleA" class="mini-select">
+                      <option :value="1">1 m/s</option>
+                      <option :value="2">2 m/s</option>
+                      <option :value="5">5 m/s</option>
                     </select>
                   </div>
                 </div>
               </div>
-              <div
-                v-else
-                class="speed-panel-container-dual"
-              >
+              <div v-else class="speed-panel-container-dual">
                 <h3
                   class="text-sm font-semibold mb-1 text-center text-gray-800"
                 >
@@ -1108,46 +892,22 @@
                 <div class="grid grid-cols-2 gap-1">
                   <!-- Duration Control -->
                   <div class="mini-card">
-                    <div class="mini-label">
-                      Duration
-                    </div>
-                    <select
-                      v-model="chartDurationA"
-                      class="mini-select"
-                    >
-                      <option :value="10">
-                        10s
-                      </option>
-                      <option :value="30">
-                        30s
-                      </option>
-                      <option :value="60">
-                        1min
-                      </option>
-                      <option :value="120">
-                        2min
-                      </option>
+                    <div class="mini-label">Duration</div>
+                    <select v-model="chartDurationA" class="mini-select">
+                      <option :value="10">10s</option>
+                      <option :value="30">30s</option>
+                      <option :value="60">1min</option>
+                      <option :value="120">2min</option>
                     </select>
                   </div>
 
                   <!-- Max Speed Control -->
                   <div class="mini-card">
-                    <div class="mini-label">
-                      Max Speed
-                    </div>
-                    <select
-                      v-model="maxSpeedScaleA"
-                      class="mini-select"
-                    >
-                      <option :value="1">
-                        1 m/s
-                      </option>
-                      <option :value="2">
-                        2 m/s
-                      </option>
-                      <option :value="5">
-                        5 m/s
-                      </option>
+                    <div class="mini-label">Max Speed</div>
+                    <select v-model="maxSpeedScaleA" class="mini-select">
+                      <option :value="1">1 m/s</option>
+                      <option :value="2">2 m/s</option>
+                      <option :value="5">5 m/s</option>
                     </select>
                   </div>
                 </div>
@@ -1159,8 +919,8 @@
               <SpeedChart
                 v-if="
                   poseLandmarkerA?.speedMetrics &&
-                    poseLandmarkerA.speedMetrics.value &&
-                    poseLandmarkerA.speedMetrics.value.isValid
+                  poseLandmarkerA.speedMetrics.value &&
+                  poseLandmarkerA.speedMetrics.value.isValid
                 "
                 :speed-metrics="poseLandmarkerA.speedMetrics.value"
                 :timestamp="currentTime"
@@ -1178,11 +938,11 @@
         <div
           v-if="
             videoBUrl &&
-              poseLandmarkerB &&
-              poseLandmarkerB.isEnabled.value &&
-              poseLandmarkerB.speedMetrics &&
-              poseLandmarkerB.speedMetrics.value &&
-              poseLandmarkerB.speedMetrics.value.isValid
+            poseLandmarkerB &&
+            poseLandmarkerB.isEnabled.value &&
+            poseLandmarkerB.speedMetrics &&
+            poseLandmarkerB.speedMetrics.value &&
+            poseLandmarkerB.speedMetrics.value.isValid
           "
           class="movement-speed-container"
         >
@@ -1192,8 +952,8 @@
               <div
                 v-if="
                   poseLandmarkerB?.speedMetrics &&
-                    poseLandmarkerB.speedMetrics.value &&
-                    poseLandmarkerB.speedMetrics.value.isValid
+                  poseLandmarkerB.speedMetrics.value &&
+                  poseLandmarkerB.speedMetrics.value.isValid
                 "
                 class="speed-panel-container-dual"
               >
@@ -1207,9 +967,7 @@
                 <div class="grid grid-cols-2 gap-1 mb-1">
                   <!-- Overall Speed -->
                   <div class="mini-card">
-                    <div class="mini-label">
-                      Overall
-                    </div>
+                    <div class="mini-label">Overall</div>
                     <div
                       class="mini-value"
                       :class="
@@ -1242,9 +1000,7 @@
 
                   <!-- Horizontal Speed -->
                   <div class="mini-card">
-                    <div class="mini-label">
-                      Horizontal
-                    </div>
+                    <div class="mini-label">Horizontal</div>
                     <div class="mini-value text-gray-700">
                       {{
                         poseLandmarkerB.speedMetrics.value.generalMovingSpeed?.toFixed(
@@ -1256,9 +1012,7 @@
 
                   <!-- Right Foot Speed -->
                   <div class="mini-card">
-                    <div class="mini-label">
-                      Right Foot
-                    </div>
+                    <div class="mini-label">Right Foot</div>
                     <div class="mini-value text-gray-600">
                       {{
                         poseLandmarkerB.speedMetrics.value.rightFootSpeed?.toFixed(
@@ -1270,9 +1024,7 @@
 
                   <!-- CoM Height -->
                   <div class="mini-card">
-                    <div class="mini-label">
-                      CoM Height
-                    </div>
+                    <div class="mini-label">CoM Height</div>
                     <div class="mini-value text-gray-700">
                       {{
                         poseLandmarkerB.speedMetrics.value.centerOfGravityHeight?.toFixed(
@@ -1287,54 +1039,27 @@
                 <div class="grid grid-cols-2 gap-1 mt-2">
                   <!-- Duration Control -->
                   <div class="mini-card">
-                    <div class="mini-label">
-                      Duration
-                    </div>
-                    <select
-                      v-model="chartDurationB"
-                      class="mini-select"
-                    >
-                      <option :value="10">
-                        10s
-                      </option>
-                      <option :value="30">
-                        30s
-                      </option>
-                      <option :value="60">
-                        1min
-                      </option>
-                      <option :value="120">
-                        2min
-                      </option>
+                    <div class="mini-label">Duration</div>
+                    <select v-model="chartDurationB" class="mini-select">
+                      <option :value="10">10s</option>
+                      <option :value="30">30s</option>
+                      <option :value="60">1min</option>
+                      <option :value="120">2min</option>
                     </select>
                   </div>
 
                   <!-- Max Speed Control -->
                   <div class="mini-card">
-                    <div class="mini-label">
-                      Max Speed
-                    </div>
-                    <select
-                      v-model="maxSpeedScaleB"
-                      class="mini-select"
-                    >
-                      <option :value="1">
-                        1 m/s
-                      </option>
-                      <option :value="2">
-                        2 m/s
-                      </option>
-                      <option :value="5">
-                        5 m/s
-                      </option>
+                    <div class="mini-label">Max Speed</div>
+                    <select v-model="maxSpeedScaleB" class="mini-select">
+                      <option :value="1">1 m/s</option>
+                      <option :value="2">2 m/s</option>
+                      <option :value="5">5 m/s</option>
                     </select>
                   </div>
                 </div>
               </div>
-              <div
-                v-else
-                class="speed-panel-container-dual"
-              >
+              <div v-else class="speed-panel-container-dual">
                 <h3
                   class="text-sm font-semibold mb-1 text-center text-gray-800"
                 >
@@ -1348,46 +1073,22 @@
                 <div class="grid grid-cols-2 gap-1">
                   <!-- Duration Control -->
                   <div class="mini-card">
-                    <div class="mini-label">
-                      Duration
-                    </div>
-                    <select
-                      v-model="chartDurationB"
-                      class="mini-select"
-                    >
-                      <option :value="10">
-                        10s
-                      </option>
-                      <option :value="30">
-                        30s
-                      </option>
-                      <option :value="60">
-                        1min
-                      </option>
-                      <option :value="120">
-                        2min
-                      </option>
+                    <div class="mini-label">Duration</div>
+                    <select v-model="chartDurationB" class="mini-select">
+                      <option :value="10">10s</option>
+                      <option :value="30">30s</option>
+                      <option :value="60">1min</option>
+                      <option :value="120">2min</option>
                     </select>
                   </div>
 
                   <!-- Max Speed Control -->
                   <div class="mini-card">
-                    <div class="mini-label">
-                      Max Speed
-                    </div>
-                    <select
-                      v-model="maxSpeedScaleB"
-                      class="mini-select"
-                    >
-                      <option :value="1">
-                        1 m/s
-                      </option>
-                      <option :value="2">
-                        2 m/s
-                      </option>
-                      <option :value="5">
-                        5 m/s
-                      </option>
+                    <div class="mini-label">Max Speed</div>
+                    <select v-model="maxSpeedScaleB" class="mini-select">
+                      <option :value="1">1 m/s</option>
+                      <option :value="2">2 m/s</option>
+                      <option :value="5">5 m/s</option>
                     </select>
                   </div>
                 </div>
@@ -1399,8 +1100,8 @@
               <SpeedChart
                 v-if="
                   poseLandmarkerB?.speedMetrics &&
-                    poseLandmarkerB.speedMetrics.value &&
-                    poseLandmarkerB.speedMetrics.value.isValid
+                  poseLandmarkerB.speedMetrics.value &&
+                  poseLandmarkerB.speedMetrics.value.isValid
                 "
                 :speed-metrics="poseLandmarkerB.speedMetrics.value"
                 :timestamp="currentTime"
@@ -1429,29 +1130,11 @@
             :aria-label="isPlaying ? 'Pause both videos' : 'Play both videos'"
             @click="toggleDualPlayPause"
           >
-            <svg
-              v-if="isPlaying"
-              class="control-icon"
-              viewBox="0 0 24 24"
-            >
-              <rect
-                x="6"
-                y="4"
-                width="4"
-                height="16"
-              />
-              <rect
-                x="14"
-                y="4"
-                width="4"
-                height="16"
-              />
+            <svg v-if="isPlaying" class="control-icon" viewBox="0 0 24 24">
+              <rect x="6" y="4" width="4" height="16" />
+              <rect x="14" y="4" width="4" height="16" />
             </svg>
-            <svg
-              v-else
-              class="control-icon"
-              viewBox="0 0 24 24"
-            >
+            <svg v-else class="control-icon" viewBox="0 0 24 24">
               <polygon points="5,3 19,12 5,21" />
             </svg>
           </button>
@@ -1463,24 +1146,10 @@
               :aria-label="isMuted ? 'Unmute' : 'Mute'"
               @click="toggleMute"
             >
-              <svg
-                v-if="isMuted"
-                class="control-icon"
-                viewBox="0 0 24 24"
-              >
+              <svg v-if="isMuted" class="control-icon" viewBox="0 0 24 24">
                 <polygon points="11,5 6,9 2,9 2,15 6,15 11,19" />
-                <line
-                  x1="23"
-                  y1="9"
-                  x2="17"
-                  y2="15"
-                />
-                <line
-                  x1="17"
-                  y1="9"
-                  x2="23"
-                  y2="15"
-                />
+                <line x1="23" y1="9" x2="17" y2="15" />
+                <line x1="17" y1="9" x2="23" y2="15" />
               </svg>
               <svg
                 v-else-if="volume < 0.5"
@@ -1490,11 +1159,7 @@
                 <polygon points="11,5 6,9 2,9 2,15 6,15 11,19" />
                 <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
               </svg>
-              <svg
-                v-else
-                class="control-icon"
-                viewBox="0 0 24 24"
-              >
+              <svg v-else class="control-icon" viewBox="0 0 24 24">
                 <polygon points="11,5 6,9 2,9 2,15 6,15 11,19" />
                 <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
                 <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
@@ -1509,7 +1174,7 @@
               class="volume-slider"
               :aria-label="'Volume: ' + Math.round(volume * 100) + '%'"
               @input="handleVolumeChange"
-            >
+            />
           </div>
 
           <!-- Speed controls -->
@@ -1528,40 +1193,20 @@
                 )
               "
             >
-              <option value="0.1">
-                0.1x
-              </option>
-              <option value="0.25">
-                0.25x
-              </option>
-              <option value="0.5">
-                0.5x
-              </option>
-              <option value="1">
-                1x
-              </option>
-              <option value="1.25">
-                1.25x
-              </option>
-              <option value="1.5">
-                1.5x
-              </option>
-              <option value="2">
-                2x
-              </option>
+              <option value="0.1">0.1x</option>
+              <option value="0.25">0.25x</option>
+              <option value="0.5">0.5x</option>
+              <option value="1">1x</option>
+              <option value="1.25">1.25x</option>
+              <option value="1.5">1.5x</option>
+              <option value="2">2x</option>
             </select>
           </div>
 
           <!-- Pose detection controls for dual video -->
-          <div
-            v-if="poseLandmarkerA || poseLandmarkerB"
-            class="pose-controls"
-          >
+          <div v-if="poseLandmarkerA || poseLandmarkerB" class="pose-controls">
             <!-- Video A Pose Detection -->
-            <div
-              v-if="poseLandmarkerA"
-              class="pose-control-group"
-            >
+            <div v-if="poseLandmarkerA" class="pose-control-group">
               <span class="pose-label">A:</span>
               <button
                 class="control-button"
@@ -1574,8 +1219,8 @@
                   poseLandmarkerA.isLoading.value
                     ? 'Loading pose detection for Video A...'
                     : poseLandmarkerA.isEnabled.value
-                      ? 'Disable pose visualization for Video A'
-                      : 'Enable pose visualization for Video A'
+                    ? 'Disable pose visualization for Video A'
+                    : 'Enable pose visualization for Video A'
                 "
                 :title="
                   poseLandmarkerA.isLoading.value
@@ -1597,11 +1242,7 @@
                   fill="none"
                   stroke="currentColor"
                 >
-                  <circle
-                    cx="12"
-                    cy="5"
-                    r="2"
-                  />
+                  <circle cx="12" cy="5" r="2" />
                   <path d="M12 7v5" />
                   <path d="M10 12h4" />
                   <path d="M8 17l2-5 2 5" />
@@ -1611,10 +1252,7 @@
             </div>
 
             <!-- Video B Pose Detection -->
-            <div
-              v-if="poseLandmarkerB"
-              class="pose-control-group"
-            >
+            <div v-if="poseLandmarkerB" class="pose-control-group">
               <span class="pose-label">B:</span>
               <button
                 class="control-button"
@@ -1627,8 +1265,8 @@
                   poseLandmarkerB.isLoading.value
                     ? 'Loading pose detection for Video B...'
                     : poseLandmarkerB.isEnabled.value
-                      ? 'Disable pose visualization for Video B'
-                      : 'Enable pose visualization for Video B'
+                    ? 'Disable pose visualization for Video B'
+                    : 'Enable pose visualization for Video B'
                 "
                 :title="
                   poseLandmarkerB.isLoading.value
@@ -1650,11 +1288,7 @@
                   fill="none"
                   stroke="currentColor"
                 >
-                  <circle
-                    cx="12"
-                    cy="5"
-                    r="2"
-                  />
+                  <circle cx="12" cy="5" r="2" />
                   <path d="M12 7v5" />
                   <path d="M10 12h4" />
                   <path d="M8 17l2-5 2 5" />
@@ -1667,7 +1301,7 @@
             <div
               v-if="
                 poseLandmarkerA?.isEnabled.value ||
-                  poseLandmarkerB?.isEnabled.value
+                poseLandmarkerB?.isEnabled.value
               "
               class="roi-controls"
             >
@@ -1708,7 +1342,7 @@
             <div
               v-if="
                 poseLandmarkerA?.isEnabled.value ||
-                  poseLandmarkerB?.isEnabled.value
+                poseLandmarkerB?.isEnabled.value
               "
               class="shared-pose-controls"
             >
@@ -1734,18 +1368,8 @@
                     d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
                   />
                   <polyline points="14,2 14,8 20,8" />
-                  <line
-                    x1="16"
-                    y1="13"
-                    x2="8"
-                    y2="13"
-                  />
-                  <line
-                    x1="16"
-                    y1="17"
-                    x2="8"
-                    y2="17"
-                  />
+                  <line x1="16" y1="13" x2="8" y2="13" />
+                  <line x1="16" y1="17" x2="8" y2="17" />
                   <polyline points="10,9 9,9 8,9" />
                 </svg>
               </button>
@@ -1765,51 +1389,15 @@
                   fill="none"
                   stroke="currentColor"
                 >
-                  <circle
-                    cx="12"
-                    cy="12"
-                    r="3"
-                  />
-                  <circle
-                    cx="12"
-                    cy="5"
-                    r="1"
-                  />
-                  <circle
-                    cx="12"
-                    cy="19"
-                    r="1"
-                  />
-                  <circle
-                    cx="5"
-                    cy="12"
-                    r="1"
-                  />
-                  <circle
-                    cx="19"
-                    cy="12"
-                    r="1"
-                  />
-                  <circle
-                    cx="7.5"
-                    cy="7.5"
-                    r="1"
-                  />
-                  <circle
-                    cx="16.5"
-                    cy="7.5"
-                    r="1"
-                  />
-                  <circle
-                    cx="7.5"
-                    cy="16.5"
-                    r="1"
-                  />
-                  <circle
-                    cx="16.5"
-                    cy="16.5"
-                    r="1"
-                  />
+                  <circle cx="12" cy="12" r="3" />
+                  <circle cx="12" cy="5" r="1" />
+                  <circle cx="12" cy="19" r="1" />
+                  <circle cx="5" cy="12" r="1" />
+                  <circle cx="19" cy="12" r="1" />
+                  <circle cx="7.5" cy="7.5" r="1" />
+                  <circle cx="16.5" cy="7.5" r="1" />
+                  <circle cx="7.5" cy="16.5" r="1" />
+                  <circle cx="16.5" cy="16.5" r="1" />
                 </svg>
               </button>
             </div>
@@ -1829,14 +1417,7 @@
 </template>
 
 <script setup lang="ts">
-import {
-  ref,
-  onMounted,
-  onUnmounted,
-  watch,
-  nextTick,
-  reactive,
-} from 'vue';
+import { ref, onMounted, onUnmounted, watch, nextTick, reactive } from 'vue';
 import DrawingCanvas from './DrawingCanvas.vue';
 import PoseVisualization from './PoseVisualization.vue';
 import SpeedVisualization from './SpeedVisualization.vue';
@@ -1993,6 +1574,7 @@ const {
 
 // Template refs
 const singleVideoElement = ref<HTMLVideoElement | null>(null);
+const singleVideoContainer = ref<HTMLElement | null>(null);
 const videoAElement = ref<HTMLVideoElement | null>(null);
 const videoBElement = ref<HTMLVideoElement | null>(null);
 const singleDrawingCanvasRef = ref<any | null>(null);
@@ -2153,7 +1735,7 @@ const processPoseDetection = async (
     if (poseData) {
       // Track position if camera is calibrated and heatmap tracking is enabled
       if (
-        cameraCalibration.isCalibrated.value &&
+        cameraCalibration.cameraParameters.position !== null &&
         positionHeatmap.isTracking.value &&
         poseData.landmarks?.length > 0
       ) {
@@ -2170,7 +1752,9 @@ const processPoseDetection = async (
           };
 
           // Transform to world coordinates using camera calibration
-          const worldPos = cameraCalibration.transformToWorld(hipCenter, 0);
+          // TODO: Implement transformToWorld method in useCameraCalibration composable
+          // const worldPos = cameraCalibration.transformToWorld(hipCenter, 0);
+          const worldPos = { x: hipCenter.x, y: hipCenter.y, z: 0 }; // Temporary fallback
 
           // Add position sample to heatmap tracker
           positionHeatmap.addPositionSample(
@@ -2931,19 +2515,19 @@ const openKeypointSelector = () => {
 // Camera calibration methods moved to App.vue level
 // Expose calibration state for other components
 const getCalibrationState = () => ({
-  isCalibrated: cameraCalibration.isCalibrated.value,
+  isCalibrated: cameraCalibration.cameraParameters.position !== null,
   calibrationError: cameraCalibration.calibrationError.value,
 });
 
 // Heatmap tracking methods
 const toggleHeatmap = () => {
   console.log('🗺️ [Heatmap] Toggle clicked', {
-    isCalibrated: cameraCalibration.isCalibrated.value,
+    isCalibrated: cameraCalibration.cameraParameters.position !== null,
     isTracking: positionHeatmap.isTracking.value,
     showMinimap: showHeatmapMinimap.value,
   });
 
-  if (!cameraCalibration.isCalibrated.value) {
+  if (cameraCalibration.cameraParameters.position === null) {
     console.warn(
       '🗺️ [Heatmap] Camera must be calibrated before using heatmap tracking'
     );
@@ -3487,6 +3071,13 @@ defineExpose({
     }
     // For dual mode, return the active video element based on context
     return singleVideoElement.value; // Default fallback
+  },
+  getCurrentVideoContainer: () => {
+    if (props.mode === 'single') {
+      return singleVideoContainer.value;
+    }
+    // For dual mode, return the container for the active video
+    return singleVideoContainer.value; // Default fallback
   },
 });
 </script>

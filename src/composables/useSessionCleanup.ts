@@ -282,7 +282,10 @@ export function useSessionCleanup() {
         console.log('🧹 [SessionCleanup] Cleaning up annotations...');
         try {
           if (Array.isArray(options.annotations.value)) {
-            options.annotations.value = [];
+            options.annotations.value.splice(
+              0,
+              options.annotations.value.length
+            );
           }
         } catch (error) {
           console.error(
@@ -653,7 +656,13 @@ export function useSessionCleanup() {
 
       // Clear annotations and selected annotation
       if (options.annotations && Array.isArray(options.annotations.value)) {
-        options.annotations.value = [];
+        // Check if the array is readonly and handle accordingly
+        try {
+          options.annotations.value.splice(0, options.annotations.value.length);
+        } catch (error) {
+          // If it's readonly, we can't modify it directly
+          console.warn('Cannot clear readonly annotations array:', error);
+        }
       }
       if (options.selectedAnnotation) {
         options.selectedAnnotation.value = null;

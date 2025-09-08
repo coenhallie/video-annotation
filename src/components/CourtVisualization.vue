@@ -5,411 +5,494 @@
     xmlns="http://www.w3.org/2000/svg"
   >
     <!-- Background -->
-    <rect
-      :width="svgWidth"
-      :height="svgHeight"
-      fill="#f3f4f6"
-      stroke="none"
-    />
+    <rect :width="svgWidth" :height="svgHeight" fill="#f3f4f6" stroke="none" />
 
-    <!-- Court surface -->
-    <rect
-      :x="courtBounds.x"
-      :y="courtBounds.y"
-      :width="courtBounds.width"
-      :height="courtBounds.height"
-      :fill="courtColor"
-      stroke="none"
-      :opacity="isVisible ? 1 : 0.3"
-    />
-
-    <!-- Court lines based on calibration mode -->
-    <g v-if="calibrationMode === 'full-court'">
-      <!-- Full court lines -->
-      <!-- Singles court boundary -->
+    <!-- Apply rotation transform based on camera position -->
+    <g :transform="courtTransform">
+      <!-- Court surface -->
       <rect
-        :x="courtX"
-        :y="courtY"
-        :width="courtWidth"
-        :height="courtLength"
-        fill="none"
-        :stroke="lineColor"
-        :stroke-width="lineWidth"
-        :opacity="lineOpacity"
+        :x="courtBounds.x"
+        :y="courtBounds.y"
+        :width="courtBounds.width"
+        :height="courtBounds.height"
+        :fill="courtColor"
+        stroke="none"
+        :opacity="isVisible ? 1 : 0.3"
       />
 
-      <!-- Net line -->
-      <line
-        :x1="courtX - netExtension"
-        :y1="centerY"
-        :x2="courtX + courtWidth + netExtension"
-        :y2="centerY"
-        :stroke="netColor"
-        :stroke-width="netWidth"
-        :opacity="lineOpacity"
-      />
+      <!-- Unified 3-line calibration mode -->
+      <g v-if="calibrationMode === 'unified-3-line'">
+        <!-- Only show the three reference lines -->
 
-      <!-- Service lines -->
-      <line
-        :x1="courtX"
-        :y1="centerY - serviceLineDistance"
-        :x2="courtX + courtWidth"
-        :y2="centerY - serviceLineDistance"
-        :stroke="lineColor"
-        :stroke-width="lineWidth"
-        :opacity="lineOpacity"
-      />
-      <line
-        :x1="courtX"
-        :y1="centerY + serviceLineDistance"
-        :x2="courtX + courtWidth"
-        :y2="centerY + serviceLineDistance"
-        :stroke="lineColor"
-        :stroke-width="lineWidth"
-        :opacity="lineOpacity"
-      />
-
-      <!-- Center service line -->
-      <line
-        :x1="centerX"
-        :y1="centerY - serviceLineDistance"
-        :x2="centerX"
-        :y2="centerY + serviceLineDistance"
-        :stroke="lineColor"
-        :stroke-width="lineWidth"
-        :opacity="lineOpacity"
-      />
-
-      <!-- Baseline center marks (tennis) -->
-      <line
-        v-if="courtType === 'tennis'"
-        :x1="centerX"
-        :y1="courtY"
-        :x2="centerX"
-        :y2="courtY - 10"
-        :stroke="lineColor"
-        :stroke-width="lineWidth"
-        :opacity="lineOpacity"
-      />
-      <line
-        v-if="courtType === 'tennis'"
-        :x1="centerX"
-        :y1="courtY + courtLength"
-        :x2="centerX"
-        :y2="courtY + courtLength + 10"
-        :stroke="lineColor"
-        :stroke-width="lineWidth"
-        :opacity="lineOpacity"
-      />
-    </g>
-
-    <g v-else-if="calibrationMode === 'half-court'">
-      <!-- Half court visualization -->
-      <!-- Singles court boundary (half) -->
-      <rect
-        :x="courtX"
-        :y="centerY"
-        :width="courtWidth"
-        :height="courtLength / 2"
-        fill="none"
-        :stroke="lineColor"
-        :stroke-width="lineWidth"
-        :opacity="lineOpacity"
-      />
-
-      <!-- Net line -->
-      <line
-        :x1="courtX - netExtension"
-        :y1="centerY"
-        :x2="courtX + courtWidth + netExtension"
-        :y2="centerY"
-        :stroke="netColor"
-        :stroke-width="netWidth"
-        :opacity="lineOpacity"
-      />
-
-      <!-- Service line (visible half) -->
-      <line
-        :x1="courtX"
-        :y1="centerY + serviceLineDistance"
-        :x2="courtX + courtWidth"
-        :y2="centerY + serviceLineDistance"
-        :stroke="lineColor"
-        :stroke-width="lineWidth"
-        :opacity="lineOpacity"
-      />
-
-      <!-- Center service line (visible half) -->
-      <line
-        :x1="centerX"
-        :y1="centerY"
-        :x2="centerX"
-        :y2="centerY + serviceLineDistance"
-        :stroke="lineColor"
-        :stroke-width="lineWidth"
-        :opacity="lineOpacity"
-      />
-
-      <!-- Faded other half indication -->
-      <rect
-        :x="courtX"
-        :y="courtY"
-        :width="courtWidth"
-        :height="courtLength / 2"
-        fill="none"
-        :stroke="lineColor"
-        :stroke-width="lineWidth"
-        :opacity="lineOpacity * 0.2"
-        stroke-dasharray="10,10"
-      />
-    </g>
-
-    <g
-      v-else-if="
-        calibrationMode === 'service-courts' || calibrationMode === 'minimal'
-      "
-    >
-      <!-- Service courts focus -->
-      <!-- Service boxes only -->
-      <rect
-        :x="courtX"
-        :y="centerY - serviceLineDistance"
-        :width="courtWidth / 2"
-        :height="serviceLineDistance * 2"
-        fill="none"
-        :stroke="lineColor"
-        :stroke-width="lineWidth"
-        :opacity="lineOpacity"
-      />
-      <rect
-        :x="centerX"
-        :y="centerY - serviceLineDistance"
-        :width="courtWidth / 2"
-        :height="serviceLineDistance * 2"
-        fill="none"
-        :stroke="lineColor"
-        :stroke-width="lineWidth"
-        :opacity="lineOpacity"
-      />
-
-      <!-- Net line -->
-      <line
-        :x1="courtX - netExtension"
-        :y1="centerY"
-        :x2="courtX + courtWidth + netExtension"
-        :y2="centerY"
-        :stroke="netColor"
-        :stroke-width="netWidth"
-        :opacity="lineOpacity"
-      />
-
-      <!-- Center line -->
-      <line
-        :x1="centerX"
-        :y1="centerY - serviceLineDistance"
-        :x2="centerX"
-        :y2="centerY + serviceLineDistance"
-        :stroke="lineColor"
-        :stroke-width="lineWidth"
-        :opacity="lineOpacity"
-      />
-
-      <!-- Baseline (faded, for optional points) -->
-      <line
-        :x1="courtX"
-        :y1="courtY + courtLength"
-        :x2="courtX + courtWidth"
-        :y2="courtY + courtLength"
-        :stroke="lineColor"
-        :stroke-width="lineWidth"
-        :opacity="lineOpacity * 0.3"
-        stroke-dasharray="5,5"
-      />
-
-      <!-- Faded court outline -->
-      <rect
-        :x="courtX"
-        :y="courtY"
-        :width="courtWidth"
-        :height="courtLength"
-        fill="none"
-        :stroke="lineColor"
-        :stroke-width="lineWidth"
-        :opacity="lineOpacity * 0.15"
-        stroke-dasharray="10,10"
-      />
-    </g>
-
-    <!-- Calibration points indicators -->
-    <g v-if="showCalibrationPoints">
-      <!-- Required calibration points based on mode -->
-      <g
-        v-for="point in requiredPoints"
-        :key="point.id"
-      >
-        <!-- Pulsing animation for next point -->
-        <g v-if="point.id === nextPoint && !point.collected">
-          <circle
-            :cx="point.x"
-            :cy="point.y"
-            :r="pointRadius * 2"
-            fill="none"
-            stroke="#3b82f6"
-            :stroke-width="2"
-            opacity="0.5"
-            class="pulse-ring"
-          />
-          <circle
-            :cx="point.x"
-            :cy="point.y"
-            :r="pointRadius * 1.5"
-            fill="none"
-            stroke="#3b82f6"
-            :stroke-width="2"
-            opacity="0.7"
-            class="pulse-ring-delayed"
-          />
-        </g>
-
-        <circle
-          :cx="point.x"
-          :cy="point.y"
-          :r="
-            point.id === nextPoint && !point.collected
-              ? pointRadius * 1.2
-              : pointRadius
-          "
-          :fill="
-            point.collected
-              ? '#10b981'
-              : point.id === nextPoint
-                ? '#3b82f6'
-                : '#ef4444'
-          "
-          :opacity="point.collected ? 0.8 : point.id === nextPoint ? 1 : 0.6"
-          stroke="white"
-          :stroke-width="point.id === nextPoint && !point.collected ? 3 : 2"
-          :class="{
-            'pulse-point': point.id === nextPoint && !point.collected,
-          }"
+        <!-- 1. Double Service Line (back service line for doubles) -->
+        <line
+          :x1="courtX"
+          :y1="doubleServiceY"
+          :x2="courtX + courtWidth"
+          :y2="doubleServiceY"
+          :stroke="getLineColor('double-service')"
+          :stroke-width="lineWidth * 1.5"
+          :opacity="lineOpacity"
+          stroke-dasharray="5,5"
+          class="reference-line"
         />
         <text
-          :x="point.x"
-          :y="point.y - pointRadius - 3"
-          :font-size="
-            point.id === nextPoint && !point.collected
-              ? fontSize * 1.1
-              : fontSize
-          "
-          :fill="
-            point.id === nextPoint && !point.collected ? '#3b82f6' : '#1f2937'
-          "
+          :x="courtX - 10"
+          :y="doubleServiceY"
+          fill="#3b82f6"
+          font-size="10"
+          text-anchor="end"
+          alignment-baseline="middle"
+        >
+          Double Service
+        </text>
+
+        <!-- 2. Center Line (dividing the court) -->
+        <line
+          :x1="centerX"
+          :y1="centerY - serviceLineDistance"
+          :x2="centerX"
+          :y2="centerY + serviceLineDistance"
+          :stroke="getLineColor('center')"
+          :stroke-width="lineWidth * 1.5"
+          :opacity="lineOpacity"
+          stroke-dasharray="5,5"
+          class="reference-line"
+        />
+        <text
+          :x="centerX"
+          :y="centerY - serviceLineDistance - 10"
+          fill="#10b981"
+          font-size="10"
+          text-anchor="middle"
+        >
+          Center
+        </text>
+
+        <!-- 3. Short Service Line (front service line) -->
+        <line
+          :x1="courtX"
+          :y1="shortServiceY"
+          :x2="courtX + courtWidth"
+          :y2="shortServiceY"
+          :stroke="getLineColor('short-service')"
+          :stroke-width="lineWidth * 1.5"
+          :opacity="lineOpacity"
+          stroke-dasharray="5,5"
+          class="reference-line"
+        />
+        <text
+          :x="courtX - 10"
+          :y="shortServiceY"
+          fill="#f59e0b"
+          font-size="10"
+          text-anchor="end"
+          alignment-baseline="middle"
+        >
+          Short Service
+        </text>
+
+        <!-- Net line for reference (not clickable) -->
+        <line
+          :x1="courtX - netExtension"
+          :y1="centerY"
+          :x2="courtX + courtWidth + netExtension"
+          :y2="centerY"
+          :stroke="netColor"
+          :stroke-width="netWidth"
+          :opacity="0.3"
+        />
+      </g>
+
+      <!-- Original full-court mode -->
+      <g v-else-if="calibrationMode === 'full-court'">
+        <!-- Full court lines -->
+        <!-- Singles court boundary -->
+        <rect
+          :x="courtX"
+          :y="courtY"
+          :width="courtWidth"
+          :height="courtLength"
+          fill="none"
+          :stroke="lineColor"
+          :stroke-width="lineWidth"
+          :opacity="lineOpacity"
+        />
+
+        <!-- Net line -->
+        <line
+          :x1="courtX - netExtension"
+          :y1="centerY"
+          :x2="courtX + courtWidth + netExtension"
+          :y2="centerY"
+          :stroke="netColor"
+          :stroke-width="netWidth"
+          :opacity="lineOpacity"
+        />
+
+        <!-- Service lines -->
+        <line
+          :x1="courtX"
+          :y1="centerY - serviceLineDistance"
+          :x2="courtX + courtWidth"
+          :y2="centerY - serviceLineDistance"
+          :stroke="lineColor"
+          :stroke-width="lineWidth"
+          :opacity="lineOpacity"
+        />
+        <line
+          :x1="courtX"
+          :y1="centerY + serviceLineDistance"
+          :x2="courtX + courtWidth"
+          :y2="centerY + serviceLineDistance"
+          :stroke="lineColor"
+          :stroke-width="lineWidth"
+          :opacity="lineOpacity"
+        />
+
+        <!-- Center service line -->
+        <line
+          :x1="centerX"
+          :y1="centerY - serviceLineDistance"
+          :x2="centerX"
+          :y2="centerY + serviceLineDistance"
+          :stroke="lineColor"
+          :stroke-width="lineWidth"
+          :opacity="lineOpacity"
+        />
+
+        <!-- Baseline center marks (tennis) -->
+        <line
+          v-if="courtType === 'tennis'"
+          :x1="centerX"
+          :y1="courtY"
+          :x2="centerX"
+          :y2="courtY - 10"
+          :stroke="lineColor"
+          :stroke-width="lineWidth"
+          :opacity="lineOpacity"
+        />
+        <line
+          v-if="courtType === 'tennis'"
+          :x1="centerX"
+          :y1="courtY + courtLength"
+          :x2="centerX"
+          :y2="courtY + courtLength + 10"
+          :stroke="lineColor"
+          :stroke-width="lineWidth"
+          :opacity="lineOpacity"
+        />
+      </g>
+
+      <g v-else-if="calibrationMode === 'half-court'">
+        <!-- Half court visualization -->
+        <!-- Singles court boundary (half) -->
+        <rect
+          :x="courtX"
+          :y="centerY"
+          :width="courtWidth"
+          :height="courtLength / 2"
+          fill="none"
+          :stroke="lineColor"
+          :stroke-width="lineWidth"
+          :opacity="lineOpacity"
+        />
+
+        <!-- Net line -->
+        <line
+          :x1="courtX - netExtension"
+          :y1="centerY"
+          :x2="courtX + courtWidth + netExtension"
+          :y2="centerY"
+          :stroke="netColor"
+          :stroke-width="netWidth"
+          :opacity="lineOpacity"
+        />
+
+        <!-- Service line (visible half) -->
+        <line
+          :x1="courtX"
+          :y1="centerY + serviceLineDistance"
+          :x2="courtX + courtWidth"
+          :y2="centerY + serviceLineDistance"
+          :stroke="lineColor"
+          :stroke-width="lineWidth"
+          :opacity="lineOpacity"
+        />
+
+        <!-- Center service line (visible half) -->
+        <line
+          :x1="centerX"
+          :y1="centerY"
+          :x2="centerX"
+          :y2="centerY + serviceLineDistance"
+          :stroke="lineColor"
+          :stroke-width="lineWidth"
+          :opacity="lineOpacity"
+        />
+
+        <!-- Faded other half indication -->
+        <rect
+          :x="courtX"
+          :y="courtY"
+          :width="courtWidth"
+          :height="courtLength / 2"
+          fill="none"
+          :stroke="lineColor"
+          :stroke-width="lineWidth"
+          :opacity="lineOpacity * 0.2"
+          stroke-dasharray="10,10"
+        />
+      </g>
+
+      <g
+        v-else-if="
+          calibrationMode === 'service-courts' || calibrationMode === 'minimal'
+        "
+      >
+        <!-- Service courts focus -->
+        <!-- Service boxes only -->
+        <rect
+          :x="courtX"
+          :y="centerY - serviceLineDistance"
+          :width="courtWidth / 2"
+          :height="serviceLineDistance * 2"
+          fill="none"
+          :stroke="lineColor"
+          :stroke-width="lineWidth"
+          :opacity="lineOpacity"
+        />
+        <rect
+          :x="centerX"
+          :y="centerY - serviceLineDistance"
+          :width="courtWidth / 2"
+          :height="serviceLineDistance * 2"
+          fill="none"
+          :stroke="lineColor"
+          :stroke-width="lineWidth"
+          :opacity="lineOpacity"
+        />
+
+        <!-- Net line -->
+        <line
+          :x1="courtX - netExtension"
+          :y1="centerY"
+          :x2="courtX + courtWidth + netExtension"
+          :y2="centerY"
+          :stroke="netColor"
+          :stroke-width="netWidth"
+          :opacity="lineOpacity"
+        />
+
+        <!-- Center line -->
+        <line
+          :x1="centerX"
+          :y1="centerY - serviceLineDistance"
+          :x2="centerX"
+          :y2="centerY + serviceLineDistance"
+          :stroke="lineColor"
+          :stroke-width="lineWidth"
+          :opacity="lineOpacity"
+        />
+
+        <!-- Baseline (faded, for optional points) -->
+        <line
+          :x1="courtX"
+          :y1="courtY + courtLength"
+          :x2="courtX + courtWidth"
+          :y2="courtY + courtLength"
+          :stroke="lineColor"
+          :stroke-width="lineWidth"
+          :opacity="lineOpacity * 0.3"
+          stroke-dasharray="5,5"
+        />
+
+        <!-- Faded court outline -->
+        <rect
+          :x="courtX"
+          :y="courtY"
+          :width="courtWidth"
+          :height="courtLength"
+          fill="none"
+          :stroke="lineColor"
+          :stroke-width="lineWidth"
+          :opacity="lineOpacity * 0.15"
+          stroke-dasharray="10,10"
+        />
+      </g>
+
+      <!-- Calibration points indicators -->
+      <g v-if="showCalibrationPoints">
+        <!-- Required calibration points based on mode -->
+        <g v-for="point in requiredPoints" :key="point.id">
+          <!-- Pulsing animation for next point -->
+          <g v-if="point.id === nextPoint && !point.collected">
+            <circle
+              :cx="point.x"
+              :cy="point.y"
+              :r="pointRadius * 2"
+              fill="none"
+              stroke="#3b82f6"
+              :stroke-width="2"
+              opacity="0.5"
+              class="pulse-ring"
+            />
+            <circle
+              :cx="point.x"
+              :cy="point.y"
+              :r="pointRadius * 1.5"
+              fill="none"
+              stroke="#3b82f6"
+              :stroke-width="2"
+              opacity="0.7"
+              class="pulse-ring-delayed"
+            />
+          </g>
+
+          <circle
+            :cx="point.x"
+            :cy="point.y"
+            :r="
+              point.id === nextPoint && !point.collected
+                ? pointRadius * 1.2
+                : pointRadius
+            "
+            :fill="
+              point.collected
+                ? '#10b981'
+                : point.id === nextPoint
+                ? '#3b82f6'
+                : '#ef4444'
+            "
+            :opacity="point.collected ? 0.8 : point.id === nextPoint ? 1 : 0.6"
+            stroke="white"
+            :stroke-width="point.id === nextPoint && !point.collected ? 3 : 2"
+            :class="{
+              'pulse-point': point.id === nextPoint && !point.collected,
+            }"
+          />
+          <text
+            :x="point.x"
+            :y="point.y - pointRadius - 3"
+            :font-size="
+              point.id === nextPoint && !point.collected
+                ? fontSize * 1.1
+                : fontSize
+            "
+            :fill="
+              point.id === nextPoint && !point.collected ? '#3b82f6' : '#1f2937'
+            "
+            text-anchor="middle"
+            font-weight="bold"
+          >
+            {{ point.label }}
+          </text>
+        </g>
+
+        <!-- Optional calibration points -->
+        <g v-for="point in optionalPoints" :key="point.id">
+          <!-- Pulsing animation for next optional point -->
+          <g v-if="point.id === nextPoint && !point.collected">
+            <circle
+              :cx="point.x"
+              :cy="point.y"
+              :r="pointRadius * 1.5"
+              fill="none"
+              stroke="#3b82f6"
+              :stroke-width="1"
+              opacity="0.5"
+              stroke-dasharray="3,3"
+              class="pulse-ring"
+            />
+          </g>
+
+          <circle
+            :cx="point.x"
+            :cy="point.y"
+            :r="
+              point.id === nextPoint && !point.collected
+                ? pointRadius
+                : pointRadius * 0.8
+            "
+            :fill="
+              point.collected
+                ? '#10b981'
+                : point.id === nextPoint
+                ? '#3b82f6'
+                : '#6b7280'
+            "
+            :opacity="
+              point.collected ? 0.6 : point.id === nextPoint ? 0.8 : 0.4
+            "
+            stroke="white"
+            :stroke-width="point.id === nextPoint && !point.collected ? 2 : 1"
+            :stroke-dasharray="point.id === nextPoint ? 'none' : '3,3'"
+            :class="{
+              'pulse-point': point.id === nextPoint && !point.collected,
+            }"
+          />
+          <text
+            :x="point.x"
+            :y="point.y - pointRadius - 3"
+            :font-size="
+              point.id === nextPoint && !point.collected
+                ? fontSize
+                : fontSize * 0.8
+            "
+            :fill="
+              point.id === nextPoint && !point.collected ? '#3b82f6' : '#6b7280'
+            "
+            text-anchor="middle"
+            font-weight="point.id === nextPoint && !point.collected ? 'bold' : 'normal'"
+          >
+            {{ point.label }}
+          </text>
+        </g>
+      </g>
+
+      <!-- Camera position indicator -->
+      <g v-if="showCameraPosition && cameraPosition">
+        <circle
+          :cx="cameraPosition.x"
+          :cy="cameraPosition.y"
+          r="8"
+          fill="#3b82f6"
+          stroke="white"
+          stroke-width="2"
+        />
+        <path
+          :d="cameraViewCone"
+          fill="#3b82f6"
+          opacity="0.2"
+          stroke="#3b82f6"
+          stroke-width="1"
+        />
+        <text
+          :x="cameraPosition.x"
+          :y="cameraPosition.y - 12"
+          font-size="10"
+          fill="#3b82f6"
           text-anchor="middle"
           font-weight="bold"
         >
-          {{ point.label }}
+          Camera
         </text>
       </g>
-
-      <!-- Optional calibration points -->
-      <g
-        v-for="point in optionalPoints"
-        :key="point.id"
-      >
-        <!-- Pulsing animation for next optional point -->
-        <g v-if="point.id === nextPoint && !point.collected">
-          <circle
-            :cx="point.x"
-            :cy="point.y"
-            :r="pointRadius * 1.5"
-            fill="none"
-            stroke="#3b82f6"
-            :stroke-width="1"
-            opacity="0.5"
-            stroke-dasharray="3,3"
-            class="pulse-ring"
-          />
-        </g>
-
-        <circle
-          :cx="point.x"
-          :cy="point.y"
-          :r="
-            point.id === nextPoint && !point.collected
-              ? pointRadius
-              : pointRadius * 0.8
-          "
-          :fill="
-            point.collected
-              ? '#10b981'
-              : point.id === nextPoint
-                ? '#3b82f6'
-                : '#6b7280'
-          "
-          :opacity="point.collected ? 0.6 : point.id === nextPoint ? 0.8 : 0.4"
-          stroke="white"
-          :stroke-width="point.id === nextPoint && !point.collected ? 2 : 1"
-          :stroke-dasharray="point.id === nextPoint ? 'none' : '3,3'"
-          :class="{
-            'pulse-point': point.id === nextPoint && !point.collected,
-          }"
-        />
-        <text
-          :x="point.x"
-          :y="point.y - pointRadius - 3"
-          :font-size="
-            point.id === nextPoint && !point.collected
-              ? fontSize
-              : fontSize * 0.8
-          "
-          :fill="
-            point.id === nextPoint && !point.collected ? '#3b82f6' : '#6b7280'
-          "
-          text-anchor="middle"
-          font-weight="point.id === nextPoint && !point.collected ? 'bold' : 'normal'"
-        >
-          {{ point.label }}
-        </text>
-      </g>
-    </g>
-
-    <!-- Camera position indicator -->
-    <g v-if="showCameraPosition && cameraPosition">
-      <circle
-        :cx="cameraPosition.x"
-        :cy="cameraPosition.y"
-        r="8"
-        fill="#3b82f6"
-        stroke="white"
-        stroke-width="2"
-      />
-      <path
-        :d="cameraViewCone"
-        fill="#3b82f6"
-        opacity="0.2"
-        stroke="#3b82f6"
-        stroke-width="1"
-      />
-      <text
-        :x="cameraPosition.x"
-        :y="cameraPosition.y - 12"
-        font-size="10"
-        fill="#3b82f6"
-        text-anchor="middle"
-        font-weight="bold"
-      >
-        Camera
-      </text>
     </g>
   </svg>
 </template>
 
 <script setup lang="ts">
 import { computed, type PropType } from 'vue';
-import type {
-  CourtDimensions,
-  CameraSettings,
-} from '../composables/useCameraCalibration';
+import type { CourtDimensions } from '../composables/useCameraCalibration';
+
+// Define CameraSettings interface locally
+interface CameraSettings {
+  position: { x: number; y: number };
+  height: number;
+  angle: number;
+  viewAngle?: number;
+}
 
 const props = defineProps({
   calibrationMode: {
@@ -483,8 +566,61 @@ const courtY = computed(() => (svgHeight.value - courtLength.value) / 2);
 const centerX = computed(() => courtX.value + courtWidth.value / 2);
 const centerY = computed(() => courtY.value + courtLength.value / 2);
 const serviceLineDistance = computed(
-  () => props.courtDimensions.serviceLineDistance * scale.value
+  () => (props.courtDimensions?.serviceLineDistance || 1.98) * scale.value
 );
+
+// Double service line position (0.76m from baseline in badminton)
+const doubleServiceY = computed(() => {
+  const distance = (courtLength.value * 0.76) / 13.4;
+  return courtY.value + distance; // From top baseline
+});
+
+// Short service line position (1.98m from net)
+const shortServiceY = computed(() => {
+  return centerY.value - serviceLineDistance.value;
+});
+
+// Get line color based on line type
+const getLineColor = (lineType: string) => {
+  switch (lineType) {
+    case 'double-service':
+      return '#3b82f6'; // Blue
+    case 'center':
+      return '#10b981'; // Green
+    case 'short-service':
+      return '#f59e0b'; // Orange
+    default:
+      return lineColor;
+  }
+};
+
+// Calculate rotation angle based on camera position
+const rotationAngle = computed(() => {
+  const angle = (props as any).cameraAngle;
+  switch (angle) {
+    case 'side-left':
+      return 90; // Vertical orientation
+    case 'side-right':
+      return -90; // Vertical orientation (opposite side)
+    case 'corner-left':
+      return 45; // Diagonal orientation
+    case 'corner-right':
+      return -45; // Diagonal orientation
+    default:
+      return 0; // Horizontal orientation (baseline view)
+  }
+});
+
+// Transform for rotating the court based on camera angle
+const courtTransform = computed(() => {
+  const centerX = svgWidth.value / 2;
+  const centerY = svgHeight.value / 2;
+  const angle = rotationAngle.value;
+
+  if (angle === 0) return '';
+
+  return `rotate(${angle} ${centerX} ${centerY})`;
+});
 
 // Doubles court dimensions (for badminton/tennis)
 const doublesCourtWidth = computed(() => {

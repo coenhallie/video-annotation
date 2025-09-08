@@ -10,20 +10,17 @@
     <svg
       v-if="
         speedVisualizationEnabled &&
-          showSpeed &&
-          speedMetrics &&
-          speedMetrics.value &&
-          speedMetrics.value.isValid
+        showSpeed &&
+        speedMetrics &&
+        speedMetrics.value &&
+        speedMetrics.value.isValid
       "
       class="absolute inset-0 w-full h-full pointer-events-none"
       :viewBox="`0 0 ${canvasWidth} ${canvasHeight}`"
       preserveAspectRatio="none"
     >
       <!-- Center of Mass point -->
-      <g
-        v-if="showCenterOfMass"
-        class="center-of-mass"
-      >
+      <g v-if="showCenterOfMass" class="center-of-mass">
         <circle
           :cx="comCanvasCoord.x"
           :cy="comCanvasCoord.y"
@@ -62,10 +59,7 @@
             refY="3.5"
             orient="auto"
           >
-            <polygon
-              points="0 0, 10 3.5, 0 7"
-              :fill="velocityColor"
-            />
+            <polygon points="0 0, 10 3.5, 0 7" :fill="velocityColor" />
           </marker>
         </defs>
 
@@ -98,16 +92,17 @@
       </g>
     </svg>
 
-    <!-- Speed display panel -->
+    <!-- Speed display panel (when chart is NOT visible) -->
     <div
       v-if="
         videoLoaded &&
-          speedVisualizationEnabled &&
-          showSpeedPanel &&
-          showMainSpeedPanel &&
-          speedMetrics &&
-          speedMetrics.value &&
-          speedMetrics.value.isValid
+        speedVisualizationEnabled &&
+        showSpeedPanel &&
+        showMainSpeedPanel &&
+        speedMetrics &&
+        speedMetrics.value &&
+        speedMetrics.value.isValid &&
+        !isChartVisible
       "
       :class="[
         'speed-panel-container',
@@ -117,9 +112,9 @@
       :style="
         !isExternalPanel
           ? {
-            backgroundColor: 'rgba(255, 255, 255, 0.8)',
-            borderColor: 'rgba(229, 231, 235, 0.8)',
-          }
+              backgroundColor: 'rgba(255, 255, 255, 0.8)',
+              borderColor: 'rgba(229, 231, 235, 0.8)',
+            }
           : {}
       "
       style="min-width: 180px"
@@ -134,9 +129,7 @@
       <div class="grid grid-cols-2 gap-1 mb-1">
         <!-- Overall Speed -->
         <div class="mini-card">
-          <div class="mini-label">
-            Overall
-          </div>
+          <div class="mini-label">Overall</div>
           <div
             class="mini-value"
             :class="getSpeedColorClass(speedMetrics.value.speed)"
@@ -159,9 +152,7 @@
 
         <!-- Horizontal Speed -->
         <div class="mini-card">
-          <div class="mini-label">
-            Horizontal
-          </div>
+          <div class="mini-label">Horizontal</div>
           <div class="mini-value text-gray-700">
             {{ speedMetrics.value.generalMovingSpeed?.toFixed(2) || 'N/A' }}
           </div>
@@ -169,9 +160,7 @@
 
         <!-- Right Foot Speed -->
         <div class="mini-card">
-          <div class="mini-label">
-            Right Foot
-          </div>
+          <div class="mini-label">Right Foot</div>
           <div class="mini-value text-gray-600">
             {{ speedMetrics.value.rightFootSpeed?.toFixed(2) || 'N/A' }}
           </div>
@@ -179,9 +168,7 @@
 
         <!-- CoM Height -->
         <div class="mini-card">
-          <div class="mini-label">
-            CoM Height
-          </div>
+          <div class="mini-label">CoM Height</div>
           <div class="mini-value text-gray-700">
             {{ speedMetrics.value.centerOfGravityHeight?.toFixed(2) || 'N/A' }}
           </div>
@@ -225,10 +212,7 @@
       </div>
 
       <!-- Velocity components -->
-      <div
-        v-if="showVelocityComponents"
-        class="text-xs space-y-1"
-      >
+      <div v-if="showVelocityComponents" class="text-xs space-y-1">
         <div class="flex justify-between">
           <span class="text-gray-600">X:</span>
           <span class="font-mono text-gray-700">{{
@@ -338,10 +322,64 @@
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- Speed Chart Container (when chart IS visible) -->
+    <div
+      v-if="
+        videoLoaded &&
+        speedVisualizationEnabled &&
+        showSpeedPanel &&
+        showMainSpeedPanel &&
+        speedMetrics &&
+        speedMetrics.value &&
+        speedMetrics.value.isValid &&
+        isChartVisible
+      "
+      :class="[
+        'speed-chart-overlay',
+        !isExternalPanel &&
+          'absolute opacity-95 top-4 right-4 bg-white backdrop-blur-sm border border-gray-200 rounded-lg shadow-lg p-3 pointer-events-auto',
+      ]"
+      :style="
+        !isExternalPanel
+          ? {
+              backgroundColor: 'rgba(255, 255, 255, 0.95)',
+              borderColor: 'rgba(229, 231, 235, 0.8)',
+              zIndex: 20,
+            }
+          : {}
+      "
+      style="min-width: 400px; max-width: 500px"
+      role="region"
+      aria-label="Speed chart display"
+    >
+      <!-- Chart Header with Close Button -->
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="text-sm font-semibold text-gray-800">Speed Chart</h3>
+        <button
+          class="btn btn-ghost btn-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md p-1"
+          title="Hide Chart"
+          @click="toggleChart"
+        >
+          <svg
+            class="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M6 18L18 6M6 6l12 12"
+            />
+          </svg>
+        </button>
+      </div>
 
       <!-- Speed Chart Component -->
       <SpeedChart
-        v-if="isChartVisible"
         :speed-metrics="speedMetrics.value"
         :timestamp="currentTimestamp"
         :current-frame="currentFrame"
@@ -353,11 +391,11 @@
     <div
       v-if="
         videoLoaded &&
-          speedVisualizationEnabled &&
-          showSpeed &&
-          showMainSpeedPanel &&
-          (!speedMetrics || !speedMetrics.value || !speedMetrics.value.isValid) &&
-          showNoSpeedIndicator
+        speedVisualizationEnabled &&
+        showSpeed &&
+        showMainSpeedPanel &&
+        (!speedMetrics || !speedMetrics.value || !speedMetrics.value.isValid) &&
+        showNoSpeedIndicator
       "
       class="absolute opacity-95 top-4 right-4 bg-white border border-gray-200 rounded-lg shadow-md px-3 py-2 text-sm text-gray-600 pointer-events-auto"
       role="status"

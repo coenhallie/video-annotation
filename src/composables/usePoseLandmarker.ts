@@ -9,6 +9,7 @@ import {
   // RunningMode is not exported by the lib types; we will use string literal types instead
 } from '@mediapipe/tasks-vision';
 import { useSpeedCalculator } from './useSpeedCalculator';
+import { roiProcessor, type CroppedFrameData } from '../utils/roiProcessor';
 
 type Landmark = { x: number; y: number; z?: number; visibility?: number };
 type WorldLandmark = { x: number; y: number; z: number; visibility?: number };
@@ -712,13 +713,59 @@ export function usePoseLandmarker(): UsePoseLandmarker {
         videoReadyState: videoElement.readyState,
         videoWidth: videoElement.videoWidth,
         videoHeight: videoElement.videoHeight,
+        useROI: detectionSettings.useROI,
+        hasROIBox: !!detectionSettings.roiBox,
       });
 
-      // FIXED: Use correct MediaPipe detectForVideo API (only videoElement and timestamp)
-      const results = poseLandmarker.detectForVideo(
-        videoElement,
-        mediaPipeTimestamp
-      );
+      let results: any;
+      let croppedFrameData: CroppedFrameData | null = null;
+
+      // Check if we should use ROI cropping
+      if (detectionSettings.useROI && detectionSettings.roiBox) {
+        console.log('🔍 [DEBUG] Using ROI cropping for pose detection');
+
+        // Update ROI processor with current video dimensions
+        roiProcessor.updateVideoDimensions(
+          videoElement.videoWidth,
+          videoElement.videoHeight
+        );
+
+        // Crop video frame to ROI region
+        croppedFrameData = roiProcessor.cropVideoFrame(
+          videoElement,
+          detectionSettings.roiBox
+        );
+
+        if (croppedFrameData) {
+          console.log('🔍 [DEBUG] Successfully cropped frame for ROI', {
+            croppedWidth: croppedFrameData.croppedWidth,
+            croppedHeight: croppedFrameData.croppedHeight,
+            offsetX: croppedFrameData.offsetX,
+            offsetY: croppedFrameData.offsetY,
+          });
+
+          // Use cropped canvas for MediaPipe detection
+          results = poseLandmarker.detectForVideo(
+            croppedFrameData.canvas,
+            mediaPipeTimestamp
+          );
+        } else {
+          console.warn(
+            '🔍 [DEBUG] Failed to crop frame, falling back to full frame'
+          );
+          // Fallback to full frame detection
+          results = poseLandmarker.detectForVideo(
+            videoElement,
+            mediaPipeTimestamp
+          );
+        }
+      } else {
+        // Use full frame detection when ROI is disabled
+        results = poseLandmarker.detectForVideo(
+          videoElement,
+          mediaPipeTimestamp
+        );
+      }
       poseResults.value = results;
 
       console.log('🔍 [DEBUG] MediaPipe detectForVideo result', {
@@ -740,39 +787,72 @@ export function usePoseLandmarker(): UsePoseLandmarker {
         });
 
         // Enhanced pose selection with ROI consideration
-        for (let i = 0; i < results.landmarks.length; i++) {
-          const pose = results.landmarks[i] as Landmark[];
+        if (
+          detectionSettings.useROI &&
+          detectionSettings.roiBox &&
+          !croppedFrameData
+        ) {
+          // ROI enabled but no cropping was used - validate poses against ROI
+          let bestScore = -1;
 
-          console.log('🔍 [DEBUG] Processing pose', {
-            poseIndex: i,
-            landmarksInPose: pose?.length || 0,
-            useROI: detectionSettings.useROI,
-            hasROIBox: !!detectionSettings.roiBox,
-          });
+          for (let i = 0; i < results.landmarks.length; i++) {
+            const pose = results.landmarks[i] as Landmark[];
 
-          if (detectionSettings.useROI && detectionSettings.roiBox) {
+            console.log('🔍 [DEBUG] Processing pose for ROI validation', {
+              poseIndex: i,
+              landmarksInPose: pose?.length || 0,
+            });
+
             // Calculate how well this pose fits the current ROI
             const roiValidation = validateROI(pose, detectionSettings.roiBox);
+            const coverage = roiProcessor.calculateROICoverage(
+              pose,
+              detectionSettings.roiBox
+            );
+
+            // Score based on ROI coverage and confidence
+            const score =
+              coverage.coverage * (roiValidation.averageConfidence || 0);
 
             console.log('🔍 [DEBUG] ROI validation result', {
               poseIndex: i,
               isValid: roiValidation.isValid,
+              coverage: coverage.coverage,
+              score: score,
             });
 
-            if (roiValidation.isValid) {
+            if (roiValidation.isValid && score > bestScore) {
               selectedPose = pose;
               selectedPoseIndex = i;
               bestROIMatch = roiValidation;
-              console.log('🔍 [DEBUG] Selected pose via ROI', { poseIndex: i });
-              break;
+              bestScore = score;
+              console.log('🔍 [DEBUG] New best pose via ROI', {
+                poseIndex: i,
+                score: score,
+                coverage: coverage.coverage,
+              });
             }
-          } else {
-            // No ROI constraint, use first valid pose
-            selectedPose = pose;
-            selectedPoseIndex = i;
-            console.log('🔍 [DEBUG] Selected pose (no ROI)', { poseIndex: i });
-            break;
           }
+
+          // If no pose meets ROI criteria, optionally fall back to best available pose
+          if (!selectedPose && detectionSettings.roiFallbackToFullFrame) {
+            console.log(
+              '🔍 [DEBUG] No pose found in ROI, falling back to best available pose'
+            );
+            selectedPose = results.landmarks[0] as Landmark[];
+            selectedPoseIndex = 0;
+          }
+        } else {
+          // No ROI constraint or ROI cropping was used - use first valid pose
+          selectedPose = results.landmarks[0] as Landmark[];
+          selectedPoseIndex = 0;
+          console.log(
+            '🔍 [DEBUG] Selected pose (no ROI constraint or cropped)',
+            {
+              poseIndex: selectedPoseIndex,
+              croppedFrameUsed: !!croppedFrameData,
+            }
+          );
         }
 
         console.log('🔍 [DEBUG] Final pose selection result', {
@@ -784,10 +864,39 @@ export function usePoseLandmarker(): UsePoseLandmarker {
         if (selectedPose) {
           console.log('🔍 [DEBUG] Starting pose processing after selection');
 
-          landmarks.value = selectedPose;
-          worldLandmarks.value = results.worldLandmarks
-            ? (results.worldLandmarks[selectedPoseIndex] as WorldLandmark[])
-            : [];
+          // Transform landmarks back to full frame coordinates if ROI cropping was used
+          if (croppedFrameData && detectionSettings.useROI) {
+            console.log(
+              '🔍 [DEBUG] Transforming landmarks from ROI to full frame coordinates'
+            );
+
+            const worldLandmarksArray = results.worldLandmarks
+              ? (results.worldLandmarks[selectedPoseIndex] as WorldLandmark[])
+              : [];
+
+            const transformed = roiProcessor.transformLandmarksToFullFrame(
+              selectedPose,
+              worldLandmarksArray,
+              croppedFrameData
+            );
+
+            landmarks.value = transformed.landmarks as Landmark[];
+            worldLandmarks.value = transformed.worldLandmarks;
+
+            console.log(
+              '🔍 [DEBUG] Landmarks transformed to full frame coordinates',
+              {
+                originalCount: selectedPose.length,
+                transformedCount: landmarks.value.length,
+              }
+            );
+          } else {
+            // No ROI cropping, use landmarks as-is
+            landmarks.value = selectedPose;
+            worldLandmarks.value = results.worldLandmarks
+              ? (results.worldLandmarks[selectedPoseIndex] as WorldLandmark[])
+              : [];
+          }
 
           console.log('🔍 [DEBUG] Set landmarks and worldLandmarks');
 
