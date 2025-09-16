@@ -171,30 +171,63 @@ function calculateAdjugate3x3(m: number[][]): number[][] {
 }
 
 /**
- * Transform a 2D image point to 3D world coordinates using homography
+ * Camera position configuration for position-aware transformations
+ */
+export interface CameraPositionConfig {
+  edge: 'top' | 'bottom' | 'left' | 'right' | null;
+  distance: number;
+  height: number;
+  position3D: Point3D;
+}
+
+// Import SportConfig from the main calibration composable to avoid duplication
+import type { SportConfig } from '../composables/useCameraCalibration';
+
+/**
+ * Transform a 2D image point to 3D world coordinates using homography with position awareness
  * @param point - 2D point in image coordinates
  * @param homography - 3x3 homography matrix (world to image)
  * @param z - Z-coordinate in world space (default 0 for court plane)
+ * @param cameraConfig - Optional camera position configuration for enhanced accuracy
  * @returns 3D point in world coordinates or null if transformation fails
  */
 export function imageToWorld(
   point: Point2D,
   homography: number[][],
-  z: number = 0
+  z: number = 0,
+  cameraConfig?: CameraPositionConfig,
+  sportConfig?: SportConfig
 ): Point3D | null {
   console.log('🔧 [imageToWorld] Input point:', point);
   console.log('🔧 [imageToWorld] Homography matrix:', homography);
+  if (cameraConfig) {
+    console.log('🔧 [imageToWorld] Camera config:', cameraConfig);
+  }
+
+  // Apply position-specific corrections if camera configuration is provided
+  let correctedPoint = { ...point };
+  if (cameraConfig && cameraConfig.edge) {
+    correctedPoint = applyCameraPositionCorrection(
+      point,
+      cameraConfig,
+      sportConfig
+    );
+    console.log('🔧 [imageToWorld] Position-corrected point:', correctedPoint);
+  }
 
   // The homography matrix H transforms world points to image points: image = H * world
   // To go from image to world, we need the inverse: world = H^(-1) * image
-  const inverseH = matrixCache.get(
-    `inverse_homography_${JSON.stringify(homography)}`,
-    () => {
-      const inv = invertMatrix3x3(homography);
-      console.log('🔧 [imageToWorld] Computed inverse homography:', inv);
-      return inv || [];
-    }
-  );
+  const cacheKey = cameraConfig
+    ? `inverse_homography_${JSON.stringify(homography)}_${cameraConfig.edge}_${
+        cameraConfig.distance
+      }`
+    : `inverse_homography_${JSON.stringify(homography)}`;
+
+  const inverseH = matrixCache.get(cacheKey, () => {
+    const inv = invertMatrix3x3(homography);
+    console.log('🔧 [imageToWorld] Computed inverse homography:', inv);
+    return inv || [];
+  });
 
   if (!inverseH || inverseH.length === 0) {
     console.error('🚨 [imageToWorld] Failed to invert homography matrix');
@@ -205,8 +238,8 @@ export function imageToWorld(
     return null;
   }
 
-  // Convert image point to homogeneous coordinates
-  const imageHomogeneous = [point.x, point.y, 1];
+  // Convert corrected image point to homogeneous coordinates
+  const imageHomogeneous = [correctedPoint.x, correctedPoint.y, 1];
   console.log('🔧 [imageToWorld] Image homogeneous:', imageHomogeneous);
 
   // Apply inverse homography transformation
@@ -222,19 +255,30 @@ export function imageToWorld(
     return null;
   }
 
-  const worldX = worldHomogeneous[0] / worldHomogeneous[2];
-  const worldY = worldHomogeneous[1] / worldHomogeneous[2];
+  let worldX = worldHomogeneous[0] / worldHomogeneous[2];
+  let worldY = worldHomogeneous[1] / worldHomogeneous[2];
+
+  // Apply position-specific height estimation if camera configuration is provided
+  let finalZ = z;
+  if (cameraConfig && cameraConfig.edge && z === 0) {
+    finalZ = estimateHeightFromCameraPosition(
+      point,
+      cameraConfig,
+      worldX,
+      worldY
+    );
+  }
 
   console.log('🔧 [imageToWorld] Final world coordinates:', {
     x: worldX,
     y: worldY,
-    z,
+    z: finalZ,
   });
 
   return {
     x: worldX,
     y: worldY,
-    z: z, // Use provided z-coordinate (typically 0 for court plane)
+    z: finalZ,
   };
 }
 
@@ -420,6 +464,98 @@ export function isValidHomography(homography: number[][] | null): boolean {
   }
 
   return true;
+}
+
+/**
+ * Apply camera position-specific corrections to image coordinates
+ * @param point - Original image point
+ * @param cameraConfig - Camera position configuration
+ * @returns Corrected image point
+ */
+function applyCameraPositionCorrection(
+  point: Point2D,
+  cameraConfig: CameraPositionConfig
+): Point2D {
+  if (!cameraConfig.edge) return point;
+
+  const { edge, distance } = cameraConfig;
+
+  // Calculate correction factors based on camera position and distance
+  const distanceFactor = Math.max(
+    0.8,
+    Math.min(1.2, 1.0 + (distance - 3.0) * 0.05)
+  );
+
+  let correctedX = point.x;
+  let correctedY = point.y;
+
+  switch (edge) {
+    case 'top':
+    case 'bottom':
+      // For baseline cameras, apply horizontal perspective correction
+      const centerX = 960; // Assume 1920px width / 2
+      correctedX = centerX + (point.x - centerX) * distanceFactor;
+      break;
+
+    case 'left':
+    case 'right':
+      // For sideline cameras, apply vertical perspective correction
+      const centerY = 540; // Assume 1080px height / 2
+      correctedY = centerY + (point.y - centerY) * distanceFactor;
+      break;
+  }
+
+  return { x: correctedX, y: correctedY };
+}
+
+/**
+ * Estimate height based on camera position and world coordinates with sport awareness
+ * @param imagePoint - Original image point
+ * @param cameraConfig - Camera position configuration
+ * @param worldX - World X coordinate
+ * @param worldY - World Y coordinate
+ * @param sportConfig - Sport-specific configuration
+ * @returns Estimated Z coordinate (height)
+ */
+function estimateHeightFromCameraPosition(
+  imagePoint: Point2D,
+  cameraConfig: CameraPositionConfig,
+  worldX: number,
+  worldY: number,
+  sportConfig?: SportConfig
+): number {
+  if (!cameraConfig.edge) return 0;
+
+  const { edge, height: cameraHeight, distance } = cameraConfig;
+
+  // Use sport-specific typical player height for better estimation
+  const typicalPlayerHeight = sportConfig?.typicalPlayerHeight || 1.7;
+  const heightSensitivity =
+    sportConfig?.perspectiveFactors?.heightSensitivity || 1.0;
+
+  let estimatedHeight = 0;
+
+  switch (edge) {
+    case 'left':
+    case 'right':
+      // Sideline cameras have better height estimation
+      // Use camera height, distance, and sport-specific player height
+      const heightFactor = (cameraHeight / distance) * heightSensitivity;
+      estimatedHeight = Math.max(0, heightFactor * typicalPlayerHeight * 0.3);
+      break;
+
+    case 'top':
+    case 'bottom':
+      // Baseline cameras have limited height estimation
+      // Use sport-specific height with conservative factor
+      estimatedHeight = Math.max(
+        0,
+        typicalPlayerHeight * 0.1 * heightSensitivity
+      );
+      break;
+  }
+
+  return estimatedHeight;
 }
 
 /**

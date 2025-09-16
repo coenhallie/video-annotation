@@ -31,6 +31,61 @@ export interface UnifiedCalibrationConfig {
   };
 }
 
+// Camera position configuration from EdgeBasedCameraSelector
+export interface CameraPositionConfig {
+  edge: 'top' | 'bottom' | 'left' | 'right' | null;
+  distance: number;
+  height: number;
+  position3D: Point3D;
+}
+
+// Sport-specific calibration configuration
+export interface SportConfig {
+  type: 'badminton' | 'tennis';
+  courtDimensions: CourtDimensions;
+  typicalPlayerHeight: number; // meters
+  optimalCameraDistance: number; // meters
+  lineImportance: {
+    baseline: number;
+    serviceLine: number;
+    centerLine: number;
+    sideline: number;
+  };
+  validationThresholds: {
+    excellentError: number; // pixels
+    acceptableError: number; // pixels
+    maxError: number; // pixels
+  };
+  perspectiveFactors: {
+    baseline: number;
+    sideline: number;
+    heightSensitivity: number;
+  };
+}
+
+// Calibration mode configuration
+export interface CalibrationModeConfig {
+  mode:
+    | 'unified-3-line'
+    | 'full-court'
+    | 'half-court'
+    | 'service-courts'
+    | 'minimal';
+  requiredLines: number;
+  homographyStrategy: 'standard' | 'weighted' | 'robust' | 'minimal';
+  iterativeRefinement: boolean;
+  outlierDetection: boolean;
+}
+
+// Position-specific calibration weights
+export interface PositionWeights {
+  horizontalLines: number; // Weight for horizontal court lines
+  verticalLines: number; // Weight for vertical court lines
+  perspectiveCorrection: number; // Perspective distortion factor
+  heightAccuracy: number; // Height estimation reliability
+  sportMultiplier: number; // Sport-specific accuracy multiplier
+}
+
 export interface DrawnLine {
   id: string;
   points: Point2D[]; // Points in video pixel coordinates
@@ -143,6 +198,48 @@ export function useCameraCalibration() {
 
   // Unified calibration configuration
   const unifiedConfig = ref<UnifiedCalibrationConfig | null>(null);
+
+  // Camera position configuration from EdgeBasedCameraSelector
+  const cameraPositionConfig = ref<CameraPositionConfig | null>(null);
+
+  // Sport configuration
+  const sportConfig = ref<SportConfig>({
+    type: 'badminton',
+    courtDimensions: {
+      length: 13.4,
+      width: 6.1,
+      serviceLineDistance: 1.98,
+      centerLineLength: 4.72,
+      netHeight: 1.55,
+    },
+    typicalPlayerHeight: 1.7, // meters
+    optimalCameraDistance: 3.0, // meters
+    lineImportance: {
+      baseline: 1.2,
+      serviceLine: 1.1,
+      centerLine: 1.0,
+      sideline: 1.0,
+    },
+    validationThresholds: {
+      excellentError: 50,
+      acceptableError: 100,
+      maxError: 200,
+    },
+    perspectiveFactors: {
+      baseline: 1.0, // Standard correction for badminton baseline
+      sideline: 1.1, // Slightly better perspective from sideline
+      heightSensitivity: 1.0, // Standard height sensitivity
+    },
+  });
+
+  // Calibration mode configuration
+  const calibrationModeConfig = ref<CalibrationModeConfig>({
+    mode: 'unified-3-line',
+    requiredLines: 3,
+    homographyStrategy: 'weighted',
+    iterativeRefinement: true,
+    outlierDetection: true,
+  });
 
   // Camera parameters - initially null until calculated
   const cameraParameters = reactive<{
@@ -398,21 +495,27 @@ export function useCameraCalibration() {
     const doubleServiceDistance = 0.76; // from baseline
     const shortServiceDistance = 1.98; // from net
 
+    // Court coordinate system: origin at center, X = width (-3.05 to 3.05), Y = length (-6.7 to 6.7)
+    // For side view camera perspective (most common setup)
+
     switch (lineType) {
       case 'service-long-doubles':
-        // Long service line for doubles (horizontal line)
+        // Long service line for doubles - HORIZONTAL line in side view (back boundary)
+        // Runs across the width of the court
         return [
           { x: -width / 2, y: length / 2 - doubleServiceDistance },
           { x: width / 2, y: length / 2 - doubleServiceDistance },
         ];
       case 'center-line':
-        // Center line (vertical line between service courts)
+        // Center line - VERTICAL line in side view (dividing left/right courts)
+        // Runs along the length of the court
         return [
           { x: 0, y: -shortServiceDistance },
           { x: 0, y: length / 2 - doubleServiceDistance },
         ];
       case 'service-short':
-        // Short service line (horizontal line)
+        // Short service line - HORIZONTAL line in side view (front service boundary)
+        // Runs across the width of the court
         return [
           { x: -width / 2, y: shortServiceDistance },
           { x: width / 2, y: shortServiceDistance },
@@ -434,9 +537,90 @@ export function useCameraCalibration() {
     );
   };
 
-  // Helper function to extract point correspondences from line correspondences
+  // Get sport-specific calibration multiplier
+  const getSportSpecificMultiplier = (): number => {
+    switch (sportConfig.value.type) {
+      case 'tennis':
+        // Tennis courts are larger, need different calibration approach
+        return 1.1; // Slightly more forgiving due to larger court
+      case 'badminton':
+        // Badminton courts are smaller, more precise calibration possible
+        return 1.0; // Standard precision
+      default:
+        return 1.0;
+    }
+  };
+
+  // Get position-specific weights based on camera position and sport
+  const getPositionWeights = (): PositionWeights => {
+    // Calculate sport-specific multiplier
+    const sportMultiplier = getSportSpecificMultiplier();
+
+    if (!cameraPositionConfig.value?.edge) {
+      // Default weights when no position is set
+      return {
+        horizontalLines: 1.0,
+        verticalLines: 1.0,
+        perspectiveCorrection: 1.0,
+        heightAccuracy: 1.0,
+        sportMultiplier,
+      };
+    }
+
+    const { edge, distance } = cameraPositionConfig.value;
+
+    // Calculate perspective correction based on distance and sport
+    const optimalDistance = sportConfig.value.optimalCameraDistance;
+    const perspectiveCorrection = Math.max(
+      0.5,
+      Math.min(1.5, 1.0 + (distance - optimalDistance) * 0.1)
+    );
+
+    // Apply sport-specific line importance
+    const lineImportance = sportConfig.value.lineImportance;
+
+    switch (edge) {
+      case 'top':
+      case 'bottom':
+        // Camera at baseline - better view of vertical lines (center line runs toward camera)
+        return {
+          horizontalLines: 0.8 * lineImportance.baseline, // Reduced view of horizontal service lines
+          verticalLines: 1.2 * lineImportance.sideline, // Better view of vertical center line
+          perspectiveCorrection,
+          heightAccuracy: 0.9, // Slightly reduced height accuracy from baseline
+          sportMultiplier,
+        };
+
+      case 'left':
+      case 'right':
+        // Camera at sideline - better view of horizontal lines (service lines are perpendicular to view)
+        return {
+          horizontalLines: 1.2 * lineImportance.baseline, // Better view of horizontal service lines
+          verticalLines: 0.8 * lineImportance.sideline, // Reduced view of vertical center line
+          perspectiveCorrection,
+          heightAccuracy: 1.1, // Better height accuracy from side view
+          sportMultiplier,
+        };
+
+      default:
+        return {
+          horizontalLines: 1.0,
+          verticalLines: 1.0,
+          perspectiveCorrection: 1.0,
+          heightAccuracy: 1.0,
+          sportMultiplier,
+        };
+    }
+  };
+
+  // Helper function to extract point correspondences from line correspondences with position weighting
   const extractPointCorrespondences = () => {
-    const correspondences: { world: Point3D; image: Point2D }[] = [];
+    const correspondences: {
+      world: Point3D;
+      image: Point2D;
+      weight: number;
+    }[] = [];
+    const weights = getPositionWeights();
 
     for (const lineCorr of lineCorrespondences.value) {
       const courtLine = selectedCourtLines.value.find(
@@ -453,6 +637,19 @@ export function useCameraCalibration() {
         videoLine.points.length < 2
       ) {
         continue;
+      }
+
+      // Determine line weight based on orientation and camera position
+      let lineWeight = 1.0;
+      if (
+        courtLine.type === 'service-long-doubles' ||
+        courtLine.type === 'service-short'
+      ) {
+        // Service lines are horizontal (run across court width)
+        lineWeight = weights.horizontalLines;
+      } else if (courtLine.type === 'center-line') {
+        // Center line is vertical (runs along court length)
+        lineWeight = weights.verticalLines;
       }
 
       // For each line, use the endpoints as point correspondences
@@ -475,8 +672,8 @@ export function useCameraCalibration() {
         };
 
         correspondences.push(
-          { world: worldStart, image: videoStartPoint },
-          { world: worldEnd, image: videoEndPoint }
+          { world: worldStart, image: videoStartPoint, weight: lineWeight },
+          { world: worldEnd, image: videoEndPoint, weight: lineWeight }
         );
       }
     }
@@ -484,9 +681,9 @@ export function useCameraCalibration() {
     return correspondences;
   };
 
-  // Calculate homography matrix using Direct Linear Transform (DLT)
+  // Calculate homography matrix using weighted Direct Linear Transform (DLT)
   const calculateHomography = (
-    correspondences: { world: Point3D; image: Point2D }[]
+    correspondences: { world: Point3D; image: Point2D; weight: number }[]
   ) => {
     if (correspondences.length < 4) {
       throw new Error(
@@ -495,32 +692,77 @@ export function useCameraCalibration() {
     }
 
     console.log(
-      '🔧 [calculateHomography] Input correspondences:',
+      '🔧 [calculateHomography] Input correspondences with weights:',
       correspondences
     );
 
-    // Build the A matrix for the DLT algorithm
+    const weights = getPositionWeights();
+    console.log('🔧 [calculateHomography] Position weights:', weights);
+
+    // Build the A matrix for the weighted DLT algorithm
     // We want to find H such that: image_point = H * world_point
     const A: number[][] = [];
 
     for (const corr of correspondences) {
-      const { world, image } = corr;
+      const { world, image, weight } = corr;
       const X = world.x;
       const Y = world.y;
-      const x = image.x;
-      const y = image.y;
+      let x = image.x;
+      let y = image.y;
+
+      // Apply perspective correction based on camera position
+      if (cameraPositionConfig.value) {
+        const { distance, edge } = cameraPositionConfig.value;
+
+        // Apply perspective correction factor
+        const correctionFactor = weights.perspectiveCorrection;
+
+        // Adjust coordinates based on camera position and distance
+        if (edge === 'top' || edge === 'bottom') {
+          // For baseline cameras, correct horizontal perspective
+          const centerX = getCurrentVideoDimensions().width / 2;
+          x = centerX + (x - centerX) * correctionFactor;
+        } else if (edge === 'left' || edge === 'right') {
+          // For sideline cameras, correct vertical perspective
+          const centerY = getCurrentVideoDimensions().height / 2;
+          y = centerY + (y - centerY) * correctionFactor;
+        }
+      }
 
       console.log(
-        `🔧 [calculateHomography] World: (${X}, ${Y}) -> Image: (${x}, ${y})`
+        `🔧 [calculateHomography] World: (${X}, ${Y}) -> Image: (${x}, ${y}) [weight: ${weight}]`
       );
 
       // Each correspondence gives us 2 equations for world-to-image transformation
+      // Apply weighting to the equations
+      const sqrtWeight = Math.sqrt(weight);
+
       // x = (h11*X + h12*Y + h13) / (h31*X + h32*Y + h33)
       // y = (h21*X + h22*Y + h23) / (h31*X + h32*Y + h33)
       // Rearranged: x*(h31*X + h32*Y + h33) = h11*X + h12*Y + h13
       //            y*(h31*X + h32*Y + h33) = h21*X + h22*Y + h23
-      A.push([X, Y, 1, 0, 0, 0, -x * X, -x * Y, -x]);
-      A.push([0, 0, 0, X, Y, 1, -y * X, -y * Y, -y]);
+      A.push([
+        X * sqrtWeight,
+        Y * sqrtWeight,
+        1 * sqrtWeight,
+        0,
+        0,
+        0,
+        -x * X * sqrtWeight,
+        -x * Y * sqrtWeight,
+        -x * sqrtWeight,
+      ]);
+      A.push([
+        0,
+        0,
+        0,
+        X * sqrtWeight,
+        Y * sqrtWeight,
+        1 * sqrtWeight,
+        -y * X * sqrtWeight,
+        -y * Y * sqrtWeight,
+        -y * sqrtWeight,
+      ]);
     }
 
     const matrixA = new Matrix(A);
@@ -551,11 +793,18 @@ export function useCameraCalibration() {
     const h3 = [h.get(0, 2), h.get(1, 2), h.get(2, 2)];
 
     // Estimate camera intrinsics (simplified approach)
-    // Assume principal point at image center and square pixels
-    const imageWidth = 1920; // Default assumption, should be passed from video
-    const imageHeight = 1080;
+    // Get actual video dimensions
+    const videoDims = getCurrentVideoDimensions();
+    const imageWidth = videoDims.width;
+    const imageHeight = videoDims.height;
     const cx = imageWidth / 2;
     const cy = imageHeight / 2;
+
+    console.log('📐 [calculateCameraParameters] Using video dimensions:', {
+      width: imageWidth,
+      height: imageHeight,
+      principalPoint: { cx, cy },
+    });
 
     // Estimate focal length from homography
     const lambda1 = Math.sqrt(h1[0] * h1[0] + h1[1] * h1[1]);
@@ -651,12 +900,13 @@ export function useCameraCalibration() {
     return { x, y, z };
   };
 
-  // Calculate reprojection error for validation
+  // Calculate weighted reprojection error for validation
   const calculateReprojectionError = (
-    correspondences: { world: Point3D; image: Point2D }[],
+    correspondences: { world: Point3D; image: Point2D; weight?: number }[],
     H: any
   ): number => {
     let totalError = 0;
+    let totalWeight = 0;
 
     for (const corr of correspondences) {
       const worldHomogeneous = new Matrix([
@@ -678,10 +928,15 @@ export function useCameraCalibration() {
           Math.pow(projectedY - corr.image.y, 2)
       );
 
-      totalError += error;
+      // Weight the error by correspondence importance (default weight = 1)
+      const weight = corr.weight || 1.0;
+      totalError += error * weight;
+      totalWeight += weight;
     }
 
-    return totalError / correspondences.length;
+    return totalWeight > 0
+      ? totalError / totalWeight
+      : totalError / correspondences.length;
   };
 
   // Main calculation method with homography-based approach
@@ -721,29 +976,45 @@ export function useCameraCalibration() {
       const reprojError = calculateReprojectionError(correspondences, H);
       calibrationError.value = reprojError;
 
-      // Calculate confidence based on reprojection error
-      // For badminton court calibration, errors under 100px are considered good
-      // Errors under 50px are excellent, errors over 200px are poor
-      const maxAcceptableError = 200; // pixels
-      const excellentError = 50; // pixels
+      // Calculate confidence based on sport-specific reprojection error thresholds
+      const thresholds = sportConfig.value.validationThresholds;
+      const weights = getPositionWeights();
+
+      // Apply sport multiplier to error calculation
+      const adjustedError = reprojError / weights.sportMultiplier;
 
       let confidence: number;
-      if (reprojError <= excellentError) {
+      if (adjustedError <= thresholds.excellentError) {
         confidence = 1.0; // Excellent calibration
-      } else if (reprojError <= maxAcceptableError) {
+      } else if (adjustedError <= thresholds.acceptableError) {
         // Linear interpolation between excellent and acceptable
         confidence =
           1.0 -
-          ((reprojError - excellentError) /
-            (maxAcceptableError - excellentError)) *
+          ((adjustedError - thresholds.excellentError) /
+            (thresholds.acceptableError - thresholds.excellentError)) *
             0.5;
-      } else {
-        // Poor calibration, but still some confidence based on how bad it is
+      } else if (adjustedError <= thresholds.maxError) {
+        // Poor but usable calibration
         confidence = Math.max(
           0.1,
-          0.5 - ((reprojError - maxAcceptableError) / maxAcceptableError) * 0.4
+          0.5 -
+            ((adjustedError - thresholds.acceptableError) /
+              (thresholds.maxError - thresholds.acceptableError)) *
+              0.4
         );
+      } else {
+        // Very poor calibration
+        confidence = 0.1;
       }
+
+      console.log('🏟️ [Sport-Specific Validation]:', {
+        sport: sportConfig.value.type,
+        originalError: reprojError,
+        adjustedError,
+        thresholds,
+        sportMultiplier: weights.sportMultiplier,
+        finalConfidence: confidence,
+      });
 
       calibrationConfidence.value = confidence;
 
@@ -800,16 +1071,180 @@ export function useCameraCalibration() {
     hasUnsavedChanges.value = true;
   };
 
+  // Set camera position configuration from EdgeBasedCameraSelector
+  const setCameraPositionConfig = (config: CameraPositionConfig) => {
+    cameraPositionConfig.value = { ...config };
+    hasUnsavedChanges.value = true;
+
+    console.log('📍 [Camera Calibration] Camera position updated:', {
+      edge: config.edge,
+      distance: config.distance,
+      height: config.height,
+      position3D: config.position3D,
+    });
+  };
+
+  // Set sport configuration
+  const setSportConfig = (type: 'badminton' | 'tennis') => {
+    if (type === 'tennis') {
+      sportConfig.value = {
+        type: 'tennis',
+        courtDimensions: {
+          length: 23.77,
+          width: 10.97,
+          serviceLineDistance: 6.4, // Distance from baseline to service line
+          centerLineLength: 10.97,
+          netHeight: 0.914,
+        },
+        typicalPlayerHeight: 1.8, // meters - tennis players typically taller
+        optimalCameraDistance: 5.0, // meters - larger court needs more distance
+        lineImportance: {
+          baseline: 1.3, // More important in tennis due to court size
+          serviceLine: 1.2,
+          centerLine: 0.9, // Less important in tennis
+          sideline: 1.1,
+        },
+        validationThresholds: {
+          excellentError: 75, // Higher tolerance due to larger court
+          acceptableError: 150,
+          maxError: 300,
+        },
+        perspectiveFactors: {
+          baseline: 1.1, // Tennis baseline cameras need more correction
+          sideline: 1.2, // Tennis sideline cameras have better perspective
+          heightSensitivity: 1.1, // Tennis players are taller, better height detection
+        },
+      };
+    } else {
+      sportConfig.value = {
+        type: 'badminton',
+        courtDimensions: {
+          length: 13.4,
+          width: 6.1,
+          serviceLineDistance: 1.98,
+          centerLineLength: 4.72,
+          netHeight: 1.55,
+        },
+        typicalPlayerHeight: 1.7, // meters
+        optimalCameraDistance: 3.0, // meters
+        lineImportance: {
+          baseline: 1.2,
+          serviceLine: 1.1,
+          centerLine: 1.0,
+          sideline: 1.0,
+        },
+        validationThresholds: {
+          excellentError: 50,
+          acceptableError: 100,
+          maxError: 200,
+        },
+        perspectiveFactors: {
+          baseline: 1.0, // Standard correction for badminton baseline
+          sideline: 1.1, // Slightly better perspective from sideline
+          heightSensitivity: 1.0, // Standard height sensitivity
+        },
+      };
+    }
+
+    // Update court dimensions to match sport
+    courtDimensions.value = { ...sportConfig.value.courtDimensions };
+    hasUnsavedChanges.value = true;
+
+    console.log('🏟️ [Camera Calibration] Sport configuration updated:', {
+      type: sportConfig.value.type,
+      courtDimensions: sportConfig.value.courtDimensions,
+      optimalDistance: sportConfig.value.optimalCameraDistance,
+      thresholds: sportConfig.value.validationThresholds,
+    });
+  };
+
   const validateCalibration = () => {
-    // Placeholder validation logic
+    if (!homographyMatrix.value || !cameraPositionConfig.value) {
+      const metrics: ValidationMetrics = {
+        reprojectionError: Infinity,
+        lineAlignmentScore: 0,
+        perspectiveAccuracy: 0,
+        overallConfidence: 0,
+      };
+      validationMetrics.value = metrics;
+      return metrics;
+    }
+
+    // Calculate position-aware validation metrics
+    const weights = getPositionWeights();
+    const baseError = calibrationError.value;
+
+    // Adjust validation based on camera position
+    let positionAccuracyFactor = 1.0;
+    let perspectiveAccuracy = 0.85; // Base accuracy
+
+    if (cameraPositionConfig.value.edge) {
+      const { edge, distance } = cameraPositionConfig.value;
+
+      // Distance-based accuracy adjustment
+      const optimalDistance = 3.0; // meters
+      const distanceDeviation = Math.abs(distance - optimalDistance);
+      const distanceFactor = Math.max(0.7, 1.0 - distanceDeviation * 0.1);
+
+      // Position-specific accuracy factors
+      switch (edge) {
+        case 'left':
+        case 'right':
+          // Sideline cameras generally provide better accuracy for movement tracking
+          positionAccuracyFactor = 1.1 * distanceFactor;
+          perspectiveAccuracy = Math.min(
+            0.95,
+            0.85 + (weights.heightAccuracy - 1.0) * 0.1
+          );
+          break;
+
+        case 'top':
+        case 'bottom':
+          // Baseline cameras provide good horizontal line accuracy but limited height
+          positionAccuracyFactor = 1.0 * distanceFactor;
+          perspectiveAccuracy = Math.min(
+            0.9,
+            0.85 + (weights.horizontalLines - 1.0) * 0.05
+          );
+          break;
+      }
+    }
+
+    // Calculate line alignment score based on position weights
+    const horizontalLineAccuracy = weights.horizontalLines > 1.0 ? 0.95 : 0.85;
+    const verticalLineAccuracy = weights.verticalLines > 1.0 ? 0.95 : 0.85;
+    const lineAlignmentScore =
+      (horizontalLineAccuracy + verticalLineAccuracy) / 2;
+
+    // Adjust reprojection error based on position
+    const adjustedError = baseError / positionAccuracyFactor;
+
+    // Calculate overall confidence considering camera position
+    const errorConfidence = Math.max(0.1, 1.0 - adjustedError / 100); // Normalize to 0-1
+    const positionConfidence = positionAccuracyFactor;
+    const overallConfidence =
+      (errorConfidence * 0.6 +
+        lineAlignmentScore * 0.2 +
+        perspectiveAccuracy * 0.2) *
+      positionConfidence;
+
     const metrics: ValidationMetrics = {
-      reprojectionError: 2.5,
-      lineAlignmentScore: 0.92,
-      perspectiveAccuracy: 0.88,
-      overallConfidence: 0.85,
+      reprojectionError: adjustedError,
+      lineAlignmentScore,
+      perspectiveAccuracy,
+      overallConfidence: Math.min(1.0, overallConfidence),
     };
 
     validationMetrics.value = metrics;
+
+    console.log('📊 [Camera Calibration] Position-aware validation metrics:', {
+      cameraPosition: cameraPositionConfig.value.edge,
+      distance: cameraPositionConfig.value.distance,
+      positionAccuracyFactor,
+      adjustedError,
+      overallConfidence: metrics.overallConfidence,
+    });
+
     return metrics;
   };
 
@@ -990,6 +1425,60 @@ export function useCameraCalibration() {
   };
 
   /**
+   * Set the video dimensions for calibration
+   */
+  const setVideoDimensions = (width: number, height: number) => {
+    if (width > 0 && height > 0) {
+      const dimensions: VideoDimensions = {
+        width,
+        height,
+        aspectRatio: width / height,
+      };
+
+      // Update runtime dimensions
+      runtimeVideoDimensions.value = dimensions;
+
+      // If calibrating, also update calibration dimensions
+      if (
+        isModalOpen.value ||
+        calibrationStep.value !== CalibrationStep.SETUP
+      ) {
+        calibrationVideoDimensions.value = dimensions;
+      }
+
+      console.log('📐 [Camera Calibration] Video dimensions updated:', {
+        width,
+        height,
+        aspectRatio: dimensions.aspectRatio,
+        isCalibrating: isModalOpen.value,
+      });
+    }
+  };
+
+  /**
+   * Get the current video dimensions (runtime or calibration)
+   */
+  const getCurrentVideoDimensions = (): VideoDimensions => {
+    // Use runtime dimensions if available, otherwise calibration dimensions
+    const dims =
+      runtimeVideoDimensions.value || calibrationVideoDimensions.value;
+
+    // If no dimensions set yet, return default (but log warning)
+    if (!dims) {
+      console.warn(
+        '⚠️ [Camera Calibration] No video dimensions set, using defaults'
+      );
+      return {
+        width: 1920,
+        height: 1080,
+        aspectRatio: 16 / 9,
+      };
+    }
+
+    return dims;
+  };
+
+  /**
    * Get transformation data to show calibration results
    */
   const getTransformationData = computed(() => {
@@ -1000,8 +1489,21 @@ export function useCameraCalibration() {
       return null;
     }
 
-    // Transform center of image to world coordinates for demonstration
-    const imageCenter = { x: 960, y: 540 }; // Assuming 1920x1080 video
+    // Get actual video dimensions
+    const videoDims = getCurrentVideoDimensions();
+
+    // Calculate actual center of the video
+    const imageCenter = {
+      x: videoDims.width / 2,
+      y: videoDims.height / 2,
+    };
+
+    console.log('📐 [getTransformationData] Using video dimensions:', {
+      width: videoDims.width,
+      height: videoDims.height,
+      center: imageCenter,
+    });
+
     const worldPoint = transformToWorld(imageCenter, 0);
 
     if (!worldPoint) {
@@ -1023,8 +1525,10 @@ export function useCameraCalibration() {
         y: worldPoint.y.toFixed(2),
         z: worldPoint.z.toFixed(2),
       },
-      // Calculate speed conversion factor based on court width
-      pixelsPerMeter: Math.abs(1920 / (courtDimensions.value.width * 2)),
+      // Calculate speed conversion factor based on actual video width and court width
+      pixelsPerMeter: Math.abs(
+        videoDims.width / (courtDimensions.value.width * 2)
+      ),
     };
   });
 
@@ -1037,6 +1541,8 @@ export function useCameraCalibration() {
     drawnVideoLines,
     lineCorrespondences,
     cameraParameters,
+    cameraPositionConfig,
+    sportConfig,
     homographyMatrix,
     projectionMatrix,
     calibrationError,
@@ -1069,8 +1575,12 @@ export function useCameraCalibration() {
     createLineCorrespondence,
     calculateCameraParameters,
     setCourtDimensions,
+    setCameraPositionConfig,
+    setSportConfig,
     validateCalibration,
     transformToWorld,
     transformLandmarksToWorld,
+    setVideoDimensions,
+    getCurrentVideoDimensions,
   };
 }

@@ -2647,14 +2647,30 @@ const setupVideoEventListeners = (
     if (props.mode === 'single') {
       singleVideoState.value.isLoading = false;
 
+      // Debug video dimensions to understand native vs rendered size
+      if (typeof debugVideoDimensions !== 'undefined') {
+        debugVideoDimensions(videoElement);
+      }
+
+      // Get actual native dimensions from the video file
+      const nativeWidth = videoElement.videoWidth;
+      const nativeHeight = videoElement.videoHeight;
+
+      console.log('📹 [UnifiedVideoPlayer] Video Native Dimensions:', {
+        nativeWidth,
+        nativeHeight,
+        hasValidDimensions: nativeWidth > 0 && nativeHeight > 0,
+        fallbackUsed: nativeWidth === 0 || nativeHeight === 0,
+      });
+
       // Create video data object for the loaded event
       const videoData = {
         id: props.videoId || 'default-video',
         url: props.videoUrl || '',
         duration: videoElement.duration,
         dimensions: {
-          width: videoElement.videoWidth || 1920,
-          height: videoElement.videoHeight || 1080,
+          width: nativeWidth || 1920, // Only use fallback if truly needed
+          height: nativeHeight || 1080,
         },
         videoType: props.videoUrl?.startsWith('blob:') ? 'upload' : 'url',
         fps: 30, // Default FPS, will be updated by FPS detection

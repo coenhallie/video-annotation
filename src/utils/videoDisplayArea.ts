@@ -20,8 +20,16 @@ export function calculateVideoDisplayArea(
   videoElement: HTMLVideoElement,
   containerElement: HTMLElement
 ): VideoDisplayArea {
-  const videoNaturalWidth = videoElement.videoWidth || 1920;
-  const videoNaturalHeight = videoElement.videoHeight || 1080;
+  // Get actual video dimensions
+  const videoNaturalWidth = videoElement.videoWidth || 1280; // More reasonable default
+  const videoNaturalHeight = videoElement.videoHeight || 720;
+
+  if (!videoElement.videoWidth || !videoElement.videoHeight) {
+    console.warn(
+      '⚠️ Video dimensions not available in calculateVideoDisplayArea'
+    );
+  }
+
   const videoAspectRatio = videoNaturalWidth / videoNaturalHeight;
 
   const containerRect = containerElement.getBoundingClientRect();

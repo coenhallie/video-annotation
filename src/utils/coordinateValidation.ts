@@ -4,7 +4,12 @@
  */
 
 import { imageToWorld, worldToImage } from './calibrationTransforms';
-import type { Point2D, Point3D } from '../composables/useCameraCalibration';
+import type {
+  Point2D,
+  Point3D,
+  CameraPositionConfig,
+  SportConfig,
+} from '../composables/useCameraCalibration';
 import type { VideoDimensions } from './videoDimensions';
 
 export interface ValidationResult {
@@ -27,15 +32,23 @@ export interface CoordinateSystemValidation {
 export function validateRoundTripAccuracy(
   testPoints: Point2D[],
   homography: number[][],
-  tolerancePixels: number = 2.0
+  tolerancePixels: number = 2.0,
+  cameraConfig?: CameraPositionConfig,
+  sportConfig?: SportConfig
 ): ValidationResult {
   let totalError = 0;
   let validTransforms = 0;
   const errors: number[] = [];
 
   for (const imagePoint of testPoints) {
-    // Image -> World -> Image
-    const worldPoint = imageToWorld(imagePoint, homography);
+    // Image -> World -> Image with position awareness
+    const worldPoint = imageToWorld(
+      imagePoint,
+      homography,
+      0,
+      cameraConfig,
+      sportConfig
+    );
     if (!worldPoint) continue;
 
     const backToImage = worldToImage(worldPoint, homography);

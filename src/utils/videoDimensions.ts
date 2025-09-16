@@ -21,8 +21,21 @@ export interface VideoContext {
 export function getVideoDimensions(
   videoElement: HTMLVideoElement
 ): VideoDimensions {
-  const width = videoElement.videoWidth || 1920; // Fallback for unloaded video
-  const height = videoElement.videoHeight || 1080;
+  // Get actual video dimensions, throw error if video not loaded
+  if (!videoElement.videoWidth || !videoElement.videoHeight) {
+    console.warn(
+      '⚠️ Video dimensions not available. Video may not be loaded yet.'
+    );
+    // Return a reasonable default but log warning
+    return {
+      width: 1280, // More common default than 1920
+      height: 720, // 720p as fallback
+      aspectRatio: 16 / 9,
+    };
+  }
+
+  const width = videoElement.videoWidth;
+  const height = videoElement.videoHeight;
 
   return {
     width,

@@ -22,7 +22,6 @@ import SpeedVisualization from './components/SpeedVisualization.vue';
 import CalibrationControls from './components/CalibrationControls.vue';
 import CalibrationOverlay from './components/CalibrationOverlay.vue';
 import CalibrationModal from './components/CalibrationModal.vue';
-import CalibrationSuccessOverlay from './components/CalibrationSuccessOverlay.vue';
 import CalibrationLinesOverlay from './components/CalibrationLinesOverlay.vue';
 import { useAuth } from './composables/useAuth';
 import { useVideoAnnotations } from './composables/useVideoAnnotations';
@@ -33,6 +32,7 @@ import { useComparisonVideoWorkflow } from './composables/useComparisonVideoWork
 import { useDualVideoPlayer } from './composables/useDualVideoPlayer';
 import { usePoseLandmarker } from './composables/usePoseLandmarker';
 import { useSessionCleanup } from './composables/useSessionCleanup';
+import { useNotifications } from './composables/useNotifications';
 import { ShareService } from './services/shareService';
 import { supabase } from './composables/useSupabase';
 
@@ -412,17 +412,19 @@ import { imageToWorld } from './utils/calibrationTransforms';
 // Initialize camera calibration composable
 const cameraCalibration = useCameraCalibration();
 
-// Calibration success overlay state
-const showCalibrationSuccess = ref(false);
-const calibrationSuccessData = ref({
-  accuracy: 85,
-  error: '2.5',
-});
-const calibrationTransformData = ref<any>(null);
+// Initialize notifications
+const { success: showSuccess, error: showError } = useNotifications();
 
 // Calibration lines overlay state
 const showCalibrationLines = ref(false);
 const calibrationLines = ref<any[]>([]);
+
+// Calibration data refs
+const calibrationTransformData = ref<any>(null);
+const calibrationSuccessData = ref<{
+  accuracy: number;
+  error: string;
+} | null>(null);
 
 // Handle calibration modal completion
 const handleCalibrationModalComplete = async (data: any) => {
@@ -576,14 +578,28 @@ const handleCalibrationModalComplete = async (data: any) => {
             ),
             error: cameraCalibration.calibrationError.value.toFixed(1),
           };
+
+          // Calibration successful - data is displayed in the modal
+          console.log(
+            'Calibration successful with accuracy:',
+            calibrationSuccessData.value.accuracy + '%'
+          );
         } else {
           // Fallback: manually calculate transformation data
           const homography = cameraCalibration.homographyMatrix.value;
           console.log('Using fallback with homography:', homography);
 
           if (homography) {
-            const centerImagePoint = { x: 960, y: 540 }; // Center of 1920x1080 video
-            console.log('Transforming point:', centerImagePoint);
+            // Use actual video dimensions instead of hardcoded values
+            const videoDims = videoState.dimensions;
+            const centerImagePoint = {
+              x: videoDims.width / 2,
+              y: videoDims.height / 2,
+            };
+            console.log('Transforming point with actual dimensions:', {
+              dimensions: videoDims,
+              center: centerImagePoint,
+            });
 
             const worldPoint = imageToWorld(centerImagePoint, homography);
             console.log('World point result:', worldPoint);
@@ -597,7 +613,8 @@ const handleCalibrationModalComplete = async (data: any) => {
                   z: worldPoint.z.toFixed(2),
                 },
                 pixelsPerMeter: Math.abs(
-                  1920 / (cameraCalibration.courtDimensions.value.width * 2)
+                  videoDims.width /
+                    (cameraCalibration.courtDimensions.value.width * 2)
                 ),
               };
 
@@ -608,18 +625,35 @@ const handleCalibrationModalComplete = async (data: any) => {
                 ),
                 error: cameraCalibration.calibrationError.value.toFixed(1),
               };
+
+              // Show success notification with calibration data
+              showSuccess(
+                'Calibration Successful',
+                `Accuracy: ${calibrationSuccessData.value.accuracy}% | Error: ${calibrationSuccessData.value.error}px | World Point: (${calibrationTransformData.value.worldPoint.x}, ${calibrationTransformData.value.worldPoint.y})`,
+                5000
+              );
             } else {
               console.error('Failed to transform point to world coordinates');
+              showError(
+                'Calibration Failed',
+                'Failed to transform point to world coordinates'
+              );
             }
           } else {
             console.error('No homography matrix available');
+            showError('Calibration Failed', 'No homography matrix available');
           }
         }
       } else {
         console.error('Calibration failed - no result returned');
+        showError('Calibration Failed', 'No calibration result returned');
       }
     } catch (error) {
       console.error('Error calculating homography:', error);
+      showError(
+        'Calibration Error',
+        `Failed to complete calibration: ${error}`
+      );
     }
   }
 
@@ -663,17 +697,6 @@ const handleCalibrationModalComplete = async (data: any) => {
   } else {
     console.log('No calibration lines received or empty array');
   }
-
-  // Show the calibration success overlay
-  showCalibrationSuccess.value = true;
-  console.log('showCalibrationSuccess set to:', showCalibrationSuccess.value);
-  console.log('Calibration transform data:', calibrationTransformData.value);
-
-  // Hide success overlay after 5 seconds (fixing the typo from 50000)
-  setTimeout(() => {
-    console.log('Hiding calibration success overlay');
-    showCalibrationSuccess.value = false;
-  }, 5000);
 };
 
 // Configure all pose landmarkers for fast movements
@@ -829,6 +852,18 @@ const handleLoaded = async (data: any) => {
 
     if (data.dimensions) {
       videoState.dimensions = data.dimensions;
+
+      // Update camera calibration with actual video dimensions
+      if (cameraCalibration.setVideoDimensions) {
+        cameraCalibration.setVideoDimensions(
+          data.dimensions.width,
+          data.dimensions.height
+        );
+        console.log(
+          '📐 Updated camera calibration with video dimensions:',
+          data.dimensions
+        );
+      }
     }
 
     if (data.id) {
@@ -2217,14 +2252,6 @@ watch(
         @overlay-hidden="showCalibrationLines = false"
       />
     </div>
-
-    <!-- Calibration Success Overlay -->
-    <CalibrationSuccessOverlay
-      :show="showCalibrationSuccess"
-      :accuracy="calibrationSuccessData.accuracy"
-      :error="calibrationSuccessData.error"
-      :example-transform="calibrationTransformData"
-    />
   </div>
 
   <!-- Login component when user is not authenticated -->

@@ -887,22 +887,6 @@ const showCreateComparisonDialog = () => {
   emit('close');
 };
 
-const generateThumbnails = async () => {
-  try {
-    const { runThumbnailGeneration } = await import(
-      '../utils/generateExistingThumbnails'
-    );
-    await runThumbnailGeneration();
-    // Reload projects to show new thumbnails
-    await loadData();
-  } catch (error) {
-    console.error('Error generating thumbnails:', error);
-    alert(
-      'Failed to generate thumbnails. Please check the console for details.'
-    );
-  }
-};
-
 const handleCreateFolder = async (name: string, parentId: string | null) => {
   if (!user.value) return;
 
