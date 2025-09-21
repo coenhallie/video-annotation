@@ -173,6 +173,17 @@ export interface Annotation {
   frame: number;
   annotationType: AnnotationType;
   drawingData?: DrawingData;
+  projectId?: string;
+  comparisonVideoId?: string;
+  synchronizedFrame?: number;
+  startFrame?: number;
+  endFrame?: number;
+  videoAFrame?: number;
+  videoBFrame?: number;
+  videoATimestamp?: number;
+  videoBTimestamp?: number;
+  videoContext?: VideoContext;
+  metadata?: Record<string, any>;
   userId?: string;
   createdAt?: string;
   updatedAt?: string;

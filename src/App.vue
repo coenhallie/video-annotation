@@ -6,6 +6,9 @@ import {
   watch,
   computed,
   onErrorCaptured,
+  onBeforeUnmount,
+  type ComponentPublicInstance,
+  type Ref,
 } from 'vue';
 import DualTimeline from './components/DualTimeline.vue';
 import VideoTimeline from './components/VideoTimeline.vue';
@@ -35,6 +38,7 @@ import { useSessionCleanup } from './composables/useSessionCleanup';
 import { useNotifications } from './composables/useNotifications';
 import { ShareService } from './services/shareService';
 import { supabase } from './composables/useSupabase';
+import type { Video, ComparisonVideo, Annotation } from './types/database';
 
 // Helper function to get the correct video URL
 const getVideoUrl = (video: any) => {
@@ -49,6 +53,30 @@ const getVideoUrl = (video: any) => {
   }
   return '';
 };
+
+type VideoSourceLike = Partial<Video> & { id: string };
+
+type UnifiedVideoPlayerExpose = {
+  seekTo: (time: number) => void;
+  play: () => void;
+  pause: () => void;
+  togglePlayPause: () => void;
+  performVideoFadeTransition: (fn: () => void) => Promise<void>;
+  singleVideoElement: Ref<HTMLVideoElement | null>;
+  videoAElement: Ref<HTMLVideoElement | null>;
+  videoBElement: Ref<HTMLVideoElement | null>;
+  singleDrawingCanvasRef: Ref<unknown>;
+  drawingCanvasARef: Ref<unknown>;
+  drawingCanvasBRef: Ref<unknown>;
+  getCalibrationState: () => unknown;
+  getCurrentVideoElement: () => HTMLVideoElement | null;
+  getCurrentVideoContainer: () => HTMLElement | null;
+};
+
+type UnifiedVideoPlayerInstance = ComponentPublicInstance<
+  Record<string, never>,
+  UnifiedVideoPlayerExpose
+>;
 
 // Error handling state
 const hasError = ref(false);
@@ -146,7 +174,7 @@ const handlePasswordResetComplete = () => {
 };
 
 // Player mode management
-const playerMode = ref('single'); // 'single' or 'dual'
+const playerMode = ref<'single' | 'dual'>('single');
 
 // Active video context for dual mode
 const activeVideoContext = ref('A'); // 'A' or 'B'
@@ -272,10 +300,10 @@ const handleAddAnnotation = async (annotationData: any) => {
   return await addAnnotation(annotationData);
 };
 
-const selectedAnnotation = ref(null);
+const selectedAnnotation = ref<Annotation | null>(null);
 
 // Component Refs
-const unifiedVideoPlayerRef = ref(null);
+const unifiedVideoPlayerRef = ref<UnifiedVideoPlayerInstance | null>(null);
 const annotationPanelRef = ref(null);
 
 const isAnnotationFormVisible = ref(false);
@@ -287,7 +315,7 @@ const isChartVisible = ref(false);
 const videoLoaded = ref(false);
 const currentVideoId = ref<string | null>(null);
 
-const currentComparisonId = ref(null);
+const currentComparisonId = ref<string | null>(null);
 const isSharedComparison = ref(false);
 const isSharedVideo = ref(false);
 const sharedVideoData = ref(null);
@@ -331,10 +359,16 @@ watch(
       return;
     }
 
-    let videoA = comp.videoA || { id: comp.videoAId };
-    let videoB = comp.videoB || { id: comp.videoBId };
+    let videoA: VideoSourceLike = comp.videoA
+      ? { ...comp.videoA }
+      : ({ id: comp.videoAId } as VideoSourceLike);
+    let videoB: VideoSourceLike = comp.videoB
+      ? { ...comp.videoB }
+      : ({ id: comp.videoBId } as VideoSourceLike);
 
-    const ensureVideoHydrated = async (vid: any) => {
+    const ensureVideoHydrated = async (
+      vid: VideoSourceLike
+    ): Promise<VideoSourceLike> => {
       if (vid && (vid.url || vid.filePath)) return vid;
       try {
         const { data, error } = await supabase
@@ -344,12 +378,12 @@ watch(
           .single();
         if (error) {
           console.warn('⚠️ [App] Hydrate watcher: failed for', vid?.id, error);
-          return vid || { id: null };
+          return vid;
         }
-        return data || vid;
+        return (data as VideoSourceLike) || vid;
       } catch (e) {
         console.warn('⚠️ [App] Hydrate watcher: exception for', vid?.id, e);
-        return vid || { id: null };
+        return vid;
       }
     };
 
@@ -482,21 +516,21 @@ const handleCalibrationModalComplete = async (data: any) => {
         {
           id: 'court-line-0',
           type: 'service-long-doubles' as const,
-          courtPoints: courtLines[0],
+          courtPoints: courtLines[0]!,
           isParallel: true,
           color: '#3b82f6',
         },
         {
           id: 'court-line-1',
           type: 'center-line' as const,
-          courtPoints: courtLines[1],
+          courtPoints: courtLines[1]!,
           isParallel: false,
           color: '#22c55e',
         },
         {
           id: 'court-line-2',
           type: 'service-short' as const,
-          courtPoints: courtLines[2],
+          courtPoints: courtLines[2]!,
           isParallel: true,
           color: '#ef4444',
         },
@@ -901,18 +935,6 @@ const handleFPSDetected = (data: { fps: number; totalFrames: number }) => {
   } catch (error) {
     console.error('Error in handleFPSDetected:', error);
   }
-};
-
-const handlePlay = () => {
-  isPlaying.value = true;
-};
-
-const handlePause = () => {
-  isPlaying.value = false;
-};
-
-const handleError = (error: Error) => {
-  console.error('Video error:', error);
 };
 
 const handleLoaded = async (data: any) => {
@@ -1420,6 +1442,8 @@ const closeShareModal = () => {
   isShareModalVisible.value = false;
 };
 
+let authSubscription: { unsubscribe: () => void } | null = null;
+
 onMounted(async () => {
   try {
     isAppLoading.value = true;
@@ -1466,6 +1490,7 @@ onMounted(async () => {
         }
       }
     );
+    authSubscription = authListener?.subscription ?? null;
 
     const shareInfo = ShareService.parseShareUrl();
 
@@ -1544,6 +1569,11 @@ onMounted(async () => {
   }
 });
 
+onBeforeUnmount(() => {
+  authSubscription?.unsubscribe();
+  authSubscription = null;
+});
+
 watch(playerMode, (newMode) => {
   if (newMode === 'single') {
     if (comparisonWorkflow) {
@@ -1574,17 +1604,6 @@ const handleResetROI = () => {
   }
 };
 
-const handleToggleROICalibration = () => {
-  (currentPoseLandmarker?.value as any)?.toggleROICalibration?.();
-};
-
-const handleKeypointSelection = (keypoint: any, isSelected: boolean) => {
-  (currentPoseLandmarker?.value as any)?.updateSelectedKeypoints?.(
-    keypoint,
-    isSelected
-  );
-};
-
 // Calibration Controls
 const handleStartCourtCalibration = () => {
   console.log('handleStartCourtCalibration called from App.vue');
@@ -1599,42 +1618,6 @@ const handleStartCourtCalibration = () => {
   } else {
     console.warn('No video URL available for calibration');
   }
-};
-
-const handleCalibrationComplete = (calibrationData: any) => {
-  console.log('handleCalibrationComplete called with:', calibrationData);
-
-  // Store calibration data in the current speed calculator
-  if (
-    currentSpeedCalculator.value &&
-    calibrationData.points &&
-    calibrationData.points.length === 4
-  ) {
-    // Access the camera calibration composable through the speed calculator
-    const speedCalc = currentSpeedCalculator.value as any;
-    if (speedCalc.cameraCalibration) {
-      speedCalc.cameraCalibration.setCalibrationPoints(calibrationData.points);
-      const success = speedCalc.cameraCalibration.calibrate();
-
-      if (success) {
-        console.log('Camera calibration completed successfully');
-        console.log(
-          'Calibration error:',
-          speedCalc.cameraCalibration.calibrationError.value.toFixed(3),
-          'meters'
-        );
-
-        // Start position tracking if pose detection is enabled
-        if (playerMode.value === 'single' && poseLandmarker?.isEnabled?.value) {
-          console.log('Speed calculator will now use calibrated coordinates');
-        }
-      } else {
-        console.error('Camera calibration failed');
-      }
-    }
-  }
-
-  showCalibrationOverlay.value = false;
 };
 
 const handleSetPlayerHeight = (height: number) => {
@@ -1960,7 +1943,9 @@ watch(
                 "
                 :dual-video-player="dualVideoPlayer"
                 :project-id="
-                  comparisonWorkflow.currentComparison.value?.project_id
+                  comparisonWorkflow.currentComparison.value?.projectId ??
+                  (comparisonWorkflow.currentComparison.value as any)?.project_id ??
+                  undefined
                 "
                 :comparison-video-id="
                   comparisonWorkflow.currentComparison.value?.id

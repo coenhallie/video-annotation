@@ -10,6 +10,9 @@
     "target": "ESNext",
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
+    "paths": {
+      "@/*": ["./src/*"]
+    },
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
     "useUnknownInCatchVariables": true,

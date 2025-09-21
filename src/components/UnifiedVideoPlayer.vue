@@ -59,8 +59,8 @@
           :class="{ 'video-fade-transition': isVideoTransitioning }"
           :style="{ opacity: videoOpacity }"
           :src="props.videoUrl"
-          :poster="poster"
-          :autoplay="autoplay"
+          :poster="posterAttr"
+          :autoplay="autoplayAttr"
           preload="metadata"
           crossorigin="anonymous"
           @click="handleVideoClick"
@@ -73,15 +73,20 @@
           v-if="props.videoUrl && drawingCanvas"
           ref="singleDrawingCanvasRef"
           :current-frame="currentFrame"
-          :is-drawing-mode="drawingCanvas?.isDrawingMode?.value"
-          :stroke-width="drawingCanvas?.currentTool?.value?.strokeWidth"
-          :severity="drawingCanvas?.currentTool?.value?.severity"
-          :current-color="
-            drawingCanvas?.getCurrentColor?.value ||
-            drawingCanvas?.getCurrentColor?.()
+          :is-drawing-mode="drawingCanvas?.isDrawingMode?.value ?? false"
+          :stroke-width="
+            drawingCanvas?.currentTool?.value?.strokeWidth ?? 3
           "
-          :existing-drawings="drawingCanvas?.allDrawings?.value"
-          :is-loading-drawings="drawingCanvas?.isLoadingDrawings?.value"
+          :severity="
+            drawingCanvas?.currentTool?.value?.severity ?? defaultSeverity
+          "
+          :current-color="
+            resolveCanvasColor(drawingCanvas) ?? '#ef4444'
+          "
+          :existing-drawings="drawingCanvas?.allDrawings?.value ?? []"
+          :is-loading-drawings="
+            drawingCanvas?.isLoadingDrawings?.value ?? false
+          "
           @drawing-created="handleDrawingCreated"
           @drawing-updated="handleDrawingUpdated"
           @drawing-deleted="handleDrawingDeleted"
@@ -150,7 +155,7 @@
 
         <!-- Custom controls for single video -->
         <div
-          v-if="controls && props.videoUrl && !singleVideoState.isLoading"
+          v-if="controlsAttr && props.videoUrl && !singleVideoState.isLoading"
           class="video-controls"
         >
           <div class="controls-content">
@@ -214,15 +219,7 @@
                   :value="playbackSpeed"
                   class="speed-select"
                   :aria-label="'Playback speed: ' + playbackSpeed + 'x'"
-                  @change="
-                    handleSpeedChange(
-                      parseFloat(
-                        $event.target && $event.target.value
-                          ? $event.target.value
-                          : '1'
-                      )
-                    )
-                  "
+                  @change="handleSpeedSelect($event)"
                 >
                   <!-- @ts-expect-error: DOM typing -->
                   <option value="0.1">0.1x</option>
@@ -470,7 +467,7 @@
           <div class="video-wrapper">
             <!-- Loading indicator for Video A -->
             <div
-              v-if="!videoAState?.isLoaded && videoAUrl"
+              v-if="!videoAStateResolved?.isLoaded && videoAUrl"
               class="loading-overlay"
             >
               <div class="loading-spinner" />
@@ -499,24 +496,32 @@
               :current-frame="
                 props.dualVideoPlayer?.videoACurrentFrame?.value || 0
               "
-              :is-drawing-mode="drawingCanvasA?.isDrawingMode?.value"
-              :stroke-width="drawingCanvasA?.currentTool?.value?.strokeWidth"
-              :severity="drawingCanvasA?.currentTool?.value?.severity"
-              :current-color="
-                drawingCanvasA?.getCurrentColor?.value ||
-                drawingCanvasA?.getCurrentColor?.()
+              :is-drawing-mode="drawingCanvasA?.isDrawingMode?.value ?? false"
+              :stroke-width="
+                drawingCanvasA?.currentTool?.value?.strokeWidth ?? 3
               "
-              :existing-drawings="drawingCanvasA?.allDrawings?.value"
-              :is-loading-drawings="drawingCanvasA?.isLoadingDrawings?.value"
+              :severity="
+                drawingCanvasA?.currentTool?.value?.severity ?? defaultSeverity
+              "
+              :current-color="
+                resolveCanvasColor(drawingCanvasA) ?? '#ef4444'
+              "
+              :existing-drawings="drawingCanvasA?.allDrawings?.value ?? []"
+              :is-loading-drawings="
+                drawingCanvasA?.isLoadingDrawings?.value ?? false
+              "
               :video-context="'A'"
               @drawing-created="
-                (drawing: any, event: Event) => handleDrawingCreated(drawing, event)
+                (drawing: DrawingData, event?: Event) =>
+                  handleDrawingCreated(drawing, event)
               "
               @drawing-updated="
-                (drawing: any, event: Event) => handleDrawingUpdated(drawing, event)
+                (drawing: DrawingData, event?: Event) =>
+                  handleDrawingUpdated(drawing, event)
               "
               @drawing-deleted="
-                (drawingId: string, event: Event) => handleDrawingDeleted(drawingId, event)
+                (drawingId: string, event?: Event) =>
+                  handleDrawingDeleted(drawingId, event)
               "
             />
 
@@ -608,7 +613,7 @@
           <div class="video-wrapper">
             <!-- Loading indicator for Video B -->
             <div
-              v-if="!videoBState?.isLoaded && videoBUrl"
+              v-if="!videoBStateResolved?.isLoaded && videoBUrl"
               class="loading-overlay"
             >
               <div class="loading-spinner" />
@@ -637,24 +642,32 @@
               :current-frame="
                 props.dualVideoPlayer?.videoBCurrentFrame?.value || 0
               "
-              :is-drawing-mode="drawingCanvasB?.isDrawingMode?.value"
-              :stroke-width="drawingCanvasB?.currentTool?.value?.strokeWidth"
-              :severity="drawingCanvasB?.currentTool?.value?.severity"
-              :current-color="
-                drawingCanvasB?.getCurrentColor?.value ||
-                drawingCanvasB?.getCurrentColor?.()
+              :is-drawing-mode="drawingCanvasB?.isDrawingMode?.value ?? false"
+              :stroke-width="
+                drawingCanvasB?.currentTool?.value?.strokeWidth ?? 3
               "
-              :existing-drawings="drawingCanvasB?.allDrawings?.value"
-              :is-loading-drawings="drawingCanvasB?.isLoadingDrawings?.value"
+              :severity="
+                drawingCanvasB?.currentTool?.value?.severity ?? defaultSeverity
+              "
+              :current-color="
+                resolveCanvasColor(drawingCanvasB) ?? '#ef4444'
+              "
+              :existing-drawings="drawingCanvasB?.allDrawings?.value ?? []"
+              :is-loading-drawings="
+                drawingCanvasB?.isLoadingDrawings?.value ?? false
+              "
               :video-context="'B'"
               @drawing-created="
-                (drawing, event) => handleDrawingCreated(drawing, event)
+                (drawing: DrawingData, event?: Event) =>
+                  handleDrawingCreated(drawing, event)
               "
               @drawing-updated="
-                (drawing, event) => handleDrawingUpdated(drawing, event)
+                (drawing: DrawingData, event?: Event) =>
+                  handleDrawingUpdated(drawing, event)
               "
               @drawing-deleted="
-                (drawingId, event) => handleDrawingDeleted(drawingId, event)
+                (drawingId: string, event?: Event) =>
+                  handleDrawingDeleted(drawingId, event)
               "
             />
 
@@ -1125,7 +1138,7 @@
 
     <!-- Custom controls for dual video -->
     <div
-      v-if="controls && (videoAUrl || videoBUrl)"
+          v-if="controlsAttr && (videoAUrl || videoBUrl)"
       class="dual-video-controls"
     >
       <div class="controls-content">
@@ -1189,15 +1202,7 @@
               :value="playbackSpeed"
               class="speed-select"
               :aria-label="'Playback speed: ' + playbackSpeed + 'x'"
-              @change="
-                handleSpeedChange(
-                  parseFloat(
-                    $event.target && $event.target.value
-                      ? $event.target.value
-                      : '1'
-                  )
-                )
-              "
+              @change="handleSpeedSelect($event)"
             >
               <option value="0.1">0.1x</option>
               <option value="0.25">0.25x</option>
@@ -1423,7 +1428,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, nextTick, reactive } from 'vue';
+import {
+  ref,
+  onMounted,
+  onUnmounted,
+  watch,
+  nextTick,
+  reactive,
+  computed,
+} from 'vue';
 import DrawingCanvas from './DrawingCanvas.vue';
 import PoseVisualization from './PoseVisualization.vue';
 import SpeedVisualization from './SpeedVisualization.vue';
@@ -1435,6 +1448,11 @@ import { useVideoPlayer } from '../composables/useVideoPlayer.ts';
 import { useCameraCalibration } from '../composables/useCameraCalibration.ts';
 import { usePositionHeatmap } from '../composables/usePositionHeatmap';
 import HeatmapMinimap from './HeatmapMinimap.vue';
+import type {
+  DualVideoPlayer,
+  DualVideoPlayerState,
+} from '../composables/useDualVideoPlayer.ts';
+import type { SeverityLevel } from '../types/database';
 // Fallback local type to satisfy TS if path alias not resolved
 type DrawingData = {
   id?: string;
@@ -1446,13 +1464,24 @@ type DrawingData = {
 interface DrawingCanvasLike {
   isDrawingMode: { value: boolean };
   currentTool: {
-    value: { type: string; strokeWidth: number; severity: string };
+    value: { type: string; strokeWidth: number; severity: SeverityLevel };
   };
   allDrawings: { value: any[] };
   isLoadingDrawings: { value: boolean };
   setVideoSize?: (w: number, h: number) => void;
   disableDrawingMode?: () => void;
+  getCurrentColor?: { value?: string } | (() => string);
+  [key: string]: any;
 }
+
+type OptionalDrawingCanvas = Partial<DrawingCanvasLike> | null | undefined;
+
+type VideoState = Partial<DualVideoPlayerState> | Record<string, unknown>;
+
+type DualVideoPlayerLike = Partial<DualVideoPlayer> & {
+    getCurrentVideoElement?: () => HTMLVideoElement | null;
+    getCurrentVideoContainer?: () => HTMLElement | null;
+  };
 interface Props {
   mode?: 'single' | 'dual';
   // Single video props
@@ -1461,34 +1490,18 @@ interface Props {
   autoplay?: boolean;
   controls?: boolean;
   poster?: string;
-  // Accept unknown but narrow at use-sites; keep template happy with optional chaining
-  drawingCanvas?: Partial<DrawingCanvasLike> | unknown;
+  // Accept narrow typing for optional drawing canvas integration
+  drawingCanvas?: OptionalDrawingCanvas;
   // Dual video props
   videoAUrl?: string;
   videoAId?: string;
   videoBUrl?: string;
   videoBId?: string;
-  drawingCanvasA?: Partial<DrawingCanvasLike> | unknown;
-  drawingCanvasB?: Partial<DrawingCanvasLike> | unknown;
-  videoAState?:
-    | { isLoaded?: boolean; fps?: number; duration?: number }
-    | Record<string, any>
-    | unknown;
-  videoBState?:
-    | { isLoaded?: boolean; fps?: number; duration?: number }
-    | Record<string, any>
-    | unknown;
-  dualVideoPlayer?:
-    | {
-        pauseVideoA?: () => void;
-        pauseVideoB?: () => void;
-        playVideoA?: () => void;
-        playVideoB?: () => void;
-        videoARef?: { value: HTMLVideoElement | null };
-        videoBRef?: { value: HTMLVideoElement | null };
-        setCanvasRefs?: (a: any, b: any) => void;
-      }
-    | unknown;
+  drawingCanvasA?: OptionalDrawingCanvas;
+  drawingCanvasB?: OptionalDrawingCanvas;
+  videoAState?: VideoState;
+  videoBState?: VideoState;
+  dualVideoPlayer?: DualVideoPlayerLike | null;
   // FPS compatibility props for dual video mode
   fpsCompatible?: boolean;
   primaryVideo?: 'A' | 'B';
@@ -1546,6 +1559,53 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const emit = defineEmits<Emits>();
+
+const posterAttr = computed(() => props.poster ?? '');
+const autoplayAttr = computed(() => props.autoplay ?? false);
+const controlsAttr = computed(() => props.controls ?? true);
+
+const drawingCanvas = computed<OptionalDrawingCanvas>(
+  () => props.drawingCanvas ?? null
+);
+const drawingCanvasA = computed<OptionalDrawingCanvas>(
+  () => props.drawingCanvasA ?? null
+);
+const drawingCanvasB = computed<OptionalDrawingCanvas>(
+  () => props.drawingCanvasB ?? null
+);
+
+const videoAStateResolved = computed<VideoState | null>(
+  () => props.videoAState ?? null
+);
+const videoBStateResolved = computed<VideoState | null>(
+  () => props.videoBState ?? null
+);
+
+const resolveCanvasColor = (canvas: OptionalDrawingCanvas): string | undefined => {
+  if (!canvas) return undefined;
+  const maybeCanvas = canvas as Partial<DrawingCanvasLike>;
+  const source = maybeCanvas.getCurrentColor;
+  if (typeof source === 'function') {
+    return source();
+  }
+  if (source && typeof source === 'object' && 'value' in source) {
+    const value = (source as { value?: string }).value;
+    if (typeof value === 'string') {
+      return value;
+    }
+  }
+  return undefined;
+};
+
+const defaultSeverity: SeverityLevel = 'medium';
+
+type PoseDetectionResult =
+  | {
+      detected?: boolean;
+      landmarks?: Array<Record<string, number>>;
+      [key: string]: unknown;
+    }
+  | null;
 
 // Video player composable for shared functionality
 const {
@@ -1856,7 +1916,7 @@ const startRAFPoseDetection = (
   // Use RAF-based detection for smooth performance with playback rate compensation
   poseLandmarker.detectPoseRAF(
     videoElement,
-    (poseData) => {
+    (poseData: PoseDetectionResult) => {
       console.log('🔍 [DEBUG] RAF pose detection callback', {
         poseData: !!poseData,
         detected: poseData?.detected,
@@ -2058,11 +2118,11 @@ const toggleROIModeB = () => {
 const toggleDualPlayPause = () => {
   if (props.dualVideoPlayer) {
     if (isPlaying.value) {
-      props.dualVideoPlayer.pauseVideoA();
-      props.dualVideoPlayer.pauseVideoB();
+      props.dualVideoPlayer.pauseVideoA?.();
+      props.dualVideoPlayer.pauseVideoB?.();
     } else {
-      props.dualVideoPlayer.playVideoA();
-      props.dualVideoPlayer.playVideoB();
+      props.dualVideoPlayer.playVideoA?.();
+      props.dualVideoPlayer.playVideoB?.();
     }
   }
 };
@@ -2653,9 +2713,13 @@ const setupVideoEventListeners = (
     if (props.mode === 'single') {
       singleVideoState.value.isLoading = false;
 
-      // Debug video dimensions to understand native vs rendered size
-      if (typeof debugVideoDimensions !== 'undefined') {
-        debugVideoDimensions(videoElement);
+      // Debug video dimensions to understand native vs rendered size when helper is present
+      const debugVideoDimensions =
+        (globalThis as Record<string, unknown>).debugVideoDimensions;
+      if (typeof debugVideoDimensions === 'function') {
+        (debugVideoDimensions as (video: HTMLVideoElement) => void)(
+          videoElement
+        );
       }
 
       // Get actual native dimensions from the video file
@@ -2759,8 +2823,9 @@ watch(
       if (props.videoAState) {
         setupVideoEventListeners(video, props.videoAState, 'A');
       }
-      if (props.dualVideoPlayer) {
-        props.dualVideoPlayer.videoARef.value = video;
+      const videoARef = props.dualVideoPlayer?.videoARef;
+      if (videoARef) {
+        videoARef.value = video;
       }
     }
   },
@@ -2774,8 +2839,9 @@ watch(
       if (props.videoBState) {
         setupVideoEventListeners(video, props.videoBState, 'B');
       }
-      if (props.dualVideoPlayer) {
-        props.dualVideoPlayer.videoBRef.value = video;
+      const videoBRef = props.dualVideoPlayer?.videoBRef;
+      if (videoBRef) {
+        videoBRef.value = video;
       }
     }
   },
@@ -2886,6 +2952,16 @@ const handleVolumeChange = (event: Event) => {
   const target = event.target as HTMLInputElement | null;
   const newVolume = parseFloat(target?.value ?? '1');
   setVolume(newVolume);
+};
+
+const handleSpeedSelect = (event: Event) => {
+  const target = event.target as HTMLSelectElement | null;
+  const nextSpeed = Number.parseFloat(target?.value ?? '1');
+  if (Number.isNaN(nextSpeed)) {
+    handleSpeedChange(1);
+    return;
+  }
+  handleSpeedChange(nextSpeed);
 };
 
 // Custom speed control for dual video mode
@@ -3091,15 +3167,20 @@ defineExpose({
     if (props.mode === 'single') {
       return singleVideoElement.value;
     }
-    // For dual mode, return the active video element based on context
-    return singleVideoElement.value; // Default fallback
+    const primary = props.primaryVideo === 'B' ? videoBElement : videoAElement;
+    const secondary = props.primaryVideo === 'B' ? videoAElement : videoBElement;
+    return primary.value ?? secondary.value ?? null;
   },
   getCurrentVideoContainer: () => {
     if (props.mode === 'single') {
       return singleVideoContainer.value;
     }
-    // For dual mode, return the container for the active video
-    return singleVideoContainer.value; // Default fallback
+    const primary = props.primaryVideo === 'B' ? videoBElement : videoAElement;
+    const container = primary.value?.parentElement ??
+      (props.primaryVideo === 'B'
+        ? videoAElement.value?.parentElement
+        : videoBElement.value?.parentElement);
+    return container ?? null;
   },
 });
 </script>
