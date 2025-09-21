@@ -3,7 +3,7 @@
     <svg
       v-if="show && lines.length > 0"
       class="calibration-lines-overlay"
-      :viewBox="`0 0 ${videoDisplayArea.width} ${videoDisplayArea.height}`"
+      :viewBox="expandedViewBox"
       preserveAspectRatio="none"
       :style="{
         left: `${videoDisplayArea.x}px`,
@@ -21,7 +21,7 @@
           :x2="line.end.x"
           :y2="line.end.y"
           :stroke="line.color || getLineColor(index)"
-          stroke-width="3"
+          stroke-width="5"
           stroke-linecap="round"
           :opacity="lineOpacity"
           class="calibration-line"
@@ -113,7 +113,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, computed } from 'vue';
+import { ref, watch, onMounted, onUnmounted, computed } from 'vue';
 import {
   calculateVideoDisplayArea,
   convertVideoToDisplayCoordinates,
@@ -126,6 +126,7 @@ interface CalibrationLine {
   color?: string;
   name?: string;
   videoDimensions?: { width: number; height: number };
+  displayDimensions?: { width: number; height: number };
 }
 
 interface Props {
@@ -163,8 +164,43 @@ let hideTimer: number | null = null;
 const lineNames = ['Back Boundary', 'Center Line', 'Service Line'];
 const lineColors = ['#3b82f6', '#22c55e', '#ef4444'];
 
-// Calculate video display area with proper page positioning
+// Calculate video display area with proper positioning
 const videoDisplayArea = computed((): VideoDisplayArea => {
+  console.log('🔍 [CalibrationLinesOverlay] Computing video display area...');
+  console.log('🔍 [CalibrationLinesOverlay] Props check:', {
+    hasVideoElement: !!props.videoElement,
+    hasVideoContainer: !!props.videoContainer,
+    show: props.show,
+    linesCount: props.lines?.length || 0,
+  });
+
+  if (!props.videoElement) {
+    console.error(
+      '❌ [CalibrationLinesOverlay] Video element is null/undefined'
+    );
+  } else {
+    console.log('✅ [CalibrationLinesOverlay] Video element details:', {
+      tagName: props.videoElement.tagName,
+      videoWidth: props.videoElement.videoWidth,
+      videoHeight: props.videoElement.videoHeight,
+      clientWidth: props.videoElement.clientWidth,
+      clientHeight: props.videoElement.clientHeight,
+    });
+  }
+
+  if (!props.videoContainer) {
+    console.error(
+      '❌ [CalibrationLinesOverlay] Video container is null/undefined'
+    );
+  } else {
+    console.log('✅ [CalibrationLinesOverlay] Video container details:', {
+      tagName: props.videoContainer.tagName,
+      className: props.videoContainer.className,
+      clientWidth: props.videoContainer.clientWidth,
+      clientHeight: props.videoContainer.clientHeight,
+    });
+  }
+
   if (props.videoElement && props.videoContainer) {
     // Get the actual display area relative to the container
     const displayArea = calculateVideoDisplayArea(
@@ -172,10 +208,11 @@ const videoDisplayArea = computed((): VideoDisplayArea => {
       props.videoContainer
     );
 
-    // Get the container's position on the page for absolute positioning
+    // Get the container's position on the page
     const containerRect = props.videoContainer.getBoundingClientRect();
 
-    // Adjust the display area to be relative to the page, not the container
+    // FIXED: Since the overlay wrapper is positioned fixed at page level,
+    // we need to use page-relative coordinates for the SVG positioning
     const pageRelativeArea = {
       ...displayArea,
       x: containerRect.left + displayArea.x,
@@ -183,22 +220,36 @@ const videoDisplayArea = computed((): VideoDisplayArea => {
     };
 
     console.log(
-      'CalibrationLinesOverlay - Video display area (page-relative):',
+      '🔍 [CalibrationLinesOverlay] Video display area (page-relative):',
       pageRelativeArea
     );
-    console.log('CalibrationLinesOverlay - Container position:', {
+    console.log('🔍 [CalibrationLinesOverlay] Container position:', {
       left: containerRect.left,
       top: containerRect.top,
+      width: containerRect.width,
+      height: containerRect.height,
     });
-    console.log('CalibrationLinesOverlay - Video natural dimensions:', {
+    console.log('🔍 [CalibrationLinesOverlay] Video natural dimensions:', {
       width: props.videoElement.videoWidth,
       height: props.videoElement.videoHeight,
+    });
+    console.log('🔍 [CalibrationLinesOverlay] Display area calculation:', {
+      displayArea,
+      containerRect: {
+        left: containerRect.left,
+        top: containerRect.top,
+        width: containerRect.width,
+        height: containerRect.height,
+      },
+      pageRelativeArea,
     });
 
     return pageRelativeArea;
   }
-  // Fallback to full video dimensions
-  console.log('CalibrationLinesOverlay - Using fallback dimensions');
+  // Fallback to full container dimensions
+  console.error(
+    '❌ [CalibrationLinesOverlay] Using fallback dimensions - missing video element or container'
+  );
   return {
     x: 0,
     y: 0,
@@ -209,54 +260,166 @@ const videoDisplayArea = computed((): VideoDisplayArea => {
   };
 });
 
-// Convert normalized coordinates (0-1 range) to display coordinates
+// Convert normalized coordinates from CalibrationModal to display coordinates
 const scaledLines = computed(() => {
-  return props.lines
-    .map((line) => {
-      if (!line || !line.start || !line.end) return null;
+  console.log('🔍 [CalibrationLinesOverlay] Computing scaled lines...');
+  console.log('🔍 [CalibrationLinesOverlay] Input lines:', props.lines);
+  console.log(
+    '🔍 [CalibrationLinesOverlay] Lines count:',
+    props.lines?.length || 0
+  );
 
-      // Check if coordinates are already normalized (values between 0 and 1)
+  if (!props.lines || props.lines.length === 0) {
+    console.error('❌ [CalibrationLinesOverlay] No lines to scale');
+    return [];
+  }
+
+  const currentDisplayArea = videoDisplayArea.value;
+
+  return props.lines
+    .map((line, index) => {
+      if (!line || !line.start || !line.end) {
+        console.error(
+          `❌ [CalibrationLinesOverlay] Line ${index} is invalid:`,
+          line
+        );
+        return null;
+      }
+
+      // Check if coordinates are normalized (0-1 range)
       const isNormalized =
         line.start.x <= 1 &&
         line.start.y <= 1 &&
         line.end.x <= 1 &&
         line.end.y <= 1;
 
-      if (isNormalized) {
-        // Scale normalized coordinates to display area dimensions
-        return {
-          ...line,
-          start: {
-            x: line.start.x * videoDisplayArea.value.width,
-            y: line.start.y * videoDisplayArea.value.height,
-          },
-          end: {
-            x: line.end.x * videoDisplayArea.value.width,
-            y: line.end.y * videoDisplayArea.value.height,
-          },
-        };
-      } else {
-        // Legacy support: if coordinates are in pixel values, scale them appropriately
-        const videoWidth =
-          line.videoDimensions?.width || props.videoWidth || 1920;
-        const videoHeight =
-          line.videoDimensions?.height || props.videoHeight || 1080;
+      console.log(`🔍 [CalibrationLinesOverlay] Line ${index} analysis:`, {
+        index,
+        isNormalized,
+        line: {
+          start: { x: line.start.x, y: line.start.y },
+          end: { x: line.end.x, y: line.end.y },
+          color: line.color,
+          name: line.name,
+        },
+        displayDimensions: line.displayDimensions,
+        videoDimensions: line.videoDimensions,
+        currentDisplayArea: {
+          width: currentDisplayArea.width,
+          height: currentDisplayArea.height,
+          x: currentDisplayArea.x,
+          y: currentDisplayArea.y,
+        },
+      });
 
-        // Convert to normalized first, then scale to display area
-        return {
-          ...line,
-          start: {
-            x: (line.start.x / videoWidth) * videoDisplayArea.value.width,
-            y: (line.start.y / videoHeight) * videoDisplayArea.value.height,
-          },
-          end: {
-            x: (line.end.x / videoWidth) * videoDisplayArea.value.width,
-            y: (line.end.y / videoHeight) * videoDisplayArea.value.height,
-          },
+      const sourceVideoWidth =
+        line.videoDimensions?.width ||
+        props.videoElement?.videoWidth ||
+        props.videoWidth ||
+        currentDisplayArea.width;
+      const sourceVideoHeight =
+        line.videoDimensions?.height ||
+        props.videoElement?.videoHeight ||
+        props.videoHeight ||
+        currentDisplayArea.height;
+
+      const sourceDisplayWidth = line.displayDimensions?.width || null;
+      const sourceDisplayHeight = line.displayDimensions?.height || null;
+
+      const maxRatioX =
+        sourceDisplayWidth && sourceDisplayWidth > 0
+          ? sourceVideoWidth / sourceDisplayWidth
+          : null;
+      const maxRatioY =
+        sourceDisplayHeight && sourceDisplayHeight > 0
+          ? sourceVideoHeight / sourceDisplayHeight
+          : null;
+
+      const tolerance = 0.02;
+      const looksLikeDisplayRatio =
+        !isNormalized &&
+        maxRatioX !== null &&
+        maxRatioY !== null &&
+        line.start.x >= 0 &&
+        line.end.x >= 0 &&
+        line.start.y >= 0 &&
+        line.end.y >= 0 &&
+        line.start.x <= maxRatioX + tolerance &&
+        line.end.x <= maxRatioX + tolerance &&
+        line.start.y <= maxRatioY + tolerance &&
+        line.end.y <= maxRatioY + tolerance;
+
+      const convertFromVideoPixels = (
+        videoX: number,
+        videoY: number
+      ): { x: number; y: number } => ({
+        x: (videoX / sourceVideoWidth) * currentDisplayArea.width,
+        y: (videoY / sourceVideoHeight) * currentDisplayArea.height,
+      });
+
+      let start;
+      let end;
+
+      if (isNormalized) {
+        start = {
+          x: line.start.x * currentDisplayArea.width,
+          y: line.start.y * currentDisplayArea.height,
         };
+        end = {
+          x: line.end.x * currentDisplayArea.width,
+          y: line.end.y * currentDisplayArea.height,
+        };
+      } else if (looksLikeDisplayRatio && sourceDisplayWidth && sourceDisplayHeight) {
+        const startVideo = {
+          x: line.start.x * sourceDisplayWidth,
+          y: line.start.y * sourceDisplayHeight,
+        };
+        const endVideo = {
+          x: line.end.x * sourceDisplayWidth,
+          y: line.end.y * sourceDisplayHeight,
+        };
+        start = convertFromVideoPixels(startVideo.x, startVideo.y);
+        end = convertFromVideoPixels(endVideo.x, endVideo.y);
+      } else {
+        start = convertFromVideoPixels(line.start.x, line.start.y);
+        end = convertFromVideoPixels(line.end.x, line.end.y);
       }
+
+      const scaledLine = {
+        ...line,
+        start,
+        end,
+      };
+
+      console.log(`✅ [CalibrationLinesOverlay] Line ${index} scaled:`, {
+        original: {
+          start: { x: line.start.x, y: line.start.y },
+          end: { x: line.end.x, y: line.end.y },
+        },
+        scaled: {
+          start: { x: scaledLine.start.x, y: scaledLine.start.y },
+          end: { x: scaledLine.end.x, y: scaledLine.end.y },
+        },
+        displayArea: {
+          width: currentDisplayArea.width,
+          height: currentDisplayArea.height,
+        },
+        sourceDimensions: {
+          width: sourceVideoWidth,
+          height: sourceVideoHeight,
+        },
+      });
+
+      return scaledLine;
     })
     .filter((line) => line !== null);
+});
+
+// Simple viewBox that matches the video display area exactly
+const expandedViewBox = computed(() => {
+  // Use exact video display area dimensions without padding
+  // This ensures 1:1 coordinate mapping
+  return `0 0 ${videoDisplayArea.value.width} ${videoDisplayArea.value.height}`;
 });
 
 // Convert video coordinates to display coordinates for SVG
@@ -295,7 +458,20 @@ const getLineColor = (index: number): string => {
 watch(
   () => props.show,
   (newShow) => {
+    console.log('🔵 [CalibrationLinesOverlay] Show prop changed:', newShow);
+    console.log('🔵 [CalibrationLinesOverlay] Current state:', {
+      show: props.show,
+      linesCount: props.lines.length,
+      hasVideoElement: !!props.videoElement,
+      hasVideoContainer: !!props.videoContainer,
+      videoWidth: props.videoWidth,
+      videoHeight: props.videoHeight,
+      duration: props.duration,
+      fadeOut: props.fadeOut,
+    });
+
     if (newShow) {
+      console.log('✅ [CalibrationLinesOverlay] Showing overlay');
       // Reset opacity when showing
       lineOpacity.value = 1;
 
@@ -313,7 +489,11 @@ watch(
       if (props.fadeOut && props.duration > 0) {
         // Start fading after 2/3 of the duration
         const fadeDelay = (props.duration * 2) / 3;
+        console.log(
+          `⏱️ [CalibrationLinesOverlay] Setting fade timer for ${fadeDelay}ms`
+        );
         fadeTimer = window.setTimeout(() => {
+          console.log('🎨 [CalibrationLinesOverlay] Starting fade animation');
           // Gradually reduce opacity
           const fadeSteps = 10;
           const fadeInterval = props.duration / 3 / fadeSteps;
@@ -325,17 +505,27 @@ watch(
 
             if (currentStep >= fadeSteps) {
               clearInterval(fadeIntervalId);
+              console.log(
+                '📤 [CalibrationLinesOverlay] Fade complete, emitting overlay-hidden'
+              );
               emit('overlay-hidden');
             }
           }, fadeInterval);
         }, fadeDelay);
       } else if (props.duration > 0) {
         // Just hide after duration without fading
+        console.log(
+          `⏱️ [CalibrationLinesOverlay] Setting hide timer for ${props.duration}ms`
+        );
         hideTimer = window.setTimeout(() => {
+          console.log(
+            '📤 [CalibrationLinesOverlay] Timer complete, emitting overlay-hidden'
+          );
           emit('overlay-hidden');
         }, props.duration);
       }
     } else {
+      console.log('🔴 [CalibrationLinesOverlay] Hiding overlay');
       // Clear timers when hiding
       if (fadeTimer) {
         clearTimeout(fadeTimer);
@@ -350,18 +540,123 @@ watch(
   { immediate: true }
 );
 
-// Cleanup on unmount
+// Watch for lines changes
+watch(
+  () => props.lines,
+  (newLines) => {
+    console.log('🔵 [CalibrationLinesOverlay] Lines prop changed:', newLines);
+    console.log('🔵 [CalibrationLinesOverlay] Lines details:', {
+      count: newLines.length,
+      hasNormalizedCoords: newLines.every(
+        (line: any) =>
+          line.start &&
+          line.end &&
+          typeof line.start.x === 'number' &&
+          typeof line.start.y === 'number'
+      ),
+      lines: newLines.map((line: any, i: number) => ({
+        index: i,
+        name: line.name,
+        color: line.color,
+        start: line.start,
+        end: line.end,
+        hasVideoDimensions: !!line.videoDimensions,
+      })),
+    });
+  },
+  { deep: true }
+);
+
+// Watch video element
+watch(
+  () => props.videoElement,
+  (newElement) => {
+    console.log('🔵 [CalibrationLinesOverlay] Video element changed:', {
+      hasElement: !!newElement,
+      elementDetails: newElement
+        ? {
+            tagName: newElement.tagName,
+            videoWidth: newElement.videoWidth,
+            videoHeight: newElement.videoHeight,
+            clientWidth: newElement.clientWidth,
+            clientHeight: newElement.clientHeight,
+            readyState: newElement.readyState,
+          }
+        : null,
+    });
+  }
+);
+
+// Watch video container
+watch(
+  () => props.videoContainer,
+  (newContainer) => {
+    console.log('🔵 [CalibrationLinesOverlay] Video container changed:', {
+      hasContainer: !!newContainer,
+      containerDetails: newContainer
+        ? {
+            tagName: newContainer.tagName,
+            className: newContainer.className,
+            clientWidth: newContainer.clientWidth,
+            clientHeight: newContainer.clientHeight,
+          }
+        : null,
+    });
+  }
+);
+
+// Lifecycle hooks
 onMounted(() => {
-  return () => {
-    if (fadeTimer) clearTimeout(fadeTimer);
-    if (hideTimer) clearTimeout(hideTimer);
-  };
+  console.log('🎬 [CalibrationLinesOverlay] Component mounted');
+  console.log('🎬 [CalibrationLinesOverlay] Mount state:', {
+    show: props.show,
+    linesCount: props.lines.length,
+    lines: props.lines,
+    hasVideoElement: !!props.videoElement,
+    hasVideoContainer: !!props.videoContainer,
+    videoElementDetails: props.videoElement
+      ? {
+          tagName: props.videoElement.tagName,
+          videoWidth: props.videoElement.videoWidth,
+          videoHeight: props.videoElement.videoHeight,
+        }
+      : null,
+    videoContainerDetails: props.videoContainer
+      ? {
+          tagName: props.videoContainer.tagName,
+          clientWidth: props.videoContainer.clientWidth,
+          clientHeight: props.videoContainer.clientHeight,
+        }
+      : null,
+  });
+
+  if (props.show && props.lines.length > 0) {
+    console.log('✅ [CalibrationLinesOverlay] Starting overlay on mount');
+    // The watch with immediate: true should handle this, but let's log it
+  } else {
+    console.log('⚠️ [CalibrationLinesOverlay] Not showing overlay on mount:', {
+      show: props.show,
+      linesCount: props.lines.length,
+    });
+  }
+});
+
+onUnmounted(() => {
+  console.log('💀 [CalibrationLinesOverlay] Component unmounting');
+  if (fadeTimer) {
+    clearTimeout(fadeTimer);
+    fadeTimer = null;
+  }
+  if (hideTimer) {
+    clearTimeout(hideTimer);
+    hideTimer = null;
+  }
 });
 </script>
 
 <style scoped>
 .calibration-lines-overlay {
-  position: fixed; /* Use fixed positioning to align with page coordinates */
+  position: absolute; /* Use absolute positioning within the fixed wrapper */
   pointer-events: none;
   z-index: 100;
 }

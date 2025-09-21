@@ -101,6 +101,8 @@
           :show-center-of-mass="poseVisualizationSettings.showCenterOfMass"
           :speed-metrics="poseLandmarker?.speedMetrics"
           :selected-keypoints="poseLandmarker?.selectedKeypoints?.value || []"
+          :current-r-o-i="roiSettings.currentROI"
+          :use-r-o-i="roiSettings.enabled"
         />
 
         <!-- Enhanced ROI Selector Overlay for Single Video -->
@@ -553,6 +555,8 @@
               :selected-keypoints="
                 poseLandmarkerA?.selectedKeypoints?.value || []
               "
+              :current-r-o-i="roiSettingsA.currentROI"
+              :use-r-o-i="roiSettingsA.enabled"
             />
 
             <!-- Enhanced ROI Selector Overlay for Video A -->
@@ -689,6 +693,8 @@
               :selected-keypoints="
                 poseLandmarkerB?.selectedKeypoints?.value || []
               "
+              :current-r-o-i="roiSettingsB.currentROI"
+              :use-r-o-i="roiSettingsB.enabled"
             />
 
             <!-- Enhanced ROI Selector Overlay for Video B -->

@@ -806,6 +806,13 @@
               Next
             </button>
             <button
+              v-if="currentStep === 1 && canProceedToNext"
+              class="btn-success"
+              @click="completeCalibrationDirectly"
+            >
+              Complete Calibration
+            </button>
+            <button
               v-if="currentStep === 2"
               class="btn-success"
               @click="closeModal"
@@ -1125,6 +1132,24 @@ const currentDrawnLine = computed(() => {
   return completedLines.value[currentLineIndex.value];
 });
 
+// Keep the quality badge in sync with the latest calibration results
+watch(
+  () => calibrationResults.value,
+  (result) => {
+    if (!result) {
+      calibrationQuality.value = null;
+      return;
+    }
+
+    const label = getCalibrationQualityLabel();
+    calibrationQuality.value = {
+      level: label.toLowerCase(),
+      message: `${label} calibration`,
+    };
+  },
+  { immediate: true }
+);
+
 // Computed properties
 const canProceedToNext = computed(() => {
   if (currentStep.value === 0) {
@@ -1151,9 +1176,30 @@ const closeModal = () => {
   // Clean up resize listener
   window.removeEventListener('resize', updateCanvasDimensions);
 
-  // Emit calibration data if we're on the success step
-  if (currentStep.value === 2 && calibrationData.value) {
-    emit('calibration-complete', calibrationData.value);
+  // Ensure calibration data is prepared when we have completed lines
+  const confirmedCount = completedLines.value.filter(
+    (l) => l?.confirmed
+  ).length;
+
+  if (confirmedCount >= 3 || currentStep.value === 2) {
+    if (!calibrationData.value) {
+      // Build calibrationData from drawn lines before emitting
+      completeCalibration();
+    }
+    if (calibrationData.value) {
+      console.log(
+        '🎯 [CloseModal] Emitting calibration data:',
+        calibrationData.value
+      );
+      emit('calibration-complete', calibrationData.value);
+    } else {
+      console.warn('🎯 [CloseModal] No calibration data available to emit');
+    }
+  } else {
+    console.log(
+      '🎯 [CloseModal] Not enough confirmed lines to emit calibration data:',
+      confirmedCount
+    );
   }
 
   emit('close');
@@ -1166,6 +1212,15 @@ onUnmounted(() => {
 
 const nextStep = () => {
   if (canProceedToNext.value) {
+    // If moving from step 1 to step 2, prepare calibration data
+    if (currentStep.value === 1) {
+      console.log(
+        '🎯 [nextStep] Moving from step 1 to step 2, preparing calibration data'
+      );
+      if (!calibrationData.value) {
+        completeCalibration();
+      }
+    }
     currentStep.value++;
   }
 };
@@ -1181,65 +1236,136 @@ const resetCalibration = () => {
   currentLineIndex.value = 0;
   completedLines.value = [];
   selectedLineIndex.value = null;
+  calibrationResults.value = null;
+  calibrationData.value = null;
+  calibrationQuality.value = null;
+};
+
+const completeCalibrationDirectly = () => {
+  console.log(
+    '🎯 [CompleteCalibrationDirectly] Completing calibration directly from step 1'
+  );
+
+  // Ensure calibration data is prepared
+  if (!calibrationData.value) {
+    completeCalibration();
+  }
+
+  // Close the modal which will emit the calibration data
+  closeModal();
 };
 
 const completeCalibration = () => {
-  console.log('completeCalibration called');
-  console.log('Current state:', {
+  console.log('🎯 [completeCalibration] Called');
+  console.log('🎯 [completeCalibration] Current state:', {
     currentStep: currentStep.value,
+    completedLinesCount: completedLines.value.length,
     completedLines: completedLines.value,
     calibrationResults: calibrationResults.value,
   });
 
-  // Convert drawn lines to normalized coordinates (0-1 range) relative to video display area
+  // Convert drawn lines to normalized coordinates (0-1 range) relative to the natural video dimensions
   const normalizedLines = completedLines.value
-    .map((line) => {
-      if (!line || !line.start || !line.end || !videoElement.value) return null;
+    .map((line, index) => {
+      console.log(`🎯 [completeCalibration] Processing line ${index}:`, line);
 
-      // CRITICAL FIX: Use video display area dimensions instead of natural dimensions
-      // The drawn coordinates are in display coordinate space, not natural video space
+      if (!line || !line.start || !line.end || !videoElement.value) {
+        console.warn(`🎯 [completeCalibration] Line ${index} is invalid:`, {
+          hasLine: !!line,
+          hasStart: !!line?.start,
+          hasEnd: !!line?.end,
+          hasVideoElement: !!videoElement.value,
+        });
+        return null;
+      }
+
       const displayArea = videoDisplayArea.value;
 
-      // Validate display area dimensions
+      // Validate the natural video dimensions – drawing happens in native pixel space
+      const videoWidth = videoElement.value?.videoWidth || 1920;
+      const videoHeight = videoElement.value?.videoHeight || 1080;
+
+      if (videoWidth <= 0 || videoHeight <= 0) {
+        console.error(
+          '🎯 [completeCalibration] Invalid natural video dimensions:',
+          {
+            videoWidth,
+            videoHeight,
+          }
+        );
+        return null;
+      }
+
       if (!displayArea || displayArea.width <= 0 || displayArea.height <= 0) {
-        console.error('Invalid video display area:', displayArea);
+        console.error(
+          '🎯 [completeCalibration] Invalid video display area:',
+          displayArea
+        );
         return null;
       }
 
       const displayWidth = displayArea.width;
       const displayHeight = displayArea.height;
 
-      // Get natural video dimensions for reference with proper null checks
-      const videoWidth = videoElement.value?.videoWidth || 1920;
-      const videoHeight = videoElement.value?.videoHeight || 1080;
+      console.log(`🎯 [completeCalibration] Line ${index} dimensions:`, {
+        displayArea: { width: displayWidth, height: displayHeight },
+        videoDimensions: { width: videoWidth, height: videoHeight },
+        lineCoords: {
+          start: line.start,
+          end: line.end,
+        },
+      });
 
-      // Validate coordinates are within bounds
-      if (
+      // Log the raw coordinates before normalization
+      console.log(`🎯 [completeCalibration] Line ${index} raw coordinates:`, {
+        start: { x: line.start.x, y: line.start.y },
+        end: { x: line.end.x, y: line.end.y },
+        videoBounds: { width: videoWidth, height: videoHeight },
+      });
+
+      // Check if coordinates are out of bounds but don't clamp them yet
+      const isOutOfBounds =
         line.start.x < 0 ||
-        line.start.x > displayWidth ||
+        line.start.x > videoWidth ||
         line.start.y < 0 ||
-        line.start.y > displayHeight ||
+        line.start.y > videoHeight ||
         line.end.x < 0 ||
-        line.end.x > displayWidth ||
+        line.end.x > videoWidth ||
         line.end.y < 0 ||
-        line.end.y > displayHeight
-      ) {
-        console.warn('Line coordinates out of bounds:', {
-          line,
-          displayArea: { width: displayWidth, height: displayHeight },
-        });
+        line.end.y > videoHeight;
+
+      if (isOutOfBounds) {
+        console.warn(
+          '🎯 [completeCalibration] Line coordinates out of bounds:',
+          {
+            line: {
+              start: { x: line.start.x, y: line.start.y },
+              end: { x: line.end.x, y: line.end.y },
+            },
+            videoArea: { width: videoWidth, height: videoHeight },
+            outOfBoundsDetails: {
+              startXOutOfBounds:
+                line.start.x < 0 || line.start.x > videoWidth,
+              startYOutOfBounds:
+                line.start.y < 0 || line.start.y > videoHeight,
+              endXOutOfBounds: line.end.x < 0 || line.end.x > videoWidth,
+              endYOutOfBounds: line.end.y < 0 || line.end.y > videoHeight,
+            },
+          }
+        );
       }
 
-      // Normalize coordinates to 0-1 range based on video's display dimensions
-      return {
+      // Normalize coordinates to 0-1 range based on the natural video dimensions
+      // Don't clamp to prevent loss of line information
+      const normalizedLine = {
         ...line,
         start: {
-          x: Math.max(0, Math.min(1, line.start.x / displayWidth)),
-          y: Math.max(0, Math.min(1, line.start.y / displayHeight)),
+          x: line.start.x / videoWidth,
+          y: line.start.y / videoHeight,
         },
         end: {
-          x: Math.max(0, Math.min(1, line.end.x / displayWidth)),
-          y: Math.max(0, Math.min(1, line.end.y / displayHeight)),
+          x: line.end.x / videoWidth,
+          y: line.end.y / videoHeight,
         },
         // Store both display and natural dimensions for reference
         videoDimensions: {
@@ -1251,8 +1377,20 @@ const completeCalibration = () => {
           height: displayHeight,
         },
       };
+
+      console.log(
+        `🎯 [completeCalibration] Line ${index} normalized:`,
+        normalizedLine
+      );
+      return normalizedLine;
     })
     .filter((line) => line !== null);
+
+  console.log('🎯 [completeCalibration] Normalized lines result:', {
+    originalCount: completedLines.value.length,
+    normalizedCount: normalizedLines.length,
+    normalizedLines: normalizedLines,
+  });
 
   // Store calibration data for later emission
   calibrationData.value = {
@@ -1612,6 +1750,10 @@ const completeCalibration = () => {
 // Camera position handlers
 const handleEdgeSelected = (edge: 'top' | 'bottom' | 'left' | 'right') => {
   console.log('Edge selected:', edge);
+
+  // Update the edge in cameraPositionData
+  cameraPositionData.value.edge = edge;
+
   // Update calibration system with camera position when edge is selected
   if (cameraPositionData.value && cameraPositionData.value.edge !== null) {
     calibration.setCameraPositionConfig({
@@ -1679,6 +1821,16 @@ const handleVideoLoaded = () => {
     videoWidth.value = naturalWidth;
     videoHeight.value = naturalHeight;
     duration.value = videoDuration || 0;
+
+    // CRITICAL FIX: Set video dimensions in the calibration system
+    calibration.setVideoDimensions(naturalWidth, naturalHeight);
+    console.log(
+      '📹 [Video Loaded] Set video dimensions in calibration system:',
+      {
+        width: naturalWidth,
+        height: naturalHeight,
+      }
+    );
 
     // Calculate the actual video display area accounting for object-fit: contain
     updateVideoDisplayArea();
@@ -1993,13 +2145,23 @@ const confirmCurrentLine = () => {
       // Add court line to calibration system
       calibration.selectDiagramLine(lineType);
 
-      // CRITICAL FIX: Convert display coordinates to normalized video coordinates
-      // The calibration system expects coordinates in the video's natural coordinate space
+      // CRITICAL FIX: Normalize against the video's natural resolution before feeding calibration
       const displayArea = videoDisplayArea.value;
       const videoWidth = videoElement.value.videoWidth || 1920;
       const videoHeight = videoElement.value.videoHeight || 1080;
 
-      // Validate display area and video dimensions
+      if (videoWidth <= 0 || videoHeight <= 0) {
+        console.error(
+          'Invalid natural video dimensions for line integration:',
+          {
+            videoWidth,
+            videoHeight,
+          }
+        );
+        return;
+      }
+
+      // Validate display area primarily for logging consistency.
       if (!displayArea || displayArea.width <= 0 || displayArea.height <= 0) {
         console.error(
           'Invalid display area for line integration:',
@@ -2008,14 +2170,14 @@ const confirmCurrentLine = () => {
         return;
       }
 
-      // Convert from display coordinates to normalized video coordinates (0-1 range)
+      // Convert to normalized coordinates (0-1) using natural video dimensions
       const normalizedStart = {
-        x: currentDrawnLine.value.start.x / displayArea.width,
-        y: currentDrawnLine.value.start.y / displayArea.height,
+        x: currentDrawnLine.value.start.x / videoWidth,
+        y: currentDrawnLine.value.start.y / videoHeight,
       };
       const normalizedEnd = {
-        x: currentDrawnLine.value.end.x / displayArea.width,
-        y: currentDrawnLine.value.end.y / displayArea.height,
+        x: currentDrawnLine.value.end.x / videoWidth,
+        y: currentDrawnLine.value.end.y / videoHeight,
       };
 
       // Convert normalized coordinates to video pixel coordinates

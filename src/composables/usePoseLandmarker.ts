@@ -1206,12 +1206,21 @@ export function usePoseLandmarker(): UsePoseLandmarker {
   };
 
   const getROIInsights = () => {
+    const currentROI = detectionSettings.roiBox;
+
     return {
+      currentROI,
+      predictedROI: roiPrediction.value,
+      history: roiHistory.value,
+      confidence: roiConfidence.value,
+      stability: roiStabilityMetrics,
+      useROI: detectionSettings.useROI,
+      // Legacy fields retained for compatibility while the app transitions to the new shape
       roiHistory: roiHistory.value,
       roiPrediction: roiPrediction.value,
       roiConfidence: roiConfidence.value,
       roiStabilityMetrics: roiStabilityMetrics,
-      detectionSettings: detectionSettings,
+      detectionSettings,
     };
   };
 

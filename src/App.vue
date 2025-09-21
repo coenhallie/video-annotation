@@ -286,6 +286,7 @@ const isVideoUploadVisible = ref(false);
 const isChartVisible = ref(false);
 const videoLoaded = ref(false);
 const currentVideoId = ref<string | null>(null);
+
 const currentComparisonId = ref(null);
 const isSharedComparison = ref(false);
 const isSharedVideo = ref(false);
@@ -502,16 +503,33 @@ const handleCalibrationModalComplete = async (data: any) => {
       ];
 
       // Set up drawn video lines
-      console.log('Drawn lines from modal:', data.drawnLines);
+      console.log('Drawn lines from modal (normalized):', data.drawnLines);
       cameraCalibration.drawnVideoLines.value = data.drawnLines
         .filter((line: any) => line && line.start && line.end)
         .map((line: any, index: number) => {
+          const videoWidth = line.videoDimensions?.width;
+          const videoHeight = line.videoDimensions?.height;
+
+          const fallbackDims = cameraCalibration.getCurrentVideoDimensions();
+          const width = videoWidth && videoWidth > 0 ? videoWidth : fallbackDims.width;
+          const height = videoHeight && videoHeight > 0 ? videoHeight : fallbackDims.height;
+
+          const startPixel = {
+            x: line.start.x * width,
+            y: line.start.y * height,
+          };
+          const endPixel = {
+            x: line.end.x * width,
+            y: line.end.y * height,
+          };
+
           console.log(
-            `Line ${index}: start(${line.start.x}, ${line.start.y}) -> end(${line.end.x}, ${line.end.y})`
+            `Line ${index}: start(${startPixel.x.toFixed(2)}, ${startPixel.y.toFixed(2)}) -> end(${endPixel.x.toFixed(2)}, ${endPixel.y.toFixed(2)}) (width=${width}, height=${height})`
           );
+
           return {
             id: `video-line-${index}`,
-            points: [line.start, line.end],
+            points: [startPixel, endPixel],
             timestamp: Date.now(),
             confidence: 0.9,
           };
@@ -659,9 +677,12 @@ const handleCalibrationModalComplete = async (data: any) => {
 
   // Store the calibration lines for display
   if (data.drawnLines && data.drawnLines.length > 0) {
-    console.log('Calibration lines received (normalized):', data.drawnLines);
+    console.log(
+      '🎯 [App.handleCalibrationModalComplete] Calibration lines received (normalized):',
+      data.drawnLines
+    );
     calibrationLines.value = data.drawnLines.map((line: any, index: number) => {
-      console.log(`Line ${index} (normalized):`, line);
+      console.log(`🎯 [App] Line ${index} (normalized):`, line);
       console.log(`  Start: (${line.start.x}, ${line.start.y})`);
       console.log(`  End: (${line.end.x}, ${line.end.y})`);
       console.log(`  Video dimensions:`, line.videoDimensions);
@@ -677,25 +698,82 @@ const handleCalibrationModalComplete = async (data: any) => {
       };
     });
 
+    // Check video player ref and its methods
+    console.log('🎯 [App] Checking video player ref:', {
+      hasRef: !!unifiedVideoPlayerRef.value,
+      refType: typeof unifiedVideoPlayerRef.value,
+      hasGetCurrentVideoElement: !!(unifiedVideoPlayerRef.value as any)
+        ?.getCurrentVideoElement,
+      hasGetCurrentVideoContainer: !!(unifiedVideoPlayerRef.value as any)
+        ?.getCurrentVideoContainer,
+    });
+
+    // Try to get video element and container
+    let videoEl = null;
+    let videoContainer = null;
+
+    if (unifiedVideoPlayerRef.value) {
+      try {
+        videoEl = (
+          unifiedVideoPlayerRef.value as any
+        )?.getCurrentVideoElement?.();
+        videoContainer = (
+          unifiedVideoPlayerRef.value as any
+        )?.getCurrentVideoContainer?.();
+      } catch (e) {
+        console.error('🔴 [App] Error getting video references:', e);
+      }
+    }
+
+    console.log('🎯 [App] Video references obtained:', {
+      hasVideoElement: !!videoEl,
+      hasVideoContainer: !!videoContainer,
+      videoElementDetails: videoEl
+        ? {
+            tagName: videoEl.tagName,
+            videoWidth: videoEl.videoWidth,
+            videoHeight: videoEl.videoHeight,
+            clientWidth: videoEl.clientWidth,
+            clientHeight: videoEl.clientHeight,
+          }
+        : null,
+      videoContainerDetails: videoContainer
+        ? {
+            tagName: videoContainer.tagName,
+            className: videoContainer.className,
+            clientWidth: videoContainer.clientWidth,
+            clientHeight: videoContainer.clientHeight,
+          }
+        : null,
+    });
+
     // Show calibration lines on the video for 1 minute
-    console.log('Setting showCalibrationLines to true');
+    console.log('✅ [App] Setting showCalibrationLines to true');
     showCalibrationLines.value = true;
     console.log(
-      'Calibration lines to display (normalized):',
+      '✅ [App] Calibration lines to display (normalized):',
       calibrationLines.value
     );
-    console.log('Current video dimensions:', {
+    console.log('🎯 [App] Current video dimensions:', {
       width: videoDimensions.value.width || 1920,
       height: videoDimensions.value.height || 1080,
+    });
+
+    console.log('🎯 [App] Final state before rendering overlay:', {
+      showCalibrationLines: showCalibrationLines.value,
+      calibrationLinesCount: calibrationLines.value.length,
+      hasVideoPlayerRef: !!unifiedVideoPlayerRef.value,
+      videoElementAvailable: !!videoEl,
+      videoContainerAvailable: !!videoContainer,
     });
 
     // Hide calibration lines after 60 seconds (1 minute)
     setTimeout(() => {
       showCalibrationLines.value = false;
-      console.log('Hiding calibration lines after 60 seconds');
+      console.log('🎯 [App] Hiding calibration lines after 60 seconds');
     }, 60000);
   } else {
-    console.log('No calibration lines received or empty array');
+    console.log('❌ [App] No calibration lines received or empty array');
   }
 };
 
@@ -2244,7 +2322,7 @@ watch(
         :video-container="unifiedVideoPlayerRef?.getCurrentVideoContainer?.()"
         :video-width="videoDimensions.width || 1920"
         :video-height="videoDimensions.height || 1080"
-        :duration="60000"
+        :duration="5000"
         :show-labels="true"
         :show-end-points="true"
         :show-success-message="true"
@@ -2286,5 +2364,16 @@ watch(
 
 .modal-leave-to .relative {
   transform: scale(0.95);
+}
+
+/* Calibration lines wrapper - fixed positioning to overlay on video */
+.calibration-lines-wrapper {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1000;
 }
 </style>

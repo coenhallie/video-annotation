@@ -11,10 +11,7 @@
       preserveAspectRatio="none"
     >
       <!-- Skeleton connections -->
-      <g
-        v-if="showSkeleton"
-        class="pose-skeleton"
-      >
+      <g v-if="showSkeleton" class="pose-skeleton">
         <line
           v-for="(connection, index) in filteredConnections"
           :key="`connection-${index}`"
@@ -30,13 +27,10 @@
       </g>
 
       <!-- Landmark points -->
-      <g
-        v-if="showLandmarks"
-        class="pose-landmarks"
-      >
+      <g v-if="showLandmarks" class="pose-landmarks">
         <circle
           v-for="(landmark, index) in currentPose.landmarks"
-          v-show="isKeypointSelected(index)"
+          v-show="isKeypointVisible(index)"
           :key="`landmark-${index}`"
           :cx="getLandmarkCanvasCoord(index).x"
           :cy="getLandmarkCanvasCoord(index).y"
@@ -49,13 +43,10 @@
       </g>
 
       <!-- Landmark labels (optional) -->
-      <g
-        v-if="showLabels"
-        class="pose-labels"
-      >
+      <g v-if="showLabels" class="pose-labels">
         <text
           v-for="(landmark, index) in currentPose.landmarks"
-          v-show="isKeypointSelected(index)"
+          v-show="isKeypointVisible(index)"
           :key="`label-${index}`"
           :x="getLandmarkCanvasCoord(index).x + labelOffset.x"
           :y="getLandmarkCanvasCoord(index).y + labelOffset.y"
@@ -73,8 +64,8 @@
       <g
         v-if="
           showCenterOfMass &&
-            speedMetrics &&
-            speedMetrics.centerOfMassNormalized
+          speedMetrics &&
+          speedMetrics.centerOfMassNormalized
         "
         class="center-of-mass"
       >
@@ -187,6 +178,16 @@ const props = defineProps({
     default: () => Array.from({ length: 33 }, (_, i) => i), // All keypoints by default
   },
 
+  // ROI filtering
+  currentROI: {
+    type: Object,
+    default: null,
+  },
+  useROI: {
+    type: Boolean,
+    default: false,
+  },
+
   // Styling options
   skeletonColor: {
     type: String,
@@ -254,6 +255,8 @@ const {
   selectedKeypoints,
   speedMetrics,
   showPose,
+  currentROI,
+  useROI,
 } = toRefs(props);
 
 // Debug logging for pose data
@@ -477,18 +480,75 @@ const isKeypointSelected = (index) => {
   return selectedKeypoints.value.includes(index);
 };
 
-// Get filtered connections based on selected keypoints
-const filteredConnections = computed(() => {
-  // If no keypoints are selected or selectedKeypoints is empty, show all connections
-  if (!selectedKeypoints.value || selectedKeypoints.value.length === 0) {
-    return POSE_CONNECTIONS;
+// Check if a landmark is within the ROI bounds
+const isLandmarkInROI = (landmark) => {
+  if (!useROI.value || !currentROI.value || !landmark) {
+    return true; // Show all landmarks if ROI is disabled
   }
 
-  return POSE_CONNECTIONS.filter(
-    (connection) =>
-      selectedKeypoints.value.includes(connection[0]) &&
-      selectedKeypoints.value.includes(connection[1])
+  const roi = currentROI.value;
+  return (
+    landmark.x >= roi.x &&
+    landmark.x <= roi.x + roi.width &&
+    landmark.y >= roi.y &&
+    landmark.y <= roi.y + roi.height
   );
+};
+
+// Check if keypoint should be visible (combines keypoint selection and ROI filtering)
+const isKeypointVisible = (index) => {
+  if (
+    !currentPose.value ||
+    !currentPose.value.landmarks ||
+    !currentPose.value.landmarks[index]
+  ) {
+    return false;
+  }
+
+  const landmark = currentPose.value.landmarks[index];
+
+  // Check if keypoint is selected
+  if (!isKeypointSelected(index)) {
+    return false;
+  }
+
+  // If ROI is disabled, show all selected keypoints
+  if (!useROI.value || !currentROI.value) {
+    return true;
+  }
+
+  // Check if landmark is in ROI (only when ROI is enabled)
+  if (!isLandmarkInROI(landmark)) {
+    return false;
+  }
+
+  return true;
+};
+
+// Get filtered connections based on selected keypoints and ROI
+const filteredConnections = computed(() => {
+  // If ROI is disabled, use the original keypoint selection logic
+  if (!useROI.value || !currentROI.value) {
+    // Original logic: filter by selected keypoints only
+    if (!selectedKeypoints.value || selectedKeypoints.value.length === 0) {
+      return POSE_CONNECTIONS;
+    }
+    return POSE_CONNECTIONS.filter(
+      (connection) =>
+        selectedKeypoints.value.includes(connection[0]) &&
+        selectedKeypoints.value.includes(connection[1])
+    );
+  }
+
+  // ROI is enabled: filter by both keypoint selection and ROI
+  if (!currentPose.value || !currentPose.value.landmarks) {
+    return [];
+  }
+
+  return POSE_CONNECTIONS.filter((connection) => {
+    // Check if both keypoints in the connection are visible (selected + in ROI)
+    return isKeypointVisible(connection[0]) && isKeypointVisible(connection[1]);
+  });
 });
 
 // Convert normalized coordinates to canvas coordinates
