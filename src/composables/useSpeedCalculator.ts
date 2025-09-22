@@ -7,6 +7,10 @@
 import { ref, computed, type Ref } from 'vue';
 import { useCameraCalibration, type Point3D } from './useCameraCalibration';
 
+const DEFAULT_COURT_WIDTH = 6.1;
+const DEFAULT_COURT_LENGTH = 13.4;
+const MIN_MOVEMENT_THRESHOLD = 1e-3;
+
 export interface SpeedSample {
   frame: number;
   time: number; // seconds
@@ -76,7 +80,7 @@ export interface UseSpeedCalculator {
   speedMetrics: Ref<ComprehensiveSpeedMetrics>;
   cameraCalibration: ReturnType<typeof useCameraCalibration>;
   reset: () => void;
-  pushSample: (frame: number, timeSec: number, distanceDelta: number) => void;
+  pushSample: (frame: number, timeSec: number, speedValue: number) => void;
   updateWithLandmarks: (
     frame: number,
     timeSec: number,
@@ -258,14 +262,56 @@ export function useSpeedCalculator(
     const dx = p1.x - p2.x;
     const dy = p1.y - p2.y;
     const dz = p1.z - p2.z;
-    return Math.sqrt(dx * dx + dy * dy + dz * dz);
+    if (
+      !Number.isFinite(dx) ||
+      !Number.isFinite(dy) ||
+      !Number.isFinite(dz)
+    ) {
+      console.warn('⚠️ [SpeedCalculator] Invalid distance calculation', {
+        p1,
+        p2,
+      });
+      return 0;
+    }
+    const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    return Number.isFinite(distance) ? distance : 0;
   }
 
   function calculateDistance2D(p1: Landmark, p2: Landmark): number {
     const dx = p1.x - p2.x;
     const dy = p1.y - p2.y;
-    return Math.sqrt(dx * dx + dy * dy);
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    return Number.isFinite(distance) ? distance : 0;
   }
+
+  const getCourtDimensions = () => {
+    const court = cameraCalibration.courtDimensions?.value as
+      | { width?: number; length?: number }
+      | undefined;
+    return {
+      width:
+        court?.width && Number.isFinite(court.width)
+          ? court.width
+          : DEFAULT_COURT_WIDTH,
+      length:
+        court?.length && Number.isFinite(court.length)
+          ? court.length
+          : DEFAULT_COURT_LENGTH,
+    };
+  };
+
+  const normalizedToCourtMeters = (vector: {
+    x: number;
+    y: number;
+    z?: number;
+  }): Vector3D => {
+    const { width, length } = getCourtDimensions();
+    return {
+      x: vector.x * width - width / 2,
+      y: vector.y * length - length / 2,
+      z: vector.z ?? 0,
+    };
+  };
 
   // Convert normalized MediaPipe coordinates to pixel coordinates
   function normalizedToPixel(landmark: Landmark): { x: number; y: number } {
@@ -316,7 +362,24 @@ export function useSpeedCalculator(
         { x: landmark.x, y: landmark.y },
         landmark.z || 0
       );
-      return worldPoint;
+
+      if (
+        worldPoint &&
+        Number.isFinite(worldPoint.x) &&
+        Number.isFinite(worldPoint.y) &&
+        Number.isFinite(worldPoint.z ?? 0)
+      ) {
+        return {
+          x: worldPoint.x,
+          y: worldPoint.y,
+          z: worldPoint.z ?? 0,
+        };
+      }
+
+      console.warn(
+        '⚠️ [SpeedCalculator] transformToWorld returned invalid value, using fallback conversion',
+        { landmark, worldPoint }
+      );
     }
 
     // Fallback to old method if not calibrated
@@ -363,7 +426,21 @@ export function useSpeedCalculator(
     const dx = currentFootReal.x - prevFootReal.x;
     const dy = currentFootReal.y - prevFootReal.y;
     const dz = currentFootReal.z - prevFootReal.z;
+    if (
+      !Number.isFinite(dx) ||
+      !Number.isFinite(dy) ||
+      !Number.isFinite(dz)
+    ) {
+      console.warn('⚠️ [SpeedCalculator] Right foot distance invalid', {
+        currentFootReal,
+        prevFootReal,
+      });
+      return 0;
+    }
     const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    if (!Number.isFinite(distance) || deltaTime <= 0) {
+      return 0;
+    }
 
     return distance / deltaTime;
   }
@@ -380,8 +457,21 @@ export function useSpeedCalculator(
     const dx = currentCenterOfMass.x - prevCenterOfMass.x;
     const dz = currentCenterOfMass.z - prevCenterOfMass.z;
 
+    if (!Number.isFinite(dx) || !Number.isFinite(dz)) {
+      console.warn('⚠️ [SpeedCalculator] Horizontal movement invalid', {
+        currentCenterOfMass,
+        prevCenterOfMass,
+        dx,
+        dz,
+      });
+      return 0;
+    }
+
     // Calculate horizontal speed (excluding vertical movement)
     const horizontalDistance = Math.sqrt(dx * dx + dz * dz);
+    if (!Number.isFinite(horizontalDistance)) {
+      return 0;
+    }
     return horizontalDistance / deltaTime;
   }
 
@@ -409,21 +499,11 @@ export function useSpeedCalculator(
     };
   }
 
-  function pushSample(frame: number, timeSec: number, distanceDelta: number) {
-    // distanceDelta over time between samples gives speed; guard divide-by-zero
-    if (samples.value.length > 0) {
-      const last = samples.value[samples.value.length - 1];
-      if (last) {
-        const dt = Math.max(1e-6, timeSec - last.time);
-        const speed = distanceDelta / dt;
-        currentSpeed.value = speed;
-        samples.value.push({ frame, time: timeSec, value: speed });
-      }
-    } else {
-      // first sample, set speed to 0
-      samples.value.push({ frame, time: timeSec, value: 0 });
-      currentSpeed.value = 0;
-    }
+  function pushSample(frame: number, timeSec: number, speedValue: number) {
+    const sanitizedSpeed = Number.isFinite(speedValue) ? speedValue : 0;
+
+    currentSpeed.value = sanitizedSpeed;
+    samples.value.push({ frame, time: timeSec, value: sanitizedSpeed });
 
     // apply moving window smoothing by trimming the array
     if (samples.value.length > smoothingWindow) {
@@ -431,7 +511,7 @@ export function useSpeedCalculator(
     }
 
     // Update basic metrics in comprehensive metrics
-    comprehensiveMetrics.value.currentSpeed = currentSpeed.value;
+    comprehensiveMetrics.value.currentSpeed = sanitizedSpeed;
     comprehensiveMetrics.value.averageSpeed = averageSpeed.value;
     comprehensiveMetrics.value.samples = samples.value.length;
   }
@@ -442,6 +522,28 @@ export function useSpeedCalculator(
     landmarks: Landmark[],
     worldLandmarks?: Landmark[]
   ) {
+    const sanitizeVector = (vector: Vector3D, label: string): Vector3D => {
+      const sanitized = {
+        x: Number.isFinite(vector.x) ? vector.x : 0,
+        y: Number.isFinite(vector.y) ? vector.y : 0,
+        z: Number.isFinite(vector.z) ? vector.z : 0,
+      } as Vector3D;
+
+      if (
+        sanitized.x !== vector.x ||
+        sanitized.y !== vector.y ||
+        sanitized.z !== vector.z
+      ) {
+        console.warn('⚠️ [SpeedCalculator] Sanitized vector', {
+          label,
+          original: vector,
+          sanitized,
+        });
+      }
+
+      return sanitized;
+    };
+
     // If camera is calibrated, use the calibration to transform landmarks
     let transformedWorldLandmarks: Point3D[] | undefined;
     if (cameraCalibration.isCalibrated.value && landmarks.length > 0) {
@@ -464,11 +566,15 @@ export function useSpeedCalculator(
       : currentCenterOfGravity;
 
     // Convert normalized center of mass to real-world coordinates
-    const currentCenterOfMassReal = normalizedToRealWorld(currentCenterOfMass);
+    const currentCenterOfMassReal = sanitizeVector(
+      normalizedToRealWorld(currentCenterOfMass),
+      'currentCoMReal-normalized'
+    );
 
     // Convert normalized center of gravity to real-world coordinates
-    const currentCenterOfGravityReal = normalizedToRealWorld(
-      currentCenterOfGravity
+    const currentCenterOfGravityReal = sanitizeVector(
+      normalizedToRealWorld(currentCenterOfGravity),
+      'currentCoGReal-normalized'
     );
 
     // Calculate normalized coordinates for visualization (keep original for UI)
@@ -491,7 +597,10 @@ export function useSpeedCalculator(
     if (previousLandmarks.value.length > 0 && previousTime.value > 0) {
       const deltaTime = Math.max(1e-6, timeSec - previousTime.value);
       const prevCenterOfMass = calculateCenterOfMass(previousLandmarks.value);
-      const prevCenterOfMassReal = normalizedToRealWorld(prevCenterOfMass);
+      const prevCenterOfMassReal = sanitizeVector(
+        normalizedToRealWorld(prevCenterOfMass),
+        'prevCoMReal-normalized'
+      );
 
       // Use world landmarks if available, otherwise use converted normalized coordinates
       let currentCoMReal: Vector3D;
@@ -499,8 +608,9 @@ export function useSpeedCalculator(
 
       if (transformedWorldLandmarks && transformedWorldLandmarks.length > 0) {
         // Use calibrated world coordinates
-        currentCoMReal = calculateCenterOfMass(
-          transformedWorldLandmarks as any
+        currentCoMReal = sanitizeVector(
+          calculateCenterOfMass(transformedWorldLandmarks as any),
+          'currentCoMReal-transformed'
         );
 
         // For previous frame, we need to transform those too
@@ -512,7 +622,10 @@ export function useSpeedCalculator(
           : null;
 
         if (prevTransformed && prevTransformed.length > 0) {
-          prevCoMReal = calculateCenterOfMass(prevTransformed as any);
+          prevCoMReal = sanitizeVector(
+            calculateCenterOfMass(prevTransformed as any),
+            'prevCoMReal-transformed'
+          );
         } else {
           prevCoMReal = prevCenterOfMassReal;
         }
@@ -529,8 +642,14 @@ export function useSpeedCalculator(
         previousWorldLandmarks.value.length > 0
       ) {
         // Use MediaPipe world coordinates directly (already in meters)
-        currentCoMReal = currentWorldCenterOfMass;
-        prevCoMReal = calculateCenterOfMass(previousWorldLandmarks.value);
+        currentCoMReal = sanitizeVector(
+          currentWorldCenterOfMass,
+          'currentCoMReal-mediapipe'
+        );
+        prevCoMReal = sanitizeVector(
+          calculateCenterOfMass(previousWorldLandmarks.value),
+          'prevCoMReal-mediapipe'
+        );
 
         console.log('🔧 [SPEED DEBUG] Using MediaPipe world coordinates:', {
           currentCoMReal,
@@ -553,12 +672,43 @@ export function useSpeedCalculator(
         );
       }
 
+      const fallbackCurrentCoM = sanitizeVector(
+        normalizedToCourtMeters(currentCenterOfMass),
+        'currentCoMReal-fallback'
+      );
+      const fallbackPrevCoM = sanitizeVector(
+        normalizedToCourtMeters(prevCenterOfMass),
+        'prevCoMReal-fallback'
+      );
+
+      let movementMagnitude = calculateDistance3D(currentCoMReal, prevCoMReal);
+      const fallbackMagnitude = calculateDistance3D(
+        fallbackCurrentCoM,
+        fallbackPrevCoM
+      );
+
+    if (
+      movementMagnitude <= MIN_MOVEMENT_THRESHOLD &&
+      fallbackMagnitude > MIN_MOVEMENT_THRESHOLD &&
+      fallbackMagnitude > movementMagnitude * 5
+    ) {
+        console.info(
+          'ℹ️ [SpeedCalculator] Falling back to court-based coordinates for CoM movement'
+        );
+        currentCoMReal = fallbackCurrentCoM;
+        prevCoMReal = fallbackPrevCoM;
+        movementMagnitude = fallbackMagnitude;
+      }
+
       // Calculate velocity in real-world units (m/s)
-      velocity = {
-        x: (currentCoMReal.x - prevCoMReal.x) / deltaTime,
-        y: (currentCoMReal.y - prevCoMReal.y) / deltaTime,
-        z: (currentCoMReal.z - prevCoMReal.z) / deltaTime,
-      };
+      velocity = sanitizeVector(
+        {
+          x: (currentCoMReal.x - prevCoMReal.x) / deltaTime,
+          y: (currentCoMReal.y - prevCoMReal.y) / deltaTime,
+          z: (currentCoMReal.z - prevCoMReal.z) / deltaTime,
+        },
+        'velocity'
+      );
 
       // Calculate various speed metrics using real-world coordinates
       generalMovingSpeed = calculateGeneralMovingSpeed(
@@ -575,8 +725,24 @@ export function useSpeedCalculator(
       );
 
       // Overall speed based on center of mass movement in 3D
-      overallSpeed =
-        calculateDistance3D(currentCoMReal, prevCoMReal) / deltaTime;
+      overallSpeed = movementMagnitude / deltaTime;
+
+      if (!Number.isFinite(overallSpeed)) {
+        console.warn('⚠️ [SpeedCalculator] Overall speed invalid', {
+          currentCoMReal,
+          prevCoMReal,
+          deltaTime,
+        });
+        overallSpeed = 0;
+      }
+
+      if (!Number.isFinite(generalMovingSpeed)) {
+        generalMovingSpeed = 0;
+      }
+
+      if (!Number.isFinite(rightFootSpeed)) {
+        rightFootSpeed = 0;
+      }
 
       console.log('🔧 [SPEED DEBUG] Final speed calculations:', {
         velocity,
@@ -630,20 +796,26 @@ export function useSpeedCalculator(
     const biomechanicalComRatio = 0.56; // 56% is average for adults
 
     // Convert center of mass position to real-world coordinates
-    const comRealWorld = normalizedToRealWorld({
-      x: currentCenterOfMass.x,
-      y: currentCenterOfMass.y,
-      z: currentCenterOfMass.z,
-      visibility: 1.0,
-    });
+    const comRealWorld = sanitizeVector(
+      normalizedToRealWorld({
+        x: currentCenterOfMass.x,
+        y: currentCenterOfMass.y,
+        z: currentCenterOfMass.z,
+        visibility: 1.0,
+      }),
+      'comRealWorld'
+    );
 
     // Convert ground plane to real-world coordinates
-    const groundRealWorld = normalizedToRealWorld({
-      x: 0.5, // Center of frame horizontally
-      y: groundPlaneY,
-      z: 0,
-      visibility: 1.0,
-    });
+    const groundRealWorld = sanitizeVector(
+      normalizedToRealWorld({
+        x: 0.5, // Center of frame horizontally
+        y: groundPlaneY,
+        z: 0,
+        visibility: 1.0,
+      }),
+      'groundRealWorld'
+    );
 
     // Calculate height above ground plane
     const heightAboveGround = Math.abs(groundRealWorld.y - comRealWorld.y);

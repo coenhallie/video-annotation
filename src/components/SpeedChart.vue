@@ -271,10 +271,14 @@ const props = defineProps({
   },
 });
 
-// Remove emit since we no longer have internal toggle
-// Chart state - now controlled by parent or props
-const chartDuration = computed(() => props.chartDuration);
-const maxSpeedScale = computed(() => props.maxSpeedScale);
+const emit = defineEmits([
+  'update:chartDuration',
+  'update:maxSpeedScale',
+]);
+
+// Local chart controls owned here; parent can still override via props
+const chartDuration = ref(props.chartDuration);
+const maxSpeedScale = ref(props.maxSpeedScale);
 const chartWidth = ref(400);
 const chartHeight = ref(props.compactMode ? 145 : 160);
 
@@ -285,6 +289,33 @@ const chartSvg = ref(null);
 // Speed data history
 const speedHistory = ref([]);
 const maxHistorySize = 1000; // Maximum number of data points to store
+
+// Keep local state in sync with incoming props while allowing local control
+watch(
+  () => props.chartDuration,
+  (value) => {
+    if (typeof value === 'number' && value !== chartDuration.value) {
+      chartDuration.value = value;
+    }
+  }
+);
+
+watch(
+  () => props.maxSpeedScale,
+  (value) => {
+    if (typeof value === 'number' && value !== maxSpeedScale.value) {
+      maxSpeedScale.value = value;
+    }
+  }
+);
+
+watch(chartDuration, (value) => {
+  emit('update:chartDuration', value);
+});
+
+watch(maxSpeedScale, (value) => {
+  emit('update:maxSpeedScale', value);
+});
 
 // Current speed for display
 const currentSpeed = computed(() => {

@@ -806,13 +806,6 @@
               Next
             </button>
             <button
-              v-if="currentStep === 1 && canProceedToNext"
-              class="btn-success"
-              @click="completeCalibrationDirectly"
-            >
-              Complete Calibration
-            </button>
-            <button
               v-if="currentStep === 2"
               class="btn-success"
               @click="closeModal"
@@ -1239,20 +1232,6 @@ const resetCalibration = () => {
   calibrationResults.value = null;
   calibrationData.value = null;
   calibrationQuality.value = null;
-};
-
-const completeCalibrationDirectly = () => {
-  console.log(
-    '🎯 [CompleteCalibrationDirectly] Completing calibration directly from step 1'
-  );
-
-  // Ensure calibration data is prepared
-  if (!calibrationData.value) {
-    completeCalibration();
-  }
-
-  // Close the modal which will emit the calibration data
-  closeModal();
 };
 
 const completeCalibration = () => {

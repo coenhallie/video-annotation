@@ -65,18 +65,6 @@
 
       <!-- Control buttons -->
       <div class="roi-controls absolute -top-8 -right-8 flex gap-1">
-        <!-- Adaptive ROI toggle -->
-        <button
-          class="control-btn w-6 h-6 rounded text-xs"
-          :class="
-            adaptiveROI ? 'bg-green-500 text-white' : 'bg-gray-500 text-white'
-          "
-          title="Toggle Adaptive ROI"
-          @click.stop="toggleAdaptiveROI"
-        >
-          A
-        </button>
-
         <!-- Motion prediction toggle -->
         <button
           class="control-btn w-6 h-6 rounded text-xs"
@@ -155,7 +143,6 @@
         <div>Stability: {{ (stabilityScore * 100).toFixed(1) }}%</div>
         <div>Velocity: {{ velocityMagnitude.toFixed(3) }}</div>
         <div>History: {{ roiHistory.length }} frames</div>
-        <div>Adaptive: {{ adaptiveROI ? 'ON' : 'OFF' }}</div>
       </div>
     </div>
   </div>
@@ -207,11 +194,6 @@ const props = defineProps({
   },
 
   // Settings
-  adaptiveROI: {
-    type: Boolean,
-    default: false,
-  },
-
   motionPrediction: {
     type: Boolean,
     default: false,
@@ -259,7 +241,6 @@ const emit = defineEmits([
   'roi-selected',
   'roi-updated',
   'roi-cleared',
-  'adaptive-roi-toggled',
   'motion-prediction-toggled',
 ]);
 
@@ -534,11 +515,6 @@ const startResize = (mode) => {
 // Clear ROI
 const clearROI = () => {
   emit('roi-cleared');
-};
-
-// Toggle adaptive ROI
-const toggleAdaptiveROI = () => {
-  emit('adaptive-roi-toggled');
 };
 
 // Toggle motion prediction

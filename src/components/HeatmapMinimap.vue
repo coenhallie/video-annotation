@@ -7,11 +7,7 @@
     <!-- Header with toggle and controls -->
     <div class="minimap-header">
       <div class="minimap-title">
-        <svg
-          class="minimap-icon"
-          viewBox="0 0 24 24"
-          fill="currentColor"
-        >
+        <svg class="minimap-icon" viewBox="0 0 24 24" fill="currentColor">
           <path
             d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"
           />
@@ -24,10 +20,7 @@
           :title="isExpanded ? 'Minimize' : 'Expand'"
           @click="toggleExpanded"
         >
-          <svg
-            viewBox="0 0 24 24"
-            fill="currentColor"
-          >
+          <svg viewBox="0 0 24 24" fill="currentColor">
             <path
               v-if="!isExpanded"
               d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"
@@ -38,15 +31,8 @@
             />
           </svg>
         </button>
-        <button
-          class="control-button"
-          title="Close"
-          @click="$emit('close')"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            fill="currentColor"
-          >
+        <button class="control-button" title="Close" @click="$emit('close')">
+          <svg viewBox="0 0 24 24" fill="currentColor">
             <path
               d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"
             />
@@ -56,10 +42,7 @@
     </div>
 
     <!-- Canvas for heatmap visualization -->
-    <div
-      ref="minimapContent"
-      class="minimap-content"
-    >
+    <div ref="minimapContent" class="minimap-content">
       <canvas
         ref="heatmapCanvas"
         :width="canvasWidth"
@@ -100,17 +83,14 @@
     </div>
 
     <!-- Statistics panel -->
-    <div
-      v-if="showStatistics"
-      class="minimap-stats"
-    >
+    <div v-if="showStatistics" class="minimap-stats">
       <div class="stat-item">
         <span class="stat-label">Total Distance:</span>
-        <span class="stat-value">{{ totalDistance.toFixed(1) }}m</span>
+        <span class="stat-value">{{ formattedTotalDistance }}m</span>
       </div>
       <div class="stat-item">
         <span class="stat-label">Avg Speed:</span>
-        <span class="stat-value">{{ averageSpeed.toFixed(2) }}m/s</span>
+        <span class="stat-value">{{ formattedAverageSpeed }}m/s</span>
       </div>
       <div class="stat-item">
         <span class="stat-label">Most Visited:</span>
@@ -123,17 +103,14 @@
     </div>
 
     <!-- Settings panel -->
-    <div
-      v-if="isExpanded"
-      class="minimap-settings"
-    >
+    <div v-if="isExpanded" class="minimap-settings">
       <div class="settings-row">
         <label>
           <input
             v-model="showCurrentPosition"
             type="checkbox"
             @change="updateVisualization"
-          >
+          />
           Show Current Position
         </label>
         <label>
@@ -141,17 +118,14 @@
             v-model="showStatistics"
             type="checkbox"
             @change="updateVisualization"
-          >
+          />
           Show Statistics
         </label>
       </div>
       <div class="settings-row">
         <label>
           Color Scheme:
-          <select
-            v-model="colorScheme"
-            @change="updateVisualization"
-          >
+          <select v-model="colorScheme" @change="updateVisualization">
             <option value="heat">Heat</option>
             <option value="cool">Cool</option>
             <option value="rainbow">Rainbow</option>
@@ -169,7 +143,7 @@
             max="1"
             step="0.1"
             @input="updateVisualization"
-          >
+          />
           {{ (heatmapOpacity * 100).toFixed(0) }}%
         </label>
       </div>
@@ -195,6 +169,9 @@ const props = defineProps<{
   getZoneName: (x: number, y: number) => string;
 }>();
 
+const DEFAULT_COURT_WIDTH = 6.1;
+const DEFAULT_COURT_LENGTH = 13.4;
+
 // Emits
 const emit = defineEmits<{
   close: [];
@@ -211,11 +188,31 @@ const showStatistics = ref(true);
 const colorScheme = ref<'heat' | 'cool' | 'rainbow' | 'grayscale'>('heat');
 const heatmapOpacity = ref(0.8);
 
+const formatMetric = (value: number) => {
+  if (!Number.isFinite(value)) return '0';
+  const absValue = Math.abs(value);
+  const maxFractionDigits = absValue >= 10 ? 1 : absValue >= 1 ? 2 : 3;
+
+  return new Intl.NumberFormat(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: maxFractionDigits,
+  }).format(value);
+};
+
+const formattedTotalDistance = computed(() =>
+  formatMetric(props.totalDistance)
+);
+
+const formattedAverageSpeed = computed(() =>
+  formatMetric(props.averageSpeed)
+);
+
 // Canvas dimensions
 const canvasWidth = computed(() => (isExpanded.value ? 400 : 250));
 const canvasHeight = computed(() => {
-  const aspectRatio =
-    props.courtDimensions.length / props.courtDimensions.width;
+  const width = props.courtDimensions.width || DEFAULT_COURT_WIDTH;
+  const length = props.courtDimensions.length || DEFAULT_COURT_LENGTH;
+  const aspectRatio = length / width;
   return Math.round(canvasWidth.value * aspectRatio);
 });
 
@@ -233,12 +230,17 @@ const tooltip = ref({
 const currentPositionPixels = computed(() => {
   if (!props.currentPosition || !heatmapCanvas.value) return null;
 
-  const scaleX = canvasWidth.value / props.courtDimensions.width;
-  const scaleY = canvasHeight.value / props.courtDimensions.length;
+  const courtWidth = props.courtDimensions.width || DEFAULT_COURT_WIDTH;
+  const courtLength = props.courtDimensions.length || DEFAULT_COURT_LENGTH;
+  const scaleX = canvasWidth.value / courtWidth;
+  const scaleY = canvasHeight.value / courtLength;
+
+  const offsetX = props.currentPosition.x + courtWidth / 2;
+  const offsetY = props.currentPosition.y + courtLength / 2;
 
   return {
-    x: props.currentPosition.x * scaleX,
-    y: props.currentPosition.y * scaleY,
+    x: clamp(offsetX, 0, courtWidth) * scaleX,
+    y: clamp(offsetY, 0, courtLength) * scaleY,
   };
 });
 
@@ -275,6 +277,9 @@ const colorSchemes = {
     { stop: 1, color: [0, 0, 0, 255] }, // Black
   ],
 };
+
+const clamp = (value: number, min: number, max: number) =>
+  Math.min(Math.max(value, min), max);
 
 /**
  * Get color for intensity value
@@ -337,63 +342,140 @@ function getColorForIntensity(
 /**
  * Draw court lines
  */
-function drawCourtLines(ctx: CanvasRenderingContext2D) {
-  const scaleX = canvasWidth.value / props.courtDimensions.width;
-  const scaleY = canvasHeight.value / props.courtDimensions.length;
+type CourtMetrics = {
+  scaleX: number;
+  scaleY: number;
+  netY: number;
+  shortServiceOffset: number;
+  longServiceOffset: number;
+  singlesOffset: number;
+  lineWidth: number;
+};
 
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
-  ctx.lineWidth = 1;
+function computeCourtMetrics(): CourtMetrics {
+  const width = props.courtDimensions.width || DEFAULT_COURT_WIDTH;
+  const length = props.courtDimensions.length || DEFAULT_COURT_LENGTH;
+  const scaleX = canvasWidth.value / width;
+  const scaleY = canvasHeight.value / length;
 
-  // Draw court outline (doubles court)
+  return {
+    scaleX,
+    scaleY,
+    netY: canvasHeight.value / 2,
+    shortServiceOffset: 1.98 * scaleY,
+    longServiceOffset: 0.76 * scaleY,
+    singlesOffset: ((width - 5.18) / 2) * scaleX,
+    lineWidth: Math.max(1, canvasWidth.value * 0.003),
+  };
+}
+
+function drawCourtSurface(
+  ctx: CanvasRenderingContext2D,
+  metrics: CourtMetrics
+) {
+  const gradient = ctx.createLinearGradient(0, 0, 0, canvasHeight.value);
+  gradient.addColorStop(0, '#0f3b21');
+  gradient.addColorStop(1, '#0a2616');
+
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, canvasWidth.value, canvasHeight.value);
+
+  // Highlight service courts and alleys so the layout reads clearly under the heatmap.
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+  ctx.fillRect(
+    0,
+    metrics.netY - metrics.shortServiceOffset,
+    canvasWidth.value,
+    metrics.shortServiceOffset * 2
+  );
+
+  if (metrics.singlesOffset > 0) {
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
+    ctx.fillRect(0, 0, metrics.singlesOffset, canvasHeight.value);
+    ctx.fillRect(
+      canvasWidth.value - metrics.singlesOffset,
+      0,
+      metrics.singlesOffset,
+      canvasHeight.value
+    );
+  }
+}
+
+function drawCourtLines(ctx: CanvasRenderingContext2D, metrics: CourtMetrics) {
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+  ctx.lineWidth = metrics.lineWidth;
+  ctx.lineCap = 'square';
+
+  // Outer boundary
   ctx.strokeRect(0, 0, canvasWidth.value, canvasHeight.value);
 
-  // Draw net line (center of court)
+  // Net (runs across the width, centered along the length)
   ctx.beginPath();
-  ctx.moveTo(canvasWidth.value / 2, 0);
-  ctx.lineTo(canvasWidth.value / 2, canvasHeight.value);
+  ctx.moveTo(0, metrics.netY);
+  ctx.lineTo(canvasWidth.value, metrics.netY);
   ctx.stroke();
 
-  // Draw short service lines (1.98m from net on each side)
-  const serviceLineX = 1.98 * scaleX; // 1.98m from net
+  // Short service lines (parallel to the net)
   ctx.beginPath();
-  // Left service line
-  ctx.moveTo(canvasWidth.value / 2 - serviceLineX, 0);
-  ctx.lineTo(canvasWidth.value / 2 - serviceLineX, canvasHeight.value);
-  // Right service line
-  ctx.moveTo(canvasWidth.value / 2 + serviceLineX, 0);
-  ctx.lineTo(canvasWidth.value / 2 + serviceLineX, canvasHeight.value);
+  ctx.moveTo(0, metrics.netY - metrics.shortServiceOffset);
+  ctx.lineTo(canvasWidth.value, metrics.netY - metrics.shortServiceOffset);
+  ctx.moveTo(0, metrics.netY + metrics.shortServiceOffset);
+  ctx.lineTo(canvasWidth.value, metrics.netY + metrics.shortServiceOffset);
   ctx.stroke();
 
-  // Draw singles sidelines (5.18m width)
-  const singlesWidth = 5.18; // meters
-  const sidelineOffset =
-    ((props.courtDimensions.width - singlesWidth) / 2) * scaleY;
+  // Doubles long service lines (near the back boundaries)
   ctx.beginPath();
-  ctx.moveTo(0, sidelineOffset);
-  ctx.lineTo(canvasWidth.value, sidelineOffset);
-  ctx.moveTo(0, canvasHeight.value - sidelineOffset);
-  ctx.lineTo(canvasWidth.value, canvasHeight.value - sidelineOffset);
+  ctx.moveTo(0, metrics.longServiceOffset);
+  ctx.lineTo(canvasWidth.value, metrics.longServiceOffset);
+  ctx.moveTo(0, canvasHeight.value - metrics.longServiceOffset);
+  ctx.lineTo(canvasWidth.value, canvasHeight.value - metrics.longServiceOffset);
   ctx.stroke();
 
-  // Draw center service line (divides left and right service courts)
-  // Runs from short service line to back boundary on each side of net
+  // Singles sidelines (inside the doubles sidelines)
+  const leftSinglesX = metrics.singlesOffset;
+  const rightSinglesX = canvasWidth.value - metrics.singlesOffset;
+
   ctx.beginPath();
-  // Left side of court (from back to service line)
-  ctx.moveTo(0, canvasHeight.value / 2);
-  ctx.lineTo(canvasWidth.value / 2 - serviceLineX, canvasHeight.value / 2);
-  // Right side of court (from service line to back)
-  ctx.moveTo(canvasWidth.value / 2 + serviceLineX, canvasHeight.value / 2);
-  ctx.lineTo(canvasWidth.value, canvasHeight.value / 2);
+  ctx.moveTo(leftSinglesX, 0);
+  ctx.lineTo(leftSinglesX, canvasHeight.value);
+  ctx.moveTo(rightSinglesX, 0);
+  ctx.lineTo(rightSinglesX, canvasHeight.value);
   ctx.stroke();
 
-  // Draw long service lines for doubles (0.76m from back)
-  const longServiceLineX = 0.76 * scaleX; // 0.76m from back
+  // Center service line (vertical) separating left/right service courts
   ctx.beginPath();
-  ctx.moveTo(longServiceLineX, 0);
-  ctx.lineTo(longServiceLineX, canvasHeight.value);
-  ctx.moveTo(canvasWidth.value - longServiceLineX, 0);
-  ctx.lineTo(canvasWidth.value - longServiceLineX, canvasHeight.value);
+  ctx.moveTo(canvasWidth.value / 2, metrics.netY - metrics.shortServiceOffset);
+  ctx.lineTo(canvasWidth.value / 2, metrics.longServiceOffset);
+  ctx.moveTo(canvasWidth.value / 2, metrics.netY + metrics.shortServiceOffset);
+  ctx.lineTo(
+    canvasWidth.value / 2,
+    canvasHeight.value - metrics.longServiceOffset
+  );
   ctx.stroke();
+
+  // Add short marks at each baseline (0.2m long)
+  const baselineMarkLength = 0.2 * metrics.scaleX;
+  ctx.beginPath();
+  ctx.moveTo(
+    canvasWidth.value / 2 - baselineMarkLength,
+    metrics.longServiceOffset
+  );
+  ctx.lineTo(
+    canvasWidth.value / 2 + baselineMarkLength,
+    metrics.longServiceOffset
+  );
+  ctx.moveTo(
+    canvasWidth.value / 2 - baselineMarkLength,
+    canvasHeight.value - metrics.longServiceOffset
+  );
+  ctx.lineTo(
+    canvasWidth.value / 2 + baselineMarkLength,
+    canvasHeight.value - metrics.longServiceOffset
+  );
+  ctx.stroke();
+
+  ctx.restore();
 }
 
 /**
@@ -450,25 +532,25 @@ function drawHeatmap(ctx: CanvasRenderingContext2D) {
  * Update visualization
  */
 function updateVisualization() {
-  if (!heatmapCanvas.value) return;
+  if (!heatmapCanvas.value || !props.isVisible) return;
 
   const ctx = heatmapCanvas.value.getContext('2d');
   if (!ctx) return;
+  ctx.imageSmoothingEnabled = true;
 
   // Clear canvas
   ctx.clearRect(0, 0, canvasWidth.value, canvasHeight.value);
 
-  // Draw background
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-  ctx.fillRect(0, 0, canvasWidth.value, canvasHeight.value);
+  const metrics = computeCourtMetrics();
 
-  // Draw court lines
-  drawCourtLines(ctx);
+  drawCourtSurface(ctx, metrics);
 
   // Draw heatmap
   if (props.heatmapData) {
     drawHeatmap(ctx);
   }
+
+  drawCourtLines(ctx, metrics);
 }
 
 /**
@@ -482,18 +564,20 @@ function handleMouseMove(event: MouseEvent) {
   const y = event.clientY - rect.top;
 
   // Convert to world coordinates
-  const worldX = (x / canvasWidth.value) * props.courtDimensions.width;
-  const worldY = (y / canvasHeight.value) * props.courtDimensions.length;
+  const courtWidth = props.courtDimensions.width || DEFAULT_COURT_WIDTH;
+  const courtLength = props.courtDimensions.length || DEFAULT_COURT_LENGTH;
+  const courtSpaceX = (x / canvasWidth.value) * courtWidth;
+  const courtSpaceY = (y / canvasHeight.value) * courtLength;
+  const centeredX = courtSpaceX - courtWidth / 2;
+  const centeredY = courtSpaceY - courtLength / 2;
 
   // Get zone name
-  const zone = props.getZoneName(worldX, worldY);
+  const zone = props.getZoneName(centeredX, centeredY);
 
   // Get cell data
   const { cells, gridWidth, gridHeight } = props.heatmapData;
-  const gridX = Math.floor((worldX / props.courtDimensions.width) * gridWidth);
-  const gridY = Math.floor(
-    (worldY / props.courtDimensions.length) * gridHeight
-  );
+  const gridX = Math.floor((courtSpaceX / courtWidth) * gridWidth);
+  const gridY = Math.floor((courtSpaceY / courtLength) * gridHeight);
 
   const cell = cells[gridY]?.[gridX];
 
@@ -528,6 +612,7 @@ function toggleExpanded() {
 watch(
   () => [
     props.heatmapData,
+    props.isVisible,
     canvasWidth.value,
     canvasHeight.value,
     colorScheme.value,
@@ -539,10 +624,32 @@ watch(
   { deep: true }
 );
 
+// Debug watch for props changes
+watch(
+  () => [props.totalDistance, props.averageSpeed, props.currentPosition],
+  (newValues, oldValues) => {
+    console.debug('🗺️ [HeatmapMinimap] Props updated', {
+      totalDistance: { old: oldValues?.[0], new: newValues[0] },
+      averageSpeed: { old: oldValues?.[1], new: newValues[1] },
+      currentPosition: { old: oldValues?.[2], new: newValues[2] },
+    });
+  },
+  { deep: true }
+);
+
 // Lifecycle
 onMounted(() => {
   updateVisualization();
 });
+
+watch(
+  () => props.isVisible,
+  (visible) => {
+    if (visible) {
+      nextTick(() => updateVisualization());
+    }
+  }
+);
 </script>
 
 <style scoped>

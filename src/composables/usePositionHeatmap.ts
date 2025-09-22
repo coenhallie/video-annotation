@@ -78,8 +78,8 @@ export interface UsePositionHeatmap {
 const DEFAULT_SETTINGS: HeatmapSettings = {
   gridResolution: 4, // 4 cells per meter (25cm resolution)
   smoothingRadius: 1, // Smooth over adjacent cells
-  minConfidence: 0.7, // Minimum 70% confidence
-  sampleInterval: 100, // Sample every 100ms (10 Hz)
+  minConfidence: 0.5, // Minimum 50% confidence (more permissive)
+  sampleInterval: 50, // Sample every 50ms (20 Hz) for more responsive tracking
   maxHistorySize: 10000, // Keep last 10000 samples
   decayFactor: 1.0, // No decay by default
 };
@@ -97,6 +97,45 @@ const COURT_ZONES = {
   'back-right': { x: [0.67, 1], y: [0.7, 1] },
 };
 
+const DEFAULT_COURT_WIDTH = 6.1;
+const DEFAULT_COURT_LENGTH = 13.4;
+
+const gaussianKernelCache = new Map<number, Float32Array>();
+
+function getGaussianKernel(radius: number): {
+  radius: number;
+  kernel: Float32Array;
+} {
+  const kernelRadius = Math.max(1, Math.round(radius));
+  if (!gaussianKernelCache.has(kernelRadius)) {
+    const size = kernelRadius * 2 + 1;
+    const sigma = Math.max(kernelRadius, 1e-3);
+    const denom = 2 * sigma * sigma;
+    const kernel = new Float32Array(size);
+    let sum = 0;
+
+    for (let i = 0; i < size; i++) {
+      const offset = i - kernelRadius;
+      const value = Math.exp(-(offset * offset) / denom);
+      kernel[i] = value;
+      sum += value;
+    }
+
+    const invSum = sum > 0 ? 1 / sum : 0;
+    for (let i = 0; i < size; i++) {
+      const current = kernel[i] ?? 0;
+      kernel[i] = current * invSum;
+    }
+
+    gaussianKernelCache.set(kernelRadius, kernel);
+  }
+
+  return {
+    radius: kernelRadius,
+    kernel: gaussianKernelCache.get(kernelRadius)!,
+  };
+}
+
 export function usePositionHeatmap(
   courtDimensions: Ref<CourtDimensions>
 ): UsePositionHeatmap {
@@ -105,7 +144,56 @@ export function usePositionHeatmap(
   const heatmapData = ref<HeatmapData | null>(null);
   const positionHistory = ref<PositionSample[]>([]);
   const currentPosition = ref<Point3D | null>(null);
-  const settings = ref<HeatmapSettings>({ ...DEFAULT_SETTINGS });
+
+  const clamp = (value: number, min: number, max: number) => {
+    if (!Number.isFinite(value)) {
+      return min;
+    }
+    return Math.min(Math.max(value, min), max);
+  };
+
+  const ensureFinite = (value: number, fallback: number) =>
+    Number.isFinite(value) ? value : fallback;
+
+  const normalizeSettings = (raw: HeatmapSettings): HeatmapSettings => {
+    const base = {
+      ...DEFAULT_SETTINGS,
+      ...raw,
+    };
+
+    return {
+      gridResolution: Math.max(
+        0.5,
+        ensureFinite(base.gridResolution, DEFAULT_SETTINGS.gridResolution)
+      ),
+      smoothingRadius: Math.max(
+        0,
+        ensureFinite(base.smoothingRadius, DEFAULT_SETTINGS.smoothingRadius)
+      ),
+      minConfidence: clamp(
+        ensureFinite(base.minConfidence, DEFAULT_SETTINGS.minConfidence),
+        0,
+        1
+      ),
+      sampleInterval: Math.max(
+        0,
+        ensureFinite(base.sampleInterval, DEFAULT_SETTINGS.sampleInterval)
+      ),
+      maxHistorySize: Math.max(
+        1,
+        Math.floor(
+          ensureFinite(base.maxHistorySize, DEFAULT_SETTINGS.maxHistorySize)
+        )
+      ),
+      decayFactor: clamp(
+        ensureFinite(base.decayFactor, DEFAULT_SETTINGS.decayFactor),
+        0,
+        1
+      ),
+    };
+  };
+
+  const settings = ref<HeatmapSettings>(normalizeSettings(DEFAULT_SETTINGS));
 
   // Statistics
   const totalDistance = ref(0);
@@ -117,6 +205,26 @@ export function usePositionHeatmap(
   const lastSampleTime = ref(0);
   const lastPosition = ref<Point3D | null>(null);
 
+  const toCourtSpace = (point: Point3D) => {
+    const width = courtDimensions.value.width || DEFAULT_COURT_WIDTH;
+    const length = courtDimensions.value.length || DEFAULT_COURT_LENGTH;
+    return {
+      x: clamp(point.x + width / 2, 0, width),
+      y: clamp(point.y + length / 2, 0, length),
+      z: point.z ?? 0,
+    };
+  };
+
+  const toNormalizedCourtSpace = (point: Point3D) => {
+    const width = courtDimensions.value.width || DEFAULT_COURT_WIDTH;
+    const length = courtDimensions.value.length || DEFAULT_COURT_LENGTH;
+    const courtSpace = toCourtSpace(point);
+    return {
+      x: clamp(courtSpace.x / width, 0, 1),
+      y: clamp(courtSpace.y / length, 0, 1),
+    };
+  };
+
   /**
    * Initialize zone tracking
    */
@@ -127,12 +235,15 @@ export function usePositionHeatmap(
     });
   }
 
+  initializeZones();
+
   /**
    * Get zone name for a position
    */
   function getZoneName(x: number, y: number): string {
-    const normalizedX = x / courtDimensions.value.width;
-    const normalizedY = y / courtDimensions.value.length;
+    const normalized = toNormalizedCourtSpace({ x, y, z: 0 });
+    const normalizedX = normalized.x;
+    const normalizedY = normalized.y;
 
     for (const [zoneName, bounds] of Object.entries(COURT_ZONES)) {
       const xBounds = bounds.x;
@@ -160,9 +271,9 @@ export function usePositionHeatmap(
    * Calculate distance between two 3D points
    */
   function calculateDistance(p1: Point3D, p2: Point3D): number {
-    const dx = p2.x - p1.x;
-    const dy = p2.y - p1.y;
-    const dz = p2.z - p1.z;
+    const dx = (p2.x ?? 0) - (p1.x ?? 0);
+    const dy = (p2.y ?? 0) - (p1.y ?? 0);
+    const dz = (p2.z ?? 0) - (p1.z ?? 0);
     return Math.sqrt(dx * dx + dy * dy + dz * dz);
   }
 
@@ -178,64 +289,189 @@ export function usePositionHeatmap(
     if (!isTracking.value) return;
 
     // Check confidence threshold
-    if (confidence < settings.value.minConfidence) return;
+    if (
+      !Number.isFinite(confidence) ||
+      confidence < settings.value.minConfidence
+    )
+      return;
 
     const now = Date.now();
+    const minInterval = Math.max(0, settings.value.sampleInterval);
 
-    // Check sample interval
-    if (now - lastSampleTime.value < settings.value.sampleInterval) return;
+    const width = courtDimensions.value.width || DEFAULT_COURT_WIDTH;
+    const length = courtDimensions.value.length || DEFAULT_COURT_LENGTH;
+    const normalizedFallback = {
+      x: imagePos.x * width - width / 2,
+      y: imagePos.y * length - length / 2,
+      z: 0,
+    };
 
-    // Create sample
+    let centeredWorld = {
+      x: worldPos.x ?? normalizedFallback.x,
+      y: worldPos.y ?? normalizedFallback.y,
+      z: worldPos.z ?? 0,
+    };
+
+    const outOfBounds =
+      !Number.isFinite(centeredWorld.x) ||
+      !Number.isFinite(centeredWorld.y) ||
+      Math.abs(centeredWorld.x) > width * 2 ||
+      Math.abs(centeredWorld.y) > length * 2;
+
+    if (outOfBounds) {
+      console.info(
+        'ℹ️ [PositionHeatmap] Falling back to normalized coordinates',
+        {
+          worldPos,
+          centeredWorld,
+          normalizedFallback,
+          width,
+          length,
+        }
+      );
+      centeredWorld = normalizedFallback;
+    }
+
+    const bounded = toCourtSpace(centeredWorld);
+    centeredWorld = {
+      x: bounded.x - width / 2,
+      y: bounded.y - length / 2,
+      z: centeredWorld.z,
+    };
+
+    if (
+      !Number.isFinite(centeredWorld.x) ||
+      !Number.isFinite(centeredWorld.y) ||
+      !Number.isFinite(centeredWorld.z)
+    ) {
+      console.warn(
+        '⚠️ [PositionHeatmap] Skipping sample with invalid position',
+        {
+          worldPos,
+          bounded,
+          centeredWorld,
+          width,
+          length,
+          confidence,
+          reason: 'non-finite centeredWorld',
+        }
+      );
+      return;
+    }
+
+    // Always expose the most recent position so the minimap stays responsive
+    currentPosition.value = centeredWorld;
+
+    const elapsedSinceLastSample = lastSampleTime.value
+      ? now - lastSampleTime.value
+      : 0;
+
+    const previousPosition = lastPosition.value;
+    const deltaSeconds =
+      elapsedSinceLastSample > 0
+        ? elapsedSinceLastSample / 1000
+        : minInterval / 1000;
+
+    let distance = 0;
+    let speed = 0;
+
+    // Always calculate distance and speed for real-time updates
+    if (previousPosition) {
+      distance = calculateDistance(previousPosition, centeredWorld);
+      if (Number.isFinite(distance)) {
+        totalDistance.value += distance;
+
+        if (deltaSeconds > 0) {
+          speed = distance / deltaSeconds;
+          if (Number.isFinite(speed)) {
+            // Update average speed with exponential moving average
+            averageSpeed.value = averageSpeed.value * 0.9 + speed * 0.1;
+          }
+        }
+      }
+    }
+
+    // Always update last position for continuous tracking
+    lastPosition.value = centeredWorld;
+
+    // Check if we should add to history based on sample interval
+    if (
+      minInterval > 0 &&
+      lastSampleTime.value !== 0 &&
+      elapsedSinceLastSample < minInterval
+    ) {
+      return;
+    }
+
+    if (!Number.isFinite(distance) || !Number.isFinite(speed)) {
+      console.warn('⚠️ [PositionHeatmap] Non-finite metrics', {
+        distance,
+        speed,
+        deltaSeconds,
+        lastPosition: previousPosition,
+        currentPosition: centeredWorld,
+      });
+    }
+
+    const zoneTimeContribution = deltaSeconds > 0 ? deltaSeconds : 0;
+    const zone = getZoneName(centeredWorld.x, centeredWorld.y);
+    const accumulated = timeInZones.value.get(zone) ?? 0;
+    timeInZones.value.set(zone, accumulated + zoneTimeContribution);
+
+    let maxTime = 0;
+    let maxZone: string | null = null;
+    timeInZones.value.forEach((time, zoneName) => {
+      if (time > maxTime) {
+        maxTime = time;
+        maxZone = zoneName;
+      }
+    });
+    mostVisitedZone.value = maxZone;
+
     const sample: PositionSample = {
-      worldPosition: worldPos,
+      worldPosition: centeredWorld,
       imagePosition: imagePos,
       timestamp: now,
       frameNumber,
       confidence,
     };
 
-    // Add to history
     positionHistory.value.push(sample);
 
-    // Trim history if needed
-    if (positionHistory.value.length > settings.value.maxHistorySize) {
-      positionHistory.value.shift();
+    const maxHistory = Math.max(1, Math.floor(settings.value.maxHistorySize));
+    const overflow = positionHistory.value.length - maxHistory;
+    if (overflow > 0) {
+      positionHistory.value.splice(0, overflow);
     }
 
-    // Update current position
-    currentPosition.value = worldPos;
-
-    // Update statistics
-    if (lastPosition.value) {
-      const distance = calculateDistance(lastPosition.value, worldPos);
-      totalDistance.value += distance;
-
-      const timeDelta = (now - lastSampleTime.value) / 1000; // Convert to seconds
-      if (timeDelta > 0) {
-        const speed = distance / timeDelta;
-        // Update average speed with exponential moving average
-        averageSpeed.value = averageSpeed.value * 0.9 + speed * 0.1;
-      }
+    if (positionHistory.value.length % 30 === 0) {
+      console.debug('🗺️ [PositionHeatmap] Sample added', {
+        samples: positionHistory.value.length,
+        position: centeredWorld,
+        distance,
+        deltaSeconds,
+        speed,
+        averageSpeed: averageSpeed.value,
+        totalDistance: totalDistance.value,
+        zone,
+      });
     }
 
-    // Update zone tracking
-    const zone = getZoneName(worldPos.x, worldPos.y);
-    const currentTime = timeInZones.value.get(zone) || 0;
-    timeInZones.value.set(zone, currentTime + 1);
+    // Log every position update for debugging (can be removed later)
+    if (frameNumber % 60 === 0) {
+      console.debug('🗺️ [PositionHeatmap] Position update', {
+        frame: frameNumber,
+        position: centeredWorld,
+        distance,
+        speed,
+        totalDistance: totalDistance.value,
+        averageSpeed: averageSpeed.value,
+        isTracking: isTracking.value,
+        confidence,
+      });
+    }
 
-    // Update most visited zone
-    let maxTime = 0;
-    let maxZone = null;
-    timeInZones.value.forEach((time, zone) => {
-      if (time > maxTime) {
-        maxTime = time;
-        maxZone = zone;
-      }
-    });
-    mostVisitedZone.value = maxZone;
-
-    // Update tracking state
-    lastPosition.value = worldPos;
+    // Only update lastSampleTime when we actually add to history
     lastSampleTime.value = now;
   }
 
@@ -243,78 +479,93 @@ export function usePositionHeatmap(
    * Apply Gaussian smoothing to heatmap
    */
   function applyGaussianSmoothing(
-    grid: number[][],
+    grid: Float32Array[],
     radius: number
-  ): number[][] {
+  ): Float32Array[] {
     const height = grid.length;
-    const width = grid[0]?.length || 0;
-    const smoothed: number[][] = Array(height)
-      .fill(0)
-      .map(() => Array(width).fill(0));
+    const width = grid[0]?.length ?? 0;
 
-    // Create Gaussian kernel
-    const kernelSize = radius * 2 + 1;
-    const kernel: number[][] = [];
-    let kernelSum = 0;
-
-    for (let i = 0; i < kernelSize; i++) {
-      kernel[i] = [];
-      for (let j = 0; j < kernelSize; j++) {
-        const x = i - radius;
-        const y = j - radius;
-        const value = Math.exp(-(x * x + y * y) / (2 * radius * radius));
-        kernel[i]![j] = value;
-        kernelSum += value;
-      }
+    if (height === 0 || width === 0) {
+      return grid.map((row) => new Float32Array(row));
     }
 
-    // Normalize kernel
-    for (let i = 0; i < kernelSize; i++) {
-      for (let j = 0; j < kernelSize; j++) {
-        kernel[i]![j]! /= kernelSum;
-      }
+    if (!Number.isFinite(radius) || radius <= 0) {
+      return grid.map((row) => new Float32Array(row));
     }
 
-    // Apply convolution
+    const { radius: kernelRadius, kernel } = getGaussianKernel(radius);
+    const temp = new Array<Float32Array>(height);
+
     for (let y = 0; y < height; y++) {
+      const row = grid[y]!;
+      const convolvedRow = new Float32Array(width);
+
       for (let x = 0; x < width; x++) {
         let sum = 0;
 
-        for (let ky = 0; ky < kernelSize; ky++) {
-          for (let kx = 0; kx < kernelSize; kx++) {
-            const gridY = y + ky - radius;
-            const gridX = x + kx - radius;
-
-            if (gridY >= 0 && gridY < height && gridX >= 0 && gridX < width) {
-              const gridValue = grid[gridY]?.[gridX] ?? 0;
-              const kernelValue = kernel[ky]?.[kx] ?? 0;
-              sum += gridValue * kernelValue;
-            }
+        for (let offset = -kernelRadius; offset <= kernelRadius; offset++) {
+          const columnIndex = x + offset;
+          if (columnIndex >= 0 && columnIndex < width) {
+            const sample = row[columnIndex] ?? 0;
+            const kernelWeight = kernel[offset + kernelRadius] ?? 0;
+            sum += sample * kernelWeight;
           }
         }
 
-        smoothed[y]![x] = sum;
+        convolvedRow[x] = sum;
       }
+
+      temp[y] = convolvedRow;
     }
 
-    return smoothed;
+    const output = new Array<Float32Array>(height);
+
+    for (let y = 0; y < height; y++) {
+      const smoothedRow = new Float32Array(width);
+
+      for (let x = 0; x < width; x++) {
+        let sum = 0;
+
+        for (let offset = -kernelRadius; offset <= kernelRadius; offset++) {
+          const rowIndex = y + offset;
+          if (rowIndex >= 0 && rowIndex < height) {
+            const tempRow = temp[rowIndex];
+            if (!tempRow) continue;
+            const sample = tempRow[x] ?? 0;
+            const kernelWeight = kernel[offset + kernelRadius] ?? 0;
+            sum += sample * kernelWeight;
+          }
+        }
+
+        smoothedRow[x] = sum;
+      }
+
+      output[y] = smoothedRow;
+    }
+
+    return output;
   }
 
   /**
    * Generate heatmap from position history
    */
   function generateHeatmap(): HeatmapData {
-    const gridWidth = Math.ceil(
-      courtDimensions.value.width * settings.value.gridResolution
+    const width = courtDimensions.value.width || DEFAULT_COURT_WIDTH;
+    const length = courtDimensions.value.length || DEFAULT_COURT_LENGTH;
+    const gridWidth = Math.max(
+      1,
+      Math.ceil(width * settings.value.gridResolution)
     );
-    const gridHeight = Math.ceil(
-      courtDimensions.value.length * settings.value.gridResolution
+    const gridHeight = Math.max(
+      1,
+      Math.ceil(length * settings.value.gridResolution)
     );
 
     // Initialize grid
-    const grid: number[][] = Array(gridHeight)
-      .fill(0)
-      .map(() => Array(gridWidth).fill(0));
+    const grid: Float32Array[] = Array.from(
+      { length: gridHeight },
+      () => new Float32Array(gridWidth)
+    );
 
     // Accumulate positions
     const now = Date.now();
@@ -327,17 +578,22 @@ export function usePositionHeatmap(
       }
 
       // Convert world position to grid coordinates
-      const gridX = Math.floor(
-        sample.worldPosition.x * settings.value.gridResolution
-      );
-      const gridY = Math.floor(
-        sample.worldPosition.y * settings.value.gridResolution
-      );
+      const courtSpace = toCourtSpace(sample.worldPosition);
+      const gridX = Math.floor(courtSpace.x * settings.value.gridResolution);
+      const gridY = Math.floor(courtSpace.y * settings.value.gridResolution);
 
       // Check bounds
-      if (gridX >= 0 && gridX < gridWidth && gridY >= 0 && gridY < gridHeight) {
-        if (grid[gridY]) {
-          grid[gridY]![gridX] = (grid[gridY]![gridX] ?? 0) + weight;
+      if (
+        Number.isFinite(weight) &&
+        gridX >= 0 &&
+        gridX < gridWidth &&
+        gridY >= 0 &&
+        gridY < gridHeight
+      ) {
+        const row = grid[gridY];
+        if (row) {
+          const current = row[gridX] ?? 0;
+          row[gridX] = current + weight;
         }
       }
     }
@@ -350,30 +606,43 @@ export function usePositionHeatmap(
 
     // Find max count and create cell objects
     let maxCount = 0;
-    const cells: HeatmapCell[][] = [];
+    const cells: HeatmapCell[][] = new Array(gridHeight);
 
     for (let y = 0; y < gridHeight; y++) {
-      cells[y] = [];
-      for (let x = 0; x < gridWidth; x++) {
-        const count = smoothedGrid[y]?.[x] ?? 0;
-        maxCount = Math.max(maxCount, count);
+      const row: HeatmapCell[] = new Array(gridWidth);
+      const smoothedRow = smoothedGrid[y];
 
-        cells[y]![x] = {
+      if (!smoothedRow) {
+        cells[y] = row;
+        continue;
+      }
+
+      for (let x = 0; x < gridWidth; x++) {
+        const value = smoothedRow[x] ?? 0;
+        const count = Number.isFinite(value) ? value : 0;
+        if (count > maxCount) {
+          maxCount = count;
+        }
+
+        row[x] = {
           x,
           y,
           count,
           intensity: 0, // Will be normalized after
         };
       }
+
+      cells[y] = row;
     }
 
     // Normalize intensities
     if (maxCount > 0) {
-      for (let y = 0; y < gridHeight; y++) {
-        for (let x = 0; x < gridWidth; x++) {
-          if (cells[y]?.[x]) {
-            cells[y]![x]!.intensity = cells[y]![x]!.count / maxCount;
-          }
+      const inverseMax = 1 / maxCount;
+      for (const row of cells) {
+        if (!row) continue;
+        for (const cell of row) {
+          if (!cell) continue;
+          cell.intensity = cell.count * inverseMax;
         }
       }
     }
@@ -384,7 +653,7 @@ export function usePositionHeatmap(
       totalSamples: positionHistory.value.length,
       gridWidth,
       gridHeight,
-      courtDimensions: { ...courtDimensions.value },
+      courtDimensions: { width, length },
     };
 
     heatmapData.value = data;
@@ -397,6 +666,8 @@ export function usePositionHeatmap(
   function startTracking() {
     isTracking.value = true;
     initializeZones();
+    lastPosition.value = null;
+    lastSampleTime.value = 0;
     console.log('Position tracking started');
   }
 
@@ -427,7 +698,10 @@ export function usePositionHeatmap(
    * Update settings
    */
   function updateSettings(newSettings: Partial<HeatmapSettings>) {
-    settings.value = { ...settings.value, ...newSettings };
+    settings.value = normalizeSettings({
+      ...settings.value,
+      ...newSettings,
+    });
   }
 
   /**
@@ -455,7 +729,10 @@ export function usePositionHeatmap(
       const data = JSON.parse(dataString);
 
       if (data.settings) {
-        settings.value = data.settings;
+        settings.value = normalizeSettings({
+          ...settings.value,
+          ...data.settings,
+        });
       }
 
       if (data.positionHistory) {

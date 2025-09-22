@@ -149,6 +149,7 @@ export interface UsePoseLandmarker {
   // ROI methods
   setROI: (roi: ROI | null) => void;
   resetROI: () => void;
+  updateSettings: (settings: Partial<DetectionSettings>) => void;
 }
 
 export function usePoseLandmarker(): UsePoseLandmarker {
@@ -246,13 +247,13 @@ export function usePoseLandmarker(): UsePoseLandmarker {
     roiMaxSize: { width: 0.8, height: 0.8 }, // Maximum ROI size
 
     // Adaptive ROI Settings
-    useAdaptiveROI: true,
+    useAdaptiveROI: false,
     adaptiveROIConfidenceThreshold: 0.7,
     adaptiveROIExpansionRate: 0.05, // How much to expand when confidence is low
     adaptiveROIShrinkRate: 0.02, // How much to shrink when confidence is high
 
     // Motion Prediction Settings
-    useMotionPrediction: true,
+    useMotionPrediction: false,
     motionPredictionWeight: 0.3, // How much to weight predicted position
     maxMotionPredictionDistance: 0.1, // Maximum distance to predict
 
@@ -900,23 +901,24 @@ export function usePoseLandmarker(): UsePoseLandmarker {
 
           console.log('🔍 [DEBUG] Set landmarks and worldLandmarks');
 
-          // Calculate enhanced ROI for this pose
+          // Manual ROI stays fixed unless adaptive mode is explicitly re-enabled
           const currentROI = detectionSettings.roiBox;
-          console.log('🔍 [DEBUG] About to call calculateEnhancedROI');
-          const newROI = calculateEnhancedROI(selectedPose, currentROI);
-          console.log('🔍 [DEBUG] calculateEnhancedROI completed');
+          let enhancedROI: ROI | null = null;
 
-          if (newROI) {
-            // Update ROI history and metrics
-            updateROIHistory(newROI, timestamp);
+          if (detectionSettings.useAdaptiveROI) {
+            console.log('🔍 [DEBUG] Adaptive ROI enabled, recalculating');
+            enhancedROI = calculateEnhancedROI(selectedPose, currentROI);
+          }
 
-            // Update current ROI if auto-update is enabled
-            if (detectionSettings.useAdaptiveROI) {
-              detectionSettings.roiBox = newROI;
-
-              // Predict next frame's ROI
-              roiPrediction.value = predictNextROI(newROI);
-            }
+          if (enhancedROI) {
+            updateROIHistory(enhancedROI, timestamp);
+            detectionSettings.roiBox = enhancedROI;
+            roiPrediction.value = predictNextROI(enhancedROI);
+          } else if (currentROI) {
+            updateROIHistory(currentROI, timestamp);
+            roiPrediction.value = null;
+          } else {
+            roiPrediction.value = null;
           }
 
           // Calculate pose confidence
@@ -974,7 +976,7 @@ export function usePoseLandmarker(): UsePoseLandmarker {
             roiFilterApplied: detectionSettings.useROI,
             roiValidation: bestROIMatch,
             roiStability: { ...roiStabilityMetrics },
-            enhancedROI: newROI,
+            enhancedROI: detectionSettings.roiBox,
             speedMetrics: comprehensiveMetrics.value,
           };
 
@@ -1260,12 +1262,36 @@ export function usePoseLandmarker(): UsePoseLandmarker {
     );
   });
 
+  const resetROIState = () => {
+    roiHistory.value = [];
+    roiPrediction.value = null;
+    roiConfidence.value = 0;
+    roiStabilityMetrics.averageSize.width = 0;
+    roiStabilityMetrics.averageSize.height = 0;
+    roiStabilityMetrics.averagePosition.x = 0;
+    roiStabilityMetrics.averagePosition.y = 0;
+    roiStabilityMetrics.velocityEstimate.x = 0;
+    roiStabilityMetrics.velocityEstimate.y = 0;
+    roiStabilityMetrics.sizeVelocity.width = 0;
+    roiStabilityMetrics.sizeVelocity.height = 0;
+    roiStabilityMetrics.stabilityScore = 0;
+  };
+
   const setROI = (roi: ROI | null) => {
     console.log('[usePoseLandmarker] Setting ROI:', roi);
+
+    const previousROI = detectionSettings.roiBox;
 
     // Update detection settings to use the new ROI
     detectionSettings.useROI = roi !== null;
     detectionSettings.roiBox = roi;
+
+    // Reset ROI-derived state when ROI is cleared or newly defined
+    const hadROI = Boolean(previousROI);
+    const hasROI = Boolean(roi);
+    if (hadROI !== hasROI || !hadROI) {
+      resetROIState();
+    }
 
     console.log('[usePoseLandmarker] ROI updated in detection settings:', {
       useROI: detectionSettings.useROI,
@@ -1275,6 +1301,23 @@ export function usePoseLandmarker(): UsePoseLandmarker {
 
   const resetROI = () => {
     setROI(null);
+  };
+
+  const updateSettings = (settings: Partial<DetectionSettings>) => {
+    Object.entries(settings).forEach(([key, value]) => {
+      if (key === 'useAdaptiveROI') {
+        detectionSettings.useAdaptiveROI = false;
+        return;
+      }
+      if (value === undefined) return;
+      if (Object.prototype.hasOwnProperty.call(detectionSettings, key)) {
+        (detectionSettings as any)[key] = value;
+      }
+    });
+
+    if (settings.useMotionPrediction === false) {
+      roiPrediction.value = null;
+    }
   };
 
   // Expose selected keypoints as a computed ref (for API parity)
@@ -1331,5 +1374,6 @@ export function usePoseLandmarker(): UsePoseLandmarker {
     selectedKeypointsComputed,
     setROI,
     resetROI,
+    updateSettings,
   };
 }

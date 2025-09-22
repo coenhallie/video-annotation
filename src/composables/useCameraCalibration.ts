@@ -11,6 +11,8 @@ import {
 import { type VideoDimensions } from '../utils/videoDimensions';
 import { type CalibrationQualityMetrics } from '../utils/calibrationQuality';
 
+let cameraCalibrationInstance: any | null = null;
+
 // Data structures based on architecture document
 export interface SelectedLine {
   id: string;
@@ -183,6 +185,10 @@ export interface CameraCalibrationState {
 }
 
 export function useCameraCalibration() {
+  if (cameraCalibrationInstance) {
+    return cameraCalibrationInstance;
+  }
+
   // Workflow state
   const calibrationStep = ref<CalibrationStep>(CalibrationStep.SETUP);
   const workflowProgress = computed(
@@ -1533,7 +1539,7 @@ export function useCameraCalibration() {
   });
 
   // Return all reactive state and methods
-  return {
+  const api = {
     // State
     calibrationStep,
     workflowProgress,
@@ -1583,4 +1589,7 @@ export function useCameraCalibration() {
     setVideoDimensions,
     getCurrentVideoDimensions,
   };
+
+  cameraCalibrationInstance = api;
+  return api;
 }

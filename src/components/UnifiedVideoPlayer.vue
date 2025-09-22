@@ -74,15 +74,11 @@
           ref="singleDrawingCanvasRef"
           :current-frame="currentFrame"
           :is-drawing-mode="drawingCanvas?.isDrawingMode?.value ?? false"
-          :stroke-width="
-            drawingCanvas?.currentTool?.value?.strokeWidth ?? 3
-          "
+          :stroke-width="drawingCanvas?.currentTool?.value?.strokeWidth ?? 3"
           :severity="
             drawingCanvas?.currentTool?.value?.severity ?? defaultSeverity
           "
-          :current-color="
-            resolveCanvasColor(drawingCanvas) ?? '#ef4444'
-          "
+          :current-color="resolveCanvasColor(drawingCanvas) ?? '#ef4444'"
           :existing-drawings="drawingCanvas?.allDrawings?.value ?? []"
           :is-loading-drawings="
             drawingCanvas?.isLoadingDrawings?.value ?? false
@@ -120,7 +116,6 @@
           :roi-history="roiSettings.roiHistory"
           :roi-confidence="roiSettings.roiConfidence"
           :stability-metrics="roiSettings.stabilityMetrics"
-          :adaptive-r-o-i="(roiSettings as any).useAdaptiveROI"
           :motion-prediction="(roiSettings as any).useMotionPrediction"
           :show-roi="roiSettings.showROI"
           :show-prediction="roiSettings.showPrediction"
@@ -131,7 +126,6 @@
           @roi-selected="handleROISelected"
           @roi-updated="handleROIUpdated"
           @roi-cleared="handleROICleared"
-          @adaptive-roi-toggled="handleAdaptiveROIToggled"
           @motion-prediction-toggled="handleMotionPredictionToggled"
         />
 
@@ -140,13 +134,13 @@
         <!-- Heatmap Minimap for Position Tracking -->
         <HeatmapMinimap
           :is-visible="showHeatmapMinimap"
-          :heatmap-data="positionHeatmap.heatmapData.value"
-          :current-position="positionHeatmap.currentPosition.value"
-          :court-dimensions="cameraCalibration.courtDimensions.value"
-          :total-distance="positionHeatmap.totalDistance.value"
-          :average-speed="positionHeatmap.averageSpeed.value"
-          :most-visited-zone="positionHeatmap.mostVisitedZone.value"
-          :total-samples="positionHeatmap.positionHistory.value.length"
+          :heatmap-data="heatmapDataComputed"
+          :current-position="currentPositionComputed"
+          :court-dimensions="courtDimensionsComputed"
+          :total-distance="totalDistanceComputed"
+          :average-speed="averageSpeedComputed"
+          :most-visited-zone="mostVisitedZoneComputed"
+          :total-samples="totalSamplesComputed"
           :get-zone-name="positionHeatmap.getZoneName"
           @close="showHeatmapMinimap = false"
         />
@@ -234,47 +228,70 @@
 
               <!-- Pose detection controls -->
               <div v-if="poseLandmarker" class="pose-controls">
-                <button
-                  class="control-button"
-                  :class="{
-                    'pose-active': poseLandmarker.isEnabled.value,
-                    'pose-loading': poseLandmarker.isLoading.value,
-                  }"
-                  :disabled="poseLandmarker.isLoading.value"
-                  :aria-label="
-                    poseLandmarker.isLoading.value
-                      ? 'Loading pose detection...'
-                      : poseLandmarker.isEnabled.value
-                      ? 'Disable pose visualization'
-                      : 'Enable pose visualization'
-                  "
-                  :title="
-                    poseLandmarker.isLoading.value
-                      ? 'Loading pose detection...'
-                      : 'Toggle pose visualization'
-                  "
-                  @click="togglePoseDetection"
-                >
-                  <!-- Loading spinner -->
-                  <div
-                    v-if="poseLandmarker.isLoading.value"
-                    class="pose-loading-spinner"
-                  />
-                  <!-- Pose icon -->
-                  <svg
-                    v-else
-                    class="control-icon"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
+                <div class="pose-toggle-wrapper">
+                  <button
+                    class="control-button"
+                    :class="{
+                      'pose-active': poseLandmarker.isEnabled.value,
+                      'pose-loading': poseLandmarker.isLoading.value,
+                    }"
+                    :disabled="
+                      poseLandmarker.isLoading.value || !isCalibrationReady
+                    "
+                    :aria-label="
+                      poseLandmarker.isLoading.value
+                        ? 'Loading pose detection...'
+                        : !isCalibrationReady
+                        ? 'Calibrate camera to enable pose visualization'
+                        : poseLandmarker.isEnabled.value
+                        ? 'Disable pose visualization'
+                        : 'Enable pose visualization'
+                    "
+                    :title="
+                      poseLandmarker.isLoading.value
+                        ? 'Loading pose detection...'
+                        : !isCalibrationReady
+                        ? 'Calibrate camera first to enable pose visualization'
+                        : poseLandmarker.isEnabled.value
+                        ? 'Disable pose visualization'
+                        : 'Enable pose visualization'
+                    "
+                    @click="togglePoseDetection"
                   >
-                    <circle cx="12" cy="5" r="2" />
-                    <path d="M12 7v5" />
-                    <path d="M10 12h4" />
-                    <path d="M8 17l2-5 2 5" />
-                    <path d="M16 17l-2-5-2 5" />
-                  </svg>
-                </button>
+                    <!-- Loading spinner -->
+                    <div
+                      v-if="poseLandmarker.isLoading.value"
+                      class="pose-loading-spinner"
+                    />
+                    <!-- Pose icon -->
+                    <svg
+                      v-else
+                      class="control-icon"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                    >
+                      <circle cx="12" cy="5" r="2" />
+                      <path d="M12 7v5" />
+                      <path d="M10 12h4" />
+                      <path d="M8 17l2-5 2 5" />
+                      <path d="M16 17l-2-5-2 5" />
+                    </svg>
+                  </button>
+                  <span
+                    v-if="
+                      mode === 'single' &&
+                      poseLandmarker &&
+                      speedToggleIndicatorVisible &&
+                      !poseLandmarker.isEnabled.value
+                    "
+                    class="speed-toggle-indicator"
+                    aria-hidden="true"
+                  />
+                  <div v-if="poseTooltipVisible" class="pose-next-step-tooltip">
+                    Next step: start speed calculation
+                  </div>
+                </div>
 
                 <!-- Labels toggle (only show when pose detection is enabled) -->
                 <button
@@ -311,36 +328,44 @@
                 </button>
 
                 <!-- Camera Calibration Button -->
-                <button
-                  class="control-button"
-                  :class="{
-                    'pose-active':
-                      cameraCalibration.cameraParameters.position !== null,
-                    calibrated:
-                      cameraCalibration.cameraParameters.position !== null,
-                  }"
-                  :title="
-                    cameraCalibration.cameraParameters.position !== null
-                      ? 'Camera calibrated - Click to recalibrate'
-                      : 'Calibrate camera angle'
-                  "
-                  @click="$emit('toggle-calibration')"
-                >
-                  <svg
-                    class="control-icon"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.5"
+                <div class="calibration-toggle-wrapper">
+                  <button
+                    class="control-button"
+                    :class="{
+                      'pose-active':
+                        cameraCalibration.cameraParameters.position !== null,
+                      calibrated:
+                        cameraCalibration.cameraParameters.position !== null,
+                    }"
+                    :title="
+                      cameraCalibration.cameraParameters.position !== null
+                        ? 'Camera calibrated - Click to recalibrate'
+                        : 'Calibrate camera angle'
+                    "
+                    @click="$emit('toggle-calibration')"
                   >
-                    <!-- "Cube Transparent" icon -->
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9"
-                    />
-                  </svg>
-                </button>
+                    <svg
+                      class="control-icon"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                    >
+                      <!-- "Cube Transparent" icon -->
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9"
+                      />
+                    </svg>
+                  </button>
+                  <div
+                    v-if="calibrationTooltipVisible"
+                    class="calibration-next-step-tooltip"
+                  >
+                    Start by calibrating the camera
+                  </div>
+                </div>
 
                 <!-- Heatmap Toggle Button (disabled until calibration is complete) -->
                 <button
@@ -503,9 +528,7 @@
               :severity="
                 drawingCanvasA?.currentTool?.value?.severity ?? defaultSeverity
               "
-              :current-color="
-                resolveCanvasColor(drawingCanvasA) ?? '#ef4444'
-              "
+              :current-color="resolveCanvasColor(drawingCanvasA) ?? '#ef4444'"
               :existing-drawings="drawingCanvasA?.allDrawings?.value ?? []"
               :is-loading-drawings="
                 drawingCanvasA?.isLoadingDrawings?.value ?? false
@@ -574,7 +597,6 @@
               :roi-history="roiSettingsA.roiHistory"
               :roi-confidence="roiSettingsA.roiConfidence"
               :stability-metrics="roiSettingsA.stabilityMetrics"
-              :adaptive-r-o-i="(roiSettingsA as any).useAdaptiveROI"
               :motion-prediction="(roiSettingsA as any).useMotionPrediction"
               :show-roi="roiSettingsA.showROI"
               :show-prediction="roiSettingsA.showPrediction"
@@ -586,7 +608,6 @@
               @roi-selected="(roi: any) => handleROISelected(roi, 'A')"
               @roi-updated="(roi: any) => handleROIUpdated(roi, 'A')"
               @roi-cleared="() => handleROICleared('A')"
-              @adaptive-roi-toggled="() => handleAdaptiveROIToggled('A')"
               @motion-prediction-toggled="
                 () => handleMotionPredictionToggled('A')
               "
@@ -649,9 +670,7 @@
               :severity="
                 drawingCanvasB?.currentTool?.value?.severity ?? defaultSeverity
               "
-              :current-color="
-                resolveCanvasColor(drawingCanvasB) ?? '#ef4444'
-              "
+              :current-color="resolveCanvasColor(drawingCanvasB) ?? '#ef4444'"
               :existing-drawings="drawingCanvasB?.allDrawings?.value ?? []"
               :is-loading-drawings="
                 drawingCanvasB?.isLoadingDrawings?.value ?? false
@@ -720,7 +739,6 @@
               :roi-history="roiSettingsB.roiHistory"
               :roi-confidence="roiSettingsB.roiConfidence"
               :stability-metrics="roiSettingsB.stabilityMetrics"
-              :adaptive-r-o-i="(roiSettingsB as any).useAdaptiveROI"
               :motion-prediction="(roiSettingsB as any).useMotionPrediction"
               :show-roi="roiSettingsB.showROI"
               :show-prediction="roiSettingsB.showPrediction"
@@ -732,7 +750,6 @@
               @roi-selected="(roi: any) => handleROISelected(roi, 'B')"
               @roi-updated="(roi: any) => handleROIUpdated(roi, 'B')"
               @roi-cleared="() => handleROICleared('B')"
-              @adaptive-roi-toggled="() => handleAdaptiveROIToggled('B')"
               @motion-prediction-toggled="
                 () => handleMotionPredictionToggled('B')
               "
@@ -1138,7 +1155,7 @@
 
     <!-- Custom controls for dual video -->
     <div
-          v-if="controlsAttr && (videoAUrl || videoBUrl)"
+      v-if="controlsAttr && (videoAUrl || videoBUrl)"
       class="dual-video-controls"
     >
       <div class="controls-content">
@@ -1445,8 +1462,12 @@ import SpeedChart from './SpeedChart.vue';
 import ROISelector from './ROISelector.vue';
 import KeypointSelectorModal from './KeypointSelectorModal.vue';
 import { useVideoPlayer } from '../composables/useVideoPlayer.ts';
-import { useCameraCalibration } from '../composables/useCameraCalibration.ts';
+import {
+  CalibrationStep,
+  useCameraCalibration,
+} from '../composables/useCameraCalibration.ts';
 import { usePositionHeatmap } from '../composables/usePositionHeatmap';
+import type { Point3D } from '../composables/usePositionHeatmap';
 import HeatmapMinimap from './HeatmapMinimap.vue';
 import type {
   DualVideoPlayer,
@@ -1479,9 +1500,9 @@ type OptionalDrawingCanvas = Partial<DrawingCanvasLike> | null | undefined;
 type VideoState = Partial<DualVideoPlayerState> | Record<string, unknown>;
 
 type DualVideoPlayerLike = Partial<DualVideoPlayer> & {
-    getCurrentVideoElement?: () => HTMLVideoElement | null;
-    getCurrentVideoContainer?: () => HTMLElement | null;
-  };
+  getCurrentVideoElement?: () => HTMLVideoElement | null;
+  getCurrentVideoContainer?: () => HTMLElement | null;
+};
 interface Props {
   mode?: 'single' | 'dual';
   // Single video props
@@ -1581,7 +1602,9 @@ const videoBStateResolved = computed<VideoState | null>(
   () => props.videoBState ?? null
 );
 
-const resolveCanvasColor = (canvas: OptionalDrawingCanvas): string | undefined => {
+const resolveCanvasColor = (
+  canvas: OptionalDrawingCanvas
+): string | undefined => {
   if (!canvas) return undefined;
   const maybeCanvas = canvas as Partial<DrawingCanvasLike>;
   const source = maybeCanvas.getCurrentColor;
@@ -1599,13 +1622,11 @@ const resolveCanvasColor = (canvas: OptionalDrawingCanvas): string | undefined =
 
 const defaultSeverity: SeverityLevel = 'medium';
 
-type PoseDetectionResult =
-  | {
-      detected?: boolean;
-      landmarks?: Array<Record<string, number>>;
-      [key: string]: unknown;
-    }
-  | null;
+type PoseDetectionResult = {
+  detected?: boolean;
+  landmarks?: Array<Record<string, number>>;
+  [key: string]: unknown;
+} | null;
 
 // Video player composable for shared functionality
 const {
@@ -1676,6 +1697,235 @@ const localSelectedKeypoints = ref<number[]>(
 // Camera calibration composable (for accessing calibration state)
 const cameraCalibration = useCameraCalibration();
 
+// Tooltip state for guiding pose visualization activation post-calibration
+const poseTooltipVisible = ref(false);
+const speedToggleIndicatorVisible = ref(false);
+const hasShownSpeedToggleIndicator = ref(false);
+const calibrationTooltipVisible = ref(false);
+const hasShownCalibrationTooltip = ref(false);
+
+const isCalibrationReady = computed(() => {
+  const calibrated = cameraCalibration.isCalibrated?.value ?? false;
+  if (calibrated) {
+    return true;
+  }
+  return cameraCalibration.cameraParameters.position !== null;
+});
+
+// Computed properties for heatmap reactivity
+const heatmapDataComputed = computed(() => positionHeatmap.heatmapData.value);
+const currentPositionComputed = computed(
+  () => positionHeatmap.currentPosition.value
+);
+const courtDimensionsComputed = computed(
+  () => cameraCalibration.courtDimensions.value
+);
+const totalDistanceComputed = computed(
+  () => positionHeatmap.totalDistance.value
+);
+const averageSpeedComputed = computed(() => positionHeatmap.averageSpeed.value);
+const mostVisitedZoneComputed = computed(
+  () => positionHeatmap.mostVisitedZone.value
+);
+const totalSamplesComputed = computed(
+  () => positionHeatmap.positionHistory.value.length
+);
+
+let poseTooltipTimeout: ReturnType<typeof setTimeout> | null = null;
+let calibrationTooltipTimeout: ReturnType<typeof setTimeout> | null = null;
+
+const showPoseTooltip = () => {
+  poseTooltipVisible.value = true;
+  if (poseTooltipTimeout) {
+    clearTimeout(poseTooltipTimeout);
+  }
+  poseTooltipTimeout = setTimeout(() => {
+    poseTooltipVisible.value = false;
+    poseTooltipTimeout = null;
+  }, 6500);
+};
+
+const hidePoseTooltip = () => {
+  poseTooltipVisible.value = false;
+  if (poseTooltipTimeout) {
+    clearTimeout(poseTooltipTimeout);
+    poseTooltipTimeout = null;
+  }
+};
+
+const showCalibrationTooltip = () => {
+  if (calibrationTooltipTimeout) {
+    clearTimeout(calibrationTooltipTimeout);
+  }
+  calibrationTooltipVisible.value = true;
+  calibrationTooltipTimeout = setTimeout(() => {
+    calibrationTooltipVisible.value = false;
+    calibrationTooltipTimeout = null;
+  }, 6500);
+};
+
+const hideCalibrationTooltip = () => {
+  calibrationTooltipVisible.value = false;
+  if (calibrationTooltipTimeout) {
+    clearTimeout(calibrationTooltipTimeout);
+    calibrationTooltipTimeout = null;
+  }
+};
+
+const maybeShowCalibrationTooltip = () => {
+  if (
+    hasShownCalibrationTooltip.value ||
+    cameraCalibration.cameraParameters.position !== null ||
+    cameraCalibration.calibrationStep.value !== CalibrationStep.SETUP ||
+    cameraCalibration.isModalOpen.value ||
+    props.mode !== 'single' ||
+    !props.videoUrl
+  ) {
+    return;
+  }
+
+  hasShownCalibrationTooltip.value = true;
+  showCalibrationTooltip();
+};
+
+const showSpeedToggleIndicator = () => {
+  if (
+    hasShownSpeedToggleIndicator.value ||
+    props.mode !== 'single' ||
+    !props.poseLandmarker ||
+    props.poseLandmarker.isEnabled?.value
+  ) {
+    return;
+  }
+  speedToggleIndicatorVisible.value = true;
+  hasShownSpeedToggleIndicator.value = true;
+};
+
+const hideSpeedToggleIndicator = () => {
+  speedToggleIndicatorVisible.value = false;
+};
+
+watch(
+  () => cameraCalibration.calibrationStep.value,
+  (step, previousStep) => {
+    if (step === CalibrationStep.SETUP) {
+      if (previousStep !== CalibrationStep.SETUP) {
+        hasShownCalibrationTooltip.value = false;
+      }
+      nextTick(() => {
+        maybeShowCalibrationTooltip();
+      });
+    } else {
+      hideCalibrationTooltip();
+    }
+  },
+  { immediate: true }
+);
+
+watch(
+  () => cameraCalibration.cameraParameters.position,
+  (position, previousPosition) => {
+    if (position) {
+      hideCalibrationTooltip();
+    } else if (
+      previousPosition !== null &&
+      cameraCalibration.calibrationStep.value === CalibrationStep.SETUP
+    ) {
+      hasShownCalibrationTooltip.value = false;
+      nextTick(() => {
+        maybeShowCalibrationTooltip();
+      });
+    }
+  }
+);
+
+watch(
+  () => cameraCalibration.isModalOpen.value,
+  (isOpen) => {
+    if (isOpen) {
+      hideCalibrationTooltip();
+    } else {
+      nextTick(() => {
+        maybeShowCalibrationTooltip();
+      });
+    }
+  }
+);
+
+watch(
+  () => props.videoUrl,
+  (videoUrl) => {
+    if (videoUrl) {
+      nextTick(() => {
+        maybeShowCalibrationTooltip();
+      });
+    } else {
+      hideCalibrationTooltip();
+      hasShownCalibrationTooltip.value = false;
+    }
+  }
+);
+
+watch(
+  () => props.mode,
+  (mode) => {
+    if (mode !== 'single') {
+      hideCalibrationTooltip();
+      hasShownCalibrationTooltip.value = false;
+    } else {
+      nextTick(() => {
+        maybeShowCalibrationTooltip();
+      });
+    }
+  }
+);
+
+watch(
+  () => isCalibrationReady.value,
+  (ready, wasReady) => {
+    if (ready && !wasReady) {
+      showPoseTooltip();
+      showSpeedToggleIndicator();
+    } else if (!ready) {
+      hidePoseTooltip();
+      hideSpeedToggleIndicator();
+      hasShownSpeedToggleIndicator.value = false;
+    }
+  }
+);
+
+watch(
+  () => props.poseLandmarker?.isEnabled?.value,
+  (enabled) => {
+    if (enabled) {
+      hideSpeedToggleIndicator();
+    }
+  }
+);
+
+watch(
+  () => props.poseLandmarker?.isEnabled?.value,
+  (isEnabled) => {
+    if (isEnabled) {
+      hidePoseTooltip();
+    }
+  }
+);
+
+watch(
+  () => props.poseLandmarker,
+  (landmarker) => {
+    if (!landmarker) {
+      hidePoseTooltip();
+    }
+  }
+);
+
+onUnmounted(() => {
+  hidePoseTooltip();
+  hideCalibrationTooltip();
+});
+
 // Position heatmap tracking
 const showHeatmapMinimap = ref(false); // Hide heatmap by default, show only after calibration
 const positionHeatmap = usePositionHeatmap(cameraCalibration.courtDimensions);
@@ -1698,8 +1948,7 @@ const roiSettings = reactive({
     averageSize: { width: 0, height: 0 },
     averagePosition: { x: 0, y: 0 },
   },
-  useAdaptiveROI: true,
-  useMotionPrediction: true,
+  useMotionPrediction: false,
 });
 
 // Enhanced ROI state for Video A
@@ -1720,8 +1969,7 @@ const roiSettingsA = reactive({
     averageSize: { width: 0, height: 0 },
     averagePosition: { x: 0, y: 0 },
   },
-  useAdaptiveROI: true,
-  useMotionPrediction: true,
+  useMotionPrediction: false,
 });
 
 // Enhanced ROI state for Video B
@@ -1742,8 +1990,7 @@ const roiSettingsB = reactive({
     averageSize: { width: 0, height: 0 },
     averagePosition: { x: 0, y: 0 },
   },
-  useAdaptiveROI: true,
-  useMotionPrediction: true,
+  useMotionPrediction: false,
 });
 
 // Speed visualization helper functions and constants
@@ -1817,10 +2064,81 @@ const processPoseDetection = async (
             y: (leftHip.y + rightHip.y) / 2,
           };
 
+          const videoWidth =
+            videoElement.videoWidth || videoElement.clientWidth || 1;
+          const videoHeight =
+            videoElement.videoHeight || videoElement.clientHeight || 1;
+          const hipCenterPixels = {
+            x: hipCenter.x * videoWidth,
+            y: hipCenter.y * videoHeight,
+          };
+
           // Transform to world coordinates using camera calibration
-          // TODO: Implement transformToWorld method in useCameraCalibration composable
-          // const worldPos = cameraCalibration.transformToWorld(hipCenter, 0);
-          const worldPos = { x: hipCenter.x, y: hipCenter.y, z: 0 }; // Temporary fallback
+          const { width: courtWidth = 6.1, length: courtLength = 13.4 } =
+            cameraCalibration.courtDimensions?.value ?? {};
+
+          let worldPos: Point3D | null = null;
+          if (typeof cameraCalibration.transformToWorld === 'function') {
+            try {
+              const transformed = cameraCalibration.transformToWorld(
+                hipCenterPixels,
+                0
+              );
+              if (
+                transformed &&
+                Number.isFinite(transformed.x) &&
+                Number.isFinite(transformed.y)
+              ) {
+                const withinBounds =
+                  Math.abs(transformed.x) <= courtWidth &&
+                  Math.abs(transformed.y) <= courtLength;
+
+                if (withinBounds) {
+                  worldPos = {
+                    x: transformed.x,
+                    y: transformed.y,
+                    z: transformed.z ?? 0,
+                  };
+                  console.debug('🗺️ [Heatmap] transformToWorld success', {
+                    hipCenter,
+                    hipCenterPixels,
+                    worldPos,
+                  });
+                } else {
+                  console.warn(
+                    '⚠️ [Heatmap] Discarding transformToWorld result outside court bounds',
+                    {
+                      hipCenter,
+                      hipCenterPixels,
+                      transformed,
+                      courtWidth,
+                      courtLength,
+                    }
+                  );
+                }
+              }
+            } catch (error) {
+              console.warn(
+                '🗺️ [Heatmap] Failed to transform hip center to world coordinates:',
+                error
+              );
+            }
+          }
+
+          if (!worldPos) {
+            // Fallback to scaled normalized coordinates centered on the court
+            worldPos = {
+              x: hipCenter.x * courtWidth - courtWidth / 2,
+              y: hipCenter.y * courtLength - courtLength / 2,
+              z: 0,
+            };
+            console.debug('🗺️ [Heatmap] Using fallback hip center transform', {
+              hipCenter,
+              worldPos,
+              courtWidth,
+              courtLength,
+            });
+          }
 
           // Add position sample to heatmap tracker
           positionHeatmap.addPositionSample(
@@ -1996,6 +2314,7 @@ const handleROIUpdated = (roiBox: any, videoContext?: string) => {
       ? roiSettingsB
       : roiSettings;
 
+  setROI(roiBox, videoContext);
   roiSettingsToUpdate.currentROI = roiBox;
 };
 
@@ -2016,35 +2335,6 @@ const handleROICleared = (videoContext?: string) => {
 };
 
 // Enhanced ROI event handlers
-const handleAdaptiveROIToggled = (videoContext?: string) => {
-  const poseLandmarker =
-    videoContext === 'A'
-      ? props.poseLandmarkerA
-      : videoContext === 'B'
-      ? props.poseLandmarkerB
-      : props.poseLandmarker;
-
-  const roiSettingsToUpdate =
-    videoContext === 'A'
-      ? roiSettingsA
-      : videoContext === 'B'
-      ? roiSettingsB
-      : roiSettings;
-
-  if (poseLandmarker && poseLandmarker.updateSettings) {
-    roiSettingsToUpdate.useAdaptiveROI = !roiSettingsToUpdate.useAdaptiveROI;
-    poseLandmarker.updateSettings({
-      useAdaptiveROI: roiSettingsToUpdate.useAdaptiveROI,
-    });
-    console.log(
-      `🎯 [UnifiedVideoPlayer] Adaptive ROI toggled for ${
-        videoContext || 'single'
-      }:`,
-      roiSettingsToUpdate.useAdaptiveROI
-    );
-  }
-};
-
 const handleMotionPredictionToggled = (videoContext?: string) => {
   const poseLandmarker =
     videoContext === 'A'
@@ -2519,7 +2809,6 @@ const configureEnhancedROIForFastMovements = () => {
         adaptiveROIExpansionRate: 0.08, // Faster expansion
         frameSkip: 1, // Process every frame
         maxFPS: 60, // Higher frame rate
-        useAdaptiveROI: true,
         useMotionPrediction: true,
         roiValidationEnabled: true,
         roiValidationMinLandmarks: 5,
@@ -2714,8 +3003,8 @@ const setupVideoEventListeners = (
       singleVideoState.value.isLoading = false;
 
       // Debug video dimensions to understand native vs rendered size when helper is present
-      const debugVideoDimensions =
-        (globalThis as Record<string, unknown>).debugVideoDimensions;
+      const debugVideoDimensions = (globalThis as Record<string, unknown>)
+        .debugVideoDimensions;
       if (typeof debugVideoDimensions === 'function') {
         (debugVideoDimensions as (video: HTMLVideoElement) => void)(
           videoElement
@@ -3033,6 +3322,7 @@ const handleVideoClick = () => {
 
 // Pose detection controls
 const togglePoseDetection = async () => {
+  hidePoseTooltip();
   if (props.poseLandmarker) {
     await props.poseLandmarker.togglePoseDetection();
     console.log(
@@ -3042,6 +3332,7 @@ const togglePoseDetection = async () => {
 
     // If pose detection was just enabled and we have a video, process the current frame
     if (props.poseLandmarker.isEnabled.value) {
+      hideSpeedToggleIndicator();
       if (props.mode === 'single' && singleVideoElement.value) {
         processPoseDetection(singleVideoElement.value);
       }
@@ -3168,7 +3459,8 @@ defineExpose({
       return singleVideoElement.value;
     }
     const primary = props.primaryVideo === 'B' ? videoBElement : videoAElement;
-    const secondary = props.primaryVideo === 'B' ? videoAElement : videoBElement;
+    const secondary =
+      props.primaryVideo === 'B' ? videoAElement : videoBElement;
     return primary.value ?? secondary.value ?? null;
   },
   getCurrentVideoContainer: () => {
@@ -3176,7 +3468,8 @@ defineExpose({
       return singleVideoContainer.value;
     }
     const primary = props.primaryVideo === 'B' ? videoBElement : videoAElement;
-    const container = primary.value?.parentElement ??
+    const container =
+      primary.value?.parentElement ??
       (props.primaryVideo === 'B'
         ? videoAElement.value?.parentElement
         : videoBElement.value?.parentElement);
@@ -3660,6 +3953,107 @@ defineExpose({
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+.pose-toggle-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.pose-next-step-tooltip {
+  position: absolute;
+  top: -2.35rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(17, 24, 39, 0.95);
+  color: #f9fafb;
+  font-size: 0.65rem;
+  line-height: 1.1;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.35rem;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.35);
+  z-index: 15;
+}
+
+.pose-next-step-tooltip::after {
+  content: '';
+  position: absolute;
+  bottom: -0.35rem;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 0.35rem;
+  border-style: solid;
+  border-color: rgba(17, 24, 39, 0.95) transparent transparent transparent;
+}
+
+.calibration-toggle-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.calibration-next-step-tooltip {
+  position: absolute;
+  top: -2.35rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(17, 24, 39, 0.95);
+  color: #f9fafb;
+  font-size: 0.65rem;
+  line-height: 1.1;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.35rem;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.35);
+  z-index: 15;
+}
+
+.calibration-next-step-tooltip::after {
+  content: '';
+  position: absolute;
+  bottom: -0.35rem;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 0.35rem;
+  border-style: solid;
+  border-color: rgba(17, 24, 39, 0.95) transparent transparent transparent;
+}
+
+.speed-toggle-indicator {
+  position: absolute;
+  top: -0.25rem;
+  right: -0.25rem;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 9999px;
+  background: #22c55e;
+  box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.5);
+  animation: speed-toggle-indicator-pulse 1.8s ease-out infinite;
+  pointer-events: none;
+}
+
+.speed-toggle-indicator::after {
+  content: '';
+  position: absolute;
+  inset: 0.2rem;
+  border-radius: 9999px;
+  background: #bbf7d0;
+}
+
+@keyframes speed-toggle-indicator-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.45);
+  }
+  70% {
+    box-shadow: 0 0 0 0.6rem rgba(34, 197, 94, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+  }
 }
 
 .pose-control-group {

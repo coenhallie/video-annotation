@@ -448,7 +448,8 @@ import { imageToWorld } from './utils/calibrationTransforms';
 const cameraCalibration = useCameraCalibration();
 
 // Initialize notifications
-const { success: showSuccess, error: showError } = useNotifications();
+const { success: showSuccess, error: showError, info: showInfo } =
+  useNotifications();
 
 // Calibration lines overlay state
 const showCalibrationLines = ref(false);
@@ -684,6 +685,11 @@ const handleCalibrationModalComplete = async (data: any) => {
                 `Accuracy: ${calibrationSuccessData.value.accuracy}% | Error: ${calibrationSuccessData.value.error}px | World Point: (${calibrationTransformData.value.worldPoint.x}, ${calibrationTransformData.value.worldPoint.y})`,
                 5000
               );
+              showInfo(
+                'Next Step',
+                'Calibration is done. Click the speed calculation toggle in the video controls to start speed tracking.',
+                6000
+              );
             } else {
               console.error('Failed to transform point to world coordinates');
               showError(
@@ -822,7 +828,6 @@ const configureFastMovements = () => {
       adaptiveROIExpansionRate: 0.08,
       frameSkip: 1,
       maxFPS: 60,
-      useAdaptiveROI: true,
       useMotionPrediction: true,
       roiValidationEnabled: true,
       roiValidationMinLandmarks: 5,
