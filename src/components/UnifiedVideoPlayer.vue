@@ -142,6 +142,7 @@
           :most-visited-zone="mostVisitedZoneComputed"
           :total-samples="totalSamplesComputed"
           :get-zone-name="positionHeatmap.getZoneName"
+          :camera-edge="cameraEdgeComputed"
           @close="showHeatmapMinimap = false"
         />
 
@@ -1730,6 +1731,9 @@ const mostVisitedZoneComputed = computed(
 const totalSamplesComputed = computed(
   () => positionHeatmap.positionHistory.value.length
 );
+const cameraEdgeComputed = computed(
+  () => cameraCalibration.cameraPositionConfig?.value?.edge ?? null
+);
 
 let poseTooltipTimeout: ReturnType<typeof setTimeout> | null = null;
 let calibrationTooltipTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -1927,6 +1931,7 @@ onUnmounted(() => {
 });
 
 // Position heatmap tracking
+const HEATMAP_DEBUG_PREFIX = '[HeatmapDebug]';
 const showHeatmapMinimap = ref(false); // Hide heatmap by default, show only after calibration
 const positionHeatmap = usePositionHeatmap(cameraCalibration.courtDimensions);
 
@@ -2077,6 +2082,12 @@ const processPoseDetection = async (
           const { width: courtWidth = 6.1, length: courtLength = 13.4 } =
             cameraCalibration.courtDimensions?.value ?? {};
 
+          const fallbackWorldPos: Point3D = {
+            x: hipCenter.x * courtWidth - courtWidth / 2,
+            y: hipCenter.y * courtLength - courtLength / 2,
+            z: 0,
+          };
+
           let worldPos: Point3D | null = null;
           if (typeof cameraCalibration.transformToWorld === 'function') {
             try {
@@ -2089,24 +2100,74 @@ const processPoseDetection = async (
                 Number.isFinite(transformed.x) &&
                 Number.isFinite(transformed.y)
               ) {
-                const withinBounds =
-                  Math.abs(transformed.x) <= courtWidth &&
-                  Math.abs(transformed.y) <= courtLength;
+                const halfCourtWidth = courtWidth / 2;
+                const halfCourtLength = courtLength / 2;
+                const singlesHalfWidth = 5.18 / 2;
+                const withinDoublesWidth =
+                  Math.abs(transformed.x) <= halfCourtWidth;
+                const withinCourtLength =
+                  Math.abs(transformed.y) <= halfCourtLength;
+                const withinSinglesWidth =
+                  Math.abs(transformed.x) <= singlesHalfWidth;
 
-                if (withinBounds) {
-                  worldPos = {
-                    x: transformed.x,
-                    y: transformed.y,
-                    z: transformed.z ?? 0,
-                  };
-                  console.debug('🗺️ [Heatmap] transformToWorld success', {
+                const withinBounds = withinDoublesWidth && withinCourtLength;
+
+                console.debug(
+                  `${HEATMAP_DEBUG_PREFIX} 🧭 [Heatmap] transformToWorld raw`,
+                  {
                     hipCenter,
                     hipCenterPixels,
-                    worldPos,
-                  });
+                    transformed,
+                    withinDoublesWidth,
+                    withinSinglesWidth,
+                    withinCourtLength,
+                    halfCourtWidth,
+                    halfCourtLength,
+                    singlesHalfWidth,
+                    courtWidth,
+                    courtLength,
+                  }
+                );
+
+                if (withinBounds) {
+                  const cameraEdge =
+                    cameraCalibration.cameraPositionConfig?.value?.edge ?? null;
+
+                  const shouldFavorBaselineFallback =
+                    cameraEdge === 'top' || cameraEdge === 'bottom';
+
+                  worldPos = {
+                    x: transformed.x,
+                    y: shouldFavorBaselineFallback
+                      ? fallbackWorldPos.y
+                      : transformed.y,
+                    z: transformed.z ?? 0,
+                  };
+
+                  if (!withinSinglesWidth) {
+                    console.warn(
+                      `${HEATMAP_DEBUG_PREFIX} ⚠️ [Heatmap] transformToWorld X exceeds half court width`,
+                      {
+                        worldPos,
+                        halfCourtWidth,
+                        singlesHalfWidth,
+                        courtWidth,
+                        courtLength,
+                      }
+                    );
+                  }
+
+                  console.debug(
+                    `${HEATMAP_DEBUG_PREFIX} 🗺️ [Heatmap] transformToWorld success`,
+                    {
+                      hipCenter,
+                      hipCenterPixels,
+                      worldPos,
+                    }
+                  );
                 } else {
                   console.warn(
-                    '⚠️ [Heatmap] Discarding transformToWorld result outside court bounds',
+                    `${HEATMAP_DEBUG_PREFIX} ⚠️ [Heatmap] Discarding transformToWorld result outside court bounds`,
                     {
                       hipCenter,
                       hipCenterPixels,
@@ -2119,7 +2180,7 @@ const processPoseDetection = async (
               }
             } catch (error) {
               console.warn(
-                '🗺️ [Heatmap] Failed to transform hip center to world coordinates:',
+                `${HEATMAP_DEBUG_PREFIX} 🗺️ [Heatmap] Failed to transform hip center to world coordinates:`,
                 error
               );
             }
@@ -2127,17 +2188,16 @@ const processPoseDetection = async (
 
           if (!worldPos) {
             // Fallback to scaled normalized coordinates centered on the court
-            worldPos = {
-              x: hipCenter.x * courtWidth - courtWidth / 2,
-              y: hipCenter.y * courtLength - courtLength / 2,
-              z: 0,
-            };
-            console.debug('🗺️ [Heatmap] Using fallback hip center transform', {
-              hipCenter,
-              worldPos,
-              courtWidth,
-              courtLength,
-            });
+            worldPos = fallbackWorldPos;
+            console.debug(
+              `${HEATMAP_DEBUG_PREFIX} 🗺️ [Heatmap] Using fallback hip center transform`,
+              {
+                hipCenter,
+                worldPos,
+                courtWidth,
+                courtLength,
+              }
+            );
           }
 
           // Add position sample to heatmap tracker
@@ -2150,10 +2210,10 @@ const processPoseDetection = async (
 
           // Log every 30th frame to avoid spam
           if (currentFrame.value % 30 === 0) {
-            console.log('🗺️ [Heatmap] Position tracked', {
-              frame: currentFrame.value,
-              hipCenter,
-              worldPos,
+          console.log(`${HEATMAP_DEBUG_PREFIX} 🗺️ [Heatmap] Position tracked`, {
+            frame: currentFrame.value,
+            hipCenter,
+            worldPos,
               totalSamples: positionHeatmap.positionHistory.value.length,
             });
           }
@@ -2876,7 +2936,7 @@ const getCalibrationState = () => ({
 
 // Heatmap tracking methods
 const toggleHeatmap = () => {
-  console.log('🗺️ [Heatmap] Toggle clicked', {
+  console.log(`${HEATMAP_DEBUG_PREFIX} 🗺️ [Heatmap] Toggle clicked`, {
     isCalibrated: cameraCalibration.cameraParameters.position !== null,
     isTracking: positionHeatmap.isTracking.value,
     showMinimap: showHeatmapMinimap.value,
@@ -2884,25 +2944,25 @@ const toggleHeatmap = () => {
 
   if (cameraCalibration.cameraParameters.position === null) {
     console.warn(
-      '🗺️ [Heatmap] Camera must be calibrated before using heatmap tracking'
+      `${HEATMAP_DEBUG_PREFIX} 🗺️ [Heatmap] Camera must be calibrated before using heatmap tracking`
     );
     return;
   }
 
   if (positionHeatmap.isTracking.value) {
     // Stop tracking and show heatmap
-    console.log('🗺️ [Heatmap] Stopping tracking and generating heatmap');
+    console.log(`${HEATMAP_DEBUG_PREFIX} 🗺️ [Heatmap] Stopping tracking and generating heatmap`);
     positionHeatmap.stopTracking();
     positionHeatmap.generateHeatmap();
     showHeatmapMinimap.value = true;
   } else {
     // Start tracking
-    console.log('🗺️ [Heatmap] Starting position tracking');
+    console.log(`${HEATMAP_DEBUG_PREFIX} 🗺️ [Heatmap] Starting position tracking`);
     positionHeatmap.startTracking();
     showHeatmapMinimap.value = true;
   }
 
-  console.log('🗺️ [Heatmap] Toggle complete', {
+  console.log(`${HEATMAP_DEBUG_PREFIX} 🗺️ [Heatmap] Toggle complete`, {
     isTracking: positionHeatmap.isTracking.value,
     showMinimap: showHeatmapMinimap.value,
     positionHistory: positionHeatmap.positionHistory.value.length,

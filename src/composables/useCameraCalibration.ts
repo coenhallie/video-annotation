@@ -208,6 +208,23 @@ export function useCameraCalibration() {
   // Camera position configuration from EdgeBasedCameraSelector
   const cameraPositionConfig = ref<CameraPositionConfig | null>(null);
 
+  type WorldAlignment = {
+    matrix: [[number, number], [number, number]];
+    translation: [number, number];
+    rmsError: number;
+  };
+
+  const defaultWorldAlignment: WorldAlignment = {
+    matrix: [
+      [1, 0],
+      [0, 1],
+    ],
+    translation: [0, 0],
+    rmsError: 0,
+  };
+
+  const worldAlignment = ref<WorldAlignment>({ ...defaultWorldAlignment });
+
   // Sport configuration
   const sportConfig = ref<SportConfig>({
     type: 'badminton',
@@ -382,6 +399,7 @@ export function useCameraCalibration() {
     calibrationConfidence.value = 0;
     isCalculating.value = false;
     hasUnsavedChanges.value = false;
+    resetWorldAlignment();
   };
 
   // Line management methods
@@ -528,6 +546,145 @@ export function useCameraCalibration() {
         ];
       default:
         return [];
+    }
+  };
+
+  const resetWorldAlignment = () => {
+    worldAlignment.value = { ...defaultWorldAlignment };
+  };
+
+  const applyWorldAlignment = (point: Point3D | null): Point3D | null => {
+    if (!point) return null;
+    const {
+      matrix: [[m11, m12], [m21, m22]],
+      translation: [tx, ty],
+    } = worldAlignment.value;
+
+    return {
+      x: m11 * (point.x ?? 0) + m12 * (point.y ?? 0) + tx,
+      y: m21 * (point.x ?? 0) + m22 * (point.y ?? 0) + ty,
+      z: point.z ?? 0,
+    };
+  };
+
+  const computeWorldAlignment = () => {
+    if (!homographyMatrix.value) {
+      resetWorldAlignment();
+      return;
+    }
+
+    const correspondences: { raw: Point3D; canonical: Point3D }[] = [];
+
+    for (const correspondence of lineCorrespondences.value) {
+      const courtLine = selectedCourtLines.value.find(
+        (line) => line.id === correspondence.courtLineId
+      );
+      const videoLine = drawnVideoLines.value.find(
+        (line) => line.id === correspondence.videoLineId
+      );
+
+      if (!courtLine || !videoLine) continue;
+
+      const canonicalPoints = courtLine.courtPoints;
+      const videoPoints = [
+        videoLine.points[0],
+        videoLine.points[videoLine.points.length - 1],
+      ];
+
+      for (let i = 0; i < canonicalPoints.length; i++) {
+        const canonical = canonicalPoints[i];
+        const videoPoint = videoPoints[i];
+
+        if (!canonical || !videoPoint) continue;
+
+        const raw = imageToWorld(
+          { x: videoPoint.x, y: videoPoint.y },
+          homographyMatrix.value,
+          0,
+          cameraPositionConfig.value ?? undefined,
+          sportConfig.value
+        );
+
+        if (!raw) continue;
+
+        if (!Number.isFinite(raw.x) || !Number.isFinite(raw.y)) continue;
+
+        correspondences.push({
+          raw,
+          canonical: { x: canonical.x, y: canonical.y, z: 0 },
+        });
+      }
+    }
+
+    if (correspondences.length < 3) {
+      console.warn(
+        '⚠️ [Camera Calibration] Insufficient correspondences to compute world alignment. Falling back to identity transform.'
+      );
+      resetWorldAlignment();
+      return;
+    }
+
+    const rows: number[][] = [];
+    const targets: number[] = [];
+
+    for (const { raw, canonical } of correspondences) {
+      rows.push([raw.x ?? 0, raw.y ?? 0, 0, 0, 1, 0]);
+      rows.push([0, 0, raw.x ?? 0, raw.y ?? 0, 0, 1]);
+      targets.push(canonical.x ?? 0);
+      targets.push(canonical.y ?? 0);
+    }
+
+    try {
+      const A = new Matrix(rows);
+      const b = Matrix.columnVector(targets);
+      const svd = new SingularValueDecomposition(A);
+      const solution = svd.solve(b).to1DArray() as [
+        number,
+        number,
+        number,
+        number,
+        number,
+        number
+      ];
+
+      const [m11, m12, m21, m22, tx, ty] = solution;
+
+      const mapPoint = (point: Point3D) => ({
+        x: m11 * (point.x ?? 0) + m12 * (point.y ?? 0) + tx,
+        y: m21 * (point.x ?? 0) + m22 * (point.y ?? 0) + ty,
+      });
+
+      let errorSum = 0;
+      for (const { raw, canonical } of correspondences) {
+        const mapped = mapPoint(raw);
+        const dx = mapped.x - (canonical.x ?? 0);
+        const dy = mapped.y - (canonical.y ?? 0);
+        errorSum += dx * dx + dy * dy;
+      }
+
+      const rmsError = Math.sqrt(errorSum / correspondences.length);
+
+      worldAlignment.value = {
+        matrix: [
+          [m11, m12],
+          [m21, m22],
+        ],
+        translation: [tx, ty],
+        rmsError,
+      };
+
+      console.log('📐 [Camera Calibration] World alignment computed', {
+        matrix: worldAlignment.value.matrix,
+        translation: worldAlignment.value.translation,
+        samples: correspondences.length,
+        rmsError: rmsError.toFixed(4),
+      });
+    } catch (error) {
+      console.error(
+        '❌ [Camera Calibration] Failed to compute world alignment:',
+        error
+      );
+      resetWorldAlignment();
     }
   };
 
@@ -1049,6 +1206,8 @@ export function useCameraCalibration() {
       cameraParameters.rotation = calculatedParams.rotation;
       cameraParameters.fov = calculatedParams.fov;
 
+      computeWorldAlignment();
+
       // Update validation metrics
       validationMetrics.value = {
         reprojectionError: reprojError,
@@ -1088,6 +1247,10 @@ export function useCameraCalibration() {
       height: config.height,
       position3D: config.position3D,
     });
+
+    if (homographyMatrix.value) {
+      computeWorldAlignment();
+    }
   };
 
   // Set sport configuration
@@ -1307,8 +1470,14 @@ export function useCameraCalibration() {
     }
 
     try {
-      const worldPoint = imageToWorld(point2D, homographyMatrix.value, z);
-      return worldPoint;
+      const rawPoint = imageToWorld(
+        point2D,
+        homographyMatrix.value,
+        z,
+        cameraPositionConfig.value ?? undefined,
+        sportConfig.value
+      );
+      return applyWorldAlignment(rawPoint);
     } catch (error) {
       console.error('Error transforming point to world coordinates:', error);
       return null;
@@ -1333,7 +1502,21 @@ export function useCameraCalibration() {
     }
 
     try {
-      return transformPoseLandmarks(landmarks, homographyMatrix.value, worldZ);
+      const rawLandmarks = transformPoseLandmarks(
+        landmarks,
+        homographyMatrix.value,
+        worldZ
+      );
+
+      return rawLandmarks.map((landmark) => {
+        const aligned = applyWorldAlignment(landmark);
+        return {
+          ...landmark,
+          x: aligned?.x ?? 0,
+          y: aligned?.y ?? 0,
+          z: aligned?.z ?? 0,
+        };
+      });
     } catch (error) {
       console.error(
         'Error transforming landmarks to world coordinates:',
@@ -1390,6 +1573,7 @@ export function useCameraCalibration() {
 
     // Clear the transformation cache
     clearTransformCache();
+    resetWorldAlignment();
 
     console.log('Camera calibration has been reset');
   };
@@ -1560,6 +1744,7 @@ export function useCameraCalibration() {
     hasUnsavedChanges,
     showCalibrationSuccess,
     calibrationSuccessMessage,
+    worldAlignment,
 
     // Computed
     canProceedToNextStep,

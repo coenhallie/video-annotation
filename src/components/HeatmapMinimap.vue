@@ -47,6 +47,10 @@
         ref="heatmapCanvas"
         :width="canvasWidth"
         :height="canvasHeight"
+        :style="{
+          width: canvasWidth + 'px',
+          height: canvasHeight + 'px',
+        }"
         class="heatmap-canvas"
         @mousemove="handleMouseMove"
         @mouseleave="handleMouseLeave"
@@ -157,6 +161,8 @@ import type { HeatmapData, Point3D } from '../composables/usePositionHeatmap';
 import type { CourtDimensions } from '../composables/useCameraCalibration';
 
 // Props
+type CameraEdge = 'top' | 'bottom' | 'left' | 'right';
+
 const props = defineProps<{
   isVisible: boolean;
   heatmapData: HeatmapData | null;
@@ -167,6 +173,7 @@ const props = defineProps<{
   mostVisitedZone: string | null;
   totalSamples: number;
   getZoneName: (x: number, y: number) => string;
+  cameraEdge?: CameraEdge | null;
 }>();
 
 const DEFAULT_COURT_WIDTH = 6.1;
@@ -187,6 +194,19 @@ const showCurrentPosition = ref(true);
 const showStatistics = ref(true);
 const colorScheme = ref<'heat' | 'cool' | 'rainbow' | 'grayscale'>('heat');
 const heatmapOpacity = ref(0.8);
+const HEATMAP_DEBUG_PREFIX = '[HeatmapDebug]';
+
+const orientationEdge = computed<CameraEdge>(() => props.cameraEdge ?? 'top');
+const isSideline = computed(
+  () => orientationEdge.value === 'left' || orientationEdge.value === 'right'
+);
+const courtWidth = computed(
+  () => props.courtDimensions.width || DEFAULT_COURT_WIDTH
+);
+const courtLength = computed(
+  () => props.courtDimensions.length || DEFAULT_COURT_LENGTH
+);
+const aspectRatio = computed(() => courtLength.value / courtWidth.value);
 
 const formatMetric = (value: number) => {
   if (!Number.isFinite(value)) return '0';
@@ -207,13 +227,22 @@ const formattedAverageSpeed = computed(() =>
   formatMetric(props.averageSpeed)
 );
 
-// Canvas dimensions
-const canvasWidth = computed(() => (isExpanded.value ? 400 : 250));
+// Canvas dimensions (smaller footprint with orientation awareness)
+// Keep minimap footprint compact but expandable when settings are open
+const baseShortEdge = computed(() => (isExpanded.value ? 240 : 150));
+
+const canvasWidth = computed(() => {
+  if (isSideline.value) {
+    return Math.round(baseShortEdge.value);
+  }
+  return Math.round(baseShortEdge.value * aspectRatio.value);
+});
+
 const canvasHeight = computed(() => {
-  const width = props.courtDimensions.width || DEFAULT_COURT_WIDTH;
-  const length = props.courtDimensions.length || DEFAULT_COURT_LENGTH;
-  const aspectRatio = length / width;
-  return Math.round(canvasWidth.value * aspectRatio);
+  if (isSideline.value) {
+    return Math.round(baseShortEdge.value * aspectRatio.value);
+  }
+  return Math.round(baseShortEdge.value);
 });
 
 // Tooltip state
@@ -229,19 +258,10 @@ const tooltip = ref({
 // Current position in pixels
 const currentPositionPixels = computed(() => {
   if (!props.currentPosition || !heatmapCanvas.value) return null;
-
-  const courtWidth = props.courtDimensions.width || DEFAULT_COURT_WIDTH;
-  const courtLength = props.courtDimensions.length || DEFAULT_COURT_LENGTH;
-  const scaleX = canvasWidth.value / courtWidth;
-  const scaleY = canvasHeight.value / courtLength;
-
-  const offsetX = props.currentPosition.x + courtWidth / 2;
-  const offsetY = props.currentPosition.y + courtLength / 2;
-
-  return {
-    x: clamp(offsetX, 0, courtWidth) * scaleX,
-    y: clamp(offsetY, 0, courtLength) * scaleY,
-  };
+  return mapWorldToCanvas(
+    props.currentPosition.x ?? 0,
+    props.currentPosition.y ?? 0
+  );
 });
 
 // Color schemes
@@ -280,6 +300,120 @@ const colorSchemes = {
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(Math.max(value, min), max);
+
+const mapNormalizedToDisplay = (nx: number, ny: number) => {
+  const edge = orientationEdge.value;
+  switch (edge) {
+    case 'bottom':
+      return { u: ny, v: 1 - nx };
+    case 'top':
+      return { u: 1 - ny, v: nx };
+    case 'left':
+      return { u: nx, v: 1 - ny };
+    case 'right':
+      return { u: 1 - nx, v: ny };
+    default:
+      return { u: ny, v: 1 - nx };
+  }
+};
+
+const mapDisplayToNormalized = (u: number, v: number) => {
+  const edge = orientationEdge.value;
+  switch (edge) {
+    case 'bottom':
+      return { nx: 1 - v, ny: u };
+    case 'top':
+      return { nx: v, ny: 1 - u };
+    case 'left':
+      return { nx: u, ny: 1 - v };
+    case 'right':
+      return { nx: 1 - u, ny: v };
+    default:
+      return { nx: 1 - v, ny: u };
+  }
+};
+
+const mapNormalizedToCanvas = (nx: number, ny: number) => {
+  const { u, v } = mapNormalizedToDisplay(nx, ny);
+  return {
+    x: u * canvasWidth.value,
+    y: v * canvasHeight.value,
+  };
+};
+
+const mapWorldToCanvas = (x: number, y: number) => {
+  const nx = clamp((x + courtWidth.value / 2) / courtWidth.value, 0, 1);
+  const ny = clamp((y + courtLength.value / 2) / courtLength.value, 0, 1);
+  return mapNormalizedToCanvas(nx, ny);
+};
+
+const mapCanvasToWorld = (x: number, y: number) => {
+  const u = clamp(x / canvasWidth.value, 0, 1);
+  const v = clamp(y / canvasHeight.value, 0, 1);
+  const { nx, ny } = mapDisplayToNormalized(u, v);
+
+  const worldX = nx * courtWidth.value - courtWidth.value / 2;
+  const worldY = ny * courtLength.value - courtLength.value / 2;
+  return { worldX, worldY, nx, ny };
+};
+
+type WorldPoint = { x: number; y: number };
+
+const mapWorldPoint = (point: WorldPoint) =>
+  mapWorldToCanvas(point.x, point.y);
+
+const drawWorldPolygon = (
+  ctx: CanvasRenderingContext2D,
+  points: WorldPoint[],
+  fill: boolean
+) => {
+  if (!points.length) return;
+  const mapped = points.map(mapWorldPoint);
+  ctx.beginPath();
+  ctx.moveTo(mapped[0]!.x, mapped[0]!.y);
+  for (let i = 1; i < mapped.length; i++) {
+    ctx.lineTo(mapped[i]!.x, mapped[i]!.y);
+  }
+  ctx.closePath();
+  if (fill) {
+    ctx.fill();
+  } else {
+    ctx.stroke();
+  }
+};
+
+const drawWorldRect = (
+  ctx: CanvasRenderingContext2D,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  fill: boolean
+) => {
+  drawWorldPolygon(
+    ctx,
+    [
+      { x: x1, y: y1 },
+      { x: x2, y: y1 },
+      { x: x2, y: y2 },
+      { x: x1, y: y2 },
+    ],
+    fill
+  );
+};
+
+const strokeWorldLine = (
+  ctx: CanvasRenderingContext2D,
+  start: WorldPoint,
+  end: WorldPoint
+) => {
+  const mappedStart = mapWorldPoint(start);
+  const mappedEnd = mapWorldPoint(end);
+  ctx.beginPath();
+  ctx.moveTo(mappedStart.x, mappedStart.y);
+  ctx.lineTo(mappedEnd.x, mappedEnd.y);
+  ctx.stroke();
+};
 
 /**
  * Get color for intensity value
@@ -339,40 +473,7 @@ function getColorForIntensity(
   return color;
 }
 
-/**
- * Draw court lines
- */
-type CourtMetrics = {
-  scaleX: number;
-  scaleY: number;
-  netY: number;
-  shortServiceOffset: number;
-  longServiceOffset: number;
-  singlesOffset: number;
-  lineWidth: number;
-};
-
-function computeCourtMetrics(): CourtMetrics {
-  const width = props.courtDimensions.width || DEFAULT_COURT_WIDTH;
-  const length = props.courtDimensions.length || DEFAULT_COURT_LENGTH;
-  const scaleX = canvasWidth.value / width;
-  const scaleY = canvasHeight.value / length;
-
-  return {
-    scaleX,
-    scaleY,
-    netY: canvasHeight.value / 2,
-    shortServiceOffset: 1.98 * scaleY,
-    longServiceOffset: 0.76 * scaleY,
-    singlesOffset: ((width - 5.18) / 2) * scaleX,
-    lineWidth: Math.max(1, canvasWidth.value * 0.003),
-  };
-}
-
-function drawCourtSurface(
-  ctx: CanvasRenderingContext2D,
-  metrics: CourtMetrics
-) {
+function drawCourtSurface(ctx: CanvasRenderingContext2D) {
   const gradient = ctx.createLinearGradient(0, 0, 0, canvasHeight.value);
   gradient.addColorStop(0, '#0f3b21');
   gradient.addColorStop(1, '#0a2616');
@@ -380,100 +481,134 @@ function drawCourtSurface(
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, canvasWidth.value, canvasHeight.value);
 
-  // Highlight service courts and alleys so the layout reads clearly under the heatmap.
+  const shortService = 1.98;
+  const singlesWidth = 5.18;
+  const singlesPadding = Math.max((courtWidth.value - singlesWidth) / 2, 0);
+
+  // Highlight service boxes
   ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
-  ctx.fillRect(
-    0,
-    metrics.netY - metrics.shortServiceOffset,
-    canvasWidth.value,
-    metrics.shortServiceOffset * 2
+  drawWorldRect(
+    ctx,
+    -courtWidth.value / 2,
+    -shortService,
+    courtWidth.value / 2,
+    shortService,
+    true
   );
 
-  if (metrics.singlesOffset > 0) {
+  // Highlight doubles alleys
+  if (singlesPadding > 0) {
     ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
-    ctx.fillRect(0, 0, metrics.singlesOffset, canvasHeight.value);
-    ctx.fillRect(
-      canvasWidth.value - metrics.singlesOffset,
-      0,
-      metrics.singlesOffset,
-      canvasHeight.value
+    drawWorldRect(
+      ctx,
+      -courtWidth.value / 2,
+      -courtLength.value / 2,
+      -courtWidth.value / 2 + singlesPadding,
+      courtLength.value / 2,
+      true
+    );
+    drawWorldRect(
+      ctx,
+      courtWidth.value / 2 - singlesPadding,
+      -courtLength.value / 2,
+      courtWidth.value / 2,
+      courtLength.value / 2,
+      true
     );
   }
 }
 
-function drawCourtLines(ctx: CanvasRenderingContext2D, metrics: CourtMetrics) {
+function drawCourtLines(ctx: CanvasRenderingContext2D) {
   ctx.save();
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
-  ctx.lineWidth = metrics.lineWidth;
+  ctx.lineWidth = Math.max(1, Math.max(canvasWidth.value, canvasHeight.value) * 0.003);
   ctx.lineCap = 'square';
 
+  const width = courtWidth.value;
+  const length = courtLength.value;
+  const shortService = 1.98;
+  const doubleService = 0.76;
+  const singlesWidth = 5.18;
+  const singlesPadding = Math.max((width - singlesWidth) / 2, 0);
+  const baselineMarkLength = 0.2;
+
   // Outer boundary
-  ctx.strokeRect(0, 0, canvasWidth.value, canvasHeight.value);
-
-  // Net (runs across the width, centered along the length)
-  ctx.beginPath();
-  ctx.moveTo(0, metrics.netY);
-  ctx.lineTo(canvasWidth.value, metrics.netY);
-  ctx.stroke();
-
-  // Short service lines (parallel to the net)
-  ctx.beginPath();
-  ctx.moveTo(0, metrics.netY - metrics.shortServiceOffset);
-  ctx.lineTo(canvasWidth.value, metrics.netY - metrics.shortServiceOffset);
-  ctx.moveTo(0, metrics.netY + metrics.shortServiceOffset);
-  ctx.lineTo(canvasWidth.value, metrics.netY + metrics.shortServiceOffset);
-  ctx.stroke();
-
-  // Doubles long service lines (near the back boundaries)
-  ctx.beginPath();
-  ctx.moveTo(0, metrics.longServiceOffset);
-  ctx.lineTo(canvasWidth.value, metrics.longServiceOffset);
-  ctx.moveTo(0, canvasHeight.value - metrics.longServiceOffset);
-  ctx.lineTo(canvasWidth.value, canvasHeight.value - metrics.longServiceOffset);
-  ctx.stroke();
-
-  // Singles sidelines (inside the doubles sidelines)
-  const leftSinglesX = metrics.singlesOffset;
-  const rightSinglesX = canvasWidth.value - metrics.singlesOffset;
-
-  ctx.beginPath();
-  ctx.moveTo(leftSinglesX, 0);
-  ctx.lineTo(leftSinglesX, canvasHeight.value);
-  ctx.moveTo(rightSinglesX, 0);
-  ctx.lineTo(rightSinglesX, canvasHeight.value);
-  ctx.stroke();
-
-  // Center service line (vertical) separating left/right service courts
-  ctx.beginPath();
-  ctx.moveTo(canvasWidth.value / 2, metrics.netY - metrics.shortServiceOffset);
-  ctx.lineTo(canvasWidth.value / 2, metrics.longServiceOffset);
-  ctx.moveTo(canvasWidth.value / 2, metrics.netY + metrics.shortServiceOffset);
-  ctx.lineTo(
-    canvasWidth.value / 2,
-    canvasHeight.value - metrics.longServiceOffset
+  drawWorldPolygon(
+    ctx,
+    [
+      { x: -width / 2, y: -length / 2 },
+      { x: width / 2, y: -length / 2 },
+      { x: width / 2, y: length / 2 },
+      { x: -width / 2, y: length / 2 },
+    ],
+    false
   );
-  ctx.stroke();
 
-  // Add short marks at each baseline (0.2m long)
-  const baselineMarkLength = 0.2 * metrics.scaleX;
-  ctx.beginPath();
-  ctx.moveTo(
-    canvasWidth.value / 2 - baselineMarkLength,
-    metrics.longServiceOffset
+  // Net
+  strokeWorldLine(ctx, { x: -width / 2, y: 0 }, { x: width / 2, y: 0 });
+
+  // Short service lines
+  strokeWorldLine(
+    ctx,
+    { x: -width / 2, y: -shortService },
+    { x: width / 2, y: -shortService }
   );
-  ctx.lineTo(
-    canvasWidth.value / 2 + baselineMarkLength,
-    metrics.longServiceOffset
+  strokeWorldLine(
+    ctx,
+    { x: -width / 2, y: shortService },
+    { x: width / 2, y: shortService }
   );
-  ctx.moveTo(
-    canvasWidth.value / 2 - baselineMarkLength,
-    canvasHeight.value - metrics.longServiceOffset
+
+  // Doubles long service lines (near baselines)
+  const longServiceY = length / 2 - doubleService;
+  strokeWorldLine(
+    ctx,
+    { x: -width / 2, y: -longServiceY },
+    { x: width / 2, y: -longServiceY }
   );
-  ctx.lineTo(
-    canvasWidth.value / 2 + baselineMarkLength,
-    canvasHeight.value - metrics.longServiceOffset
+  strokeWorldLine(
+    ctx,
+    { x: -width / 2, y: longServiceY },
+    { x: width / 2, y: longServiceY }
   );
-  ctx.stroke();
+
+  // Singles sidelines
+  const leftSinglesX = -width / 2 + singlesPadding;
+  const rightSinglesX = width / 2 - singlesPadding;
+  strokeWorldLine(
+    ctx,
+    { x: leftSinglesX, y: -length / 2 },
+    { x: leftSinglesX, y: length / 2 }
+  );
+  strokeWorldLine(
+    ctx,
+    { x: rightSinglesX, y: -length / 2 },
+    { x: rightSinglesX, y: length / 2 }
+  );
+
+  // Center service line
+  strokeWorldLine(
+    ctx,
+    { x: 0, y: -shortService },
+    { x: 0, y: -longServiceY }
+  );
+  strokeWorldLine(
+    ctx,
+    { x: 0, y: shortService },
+    { x: 0, y: longServiceY }
+  );
+
+  // Baseline marks (0.2m)
+  strokeWorldLine(
+    ctx,
+    { x: -baselineMarkLength / 2, y: -longServiceY },
+    { x: baselineMarkLength / 2, y: -longServiceY }
+  );
+  strokeWorldLine(
+    ctx,
+    { x: -baselineMarkLength / 2, y: longServiceY },
+    { x: baselineMarkLength / 2, y: longServiceY }
+  );
 
   ctx.restore();
 }
@@ -485,47 +620,37 @@ function drawHeatmap(ctx: CanvasRenderingContext2D) {
   if (!props.heatmapData) return;
 
   const { cells, gridWidth, gridHeight } = props.heatmapData;
-  const cellWidth = canvasWidth.value / gridWidth;
-  const cellHeight = canvasHeight.value / gridHeight;
 
-  // Create image data for better performance
-  const imageData = ctx.createImageData(canvasWidth.value, canvasHeight.value);
-  const data = imageData.data;
-
-  for (let y = 0; y < gridHeight; y++) {
-    for (let x = 0; x < gridWidth; x++) {
-      const cell = cells[y]?.[x];
+  for (let gridY = 0; gridY < gridHeight; gridY++) {
+    for (let gridX = 0; gridX < gridWidth; gridX++) {
+      const cell = cells[gridY]?.[gridX];
       if (!cell || cell.intensity === 0) continue;
 
       const color = getColorForIntensity(cell.intensity);
+      const rgba = `rgba(${color[0] ?? 0}, ${color[1] ?? 0}, ${
+        color[2] ?? 0
+      }, ${(color[3] ?? 0) / 255})`;
+      ctx.fillStyle = rgba;
 
-      // Fill the cell area in the image data
-      const startX = Math.floor(x * cellWidth);
-      const endX = Math.floor((x + 1) * cellWidth);
-      const startY = Math.floor(y * cellHeight);
-      const endY = Math.floor((y + 1) * cellHeight);
+      const corners = [
+        mapNormalizedToCanvas(gridX / gridWidth, gridY / gridHeight),
+        mapNormalizedToCanvas((gridX + 1) / gridWidth, gridY / gridHeight),
+        mapNormalizedToCanvas(
+          (gridX + 1) / gridWidth,
+          (gridY + 1) / gridHeight
+        ),
+        mapNormalizedToCanvas(gridX / gridWidth, (gridY + 1) / gridHeight),
+      ];
 
-      for (let py = startY; py < endY; py++) {
-        for (let px = startX; px < endX; px++) {
-          const index = (py * canvasWidth.value + px) * 4;
-
-          // Blend with existing color
-          const alpha = (color[3] ?? 0) / 255;
-          const r = data[index] ?? 0;
-          const g = data[index + 1] ?? 0;
-          const b = data[index + 2] ?? 0;
-          const a = data[index + 3] ?? 0;
-
-          data[index] = r * (1 - alpha) + (color[0] ?? 0) * alpha;
-          data[index + 1] = g * (1 - alpha) + (color[1] ?? 0) * alpha;
-          data[index + 2] = b * (1 - alpha) + (color[2] ?? 0) * alpha;
-          data[index + 3] = Math.min(255, a + (color[3] ?? 0));
-        }
+      ctx.beginPath();
+      ctx.moveTo(corners[0].x, corners[0].y);
+      for (let i = 1; i < corners.length; i++) {
+        ctx.lineTo(corners[i]!.x, corners[i]!.y);
       }
+      ctx.closePath();
+      ctx.fill();
     }
   }
-
-  ctx.putImageData(imageData, 0, 0);
 }
 
 /**
@@ -541,16 +666,14 @@ function updateVisualization() {
   // Clear canvas
   ctx.clearRect(0, 0, canvasWidth.value, canvasHeight.value);
 
-  const metrics = computeCourtMetrics();
-
-  drawCourtSurface(ctx, metrics);
+  drawCourtSurface(ctx);
 
   // Draw heatmap
   if (props.heatmapData) {
     drawHeatmap(ctx);
   }
 
-  drawCourtLines(ctx, metrics);
+  drawCourtLines(ctx);
 }
 
 /**
@@ -563,21 +686,16 @@ function handleMouseMove(event: MouseEvent) {
   const x = event.clientX - rect.left;
   const y = event.clientY - rect.top;
 
-  // Convert to world coordinates
-  const courtWidth = props.courtDimensions.width || DEFAULT_COURT_WIDTH;
-  const courtLength = props.courtDimensions.length || DEFAULT_COURT_LENGTH;
-  const courtSpaceX = (x / canvasWidth.value) * courtWidth;
-  const courtSpaceY = (y / canvasHeight.value) * courtLength;
-  const centeredX = courtSpaceX - courtWidth / 2;
-  const centeredY = courtSpaceY - courtLength / 2;
+  const { worldX: centeredX, worldY: centeredY, nx, ny } =
+    mapCanvasToWorld(x, y);
 
   // Get zone name
   const zone = props.getZoneName(centeredX, centeredY);
 
   // Get cell data
   const { cells, gridWidth, gridHeight } = props.heatmapData;
-  const gridX = Math.floor((courtSpaceX / courtWidth) * gridWidth);
-  const gridY = Math.floor((courtSpaceY / courtLength) * gridHeight);
+  const gridX = Math.floor(clamp(nx, 0, 0.999999) * gridWidth);
+  const gridY = Math.floor(clamp(ny, 0, 0.999999) * gridHeight);
 
   const cell = cells[gridY]?.[gridX];
 
@@ -617,6 +735,8 @@ watch(
     canvasHeight.value,
     colorScheme.value,
     heatmapOpacity.value,
+    courtWidth.value,
+    courtLength.value,
   ],
   () => {
     updateVisualization();
@@ -628,7 +748,7 @@ watch(
 watch(
   () => [props.totalDistance, props.averageSpeed, props.currentPosition],
   (newValues, oldValues) => {
-    console.debug('🗺️ [HeatmapMinimap] Props updated', {
+    console.debug(`${HEATMAP_DEBUG_PREFIX} 🗺️ [HeatmapMinimap] Props updated`, {
       totalDistance: { old: oldValues?.[0], new: newValues[0] },
       averageSpeed: { old: oldValues?.[1], new: newValues[1] },
       currentPosition: { old: oldValues?.[2], new: newValues[2] },
@@ -650,34 +770,38 @@ watch(
     }
   }
 );
+
+watch(orientationEdge, () => {
+  nextTick(() => updateVisualization());
+});
 </script>
 
 <style scoped>
 .heatmap-minimap {
   position: absolute;
-  bottom: 20px;
-  right: 20px;
+  bottom: 16px;
+  right: 16px;
   background: rgba(0, 0, 0, 0.9);
   border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 8px;
+  border-radius: 6px;
   padding: 0;
   z-index: 1000;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+  transition: all 0.25s ease;
+  box-shadow: 0 3px 5px rgba(0, 0, 0, 0.28);
 }
 
 .minimap-expanded {
-  width: 420px;
+  width: auto;
 }
 
 .minimap-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 12px;
+  padding: 6px 10px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(0, 0, 0, 0.3);
-  border-radius: 8px 8px 0 0;
+  border-radius: 6px 6px 0 0;
 }
 
 .minimap-title {
@@ -685,7 +809,7 @@ watch(
   align-items: center;
   gap: 8px;
   color: white;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
 }
 
@@ -705,7 +829,7 @@ watch(
   border: none;
   color: rgba(255, 255, 255, 0.7);
   cursor: pointer;
-  padding: 4px;
+  padding: 3px;
   border-radius: 4px;
   transition: all 0.2s;
   display: flex;
@@ -719,19 +843,20 @@ watch(
 }
 
 .control-button svg {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
 }
 
 .minimap-content {
   position: relative;
-  padding: 10px;
+  padding: 6px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 .heatmap-canvas {
   display: block;
-  width: 100%;
-  height: auto;
   border-radius: 4px;
   cursor: crosshair;
 }
@@ -743,10 +868,10 @@ watch(
 }
 
 .position-dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   background: #fff;
-  border: 2px solid #4ade80;
+  border: 1.5px solid #4ade80;
   border-radius: 50%;
   position: relative;
   z-index: 2;
@@ -757,9 +882,9 @@ watch(
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 20px;
-  height: 20px;
-  border: 2px solid #4ade80;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid #4ade80;
   border-radius: 50%;
   animation: pulse 2s infinite;
 }
@@ -785,8 +910,8 @@ watch(
   background: rgba(0, 0, 0, 0.9);
   border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 4px;
-  padding: 6px 10px;
-  font-size: 12px;
+  padding: 5px 8px;
+  font-size: 11px;
   color: white;
   white-space: nowrap;
 }
@@ -796,17 +921,17 @@ watch(
 }
 
 .minimap-stats {
-  padding: 10px 12px;
+  padding: 8px 10px;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  gap: 6px;
 }
 
 .stat-item {
   display: flex;
   justify-content: space-between;
-  font-size: 12px;
+  font-size: 11px;
   color: rgba(255, 255, 255, 0.8);
 }
 
@@ -820,14 +945,14 @@ watch(
 }
 
 .minimap-settings {
-  padding: 10px 12px;
+  padding: 8px 10px;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .settings-row {
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   display: flex;
-  gap: 12px;
+  gap: 10px;
   align-items: center;
 }
 
@@ -835,7 +960,7 @@ watch(
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: 11px;
   color: rgba(255, 255, 255, 0.8);
   cursor: pointer;
 }
@@ -848,14 +973,14 @@ watch(
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.2);
   color: white;
-  padding: 2px 6px;
+  padding: 2px 5px;
   border-radius: 4px;
-  font-size: 12px;
+  font-size: 11px;
   cursor: pointer;
 }
 
 .settings-row input[type='range'] {
-  width: 80px;
+  width: 72px;
   cursor: pointer;
 }
 </style>

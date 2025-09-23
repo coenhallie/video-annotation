@@ -101,6 +101,7 @@ const DEFAULT_COURT_WIDTH = 6.1;
 const DEFAULT_COURT_LENGTH = 13.4;
 
 const gaussianKernelCache = new Map<number, Float32Array>();
+const HEATMAP_DEBUG_PREFIX = '[HeatmapDebug]';
 
 function getGaussianKernel(radius: number): {
   radius: number;
@@ -320,7 +321,7 @@ export function usePositionHeatmap(
 
     if (outOfBounds) {
       console.info(
-        'ℹ️ [PositionHeatmap] Falling back to normalized coordinates',
+        `${HEATMAP_DEBUG_PREFIX} ℹ️ [PositionHeatmap] Falling back to normalized coordinates`,
         {
           worldPos,
           centeredWorld,
@@ -332,12 +333,27 @@ export function usePositionHeatmap(
       centeredWorld = normalizedFallback;
     }
 
+    const preClamp = { ...centeredWorld };
     const bounded = toCourtSpace(centeredWorld);
-    centeredWorld = {
+    const clampedCenteredWorld = {
       x: bounded.x - width / 2,
       y: bounded.y - length / 2,
       z: centeredWorld.z,
     };
+
+    if (
+      Math.abs(preClamp.x - clampedCenteredWorld.x) > 1e-3 ||
+      Math.abs(preClamp.y - clampedCenteredWorld.y) > 1e-3
+    ) {
+      console.debug(`${HEATMAP_DEBUG_PREFIX} 🧭 [PositionHeatmap] Court clamp applied`, {
+        before: preClamp,
+        after: clampedCenteredWorld,
+        width,
+        length,
+      });
+    }
+
+    centeredWorld = clampedCenteredWorld;
 
     if (
       !Number.isFinite(centeredWorld.x) ||
@@ -345,7 +361,7 @@ export function usePositionHeatmap(
       !Number.isFinite(centeredWorld.z)
     ) {
       console.warn(
-        '⚠️ [PositionHeatmap] Skipping sample with invalid position',
+        `${HEATMAP_DEBUG_PREFIX} ⚠️ [PositionHeatmap] Skipping sample with invalid position`,
         {
           worldPos,
           bounded,
@@ -404,7 +420,7 @@ export function usePositionHeatmap(
     }
 
     if (!Number.isFinite(distance) || !Number.isFinite(speed)) {
-      console.warn('⚠️ [PositionHeatmap] Non-finite metrics', {
+      console.warn(`${HEATMAP_DEBUG_PREFIX} ⚠️ [PositionHeatmap] Non-finite metrics`, {
         distance,
         speed,
         deltaSeconds,
@@ -445,9 +461,11 @@ export function usePositionHeatmap(
     }
 
     if (positionHistory.value.length % 30 === 0) {
-      console.debug('🗺️ [PositionHeatmap] Sample added', {
+      const normalizedPosition = toNormalizedCourtSpace(centeredWorld);
+      console.debug(`${HEATMAP_DEBUG_PREFIX} 🗺️ [PositionHeatmap] Sample added`, {
         samples: positionHistory.value.length,
         position: centeredWorld,
+        normalizedPosition,
         distance,
         deltaSeconds,
         speed,
@@ -459,9 +477,11 @@ export function usePositionHeatmap(
 
     // Log every position update for debugging (can be removed later)
     if (frameNumber % 60 === 0) {
-      console.debug('🗺️ [PositionHeatmap] Position update', {
+      const normalizedPosition = toNormalizedCourtSpace(centeredWorld);
+      console.debug(`${HEATMAP_DEBUG_PREFIX} 🗺️ [PositionHeatmap] Position update`, {
         frame: frameNumber,
         position: centeredWorld,
+        normalizedPosition,
         distance,
         speed,
         totalDistance: totalDistance.value,
@@ -668,7 +688,7 @@ export function usePositionHeatmap(
     initializeZones();
     lastPosition.value = null;
     lastSampleTime.value = 0;
-    console.log('Position tracking started');
+    console.log(`${HEATMAP_DEBUG_PREFIX} Position tracking started`);
   }
 
   /**
@@ -676,7 +696,7 @@ export function usePositionHeatmap(
    */
   function stopTracking() {
     isTracking.value = false;
-    console.log('Position tracking stopped');
+    console.log(`${HEATMAP_DEBUG_PREFIX} Position tracking stopped`);
   }
 
   /**
@@ -691,7 +711,7 @@ export function usePositionHeatmap(
     averageSpeed.value = 0;
     initializeZones();
     heatmapData.value = null;
-    console.log('Position history cleared');
+    console.log(`${HEATMAP_DEBUG_PREFIX} Position history cleared`);
   }
 
   /**
@@ -756,7 +776,7 @@ export function usePositionHeatmap(
 
       return true;
     } catch (error) {
-      console.error('Failed to import position tracking data:', error);
+      console.error(`${HEATMAP_DEBUG_PREFIX} Failed to import position tracking data:`, error);
       return false;
     }
   }
