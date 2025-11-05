@@ -165,35 +165,105 @@
         <!-- Initial State -->
         <div
           v-else
-          class="text-center py-8"
+          class="space-y-6"
         >
-          <div class="text-blue-600 mb-4">
-            <svg
-              class="w-16 h-16 mx-auto"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z"
-              />
-            </svg>
+          <div class="text-center">
+            <div class="text-blue-600 mb-4">
+              <svg
+                class="w-16 h-16 mx-auto"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z"
+                />
+              </svg>
+            </div>
+            <h3 class="text-lg font-medium text-gray-900 mb-2">
+              {{ modalTitle }}
+            </h3>
+            <p class="text-gray-600 mb-6">
+              Configure sharing permissions for your {{ shareType === 'comparison' ? 'comparison video' : 'video' }}
+            </p>
           </div>
-          <h3 class="text-lg font-medium text-gray-900 mb-2">
-            {{ modalTitle }}
-          </h3>
-          <p class="text-gray-600 mb-6">
-            {{ shareDescription }}
-          </p>
-          <button
-            class="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
-            @click="generateShareLink"
-          >
-            Generate Share Link
-          </button>
+
+          <!-- Annotation Permission Options -->
+          <div class="bg-gray-50 rounded-lg p-4">
+            <label class="block text-sm font-medium text-gray-700 mb-3">
+              Annotation Permissions
+            </label>
+            <div class="space-y-3">
+              <!-- View-only option -->
+              <label class="flex items-start cursor-pointer group">
+                <input
+                  type="radio"
+                  :value="false"
+                  v-model="allowAnnotations"
+                  class="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                >
+                <div class="ml-3 flex-1">
+                  <div class="flex items-center">
+                    <span class="text-sm font-medium text-gray-900 group-hover:text-blue-700">
+                      View-only access
+                    </span>
+                    <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-200 text-gray-800">
+                      Default
+                    </span>
+                  </div>
+                  <p class="text-xs text-gray-500 mt-1">
+                    Anyone with the link can view without signing in. No annotation capabilities.
+                  </p>
+                </div>
+              </label>
+
+              <!-- Annotation-enabled option -->
+              <label class="flex items-start cursor-pointer group">
+                <input
+                  type="radio"
+                  :value="true"
+                  v-model="allowAnnotations"
+                  class="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                >
+                <div class="ml-3 flex-1">
+                  <div class="flex items-center">
+                    <span class="text-sm font-medium text-gray-900 group-hover:text-blue-700">
+                      Allow annotations
+                    </span>
+                    <svg
+                      class="ml-1.5 w-4 h-4 text-amber-600"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                      />
+                    </svg>
+                  </div>
+                  <p class="text-xs text-gray-500 mt-1">
+                    Recipients must sign in to view and can add annotations.
+                  </p>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- Generate Button -->
+          <div class="text-center">
+            <button
+              class="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+              @click="generateShareLink"
+            >
+              Generate Share Link
+            </button>
+          </div>
         </div>
       </div>
 
@@ -249,6 +319,7 @@ const isGenerating = ref(false);
 const error = ref<string | null>(null);
 const copied = ref(false);
 const shareUrlInput = ref<HTMLInputElement | null>(null);
+const allowAnnotations = ref(false);
 
 // Computed properties
 const modalTitle = computed(() => {
@@ -270,6 +341,7 @@ const closeModal = () => {
   shareUrl.value = '';
   error.value = null;
   copied.value = false;
+  allowAnnotations.value = false;
 };
 
 const generateShareLink = async () => {
@@ -284,7 +356,8 @@ const generateShareLink = async () => {
 
     try {
       const url = await ShareService.createComparisonShareableLink(
-        props.comparisonId
+        props.comparisonId,
+        allowAnnotations.value
       );
       shareUrl.value = url;
     } catch (err) {
@@ -303,7 +376,10 @@ const generateShareLink = async () => {
     error.value = null;
 
     try {
-      const url = await ShareService.createShareableLink(props.videoId);
+      const url = await ShareService.createShareableLink(
+        props.videoId,
+        allowAnnotations.value
+      );
       shareUrl.value = url;
     } catch (err) {
       error.value = 'Failed to generate share link. Please try again.';

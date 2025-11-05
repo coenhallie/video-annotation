@@ -15,6 +15,7 @@ import VideoTimeline from './components/VideoTimeline.vue';
 import AnnotationPanel from './components/AnnotationPanel.vue';
 import Login from './components/Login.vue';
 import ResetPassword from './components/ResetPassword.vue';
+import SharedVideoAuthPrompt from './components/SharedVideoAuthPrompt.vue';
 import ProjectManagementModal from './components/ProjectManagementModal.vue';
 import CreateComparisonModal from './components/CreateComparisonModal.vue';
 import ShareModal from './components/ShareModal.vue';
@@ -318,7 +319,12 @@ const currentVideoId = ref<string | null>(null);
 const currentComparisonId = ref<string | null>(null);
 const isSharedComparison = ref(false);
 const isSharedVideo = ref(false);
-const sharedVideoData = ref(null);
+const sharedVideoData = ref<any>(null);
+
+// Shared video authentication state
+const showAuthPrompt = ref(false);
+const userDeclinedAuth = ref(false);
+const pendingSharedContent = ref<{type: 'video' | 'comparison', id: string, data: any} | null>(null);
 
 // Real-time features
 const { isConnected, activeUsers, setupPresenceTracking } =
@@ -1447,6 +1453,138 @@ const closeShareModal = () => {
   isShareModalVisible.value = false;
 };
 
+// Shared video authentication handlers
+const handleAuthSignIn = () => {
+  showAuthPrompt.value = false;
+  userDeclinedAuth.value = false;
+  // The Login component will be shown since user is not authenticated
+  // After successful login, the pending shared content will be loaded
+};
+
+const handleAuthContinueReadOnly = () => {
+  userDeclinedAuth.value = true;
+  
+  // Load the shared content in read-only mode BEFORE closing the prompt
+  // This ensures the isSharedVideo/isSharedComparison flags are set first
+  if (pendingSharedContent.value) {
+    if (pendingSharedContent.value.type === 'video') {
+      loadSharedVideoReadOnly(pendingSharedContent.value.data);
+    } else if (pendingSharedContent.value.type === 'comparison') {
+      loadSharedComparisonReadOnly(pendingSharedContent.value.data);
+    }
+    pendingSharedContent.value = null;
+  }
+  
+  // Close the prompt AFTER loading content to avoid unmounting the main div
+  showAuthPrompt.value = false;
+};
+
+const loadSharedVideoReadOnly = (shareData: any) => {
+  isSharedVideo.value = true;
+  sharedVideoData.value = shareData;
+  currentVideoId.value = shareData.id;
+  
+  loadVideo(
+    {
+      id: shareData.id,
+      url: shareData.url,
+    },
+    'shared'
+  );
+};
+
+const loadSharedComparisonReadOnly = async (sharedComparisonData: any) => {
+  isSharedComparison.value = true;
+  currentComparisonId.value = sharedComparisonData.id;
+
+  const comparisonVideo = {
+    id: sharedComparisonData.id,
+    title: sharedComparisonData.title,
+    description: sharedComparisonData.description,
+    videoAId: sharedComparisonData.videoA?.id || 'placeholder',
+    videoBId: sharedComparisonData.videoB?.id || 'placeholder',
+    videoA: sharedComparisonData.videoA,
+    videoB: sharedComparisonData.videoB,
+    isPublic: sharedComparisonData.isPublic,
+    userId: '',
+    createdAt: '',
+    updatedAt: '',
+  };
+
+  if (comparisonWorkflow) {
+    await comparisonWorkflow.loadComparisonVideo(comparisonVideo as any);
+    playerMode.value = 'dual';
+  }
+};
+
+const loadSharedVideoAuthenticated = async (shareData: any) => {
+  try {
+    // Re-fetch the shared video data now that user is authenticated
+    // This ensures canComment is correctly set based on current auth state
+    const freshShareData = await ShareService.getSharedVideoWithCommentPermissions(shareData.id);
+    
+    isSharedVideo.value = true;
+    sharedVideoData.value = freshShareData;
+    currentVideoId.value = freshShareData.id;
+    
+    loadVideo(
+      {
+        id: freshShareData.id,
+        url: freshShareData.url,
+      },
+      'shared'
+    );
+    
+    // Start the video session with proper permissions
+    if (currentVideoId.value) {
+      await startSession();
+    }
+  } catch (error) {
+    console.error('Error loading authenticated shared video:', error);
+    // Fallback to original data if re-fetch fails
+    loadSharedVideoReadOnly(shareData);
+  }
+};
+
+const loadSharedComparisonAuthenticated = async (sharedComparisonData: any) => {
+  try {
+    // Re-fetch the shared comparison data now that user is authenticated
+    // This ensures canComment is correctly set based on current auth state
+    const freshComparisonData = await ShareService.getSharedComparisonVideoWithCommentPermissions(sharedComparisonData.id);
+    
+    isSharedComparison.value = true;
+    currentComparisonId.value = freshComparisonData.id;
+
+    const comparisonVideo = {
+      id: freshComparisonData.id,
+      title: freshComparisonData.title,
+      description: freshComparisonData.description,
+      videoAId: freshComparisonData.videoA?.id || 'placeholder',
+      videoBId: freshComparisonData.videoB?.id || 'placeholder',
+      videoA: freshComparisonData.videoA,
+      videoB: freshComparisonData.videoB,
+      isPublic: freshComparisonData.isPublic,
+      userId: '',
+      createdAt: '',
+      updatedAt: '',
+    };
+
+    if (comparisonWorkflow) {
+      await comparisonWorkflow.loadComparisonVideo(comparisonVideo as any);
+      playerMode.value = 'dual';
+    }
+    
+    // Start the video session with proper permissions
+    if (currentComparisonId.value) {
+      await startSession();
+    }
+  } catch (error) {
+    console.error('Error loading authenticated shared comparison:', error);
+    // Fallback to original data if re-fetch fails
+    loadSharedComparisonReadOnly(sharedComparisonData);
+  }
+};
+
 let authSubscription: { unsubscribe: () => void } | null = null;
 
 onMounted(async () => {
@@ -1502,25 +1640,27 @@ onMounted(async () => {
     if (shareInfo.type && shareInfo.id) {
       try {
         if (shareInfo.type === 'video') {
-          isSharedVideo.value = true;
           const shareData =
             await ShareService.getSharedVideoWithCommentPermissions(
               shareInfo.id
             );
 
-          sharedVideoData.value = shareData as any;
-          currentVideoId.value = shareData.id as string;
-
-          loadVideo(
-            {
-              id: shareData.id,
-              url: shareData.url,
-            },
-            'shared'
-          );
+          // Check if this shared video requires authentication for annotations
+          const requiresAuth = shareData.canComment && !user.value;
+          
+          if (requiresAuth) {
+            // Store the pending content and show auth prompt
+            pendingSharedContent.value = {
+              type: 'video',
+              id: shareInfo.id,
+              data: shareData
+            };
+            showAuthPrompt.value = true;
+          } else {
+            // User is authenticated or annotations not allowed, load directly
+            loadSharedVideoReadOnly(shareData);
+          }
         } else if (shareInfo.type === 'comparison') {
-          isSharedComparison.value = true;
-
           try {
             // Load shared comparison video with proper permissions
             const sharedComparisonData =
@@ -1528,29 +1668,20 @@ onMounted(async () => {
                 shareInfo.id
               );
 
-            // Set the current comparison data
-            currentComparisonId.value = sharedComparisonData.id;
+            // Check if this shared comparison requires authentication for annotations
+            const requiresAuth = sharedComparisonData.canComment && !user.value;
 
-            // Create a comparison video object for the workflow
-            const comparisonVideo = {
-              id: sharedComparisonData.id,
-              title: sharedComparisonData.title,
-              description: sharedComparisonData.description,
-              videoAId: sharedComparisonData.videoA?.id || 'placeholder',
-              videoBId: sharedComparisonData.videoB?.id || 'placeholder',
-              videoA: sharedComparisonData.videoA,
-              videoB: sharedComparisonData.videoB,
-              isPublic: sharedComparisonData.isPublic,
-              userId: '', // Not needed for shared videos
-              createdAt: '',
-              updatedAt: '',
-            };
-
-            if (comparisonWorkflow) {
-              await comparisonWorkflow.loadComparisonVideo(
-                comparisonVideo as any
-              );
-              playerMode.value = 'dual';
+            if (requiresAuth) {
+              // Store the pending content and show auth prompt
+              pendingSharedContent.value = {
+                type: 'comparison',
+                id: shareInfo.id,
+                data: sharedComparisonData
+              };
+              showAuthPrompt.value = true;
+            } else {
+              // User is authenticated or annotations not allowed, load directly
+              loadSharedComparisonReadOnly(sharedComparisonData);
             }
           } catch (error) {
             console.error(
@@ -1704,9 +1835,19 @@ watch(
         setupPresenceTracking((newUser as any).id, (newUser as any).email);
       }
 
+      // Check if user just logged in and we have pending shared content
+      if (!oldUser && pendingSharedContent.value) {
+        // User logged in after seeing auth prompt, load the shared content WITH full permissions
+        if (pendingSharedContent.value.type === 'video') {
+          loadSharedVideoAuthenticated(pendingSharedContent.value.data);
+        } else if (pendingSharedContent.value.type === 'comparison') {
+          loadSharedComparisonAuthenticated(pendingSharedContent.value.data);
+        }
+        pendingSharedContent.value = null;
+      }
       // Auto-open ProjectManagementModal after successful login
-      // Only open if this is a new login (oldUser was null/undefined)
-      if (!oldUser && !isSharedVideo.value && !isSharedComparison.value) {
+      // Only open if this is a new login (oldUser was null/undefined) and no shared content
+      else if (!oldUser && !isSharedVideo.value && !isSharedComparison.value) {
         // Small delay to ensure the UI is fully rendered
         setTimeout(() => {
           isLoadModalVisible.value = true;
@@ -1788,9 +1929,9 @@ watch(
     <ResetPassword @complete="handlePasswordResetComplete" />
   </div>
 
-  <!-- Main app when user is authenticated OR when viewing shared video/comparison -->
+  <!-- Main app when user is authenticated OR when viewing shared video/comparison OR showing auth prompt -->
   <div
-    v-else-if="user || isSharedVideo || isSharedComparison"
+    v-else-if="user || isSharedVideo || isSharedComparison || showAuthPrompt"
     class="min-h-screen bg-white flex flex-col"
   >
     <!-- Header -->
@@ -2320,6 +2461,13 @@ watch(
         @overlay-hidden="showCalibrationLines = false"
       />
     </div>
+    <!-- Shared Video Authentication Prompt -->
+    <SharedVideoAuthPrompt
+      :is-visible="showAuthPrompt"
+      :content-type="pendingSharedContent?.type === 'comparison' ? 'comparison video' : 'video'"
+      @sign-in="handleAuthSignIn"
+      @continue-read-only="handleAuthContinueReadOnly"
+    />
   </div>
 
   <!-- Login component when user is not authenticated -->

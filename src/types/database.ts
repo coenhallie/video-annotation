@@ -63,6 +63,7 @@ export interface DatabaseVideo {
   thumbnailUrl?: string;
   metadata?: Record<string, any>;
   isPublic: boolean;
+  allowAnnotations: boolean; // When true, requires authentication and allows annotations
   videoType: 'url' | 'upload';
   filePath?: string;
   fileSize?: number;
@@ -114,6 +115,7 @@ export interface DatabaseComparisonVideo {
   thumbnailUrl?: string;
   thumbnailLayout?: string;
   isPublic: boolean;
+  allowAnnotations: boolean; // When true, requires authentication and allows annotations
   createdAt: string;
   updatedAt: string;
 }
@@ -201,6 +203,7 @@ export interface Video {
   totalFrames: number;
   thumbnailUrl?: string;
   isPublic: boolean;
+  allowAnnotations: boolean; // When true, requires authentication and allows annotations
   ownerId: string;
   videoType: 'url' | 'upload';
   filePath?: string;
@@ -224,6 +227,7 @@ export interface ComparisonVideo {
   thumbnailUrl?: string;
   thumbnailLayout?: string;
   isPublic: boolean;
+  allowAnnotations: boolean; // When true, requires authentication and allows annotations
   createdAt: string;
   updatedAt: string;
 

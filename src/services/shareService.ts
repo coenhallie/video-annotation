@@ -27,12 +27,15 @@ export interface CommentPermissionContext {
 
 export class ShareService {
   // Generate a shareable link for a video
-  static async createShareableLink(videoId: string): Promise<string> {
+  static async createShareableLink(
+    videoId: string,
+    allowAnnotations: boolean = false
+  ): Promise<string> {
     try {
-      // First, make the video public
+      // Make the video public and set annotation permissions
       await supabase
         .from('videos')
-        .update({ isPublic: true })
+        .update({ isPublic: true, allowAnnotations })
         .eq('id', videoId);
 
       // Generate the shareable URL with video ID
@@ -209,13 +212,14 @@ export class ShareService {
    * Create shareable link for comparison video
    */
   static async createComparisonShareableLink(
-    comparisonId: string
+    comparisonId: string,
+    allowAnnotations: boolean = false
   ): Promise<string> {
     try {
-      // Make the comparison video public
+      // Make the comparison video public and set annotation permissions
       await supabase
         .from('comparison_videos')
-        .update({ isPublic: true })
+        .update({ isPublic: true, allowAnnotations })
         .eq('id', comparisonId);
 
       // Generate the shareable URL
@@ -376,8 +380,8 @@ export class ShareService {
         ];
       }
 
-      // Comment permissions for comparison videos
-      const canComment = comparison.isPublic;
+      // Comment permissions for comparison videos - requires both isPublic and allowAnnotations
+      const canComment = comparison.isPublic && comparison.allowAnnotations;
 
       const result = {
         id: comparison.id,
@@ -518,12 +522,14 @@ export class ShareService {
 
   /**
    * Check if commenting is allowed on a shared video
+   * Note: Commenting on annotations requires the allowAnnotations flag to be true
    */
   static canCommentOnSharedVideo(video: any): boolean {
     try {
-      // For now, all public shared videos allow commenting
-      // This can be extended to check specific video settings or user permissions
-      return video.isPublic === true;
+      // Video must be public AND have annotations allowed
+      // When allowAnnotations is true, only authenticated users can access and comment
+      // When allowAnnotations is false, anonymous viewing is allowed but no commenting
+      return video.isPublic === true && video.allowAnnotations === true;
     } catch (error) {
       console.error(
         '❌ [ShareService] Error checking comment permissions:',
@@ -541,10 +547,10 @@ export class ShareService {
     sessionId?: string
   ): Promise<CommentPermissionContext> {
     try {
-      // Get the video to check if it's public
+      // Get the video to check if it's public and annotation permissions
       const { data: videos, error: videoError } = await supabase
         .from('videos')
-        .select('id, isPublic')
+        .select('id, isPublic, allowAnnotations')
         .eq('id', videoId)
         .eq('isPublic', true);
 
@@ -566,14 +572,14 @@ export class ShareService {
       }
 
       const canComment = this.canCommentOnSharedVideo(video);
-      // For shared public videos, anonymous users can comment even without a session yet
-      // They will create a session when they actually post a comment
+      // For shared public videos with allowAnnotations, users need authentication
+      // Anonymous commenting is not allowed when allowAnnotations is true
       const isAnonymous = sessionId ? true : false;
 
       return {
         canComment,
         isAnonymous,
-        sessionId,
+        ...(sessionId && { sessionId }),
       };
     } catch (error) {
       console.error(
@@ -720,10 +726,10 @@ export class ShareService {
     sessionId?: string
   ): Promise<CommentPermissionContext> {
     try {
-      // Get the comparison video to check if it's public
+      // Get the comparison video to check if it's public and annotation permissions
       const { data: comparisons, error } = await supabase
         .from('comparison_videos')
-        .select('id, isPublic')
+        .select('id, isPublic, allowAnnotations')
         .eq('id', comparisonId)
         .eq('isPublic', true);
 
@@ -745,15 +751,16 @@ export class ShareService {
         };
       }
 
-      const canComment = comparison.isPublic;
-      // For shared public comparison videos, anonymous users can comment even without a session yet
-      // They will create a session when they actually post a comment
+      // Check if comparison allows annotations (must be public AND allow annotations)
+      const canComment = comparison.isPublic && comparison.allowAnnotations;
+      // For shared public comparison videos with allowAnnotations, users need authentication
+      // Anonymous commenting is not allowed when allowAnnotations is true
       const isAnonymous = sessionId ? true : false;
 
       return {
         canComment,
         isAnonymous,
-        sessionId,
+        ...(sessionId && { sessionId }),
       };
     } catch (error) {
       console.error(
@@ -820,7 +827,7 @@ export class ShareService {
 
       const { data: comparisons, error } = await supabase
         .from('comparison_videos')
-        .select('id, isPublic')
+        .select('id, isPublic, allowAnnotations')
         .eq('id', comparisonId)
         .eq('isPublic', true);
 
