@@ -279,6 +279,7 @@ export interface SharedComparisonVideoWithCommentPermissions {
   videoB: any | null; // Will be SharedVideoWithCommentPermissions from shareService
   isPublic: boolean;
   canComment: boolean;
+  allowAnnotations: boolean;
   annotations: any[];
   thumbnailUrl?: string;
   duration?: number;

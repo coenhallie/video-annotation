@@ -15,6 +15,7 @@ export interface SharedVideoWithCommentPermissions {
   videoType: string;
   isPublic: boolean;
   canComment: boolean;
+  allowAnnotations: boolean;
   annotations: any[];
 }
 
@@ -112,6 +113,7 @@ export class ShareService {
         videoType: video.videoType,
         isPublic: video.isPublic,
         canComment: canComment,
+        allowAnnotations: video.allowAnnotations || false,
         annotations: mappedAnnotations,
       };
 
@@ -391,6 +393,7 @@ export class ShareService {
         videoB: videoB,
         isPublic: comparison.isPublic,
         canComment: canComment,
+        allowAnnotations: comparison.allowAnnotations || false,
         annotations: mappedAnnotations,
         thumbnailUrl: comparison.thumbnailUrl,
         duration: comparison.duration,
@@ -427,6 +430,7 @@ export class ShareService {
         videoType: 'placeholder',
         isPublic: false,
         canComment: false,
+        allowAnnotations: false,
         annotations: [],
       };
     }
@@ -442,6 +446,7 @@ export class ShareService {
       videoType: video.videoType,
       isPublic: video.isPublic,
       canComment: false, // Comments are handled at comparison level
+      allowAnnotations: video.allowAnnotations || false,
       annotations: [], // Will be loaded separately if needed
     };
   }
@@ -466,6 +471,7 @@ export class ShareService {
         videoType: 'placeholder',
         isPublic: false,
         canComment: false,
+        allowAnnotations: false,
         annotations: [],
       };
     }
@@ -482,6 +488,7 @@ export class ShareService {
         videoType: 'placeholder',
         isPublic: false,
         canComment: false,
+        allowAnnotations: false,
         annotations: [],
       };
     }
@@ -496,6 +503,7 @@ export class ShareService {
       videoType: video.videoType,
       isPublic: video.isPublic,
       canComment: this.canCommentOnSharedVideo(video),
+      allowAnnotations: video.allowAnnotations || false,
       annotations: [], // Will be loaded separately if needed
     };
   }
@@ -908,6 +916,132 @@ export class ShareService {
         error
       );
       return { valid: false, reason: 'Validation error occurred' };
+    }
+  }
+
+  // ===== SHARED LINKS MANAGEMENT METHODS =====
+
+  /**
+   * Get all shared videos (both individual and comparison) for the current user
+   */
+  static async getAllSharedVideos(userId: string): Promise<{
+    videos: Array<{
+      id: string;
+      title: string;
+      type: 'video' | 'comparison';
+      shareUrl: string;
+      allowAnnotations: boolean;
+      isPublic: boolean;
+      createdAt: string;
+      thumbnailUrl?: string;
+      description?: string;
+    }>;
+  }> {
+    try {
+      const baseUrl = window.location.origin;
+
+      // Fetch individual videos
+      const { data: videos, error: videosError } = await supabase
+        .from('videos')
+        .select('id, title, isPublic, allowAnnotations, createdAt, thumbnailUrl')
+        .eq('ownerId', userId)
+        .eq('isPublic', true)
+        .order('createdAt', { ascending: false });
+
+      if (videosError) {
+        console.error('❌ [ShareService] Error fetching shared videos:', videosError);
+        throw videosError;
+      }
+
+      // Fetch comparison videos
+      const { data: comparisons, error: comparisonsError } = await supabase
+        .from('comparison_videos')
+        .select('id, title, description, isPublic, allowAnnotations, createdAt, thumbnailUrl')
+        .eq('userId', userId)
+        .eq('isPublic', true)
+        .order('createdAt', { ascending: false });
+
+      if (comparisonsError) {
+        console.error('❌ [ShareService] Error fetching shared comparisons:', comparisonsError);
+        throw comparisonsError;
+      }
+
+      // Map videos to unified format
+      const videosList = (videos || []).map(video => ({
+        id: video.id,
+        title: video.title,
+        type: 'video' as const,
+        shareUrl: `${baseUrl}?share=${video.id}`,
+        allowAnnotations: video.allowAnnotations || false,
+        isPublic: video.isPublic,
+        createdAt: video.createdAt,
+        thumbnailUrl: video.thumbnailUrl,
+      }));
+
+      // Map comparison videos to unified format
+      const comparisonsList = (comparisons || []).map(comparison => ({
+        id: comparison.id,
+        title: comparison.title,
+        type: 'comparison' as const,
+        shareUrl: `${baseUrl}?shareComparison=${comparison.id}`,
+        allowAnnotations: comparison.allowAnnotations || false,
+        isPublic: comparison.isPublic,
+        createdAt: comparison.createdAt,
+        thumbnailUrl: comparison.thumbnailUrl,
+        description: comparison.description,
+      }));
+
+      // Combine and sort by creation date
+      const allShared = [...videosList, ...comparisonsList].sort((a, b) => {
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      });
+
+      return { videos: allShared };
+    } catch (error) {
+      console.error('❌ [ShareService] Error getting all shared videos:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update permission settings for a shared video
+   */
+  static async updateSharePermissions(
+    id: string,
+    type: 'video' | 'comparison',
+    allowAnnotations: boolean
+  ): Promise<void> {
+    try {
+      const table = type === 'video' ? 'videos' : 'comparison_videos';
+      
+      const { error } = await supabase
+        .from(table)
+        .update({ allowAnnotations })
+        .eq('id', id);
+
+      if (error) {
+        console.error('❌ [ShareService] Error updating share permissions:', error);
+        throw error;
+      }
+    } catch (error) {
+      console.error('❌ [ShareService] Error updating share permissions:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Revoke sharing (make video private)
+   */
+  static async revokeShare(id: string, type: 'video' | 'comparison'): Promise<void> {
+    try {
+      if (type === 'video') {
+        await this.makeVideoPrivate(id);
+      } else {
+        await this.makeComparisonVideoPrivate(id);
+      }
+    } catch (error) {
+      console.error('❌ [ShareService] Error revoking share:', error);
+      throw error;
     }
   }
 }

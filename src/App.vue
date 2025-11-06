@@ -19,6 +19,7 @@ import SharedVideoAuthPrompt from './components/SharedVideoAuthPrompt.vue';
 import ProjectManagementModal from './components/ProjectManagementModal.vue';
 import CreateComparisonModal from './components/CreateComparisonModal.vue';
 import ShareModal from './components/ShareModal.vue';
+import SharedLinksManagement from './components/SharedLinksManagement.vue';
 import NotificationToast from './components/NotificationToast.vue';
 import VideoUpload from './components/VideoUpload.vue';
 import UnifiedVideoPlayer from './components/UnifiedVideoPlayer.vue';
@@ -311,6 +312,7 @@ const isAnnotationFormVisible = ref(false);
 const isLoadModalVisible = ref(false);
 const isComparisonModalVisible = ref(false);
 const isShareModalVisible = ref(false);
+const isSharedLinksManagementVisible = ref(false);
 const isVideoUploadVisible = ref(false);
 const isChartVisible = ref(false);
 const videoLoaded = ref(false);
@@ -329,6 +331,11 @@ const pendingSharedContent = ref<{type: 'video' | 'comparison', id: string, data
 // Real-time features
 const { isConnected, activeUsers, setupPresenceTracking } =
   useRealtimeAnnotations(videoId, annotations);
+// Use either currentVideoId or currentComparisonId depending on mode
+const activeContentId = computed(() => {
+  return currentComparisonId.value || currentVideoId.value;
+});
+
 const {
   startSession,
   endSession,
@@ -340,7 +347,7 @@ const {
   getCommentContext,
   canComment,
   refreshCommentPermissions,
-} = useVideoSession(currentVideoId);
+} = useVideoSession(activeContentId);
 
 watch(
   () => comparisonWorkflow.currentComparison.value,
@@ -1453,6 +1460,14 @@ const closeShareModal = () => {
   isShareModalVisible.value = false;
 };
 
+const openSharedLinksManagement = () => {
+  isSharedLinksManagementVisible.value = true;
+};
+
+const closeSharedLinksManagement = () => {
+  isSharedLinksManagementVisible.value = false;
+};
+
 // Shared video authentication handlers
 const handleAuthSignIn = () => {
   showAuthPrompt.value = false;
@@ -1514,6 +1529,11 @@ const loadSharedComparisonReadOnly = async (sharedComparisonData: any) => {
   if (comparisonWorkflow) {
     await comparisonWorkflow.loadComparisonVideo(comparisonVideo as any);
     playerMode.value = 'dual';
+    
+    // Start the session to initialize permissions even in read-only mode
+    if (currentComparisonId.value) {
+      await startSession();
+    }
   }
 };
 
@@ -1572,11 +1592,12 @@ const loadSharedComparisonAuthenticated = async (sharedComparisonData: any) => {
     if (comparisonWorkflow) {
       await comparisonWorkflow.loadComparisonVideo(comparisonVideo as any);
       playerMode.value = 'dual';
-    }
-    
-    // Start the video session with proper permissions
-    if (currentComparisonId.value) {
-      await startSession();
+      
+      // Start the video session with proper permissions after loading
+      // This ensures the activeContentId computed property has the currentComparisonId
+      if (currentComparisonId.value) {
+        await startSession();
+      }
     }
   } catch (error) {
     console.error('Error loading authenticated shared comparison:', error);
@@ -1656,8 +1677,11 @@ onMounted(async () => {
               data: shareData
             };
             showAuthPrompt.value = true;
+          } else if (user.value && shareData.canComment) {
+            // User is authenticated and video allows annotations - load with full permissions
+            await loadSharedVideoAuthenticated(shareData);
           } else {
-            // User is authenticated or annotations not allowed, load directly
+            // Annotations not allowed or user not authenticated, load in read-only mode
             loadSharedVideoReadOnly(shareData);
           }
         } else if (shareInfo.type === 'comparison') {
@@ -1679,8 +1703,11 @@ onMounted(async () => {
                 data: sharedComparisonData
               };
               showAuthPrompt.value = true;
+            } else if (user.value && sharedComparisonData.canComment) {
+              // User is authenticated and comparison allows annotations - load with full permissions
+              await loadSharedComparisonAuthenticated(sharedComparisonData);
             } else {
-              // User is authenticated or annotations not allowed, load directly
+              // Annotations not allowed or user not authenticated, load in read-only mode
               loadSharedComparisonReadOnly(sharedComparisonData);
             }
           } catch (error) {
@@ -1816,6 +1843,23 @@ const currentSpeedMetrics = computed(() => {
   return result;
 });
 
+// Computed property for shared content permission text
+const sharedContentPermissionText = computed(() => {
+  if (isSharedComparison.value) {
+    const comparison = comparisonWorkflow.currentComparison.value;
+    const hasAnnotationPermission = comparison && (comparison as any).allowAnnotations;
+    return hasAnnotationPermission
+      ? 'Shared Comparison (Annotations Enabled)'
+      : 'Shared Comparison (View Only)';
+  } else if (isSharedVideo.value) {
+    const hasAnnotationPermission = sharedVideoData.value?.allowAnnotations;
+    return hasAnnotationPermission
+      ? 'Shared Video (Annotations Enabled)'
+      : 'Shared Video (View Only)';
+  }
+  return 'Shared Content';
+});
+
 // Logout and cleanup
 const handleSignOut = async () => {
   try {
@@ -1847,7 +1891,8 @@ watch(
       }
       // Auto-open ProjectManagementModal after successful login
       // Only open if this is a new login (oldUser was null/undefined) and no shared content
-      else if (!oldUser && !isSharedVideo.value && !isSharedComparison.value) {
+      // Check for share URL parameters to avoid opening modal when accessing shared links
+      else if (!oldUser && !isSharedVideo.value && !isSharedComparison.value && !ShareService.parseShareUrl().id) {
         // Small delay to ensure the UI is fully rendered
         setTimeout(() => {
           isLoadModalVisible.value = true;
@@ -1972,6 +2017,27 @@ watch(
             </svg>
           </button>
 
+          <!-- Manage Shared Links Button -->
+          <button
+            class="p-2 text-gray-600 hover:text-blue-600 hover:bg-gray-50 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            title="Manage shared links"
+            @click="openSharedLinksManagement"
+          >
+            <svg
+              class="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+              />
+            </svg>
+          </button>
+
           <!-- Share Video Button -->
           <button
             :disabled="!canShare"
@@ -2014,11 +2080,7 @@ watch(
             />
           </svg>
           <span class="font-medium">
-            {{
-              isSharedComparison
-                ? 'Shared Comparison (View Only)'
-                : 'Shared Video (View Only)'
-            }}
+            {{ sharedContentPermissionText }}
           </span>
         </div>
 
@@ -2422,6 +2484,56 @@ watch(
       :share-type="shareModalProps.shareType"
       @close="closeShareModal"
     />
+
+    <!-- Shared Links Management Modal -->
+    <Teleport to="body">
+      <Transition name="modal">
+        <div
+          v-if="isSharedLinksManagementVisible"
+          class="fixed inset-0 z-50 flex items-center justify-center"
+        >
+          <!-- Backdrop -->
+          <div
+            class="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            @click="closeSharedLinksManagement"
+          />
+
+          <!-- Modal Content -->
+          <div
+            class="relative bg-white rounded-xl shadow-2xl w-full max-w-7xl mx-4 max-h-[90vh] overflow-hidden flex flex-col"
+            @click.stop
+          >
+            <!-- Header -->
+            <div class="flex items-center justify-between p-6 border-b border-gray-200 flex-shrink-0">
+              <h2 class="text-2xl font-semibold text-gray-900">Manage Shared Links</h2>
+              <button
+                class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                @click="closeSharedLinksManagement"
+              >
+                <svg
+                  class="w-6 h-6"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+
+            <!-- Component Container -->
+            <div class="flex-1 overflow-auto">
+              <SharedLinksManagement />
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
 
     <!-- Calibration Overlay - Now positioned outside video container for better positioning -->
     <CalibrationOverlay
