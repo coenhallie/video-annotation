@@ -655,7 +655,6 @@ const lineOpacity = computed(() => {
   // Reduced opacity for more subtle appearance
   switch (props.calibrationMode) {
     case 'full-court':
-    case 'full-court':
       return 0.4;
     case 'half-court':
       return 0.35;
@@ -665,13 +664,6 @@ const lineOpacity = computed(() => {
     default:
       return 0.25;
   }
-});
-
-const showDoubles = computed(() => {
-  return (
-    props.calibrationMode === 'full-court' ||
-    props.calibrationMode === 'full-court'
-  );
 });
 
 // ViewBox based on calibration mode
