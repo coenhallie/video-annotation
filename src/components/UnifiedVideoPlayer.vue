@@ -155,6 +155,28 @@
         >
           <div class="controls-content">
             <div class="controls-left">
+              <!-- Previous Frame button -->
+              <button
+                class="control-button"
+                aria-label="Previous Frame"
+                title="Previous Frame (Left Arrow)"
+                @click="seekToPreviousFrame"
+              >
+                <svg
+                  class="control-icon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M15.75 19.5L8.25 12l7.5-7.5"
+                  />
+                </svg>
+              </button>
+
               <!-- Play/Pause button -->
               <button
                 class="control-button"
@@ -167,6 +189,28 @@
                 </svg>
                 <svg v-else class="control-icon" viewBox="0 0 24 24">
                   <polygon points="5,3 19,12 5,21" />
+                </svg>
+              </button>
+
+              <!-- Next Frame button -->
+              <button
+                class="control-button"
+                aria-label="Next Frame"
+                title="Next Frame (Right Arrow)"
+                @click="seekToNextFrame"
+              >
+                <svg
+                  class="control-icon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M8.25 4.5l7.5 7.5-7.5 7.5"
+                  />
                 </svg>
               </button>
 
@@ -1648,6 +1692,8 @@ const {
   pause,
   togglePlayPause,
   seekTo,
+  seekToNextFrame,
+  seekToPreviousFrame,
   setVolume,
   toggleMute,
   setPlaybackSpeed,
