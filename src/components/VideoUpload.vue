@@ -259,12 +259,33 @@ const handleDragLeave = (event) => {
   isDragOver.value = false;
 };
 
-const selectFile = (file) => {
-  // Validate file
+const selectFile = async (file) => {
+  // Validate file type and size (Sync)
   const validation = VideoUploadService.validateVideoFile(file);
   if (!validation.valid) {
     uploadError.value = validation.error;
     return;
+  }
+
+  // Validate Codec (Async)
+  isUploading.value = true; // Show loading state briefly while checking
+  uploadStatus.value = 'Verifying compatibility...';
+  
+  try {
+    const compatibility = await VideoUploadService.validateVideoCompatibility(file);
+    if (!compatibility.valid) {
+      uploadError.value = compatibility.error;
+      isUploading.value = false;
+      return;
+    }
+  } catch (err) {
+    console.error('Compatibility check failed:', err);
+    // Determine if we should block or warn. For now, let's allow if check fails (fail open)
+    // or block if we want strictness.
+    // Let's safe fail:
+  } finally {
+    isUploading.value = false;
+    uploadStatus.value = '';
   }
 
   selectedFile.value = file;
