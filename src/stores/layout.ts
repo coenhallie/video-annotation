@@ -8,7 +8,7 @@ export const useLayoutStore = defineStore('layout', () => {
   const isShareModalOpen = ref(false);
   const isSharedLinksModalOpen = ref(false);
   const isVideoUploadModalOpen = ref(false);
-  const isCalibrationModalOpen = ref(false);
+
   const isAnnotationFormVisible = ref(false);
   
   // Actions
@@ -50,7 +50,6 @@ export const useLayoutStore = defineStore('layout', () => {
     isShareModalOpen,
     isSharedLinksModalOpen,
     isVideoUploadModalOpen,
-    isCalibrationModalOpen,
     isAnnotationFormVisible,
     openProjectModal,
     closeProjectModal,

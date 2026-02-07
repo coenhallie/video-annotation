@@ -13,10 +13,7 @@ export function useSessionCleanup() {
    */
   const cleanupAllSessionData = async (
     options: {
-      // Pose detection instances
-      poseLandmarker?: any;
-      poseLandmarkerA?: any;
-      poseLandmarkerB?: any;
+
 
       // Drawing canvas instances
       drawingCanvas?: any;
@@ -48,8 +45,7 @@ export function useSessionCleanup() {
       commentPermissions?: any;
       anonymousSession?: any;
 
-      // Speed calculator instances (accessed through pose landmarkers)
-      // These will be cleaned up via pose landmarker cleanup
+
 
       // Additional cleanup callbacks
       additionalCleanup?: (() => void | Promise<void>)[];
@@ -68,84 +64,7 @@ export function useSessionCleanup() {
         '🧹 [SessionCleanup] Starting comprehensive session cleanup...'
       );
 
-      // 1. Clean up pose detection instances
-      if (options.poseLandmarker) {
-        console.log('🧹 [SessionCleanup] Cleaning up main pose landmarker...');
-        try {
-          // Disable pose detection first
-          if (options.poseLandmarker.disablePoseDetection) {
-            await options.poseLandmarker.disablePoseDetection();
-          }
-          // Reset pose data using the correct method
-          if (options.poseLandmarker.reset) {
-            options.poseLandmarker.reset();
-          }
-          // Reset speed calculator through pose landmarker
-          if (options.poseLandmarker.speedCalculator?.reset) {
-            options.poseLandmarker.speedCalculator.reset();
-          }
-          if (options.poseLandmarker.speedCalculator?.resetCalibration) {
-            options.poseLandmarker.speedCalculator.resetCalibration();
-          }
-        } catch (error) {
-          console.error(
-            '❌ [SessionCleanup] Error cleaning up main pose landmarker:',
-            error
-          );
-        }
-      }
 
-      if (options.poseLandmarkerA) {
-        console.log('🧹 [SessionCleanup] Cleaning up pose landmarker A...');
-        try {
-          // Disable pose detection first
-          if (options.poseLandmarkerA.disablePoseDetection) {
-            await options.poseLandmarkerA.disablePoseDetection();
-          }
-          // Reset pose data using the correct method
-          if (options.poseLandmarkerA.reset) {
-            options.poseLandmarkerA.reset();
-          }
-          // Reset speed calculator through pose landmarker A
-          if (options.poseLandmarkerA.speedCalculator?.reset) {
-            options.poseLandmarkerA.speedCalculator.reset();
-          }
-          if (options.poseLandmarkerA.speedCalculator?.resetCalibration) {
-            options.poseLandmarkerA.speedCalculator.resetCalibration();
-          }
-        } catch (error) {
-          console.error(
-            '❌ [SessionCleanup] Error cleaning up pose landmarker A:',
-            error
-          );
-        }
-      }
-
-      if (options.poseLandmarkerB) {
-        console.log('🧹 [SessionCleanup] Cleaning up pose landmarker B...');
-        try {
-          // Disable pose detection first
-          if (options.poseLandmarkerB.disablePoseDetection) {
-            await options.poseLandmarkerB.disablePoseDetection();
-          }
-          // Reset pose data using the correct method
-          if (options.poseLandmarkerB.reset) {
-            options.poseLandmarkerB.reset();
-          }
-          // Reset speed calculator through pose landmarker B
-          if (options.poseLandmarkerB.speedCalculator?.reset) {
-            options.poseLandmarkerB.speedCalculator.reset();
-          }
-          if (options.poseLandmarkerB.speedCalculator?.resetCalibration) {
-            options.poseLandmarkerB.speedCalculator.resetCalibration();
-          }
-        } catch (error) {
-          console.error(
-            '❌ [SessionCleanup] Error cleaning up pose landmarker B:',
-            error
-          );
-        }
-      }
 
       // 2. Clean up drawing canvas
       if (options.drawingCanvas) {
@@ -466,8 +385,6 @@ export function useSessionCleanup() {
    */
   const quickCleanup = async (
     options: {
-      clearPoseData?: boolean;
-      clearDrawings?: boolean;
       endSession?: boolean;
       resetWorkflow?: boolean;
     } = {}
@@ -480,34 +397,7 @@ export function useSessionCleanup() {
     console.log('✅ [SessionCleanup] Quick cleanup completed');
   };
 
-  /**
-   * Cleanup specific to pose detection data
-   */
-  const cleanupPoseDetection = async (poseLandmarkers: any[]) => {
-    console.log('🧹 [SessionCleanup] Cleaning up pose detection data...');
 
-    for (const landmarker of poseLandmarkers) {
-      if (landmarker) {
-        try {
-          // Disable pose detection first
-          if (landmarker.disablePoseDetection) {
-            await landmarker.disablePoseDetection();
-          }
-          // Reset pose data using the correct method
-          if (landmarker.reset) {
-            landmarker.reset();
-          }
-        } catch (error) {
-          console.error(
-            '❌ [SessionCleanup] Error cleaning up pose landmarker:',
-            error
-          );
-        }
-      }
-    }
-
-    console.log('✅ [SessionCleanup] Pose detection cleanup completed');
-  };
 
   /**
    * Cleanup specific to drawing data
@@ -538,9 +428,7 @@ export function useSessionCleanup() {
     currentProjectType: 'single' | 'dual',
     newProjectType: 'single' | 'dual',
     options: {
-      poseLandmarker?: any;
-      poseLandmarkerA?: any;
-      poseLandmarkerB?: any;
+
       drawingCanvas?: any;
       drawingCanvasA?: any;
       drawingCanvasB?: any;
@@ -580,42 +468,7 @@ export function useSessionCleanup() {
         }
       }
 
-      // Clean up pose detection based on current project type
-      if (currentProjectType === 'single' && options.poseLandmarker) {
-        try {
-          if (options.poseLandmarker.disablePoseDetection) {
-            await options.poseLandmarker.disablePoseDetection();
-          }
-          if (options.poseLandmarker.reset) {
-            options.poseLandmarker.reset();
-          }
-        } catch (error) {
-          console.error(
-            '❌ [SessionCleanup] Error cleaning up single pose landmarker:',
-            error
-          );
-        }
-      } else if (currentProjectType === 'dual') {
-        const landmarkers = [
-          options.poseLandmarkerA,
-          options.poseLandmarkerB,
-        ].filter(Boolean);
-        for (const landmarker of landmarkers) {
-          try {
-            if (landmarker.disablePoseDetection) {
-              await landmarker.disablePoseDetection();
-            }
-            if (landmarker.reset) {
-              landmarker.reset();
-            }
-          } catch (error) {
-            console.error(
-              '❌ [SessionCleanup] Error cleaning up dual pose landmarker:',
-              error
-            );
-          }
-        }
-      }
+
 
       // Clean up drawing canvases based on current project type
       if (currentProjectType === 'single' && options.drawingCanvas) {
@@ -728,7 +581,6 @@ export function useSessionCleanup() {
     isCleaningUp: readonly(isCleaningUp),
     cleanupAllSessionData,
     quickCleanup,
-    cleanupPoseDetection,
     cleanupDrawingData,
     cleanupForProjectSwitch,
   };

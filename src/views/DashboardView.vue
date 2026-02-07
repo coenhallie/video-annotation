@@ -17,17 +17,13 @@ import AnnotationPanel from '@/components/AnnotationPanel.vue';
 import SharedVideoAuthPrompt from '@/components/SharedVideoAuthPrompt.vue';
 import VideoUpload from '@/components/VideoUpload.vue';
 import UnifiedVideoPlayer from '@/components/UnifiedVideoPlayer.vue';
-import CalibrationControls from '@/components/CalibrationControls.vue';
-import CalibrationOverlay from '@/components/CalibrationOverlay.vue';
-import CalibrationLinesOverlay from '@/components/CalibrationLinesOverlay.vue';
+import { ShareService } from '@/services/shareService';
 
 // Lazy loaded components
 const ProjectManagementModal = defineAsyncComponent(() => import('@/components/ProjectManagementModal.vue'));
 const CreateComparisonModal = defineAsyncComponent(() => import('@/components/CreateComparisonModal.vue'));
 const ShareModal = defineAsyncComponent(() => import('@/components/ShareModal.vue'));
 const SharedLinksManagement = defineAsyncComponent(() => import('@/components/SharedLinksManagement.vue'));
-const CalibrationModal = defineAsyncComponent(() => import('@/components/CalibrationModal.vue'));
-const SpeedVisualization = defineAsyncComponent(() => import('@/components/SpeedVisualization.vue'));
 const ChangelogModal = defineAsyncComponent(() => import('@/components/ChangelogModal.vue'));
 import { useAuth } from '@/composables/useAuth';
 import { useVideoAnnotations } from '@/composables/useVideoAnnotations';
@@ -36,39 +32,40 @@ import { useVideoSession } from '@/composables/useVideoSession';
 import { useDrawingCanvas } from '@/composables/useDrawingCanvas';
 import { useComparisonVideoWorkflow } from '@/composables/useComparisonVideoWorkflow';
 import { useDualVideoPlayer } from '@/composables/useDualVideoPlayer';
-import { usePoseLandmarker } from '@/composables/usePoseLandmarker';
 import { useSessionCleanup } from '@/composables/useSessionCleanup';
 import { useNotifications } from '@/composables/useNotifications';
-import { ShareService } from '@/services/shareService';
 import { supabase } from '@/composables/useSupabase';
-import type { Video, ComparisonVideo, Annotation } from '@/types/database';
+import type { Video, Annotation } from '@/types/database';
 import { useVideoStore } from '@/stores/video';
 import { useLayoutStore } from '@/stores/layout';
 import { storeToRefs } from 'pinia';
+import { useRoute } from 'vue-router';
+
+const route = useRoute();
 
 const videoStore = useVideoStore();
 const layoutStore = useLayoutStore();
-const { 
-  isProjectModalOpen, 
-  isComparisonModalOpen, 
-  isShareModalOpen, 
-  isSharedLinksModalOpen, 
-  isVideoUploadModalOpen, 
-  isCalibrationModalOpen,
-  isAnnotationFormVisible 
+const {
+  isProjectModalOpen,
+  isComparisonModalOpen,
+  isShareModalOpen,
+  isSharedLinksModalOpen,
+  isVideoUploadModalOpen,
+  isAnnotationFormVisible,
+
 } = storeToRefs(layoutStore);
 
+
+
 // Use videoStore for video state
-const { 
-  url: videoUrl, 
-  id: videoId, 
-  currentTime, 
-  duration, 
-  isPlaying, 
-  dimensions: videoDimensions, 
-  currentFrame, 
-  totalFrames, 
-  fps 
+const {
+  url: videoUrl,
+  id: videoId,
+  duration,
+  isPlaying,
+  currentFrame,
+  totalFrames,
+  fps
 } = storeToRefs(videoStore);
 
 
@@ -142,7 +139,7 @@ const isLoading = computed(() => {
 const playerMode = ref<'single' | 'dual'>('single');
 
 // Active video context for dual mode
-const activeVideoContext = ref('A'); // 'A' or 'B'
+ // 'A' or 'B'
 
 // Unified video state management
 // Video state managed by Pinia
@@ -191,8 +188,6 @@ const {
   deleteAnnotation,
   initializeVideo,
   loadAnnotations,
-  loadExistingAnnotations,
-  isComparisonContext,
   isLoading: annotationsLoading,
 } = useVideoAnnotations(
   videoUrl,
@@ -217,9 +212,9 @@ const selectedAnnotation = ref<Annotation | null>(null);
 
 // Component Refs
 const unifiedVideoPlayerRef = ref<UnifiedVideoPlayerInstance | null>(null);
-const annotationPanelRef = ref(null);
+const annotationPanelRef = ref<InstanceType<typeof AnnotationPanel> | null>(null);
 
-const isChartVisible = ref(false);
+
 
 const videoLoaded = ref(false);
 const currentVideoId = ref<string | null>(null);
@@ -238,7 +233,7 @@ const pendingSharedContent = ref<{type: 'video' | 'comparison', id: string, data
 const isChangelogModalOpen = ref(false);
 
 // Real-time features
-const { isConnected, activeUsers, setupPresenceTracking } =
+const { setupPresenceTracking } =
   useRealtimeAnnotations(videoId, annotations);
 // Use either currentVideoId or currentComparisonId depending on mode
 const activeContentId = computed(() => {
@@ -248,14 +243,11 @@ const activeContentId = computed(() => {
 const {
   startSession,
   endSession,
-  isSessionActive,
   commentPermissions,
   anonymousSession,
-  isSharedVideo: isSharedVideoSession,
   createAnonymousSession,
   getCommentContext,
   canComment,
-  refreshCommentPermissions,
 } = useVideoSession(activeContentId);
 
 watch(
@@ -337,428 +329,14 @@ watch(
   { immediate: true, deep: true }
 );
 
-// Enhanced Pose detection functionality with fast movements optimization
-const poseLandmarker = usePoseLandmarker();
-const poseLandmarkerA = usePoseLandmarker();
-const poseLandmarkerB = usePoseLandmarker();
-
 const { cleanupAllSessionData, cleanupForProjectSwitch } = useSessionCleanup();
 
-const currentSpeedCalculator = computed(() => {
-  if (playerMode.value === 'single') {
-    return poseLandmarker.speedCalculator;
-  } else if (activeVideoContext.value === 'A') {
-    return poseLandmarkerA.speedCalculator;
-  } else {
-    return poseLandmarkerB.speedCalculator;
-  }
-});
-
-const isCourtCalibrating = ref(false);
-const courtCalibrationPoints = ref([]);
-const showCalibrationControls = ref(false);
-
-// Camera calibration state
-const showCalibrationOverlay = ref(false);
-const showCalibrationModal = ref(false);
-
-// Import calibration utilities
-import { useCameraCalibration } from '@/composables/useCameraCalibration';
-import { imageToWorld } from '@/utils/calibrationTransforms';
-
-// Initialize camera calibration composable
-const cameraCalibration = useCameraCalibration();
-
 // Initialize notifications
-const { success: showSuccess, error: showError, info: showInfo } =
-  useNotifications();
+useNotifications();
 
-// Calibration lines overlay state
-const showCalibrationLines = ref(false);
-const calibrationLines = ref<any[]>([]);
 
-// Calibration data refs
-const calibrationTransformData = ref<any>(null);
-const calibrationSuccessData = ref<{
-  accuracy: number;
-  error: string;
-} | null>(null);
 
-// Handle calibration modal completion
-const handleCalibrationModalComplete = async (data: any) => {
-  console.log('CalibrationModal completed - processing data:', data);
-  showCalibrationModal.value = false;
 
-  // Process the calibration data to generate homography
-  if (data && data.drawnLines && data.drawnLines.length >= 3) {
-    // Map drawn lines to court coordinates based on their order
-    // Badminton court dimensions (in meters):
-    // - Total length: 13.4m (6.7m on each side of net)
-    // - Total width (doubles): 6.1m (3.05m on each side of center)
-    // - Short service line: 1.98m from net
-    // - Long service line (doubles): 0.76m from back boundary
-    //
-    // COORDINATE SYSTEM: Origin (0,0) at center of court (net center)
-    // X-axis: left (-) to right (+)
-    // Y-axis: far court (-) to near court (+)
-
-    // Use the same coordinate system as useCameraCalibration.ts
-    const width = 6.1; // Court width (doubles)
-    const length = 13.4; // Court length
-    const doubleServiceDistance = 0.76; // from baseline
-    const shortServiceDistance = 1.98; // from net
-
-    const courtLines = [
-      // Line 1: Back boundary (doubles long service line) - horizontal line
-      // For near court side (camera side)
-      [
-        { x: -width / 2, y: length / 2 - doubleServiceDistance }, // Left edge: (-3.05, 5.94)
-        { x: width / 2, y: length / 2 - doubleServiceDistance }, // Right edge: (3.05, 5.94)
-      ],
-      // Line 2: Center line - vertical line dividing left/right courts
-      // From short service line to back boundary
-      [
-        { x: 0, y: -shortServiceDistance }, // Net end: (0, -1.98)
-        { x: 0, y: length / 2 - doubleServiceDistance }, // Back end: (0, 5.94)
-      ],
-      // Line 3: Short service line - horizontal line
-      // On the far court side (opposite from camera)
-      [
-        { x: -width / 2, y: shortServiceDistance }, // Left edge: (-3.05, 1.98)
-        { x: width / 2, y: shortServiceDistance }, // Right edge: (3.05, 1.98)
-      ],
-    ];
-
-    // Calculate homography if we have enough lines
-    try {
-      // Clear previous calibration
-      cameraCalibration.resetCalibration();
-
-      // Set up court lines
-      cameraCalibration.selectedCourtLines.value = [
-        {
-          id: 'court-line-0',
-          type: 'service-long-doubles' as const,
-          courtPoints: courtLines[0]!,
-          isParallel: true,
-          color: '#3b82f6',
-        },
-        {
-          id: 'court-line-1',
-          type: 'center-line' as const,
-          courtPoints: courtLines[1]!,
-          isParallel: false,
-          color: '#22c55e',
-        },
-        {
-          id: 'court-line-2',
-          type: 'service-short' as const,
-          courtPoints: courtLines[2]!,
-          isParallel: true,
-          color: '#ef4444',
-        },
-      ];
-
-      // Set up drawn video lines
-      console.log('Drawn lines from modal (normalized):', data.drawnLines);
-      cameraCalibration.drawnVideoLines.value = data.drawnLines
-        .filter((line: any) => line && line.start && line.end)
-        .map((line: any, index: number) => {
-          const videoWidth = line.videoDimensions?.width;
-          const videoHeight = line.videoDimensions?.height;
-
-          const fallbackDims = cameraCalibration.getCurrentVideoDimensions();
-          const width = videoWidth && videoWidth > 0 ? videoWidth : fallbackDims.width;
-          const height = videoHeight && videoHeight > 0 ? videoHeight : fallbackDims.height;
-
-          const startPixel = {
-            x: line.start.x * width,
-            y: line.start.y * height,
-          };
-          const endPixel = {
-            x: line.end.x * width,
-            y: line.end.y * height,
-          };
-
-          console.log(
-            `Line ${index}: start(${startPixel.x.toFixed(2)}, ${startPixel.y.toFixed(2)}) -> end(${endPixel.x.toFixed(2)}, ${endPixel.y.toFixed(2)}) (width=${width}, height=${height})`
-          );
-
-          return {
-            id: `video-line-${index}`,
-            points: [startPixel, endPixel],
-            timestamp: Date.now(),
-            confidence: 0.9,
-          };
-        });
-
-      // Create line correspondences
-      console.log('Creating line correspondences:');
-      data.drawnLines.forEach((line: any, index: number) => {
-        if (line && line.start && line.end && index < 3) {
-          console.log(
-            `Correspondence ${index}: court-line-${index} <-> video-line-${index}`
-          );
-          console.log(`  Court line ${index}:`, courtLines[index]);
-          console.log(
-            `  Video line ${index}: (${line.start.x}, ${line.start.y}) -> (${line.end.x}, ${line.end.y})`
-          );
-          cameraCalibration.createLineCorrespondence(
-            `court-line-${index}`,
-            `video-line-${index}`
-          );
-        }
-      });
-
-      // Set camera position from the modal data before calculating
-      if (data.cameraPosition) {
-        console.log('Setting camera position:', data.cameraPosition);
-        cameraCalibration.cameraParameters.position = {
-          x: data.cameraPosition.x,
-          y: data.cameraPosition.y,
-          z: data.cameraPosition.z,
-        };
-      }
-
-      // Calculate camera parameters (this will compute the homography)
-      const calibrationResult =
-        await cameraCalibration.calculateCameraParameters();
-
-      console.log('Calibration result:', calibrationResult);
-      console.log(
-        'Homography matrix:',
-        cameraCalibration.homographyMatrix.value
-      );
-      console.log(
-        'Calibration confidence:',
-        cameraCalibration.calibrationConfidence.value
-      );
-      console.log(
-        'Calibration error:',
-        cameraCalibration.calibrationError.value
-      );
-
-      if (calibrationResult) {
-        // Get the transformation data from the composable
-        const transformData = cameraCalibration.getTransformationData.value;
-        console.log('Transform data from composable:', transformData);
-
-        if (transformData) {
-          calibrationTransformData.value = transformData;
-
-          // Update calibration success data
-          calibrationSuccessData.value = {
-            accuracy: Math.round(
-              cameraCalibration.calibrationConfidence.value * 100
-            ),
-            error: cameraCalibration.calibrationError.value.toFixed(1),
-          };
-
-          // Calibration successful - data is displayed in the modal
-          console.log(
-            'Calibration successful with accuracy:',
-            calibrationSuccessData.value.accuracy + '%'
-          );
-        } else {
-          // Fallback: manually calculate transformation data
-          const homography = cameraCalibration.homographyMatrix.value;
-          console.log('Using fallback with homography:', homography);
-
-          if (homography) {
-            // Use actual video dimensions instead of hardcoded values
-          const videoDims = videoDimensions.value;
-            const centerImagePoint = {
-              x: videoDims.width / 2,
-              y: videoDims.height / 2,
-            };
-            console.log('Transforming point with actual dimensions:', {
-              dimensions: videoDims,
-              center: centerImagePoint,
-            });
-
-            const worldPoint = imageToWorld(centerImagePoint, homography);
-            console.log('World point result:', worldPoint);
-
-            if (worldPoint) {
-              calibrationTransformData.value = {
-                imagePoint: centerImagePoint,
-                worldPoint: {
-                  x: worldPoint.x.toFixed(2),
-                  y: worldPoint.y.toFixed(2),
-                  z: worldPoint.z.toFixed(2),
-                },
-                pixelsPerMeter: Math.abs(
-                  videoDims.width /
-                    (cameraCalibration.courtDimensions.value.width * 2)
-                ),
-              };
-
-              // Update calibration success data
-              calibrationSuccessData.value = {
-                accuracy: Math.round(
-                  cameraCalibration.calibrationConfidence.value * 100
-                ),
-                error: cameraCalibration.calibrationError.value.toFixed(1),
-              };
-
-              // Show success notification with calibration data
-              showSuccess(
-                'Calibration Successful',
-                `Accuracy: ${calibrationSuccessData.value.accuracy}% | Error: ${calibrationSuccessData.value.error}px | World Point: (${calibrationTransformData.value.worldPoint.x}, ${calibrationTransformData.value.worldPoint.y})`,
-                5000
-              );
-              showInfo(
-                'Next Step',
-                'Calibration is done. Click the speed calculation toggle in the video controls to start speed tracking.',
-                6000
-              );
-            } else {
-              console.error('Failed to transform point to world coordinates');
-              showError(
-                'Calibration Failed',
-                'Failed to transform point to world coordinates'
-              );
-            }
-          } else {
-            console.error('No homography matrix available');
-            showError('Calibration Failed', 'No homography matrix available');
-          }
-        }
-      } else {
-        console.error('Calibration failed - no result returned');
-        showError('Calibration Failed', 'No calibration result returned');
-      }
-    } catch (error) {
-      console.error('Error calculating homography:', error);
-      showError(
-        'Calibration Error',
-        `Failed to complete calibration: ${error}`
-      );
-    }
-  }
-
-  // Store the calibration lines for display
-  if (data.drawnLines && data.drawnLines.length > 0) {
-    console.log(
-      '🎯 [App.handleCalibrationModalComplete] Calibration lines received (normalized):',
-      data.drawnLines
-    );
-    calibrationLines.value = data.drawnLines.map((line: any, index: number) => {
-      console.log(`🎯 [App] Line ${index} (normalized):`, line);
-      console.log(`  Start: (${line.start.x}, ${line.start.y})`);
-      console.log(`  End: (${line.end.x}, ${line.end.y})`);
-      console.log(`  Video dimensions:`, line.videoDimensions);
-
-      // Lines are already normalized from CalibrationModal
-      // Just add color and name metadata
-      return {
-        ...line, // Keep all properties including normalized coordinates and videoDimensions
-        color: ['#3b82f6', '#22c55e', '#ef4444'][index] || '#ffffff',
-        name:
-          ['Back Boundary', 'Center Line', 'Service Line'][index] ||
-          `Line ${index + 1}`,
-      };
-    });
-
-    // Check video player ref and its methods
-    console.log('🎯 [App] Checking video player ref:', {
-      hasRef: !!unifiedVideoPlayerRef.value,
-      refType: typeof unifiedVideoPlayerRef.value,
-      hasGetCurrentVideoElement: !!(unifiedVideoPlayerRef.value as any)
-        ?.getCurrentVideoElement,
-      hasGetCurrentVideoContainer: !!(unifiedVideoPlayerRef.value as any)
-        ?.getCurrentVideoContainer,
-    });
-
-    // Try to get video element and container
-    let videoEl = null;
-    let videoContainer = null;
-
-    if (unifiedVideoPlayerRef.value) {
-      try {
-        videoEl = (
-          unifiedVideoPlayerRef.value as any
-        )?.getCurrentVideoElement?.();
-        videoContainer = (
-          unifiedVideoPlayerRef.value as any
-        )?.getCurrentVideoContainer?.();
-      } catch (e) {
-        console.error('🔴 [App] Error getting video references:', e);
-      }
-    }
-
-    console.log('🎯 [App] Video references obtained:', {
-      hasVideoElement: !!videoEl,
-      hasVideoContainer: !!videoContainer,
-      videoElementDetails: videoEl
-        ? {
-            tagName: videoEl.tagName,
-            videoWidth: videoEl.videoWidth,
-            videoHeight: videoEl.videoHeight,
-            clientWidth: videoEl.clientWidth,
-            clientHeight: videoEl.clientHeight,
-          }
-        : null,
-      videoContainerDetails: videoContainer
-        ? {
-            tagName: videoContainer.tagName,
-            className: videoContainer.className,
-            clientWidth: videoContainer.clientWidth,
-            clientHeight: videoContainer.clientHeight,
-          }
-        : null,
-    });
-
-    // Show calibration lines on the video for 1 minute
-    console.log('✅ [App] Setting showCalibrationLines to true');
-    showCalibrationLines.value = true;
-    console.log(
-      '✅ [App] Calibration lines to display (normalized):',
-      calibrationLines.value
-    );
-    console.log('🎯 [App] Current video dimensions:', {
-      width: videoDimensions.value.width || 1920,
-      height: videoDimensions.value.height || 1080,
-    });
-
-    console.log('🎯 [App] Final state before rendering overlay:', {
-      showCalibrationLines: showCalibrationLines.value,
-      calibrationLinesCount: calibrationLines.value.length,
-      hasVideoPlayerRef: !!unifiedVideoPlayerRef.value,
-      videoElementAvailable: !!videoEl,
-      videoContainerAvailable: !!videoContainer,
-    });
-
-    // Hide calibration lines after 60 seconds (1 minute)
-    setTimeout(() => {
-      showCalibrationLines.value = false;
-      console.log('🎯 [App] Hiding calibration lines after 60 seconds');
-    }, 60000);
-  } else {
-    console.log('❌ [App] No calibration lines received or empty array');
-  }
-};
-
-// Configure all pose landmarkers for fast movements
-const configureFastMovements = () => {
-  const landmarkers = [poseLandmarker, poseLandmarkerA, poseLandmarkerB];
-
-  landmarkers.forEach((landmarker) => {
-    Object.assign(landmarker.detectionSettings, {
-      roiSmoothingFactor: 0.5,
-      motionPredictionWeight: 0.4,
-      adaptiveROIExpansionRate: 0.08,
-      frameSkip: 1,
-      maxFPS: 60,
-      useMotionPrediction: true,
-      roiValidationEnabled: true,
-      roiValidationMinLandmarks: 5,
-      roiValidationMinConfidence: 0.4,
-    });
-  });
-};
-
-configureFastMovements();
 
 watch(
   annotations,
@@ -807,13 +385,13 @@ watch(selectedAnnotation, (newAnnotation, oldAnnotation) => {
   }
 });
 
-const handleChartToggled = (value: boolean) => {
-  isChartVisible.value = value;
-};
+
 
 // Event handlers for video player events
 const handleTimeUpdate = (data: { currentTime: number; duration: number }) => {
-  currentTime.value = data.currentTime;
+  // Use store action to update time - this ensures frame is calculated based on FPS
+  videoStore.updateTime(data.currentTime);
+  
   if (data.duration && data.duration > 0 && duration.value !== data.duration) {
     duration.value = data.duration;
   }
@@ -879,18 +457,6 @@ const handleLoaded = async (data: any) => {
 
     if (data.dimensions) {
       videoStore.setDimensions(data.dimensions.width, data.dimensions.height);
-
-      // Update camera calibration with actual video dimensions
-      if (cameraCalibration.setVideoDimensions) {
-        cameraCalibration.setVideoDimensions(
-          data.dimensions.width,
-          data.dimensions.height
-        );
-        console.log(
-          '📐 Updated camera calibration with video dimensions:',
-          data.dimensions
-        );
-      }
     }
 
     if (data.id) {
@@ -1103,9 +669,7 @@ const handleTimelinePause = () => {
   }
 };
 
-const handleSpeedVisualizationToggled = (isEnabled: boolean) => {
-  console.log('🔄 [App] Speed visualization toggled:', isEnabled);
-};
+
 
 const openLoadModal = () => {
   layoutStore.openProjectModal();
@@ -1222,9 +786,6 @@ const handleProjectSelected = async (project: any) => {
       );
 
       await cleanupForProjectSwitch(currentProjectType, newProjectType, {
-        poseLandmarker,
-        poseLandmarkerA,
-        poseLandmarkerB,
         drawingCanvas,
         drawingCanvasA,
         drawingCanvasB,
@@ -1275,23 +836,6 @@ const handleProjectSelected = async (project: any) => {
       currentVideoId.value = null;
 
       if (comparisonWorkflow) {
-        try {
-          // Initialize pose landmarkers for dual mode if not already initialized
-          if (!poseLandmarkerA.isInitialized.value) {
-            await poseLandmarkerA.initialize();
-            console.log('🎯 [App] Initialized poseLandmarkerA for dual mode');
-          }
-          if (!poseLandmarkerB.isInitialized.value) {
-            await poseLandmarkerB.initialize();
-            console.log('🎯 [App] Initialized poseLandmarkerB for dual mode');
-          }
-        } catch (error) {
-          console.error(
-            'Failed to initialize dual mode pose landmarkers:',
-            error
-          );
-        }
-
         await comparisonWorkflow.loadComparisonVideo(project.comparisonVideo);
       }
     }
@@ -1318,17 +862,6 @@ const handleDualVideoLoaded = async () => {
     ) {
       if (comparisonWorkflow) {
         (comparisonWorkflow as any).setDualVideoReady?.(true);
-      }
-
-      try {
-        if (!poseLandmarkerA.isInitialized.value) {
-          await poseLandmarkerA.initialize();
-        }
-        if (!poseLandmarkerB.isInitialized.value) {
-          await poseLandmarkerB.initialize();
-        }
-      } catch (error) {
-        console.error('Failed to initialize dual mode pose detection:', error);
       }
     }
   }
@@ -1357,15 +890,9 @@ const canShare = computed(() => {
   );
 });
 
-const openShareModal = () => {
-  if (canShare.value) {
-    layoutStore.openShareModal();
-  }
-};
 
-const closeShareModal = () => {
-  layoutStore.closeShareModal();
-};
+
+
 
 const openSharedLinksManagement = () => {
   isSharedLinksModalOpen.value = true;
@@ -1613,103 +1140,7 @@ watch(playerMode, (newMode) => {
   }
 });
 
-const getActivePoseLandmarker = () => {
-  if (playerMode.value === 'single') return poseLandmarker;
-  if (activeVideoContext.value === 'A') return poseLandmarkerA;
-  return poseLandmarkerB;
-};
 
-const currentPoseLandmarker = computed(getActivePoseLandmarker);
-
-const handleSetROI = (roi: any) => {
-  const activeLandmarker = getActivePoseLandmarker();
-  if (activeLandmarker?.setROI) {
-    activeLandmarker.setROI(roi);
-  }
-};
-
-const handleResetROI = () => {
-  const activeLandmarker = getActivePoseLandmarker();
-  if (activeLandmarker?.resetROI) {
-    activeLandmarker.resetROI();
-  }
-};
-
-// Calibration Controls
-const handleStartCourtCalibration = () => {
-  console.log('handleStartCourtCalibration called from App.vue');
-  // Show the calibration modal instead of the overlay
-  if (videoUrl.value) {
-    // Pause the video during calibration if it's playing
-    if (unifiedVideoPlayerRef.value) {
-      unifiedVideoPlayerRef.value.pause();
-    }
-    showCalibrationModal.value = true;
-    console.log('showCalibrationModal set to:', showCalibrationModal.value);
-  } else {
-    console.warn('No video URL available for calibration');
-  }
-};
-
-const handleSetPlayerHeight = (height: number) => {
-  if (currentSpeedCalculator.value) {
-    (currentSpeedCalculator.value as any).setPlayerHeight(height);
-  }
-};
-
-const handleSetCourtDimensions = (dimensions: any) => {
-  if (currentSpeedCalculator.value) {
-    (currentSpeedCalculator.value as any).setCourtLength(dimensions.height);
-  }
-};
-
-const handleSetCourtReferencePoints = (points: any) => {
-  if (currentSpeedCalculator.value) {
-    (currentSpeedCalculator.value as any).setCourtReferencePoints(points);
-  }
-};
-
-const toggleCalibrationControls = () => {
-  showCalibrationControls.value = !showCalibrationControls.value;
-};
-
-const handleResetCalibration = () => {
-  if (currentSpeedCalculator.value) {
-    (currentSpeedCalculator.value as any).resetCalibration();
-  }
-};
-
-const handleSpeedData = (data: any) => {
-  if (currentSpeedCalculator.value) {
-    (currentSpeedCalculator.value as any).addSpeedData(
-      data.speed,
-      data.timestamp,
-      data.frame
-    );
-  }
-};
-
-const currentSpeedMetrics = computed(() => {
-  let result;
-  if (playerMode.value === 'single') {
-    result = poseLandmarker.speedMetrics;
-  } else if (activeVideoContext.value === 'A') {
-    result = poseLandmarkerA.speedMetrics;
-  } else {
-    result = poseLandmarkerB.speedMetrics;
-  }
-
-  console.log('🔍 [App.vue] currentSpeedMetrics computed:', {
-    playerMode: playerMode.value,
-    activeVideoContext: activeVideoContext.value,
-    result: result?.value,
-    isValid: result?.value?.isValid,
-    hasSpeedProperty: !!(result?.value?.speed !== undefined),
-    speedValue: result?.value?.speed,
-  });
-
-  return result;
-});
 
 // Computed property for shared content permission text
 const sharedContentPermissionText = computed(() => {
@@ -1853,7 +1284,7 @@ watch(
             class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 border border-orange-200 cursor-pointer hover:bg-orange-200 transition-colors"
             @click="isChangelogModalOpen = true"
           >
-            BETA v3
+            BETA v3.1
           </span>
         </div>
 
@@ -2017,18 +1448,12 @@ watch(
                 "
                 :dual-video-player="dualVideoPlayer"
                 :project-id="
-                  comparisonWorkflow.currentComparison.value?.projectId ??
-                  (comparisonWorkflow.currentComparison.value as any)?.project_id ??
-                  undefined
+                  comparisonWorkflow.currentComparison.value?.id || undefined
                 "
                 :comparison-video-id="
                   comparisonWorkflow.currentComparison.value?.id || undefined
                 "
                 :user="user"
-                :pose-landmarker="poseLandmarker"
-                :pose-landmarker-a="poseLandmarkerA"
-                :pose-landmarker-b="poseLandmarkerB"
-                :enable-pose-detection="true"
                 @time-update="handleTimeUpdate"
                 @frame-update="handleFrameUpdate"
                 @fps-detected="handleFPSDetected"
@@ -2038,31 +1463,6 @@ watch(
                 @drawing-created="handleDrawingCreated"
                 @drawing-updated="handleDrawingUpdated"
                 @drawing-deleted="handleDrawingDeleted"
-                @set-roi="handleSetROI"
-                @reset-roi="handleResetROI"
-                @toggle-calibration="handleStartCourtCalibration"
-              />
-
-              <!-- Speed Visualization (only render in single mode) -->
-              <SpeedVisualization
-                v-if="playerMode === 'single'"
-                :speed-metrics="currentSpeedMetrics"
-                :canvas-width="videoDimensions.width"
-                :canvas-height="videoDimensions.height"
-                :current-timestamp="currentTime"
-                :current-frame="currentFrame"
-                :show-speed="true"
-                :show-center-of-mass="true"
-                :show-velocity-vector="true"
-                :show-speed-panel="true"
-                :show-main-speed-panel="true"
-                :show-labels="true"
-                :show-velocity-components="false"
-                :show-co-m-coordinates="false"
-                :show-toggle-control="true"
-                :video-loaded="videoLoaded"
-                @speed-visualization-toggled="handleSpeedVisualizationToggled"
-                @chart-toggled="handleChartToggled"
               />
             </div>
           </div>
@@ -2140,64 +1540,7 @@ watch(
       <aside
         class="w-96 min-w-96 max-w-96 flex-shrink-0 bg-white border-l border-gray-200 flex flex-col overflow-hidden"
       >
-        <!-- Calibration Controls -->
-        <div class="flex-shrink-0 border-b border-gray-200">
-          <!-- Toggle Button -->
-          <div class="p-3 bg-gray-50 border-b border-gray-200">
-            <button
-              class="flex items-center justify-between w-full text-left text-sm font-medium text-gray-700 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded-md p-2 hover:bg-gray-100 transition-colors"
-              @click="toggleCalibrationControls"
-            >
-              <span class="flex items-center">
-                <svg
-                  class="w-4 h-4 mr-2"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4"
-                  />
-                </svg>
-                Speed Calibration
-              </span>
-              <svg
-                :class="[
-                  'w-4 h-4 transition-transform duration-200',
-                  showCalibrationControls ? 'rotate-180' : 'rotate-0',
-                ]"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M19 9l-7 7-7-7"
-                />
-              </svg>
-            </button>
-          </div>
 
-          <!-- Calibration Controls Panel -->
-          <div v-if="showCalibrationControls" class="p-4">
-            <CalibrationControls
-              v-if="currentSpeedCalculator"
-              :calibration-settings="(currentSpeedCalculator as any).calibrationSettings"
-              :speed-metrics="(currentSpeedCalculator as any).speedMetrics"
-              :video-dimensions="videoDimensions"
-              :on-set-player-height="handleSetPlayerHeight"
-              :on-set-court-dimensions="handleSetCourtDimensions"
-              :on-set-court-reference-points="handleSetCourtReferencePoints"
-              :on-reset-calibration="handleResetCalibration"
-              @start-court-calibration="handleStartCourtCalibration"
-            />
-          </div>
-        </div>
 
         <!-- Annotation Panel -->
         <div class="flex-1 overflow-hidden">
@@ -2361,7 +1704,7 @@ watch(
           <!-- Backdrop -->
           <div
             class="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            @click="isSharedLinksModalOpen = false"
+            @click="closeSharedLinksManagement"
           />
 
           <!-- Modal Content -->
@@ -2401,44 +1744,7 @@ watch(
       </Transition>
     </Teleport>
 
-    <!-- Calibration Overlay - Now positioned outside video container for better positioning -->
-    <CalibrationOverlay
-      v-if="videoUrl && (user || isSharedVideo || isSharedComparison)"
-      :video-element="unifiedVideoPlayerRef?.getCurrentVideoElement?.()"
-      :is-active="showCalibrationOverlay"
-      @calibration-complete="handleCalibrationModalComplete"
-      @calibration-cancelled="showCalibrationOverlay = false"
-    />
 
-    <!-- Calibration Modal -->
-    <CalibrationModal
-      :show="showCalibrationModal"
-      :video-url="videoUrl || ''"
-      :court-type="'badminton'"
-      @close="showCalibrationModal = false"
-      @calibration-complete="handleCalibrationModalComplete"
-    />
-
-    <!-- Calibration Lines Overlay - Shows on the video after calibration -->
-    <div
-      v-if="showCalibrationLines && videoUrl"
-      class="calibration-lines-wrapper"
-    >
-      <CalibrationLinesOverlay
-        :show="showCalibrationLines"
-        :lines="calibrationLines"
-        :video-element="unifiedVideoPlayerRef?.getCurrentVideoElement?.()"
-        :video-container="unifiedVideoPlayerRef?.getCurrentVideoContainer?.()"
-        :video-width="videoDimensions.width || 1920"
-        :video-height="videoDimensions.height || 1080"
-        :duration="5000"
-        :show-labels="true"
-        :show-end-points="true"
-        :show-success-message="true"
-        :fade-out="false"
-        @overlay-hidden="showCalibrationLines = false"
-      />
-    </div>
     <!-- Shared Video Authentication Prompt -->
     <SharedVideoAuthPrompt
       :is-visible="showAuthPrompt"

@@ -59,7 +59,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch, onBeforeUnmount, computed } from 'vue';
+import { ref, watch, computed } from 'vue';
 import { useVideoStore } from '@/stores/video';
 import VideoControls from './VideoControls.vue';
 import { storeToRefs } from 'pinia';
@@ -189,12 +189,12 @@ const detectFPS = (video: HTMLVideoElement) => {
     const maxFrames = 30; // Sample 30 frames
     
     // Play briefly to capture frames if paused
-    const wasPaused = video.paused;
+    // Play briefly to capture frames if paused
     // We need the video to be playing or seeking to get callbacks
     // If it's paused, we can't reliably get callbacks without playing
     // For now, let's rely on playback. If not playing, we might delay detection until play
     
-    const frameCallback = (now: number, metadata: VideoFrameMetadata) => {
+    const frameCallback = (now: number, _metadata: any) => {
       if (!startTime) startTime = now;
       frameCount++;
       
@@ -228,6 +228,20 @@ const detectFPS = (video: HTMLVideoElement) => {
         emit('fps-detected', { fps: finalFps, totalFrames });
       }
     };
+    
+    // Initialize with default FPS (30) immediately to allow frame calculation before playback
+    // This fixes the issue where scrubbing before playing results in frame 0
+    const defaultFps = 30;
+    const initialTotalFrames = Math.floor(video.duration * defaultFps);
+    if (!props.disableGlobalStore) {
+      if (videoStore.fps === 0) {
+        videoStore.setFrameData(
+             storeRefs!.currentFrame.value, 
+             initialTotalFrames, 
+             defaultFps
+        );
+      }
+    }
     
     (video as any).requestVideoFrameCallback(frameCallback);
   } else {
