@@ -89,6 +89,13 @@ const closeModal = () => {
 // --- MANUAL CHANGELOG ENTRIES ---
 // Add new entries to the TOP of this array
 const changelogEntries = ref([
+  {
+    version: 'Beta v3.5',
+    date: 'February 23, 2026',
+    changes: [
+      'Make skeleton loader work for both light and dark mode'
+    ],
+  },
    {
     version: 'Beta v3.4',
     date: 'February 17, 2026',
