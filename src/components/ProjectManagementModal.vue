@@ -15,24 +15,24 @@
         <!-- Modal Container -->
         <div class="absolute inset-4 md:inset-8 lg:inset-12 flex flex-col">
           <div
-            class="relative bg-white rounded-xl shadow-2xl flex flex-col h-full overflow-hidden"
+            class="relative bg-white dark:bg-gray-800 rounded-xl shadow-2xl flex flex-col h-full overflow-hidden"
             @click.stop
           >
             <!-- Header -->
-            <div class="flex-shrink-0 border-b border-gray-200">
+            <div class="flex-shrink-0 border-b border-gray-200 dark:border-gray-700">
               <div class="flex items-center justify-between px-6 py-4">
-                <h2 class="text-xl font-semibold text-gray-900">
+                <h2 class="text-xl font-semibold text-gray-900 dark:text-white">
                   Project Manager
                 </h2>
                 <div class="flex items-center gap-2">
                   <!-- View Toggle -->
-                  <div class="flex items-center bg-gray-100 rounded-lg p-1">
+                  <div class="flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
                     <button
                       :class="[
                         'px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
                         viewMode === 'grid'
-                          ? 'bg-white text-gray-900 shadow-sm'
-                          : 'text-gray-600 hover:text-gray-900',
+                          ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+                          : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white',
                       ]"
                       @click="viewMode = 'grid'"
                     >
@@ -54,8 +54,8 @@
                       :class="[
                         'px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
                         viewMode === 'list'
-                          ? 'bg-white text-gray-900 shadow-sm'
-                          : 'text-gray-600 hover:text-gray-900',
+                          ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+                          : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white',
                       ]"
                       @click="viewMode = 'list'"
                     >
@@ -77,7 +77,7 @@
 
                   <!-- Close Button -->
                   <button
-                    class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                    class="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                     @click="closeModal"
                   >
                     <svg
@@ -105,7 +105,7 @@
                     v-model="searchQuery"
                     type="text"
                     placeholder="Search projects and folders..."
-                    class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                    class="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none placeholder-gray-500 dark:placeholder-gray-400"
                     @input="handleSearch"
                   />
                   <svg
@@ -123,7 +123,7 @@
                   </svg>
                   <button
                     v-if="searchQuery"
-                    class="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
+                    class="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                     @click="clearSearch"
                   >
                     <svg
@@ -146,7 +146,7 @@
                 <div class="flex items-center gap-2">
                   <!-- New Folder Button -->
                   <button
-                    class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-2"
+                    class="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex items-center gap-2"
                     @click="showNewFolderDialog"
                   >
                     <svg
@@ -215,7 +215,7 @@
                 class="px-6 pb-3 flex items-center gap-2 text-sm"
               >
                 <button
-                  class="text-gray-600 hover:text-gray-900 font-medium"
+                  class="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-medium"
                   @click="navigateToRoot"
                 >
                   All Projects
@@ -236,10 +236,10 @@
                   </svg>
                   <button
                     :class="[
-                      'hover:text-gray-900 font-medium',
+                      'hover:text-gray-900 dark:hover:text-white font-medium',
                       index === breadcrumbs.length - 1
-                        ? 'text-gray-900'
-                        : 'text-gray-600',
+                        ? 'text-gray-900 dark:text-white'
+                        : 'text-gray-600 dark:text-gray-400',
                     ]"
                     @click="navigateToFolder(crumb)"
                   >
@@ -253,11 +253,11 @@
             <div class="flex-1 flex overflow-hidden">
               <!-- Sidebar - Folder Tree -->
               <div
-                class="w-64 border-r border-gray-200 bg-gray-50 overflow-y-auto"
+                class="w-64 border-r border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 overflow-y-auto"
               >
                 <div class="p-4">
                   <h3
-                    class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3"
+                    class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3"
                   >
                     Folders
                   </h3>
@@ -281,17 +281,17 @@
                 <!-- Bulk Actions Bar -->
                 <div
                   v-if="selectedProjects.size > 0"
-                  class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between"
+                  class="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg flex items-center justify-between"
                 >
                   <div class="flex items-center gap-3">
-                    <span class="text-sm font-medium text-blue-900">
+                    <span class="text-sm font-medium text-blue-900 dark:text-blue-100">
                       {{ selectedProjects.size }} project{{
                         selectedProjects.size !== 1 ? 's' : ''
                       }}
                       selected
                     </span>
                     <button
-                      class="text-sm text-blue-600 hover:text-blue-800"
+                      class="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
                       @click="clearSelection"
                     >
                       Clear selection
@@ -299,13 +299,13 @@
                   </div>
                   <div class="flex items-center gap-2">
                     <button
-                      class="px-3 py-1.5 text-sm bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50"
+                      class="px-3 py-1.5 text-sm bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
                       @click="moveSelectedProjects"
                     >
                       Move to...
                     </button>
                     <button
-                      class="px-3 py-1.5 text-sm bg-white text-red-600 border border-red-300 rounded-md hover:bg-red-50"
+                      class="px-3 py-1.5 text-sm bg-white dark:bg-gray-800 text-red-600 dark:text-red-400 border border-red-300 dark:border-red-800 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20"
                       @click="deleteSelectedProjects"
                     >
                       Delete
@@ -316,7 +316,7 @@
                 <!-- Error Message -->
                 <div
                   v-if="error"
-                  class="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700"
+                  class="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-300"
                 >
                   <div class="flex items-center">
                     <svg
@@ -332,7 +332,7 @@
                     </svg>
                     <span>{{ error }}</span>
                     <button
-                      class="ml-auto text-red-500 hover:text-red-700"
+                      class="ml-auto text-red-500 hover:text-red-700 dark:hover:text-red-300"
                       @click="error = null"
                     >
                       <svg
@@ -356,7 +356,7 @@
                   class="flex flex-col items-center justify-center h-full text-center"
                 >
                   <svg
-                    class="w-16 h-16 text-gray-300 mb-4"
+                    class="w-16 h-16 text-gray-300 dark:text-gray-600 mb-4"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -368,10 +368,10 @@
                       d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
                     />
                   </svg>
-                  <h3 class="text-lg font-medium text-gray-900 mb-2">
+                  <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">
                     {{ searchQuery ? 'No results found' : 'No projects yet' }}
                   </h3>
-                  <p class="text-gray-600 mb-4">
+                  <p class="text-gray-600 dark:text-gray-400 mb-4">
                     {{
                       searchQuery
                         ? 'Try adjusting your search terms'
@@ -396,7 +396,7 @@
                     <div
                       class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"
                     />
-                    <p class="text-gray-600">Loading projects...</p>
+                    <p class="text-gray-600 dark:text-gray-400">Loading projects...</p>
                   </div>
                 </div>
 
@@ -457,7 +457,7 @@
                 >
                   <button
                     :disabled="currentPage === 1"
-                    class="p-2 text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                    class="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
                     @click="goToPage(currentPage - 1)"
                   >
                     <svg
@@ -482,7 +482,7 @@
                         'px-3 py-1 rounded-lg text-sm font-medium transition-colors',
                         page === currentPage
                           ? 'bg-blue-600 text-white'
-                          : 'text-gray-600 hover:bg-gray-100',
+                          : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700',
                       ]"
                       @click="goToPage(page)"
                     >
@@ -491,7 +491,7 @@
                   </div>
                   <button
                     :disabled="currentPage === totalPages"
-                    class="p-2 text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                    class="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
                     @click="goToPage(currentPage + 1)"
                   >
                     <svg
@@ -514,10 +514,10 @@
 
             <!-- Status Bar -->
             <div
-              class="flex-shrink-0 border-t border-gray-200 px-6 py-3 bg-gray-50"
+              class="flex-shrink-0 border-t border-gray-200 dark:border-gray-700 px-6 py-3 bg-gray-50 dark:bg-gray-900"
             >
               <div
-                class="flex items-center justify-between text-sm text-gray-600"
+                class="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400"
               >
                 <div>
                   {{ filteredProjects.length }} project{{
@@ -529,14 +529,14 @@
                   <span>
                     Press
                     <kbd
-                      class="px-1.5 py-0.5 bg-white border border-gray-300 rounded text-xs"
+                      class="px-1.5 py-0.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-xs"
                       >⌘K</kbd
                     >
                     for quick search
                   </span>
                   <span>
                     <kbd
-                      class="px-1.5 py-0.5 bg-white border border-gray-300 rounded text-xs"
+                      class="px-1.5 py-0.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-xs"
                       >⌘A</kbd
                     >
                     to select all

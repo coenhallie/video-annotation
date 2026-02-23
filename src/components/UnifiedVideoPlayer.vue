@@ -138,6 +138,7 @@ interface Props {
   user?: unknown;
 }
 
+
 const props = withDefaults(defineProps<Props>(), {
   mode: 'single',
   videoUrl: '',
@@ -145,7 +146,19 @@ const props = withDefaults(defineProps<Props>(), {
   autoplay: false,
   controls: true,
   poster: '',
-  primaryVideo: 'A',
+  videoAUrl: '',
+  videoAId: 'video-a',
+  videoBUrl: '',
+  videoBId: 'video-b',
+  drawingCanvas: undefined,
+  drawingCanvasA: undefined,
+  drawingCanvasB: undefined,
+  videoAState: () => ({}),
+  videoBState: () => ({}),
+  dualVideoPlayer: null,
+  projectId: '',
+  comparisonVideoId: '',
+  user: undefined
 });
 
 // Emits
@@ -250,6 +263,14 @@ const pause = () => {
     }
 }
 
+const stepFrame = (frames: number) => {
+  if (props.mode === 'single') {
+    singlePlayerRef.value?.seekFrame(frames);
+  } else {
+    dualPlayerRef.value?.seekFrame(frames);
+  }
+};
+
 // Fade transition stub/helper
 const performVideoFadeTransition = async (callback: () => void) => {
   // Simple implementation: fade out, callback, fade in
@@ -269,6 +290,7 @@ defineExpose({
   seekTo,
   play,
   pause,
+  stepFrame,
   performVideoFadeTransition
 });
 </script>

@@ -2,8 +2,8 @@
   <div class="move-dialog-folder-item">
     <div
       :class="[
-        'folder-option px-2 py-1.5 rounded cursor-pointer hover:bg-gray-100',
-        selectedFolderId === folder.id && 'bg-blue-50 text-blue-700',
+        'folder-option px-2 py-1.5 rounded cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200',
+        selectedFolderId === folder.id && 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300',
         currentFolderId === folder.id && 'opacity-50 cursor-not-allowed',
       ]"
       :style="{ paddingLeft: `${level * 20 + 8}px` }"
@@ -13,7 +13,7 @@
         <!-- Expand/Collapse Arrow -->
         <button
           v-if="folder.children.length > 0"
-          class="p-0.5 hover:bg-gray-200 rounded"
+          class="p-0.5 hover:bg-gray-200 dark:hover:bg-gray-600 rounded text-gray-500 dark:text-gray-400"
           @click.stop="toggleExpanded"
         >
           <svg
@@ -56,7 +56,7 @@
         <!-- Project Count Badge -->
         <span
           v-if="folder.totalProjectCount > 0"
-          class="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded-full"
+          class="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded-full"
         >
           {{ folder.totalProjectCount }}
         </span>

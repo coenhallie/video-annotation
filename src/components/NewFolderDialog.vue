@@ -13,10 +13,10 @@
       >
         <!-- Modal panel -->
         <div
-          class="relative inline-block align-bottom bg-white rounded-xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
+          class="relative inline-block align-bottom bg-white dark:bg-gray-800 rounded-xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
           @click.stop
         >
-          <div class="bg-white px-6 pt-6 pb-4">
+          <div class="bg-white dark:bg-gray-800 px-6 pt-6 pb-4">
             <div class="flex items-start gap-4">
               <div
                 class="flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-blue-50"
@@ -36,13 +36,13 @@
                 </svg>
               </div>
               <div class="flex-1">
-                <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">
                   Create New Folder
                 </h3>
                 <div>
                   <label
                     for="folder-name"
-                    class="block text-sm font-medium text-gray-700 mb-2"
+                    class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
                   >
                     Folder Name
                   </label>
@@ -51,22 +51,22 @@
                     ref="nameInput"
                     v-model="folderName"
                     type="text"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors placeholder-gray-500 dark:placeholder-gray-400"
                     placeholder="Enter folder name"
                     @keydown.enter="createFolder"
                     @keydown.esc="$emit('close')"
                   />
-                  <p v-if="parentFolder" class="mt-2 text-sm text-gray-500">
+                  <p v-if="parentFolder" class="mt-2 text-sm text-gray-500 dark:text-gray-400">
                     This folder will be created inside "{{ parentFolder.name }}"
                   </p>
                 </div>
               </div>
             </div>
           </div>
-          <div class="bg-gray-50 px-6 py-4 flex justify-end gap-3">
+          <div class="bg-gray-50 dark:bg-gray-700/50 px-6 py-4 flex justify-end gap-3">
             <button
               type="button"
-              class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+              class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
               @click="$emit('close')"
             >
               Cancel

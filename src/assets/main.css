@@ -1,6 +1,8 @@
 @import "tailwindcss";
 @source "../**/*.{vue,js,ts,jsx,tsx}";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @layer base {
   /* Modern Minimalist Design System */
   :root {
@@ -38,6 +40,33 @@
   }
 }
 
+@layer base {
+  :root.dark {
+    --color-bg-primary: #1a1d20;
+    --color-bg-secondary: #212529;
+    --color-bg-tertiary: #343a40;
+    --color-bg-dark: #000000;
+    --color-bg-darker: #000000;
+
+    --color-text-primary: #f8f9fa;
+    --color-text-secondary: #dee2e6;
+    --color-text-muted: #6c757d;
+    --color-text-inverse: #212529;
+
+    --color-border: #495057;
+    --color-border-light: #343a40;
+    --color-border-dark: #6c757d;
+
+    --color-accent: #ffffff;
+    --color-accent-light: #e9ecef;
+    --color-accent-hover: #dee2e6;
+    
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+  }
+}
+
 @layer components {
   /* Modern Icon Styles */
   .icon {
@@ -71,15 +100,15 @@
   }
 
   .btn-primary {
-    @apply bg-black text-white hover:bg-gray-800 focus:ring-gray-500;
+    @apply bg-black text-white hover:bg-gray-800 focus:ring-gray-500 dark:bg-white dark:text-black dark:hover:bg-gray-200;
   }
 
   .btn-secondary {
-    @apply bg-gray-100 text-gray-900 hover:bg-gray-200 focus:ring-gray-500;
+    @apply bg-gray-100 text-gray-900 hover:bg-gray-200 focus:ring-gray-500 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700 dark:border-gray-700;
   }
 
   .btn-ghost {
-    @apply bg-transparent text-gray-600 hover:bg-gray-100 hover:text-gray-900 focus:ring-gray-500;
+    @apply bg-transparent text-gray-600 hover:bg-gray-100 hover:text-gray-900 focus:ring-gray-500 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100;
   }
 
   .btn-sm {
@@ -88,15 +117,15 @@
 
   /* Input Styles */
   .input {
-    @apply w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-gray-500 transition-colors;
+    @apply w-full px-3 py-2 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-gray-500 transition-colors dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100 dark:placeholder-gray-400;
   }
 
   /* Card Styles */
   .card {
-    @apply bg-white border border-gray-200 rounded-lg shadow-sm;
+    @apply bg-white border border-gray-200 rounded-lg shadow-sm dark:bg-gray-800 dark:border-gray-700;
   }
 
   .card-hover {
-    @apply hover:border-gray-300 hover:shadow-md transition-all duration-200;
+    @apply hover:border-gray-300 hover:shadow-md transition-all duration-200 dark:hover:border-gray-600;
   }
 }

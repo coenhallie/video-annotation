@@ -133,9 +133,9 @@ const closeActions = (event) => {
         </div>
         <div
           v-else
-          class="avatar-placeholder"
+          class="avatar-placeholder dark:bg-gray-700"
         >
-          <span class="text-xs font-medium text-gray-600">{{
+          <span class="text-xs font-medium text-gray-600 dark:text-gray-300">{{
             authorInitials
           }}</span>
         </div>
@@ -146,7 +146,7 @@ const closeActions = (event) => {
         <!-- Header -->
         <div class="flex items-center justify-between">
           <div class="flex items-center space-x-2">
-            <h5 class="text-sm font-medium text-gray-900 truncate">
+            <h5 class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
               {{ authorName }}
             </h5>
             <span
@@ -159,7 +159,7 @@ const closeActions = (event) => {
 
           <div class="flex items-center space-x-2">
             <time
-              class="text-xs text-gray-500"
+              class="text-xs text-gray-500 dark:text-gray-400"
               :title="new Date(comment.createdAt).toLocaleString()"
             >
               {{ formattedDate }}
@@ -207,7 +207,7 @@ const closeActions = (event) => {
 
               <div
                 v-show="showActions"
-                class="action-menu"
+                class="action-menu dark:bg-gray-800 dark:border-gray-700"
                 tabindex="-1"
                 @focusout="closeActions"
               >
@@ -232,7 +232,7 @@ const closeActions = (event) => {
 
                 <button
                   v-if="canEdit"
-                  class="action-menu-item text-red-600 hover:bg-red-50"
+                  class="action-menu-item text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
                   @click.stop="handleDelete"
                 >
                   <svg
@@ -249,7 +249,7 @@ const closeActions = (event) => {
 
                 <button
                   v-if="canModerate && !canEdit"
-                  class="action-menu-item text-red-600 hover:bg-red-50"
+                  class="action-menu-item text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
                   @click.stop="handleModerate"
                 >
                   <svg
@@ -283,7 +283,7 @@ const closeActions = (event) => {
 
         <!-- Comment Text -->
         <div class="mt-1">
-          <p class="text-sm text-gray-700 whitespace-pre-wrap break-words">
+          <p class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words">
             {{ comment.content }}
           </p>
         </div>
@@ -304,7 +304,7 @@ const closeActions = (event) => {
 }
 
 .anonymous-badge {
-  @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800;
+  @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200;
 }
 
 .edited-indicator {
@@ -312,7 +312,7 @@ const closeActions = (event) => {
 }
 
 .action-menu-trigger {
-  @apply p-1 rounded-full hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 transition-colors duration-150;
+  @apply p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 dark:focus:ring-offset-gray-800 transition-colors duration-150;
 }
 
 .action-menu {
@@ -323,11 +323,11 @@ const closeActions = (event) => {
 }
 
 .action-menu-item {
-  @apply w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-2 transition-colors duration-150;
+  @apply w-full px-3 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50 flex items-center space-x-2 transition-colors duration-150;
 }
 
 .action-menu-item:focus {
-  @apply outline-none bg-gray-50;
+  @apply outline-none bg-gray-50 dark:bg-gray-700/50;
 }
 
 .icon {

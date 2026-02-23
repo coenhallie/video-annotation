@@ -5,18 +5,18 @@
     @click="closeModal"
   >
     <div
-      class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4"
+      class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4"
       @click.stop
     >
       <!-- Modal Header -->
       <div
-        class="flex items-center justify-between p-6 border-b border-gray-200"
+        class="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700"
       >
-        <h2 class="text-xl font-semibold text-gray-900">
+        <h2 class="text-xl font-semibold text-gray-900 dark:text-white">
           {{ modalTitle }}
         </h2>
         <button
-          class="text-gray-400 hover:text-gray-600 transition-colors"
+          class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
           @click="closeModal"
         >
           <svg
@@ -45,7 +45,7 @@
           <div
             class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"
           />
-          <p class="text-gray-600">
+          <p class="text-gray-600 dark:text-gray-400">
             Generating shareable link...
           </p>
         </div>
@@ -55,7 +55,7 @@
           v-else-if="error"
           class="text-center py-8"
         >
-          <div class="text-red-600 mb-4">
+          <div class="text-red-600 dark:text-red-400 mb-4">
             <svg
               class="w-12 h-12 mx-auto"
               fill="none"
@@ -70,7 +70,7 @@
               />
             </svg>
           </div>
-          <p class="text-gray-600 mb-4">
+          <p class="text-gray-600 dark:text-gray-400 mb-4">
             {{ error }}
           </p>
           <button
@@ -87,7 +87,7 @@
           class="space-y-4"
         >
           <div class="text-center mb-4">
-            <div class="text-green-600 mb-2">
+            <div class="text-green-600 dark:text-green-400 mb-2">
               <svg
                 class="w-12 h-12 mx-auto"
                 fill="none"
@@ -102,17 +102,17 @@
                 />
               </svg>
             </div>
-            <h3 class="text-lg font-medium text-gray-900 mb-2">
+            <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">
               Share Link Generated!
             </h3>
-            <p class="text-sm text-gray-600">
+            <p class="text-sm text-gray-600 dark:text-gray-400">
               {{ shareDescription }}
             </p>
           </div>
 
           <!-- Share URL Display -->
-          <div class="bg-gray-50 rounded-lg p-4">
-            <label class="block text-sm font-medium text-gray-700 mb-2">
+          <div class="bg-gray-50 dark:bg-gray-900 rounded-lg p-4">
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Shareable Link
             </label>
             <div class="flex items-center space-x-2">
@@ -120,7 +120,7 @@
                 ref="shareUrlInput"
                 :value="shareUrl"
                 readonly
-                class="flex-1 px-3 py-2 border border-gray-300 rounded-md bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 @focus="logger.debug('[ShareModal] input focus')"
               >
               <button
@@ -168,7 +168,7 @@
           class="space-y-6"
         >
           <div class="text-center">
-            <div class="text-blue-600 mb-4">
+            <div class="text-blue-600 dark:text-blue-400 mb-4">
               <svg
                 class="w-16 h-16 mx-auto"
                 fill="none"
@@ -183,17 +183,17 @@
                 />
               </svg>
             </div>
-            <h3 class="text-lg font-medium text-gray-900 mb-2">
+            <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">
               {{ modalTitle }}
             </h3>
-            <p class="text-gray-600 mb-6">
+            <p class="text-gray-600 dark:text-gray-400 mb-6">
               Configure sharing permissions for your {{ shareType === 'comparison' ? 'comparison video' : 'video' }}
             </p>
           </div>
 
           <!-- Annotation Permission Options -->
-          <div class="bg-gray-50 rounded-lg p-4">
-            <label class="block text-sm font-medium text-gray-700 mb-3">
+          <div class="bg-gray-50 dark:bg-gray-900 rounded-lg p-4">
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
               Annotation Permissions
             </label>
             <div class="space-y-3">
@@ -203,18 +203,18 @@
                   type="radio"
                   :value="false"
                   v-model="allowAnnotations"
-                  class="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                  class="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600 dark:bg-gray-700"
                 >
                 <div class="ml-3 flex-1">
                   <div class="flex items-center">
-                    <span class="text-sm font-medium text-gray-900 group-hover:text-blue-700">
+                    <span class="text-sm font-medium text-gray-900 dark:text-white group-hover:text-blue-700 dark:group-hover:text-blue-400">
                       View-only access
                     </span>
-                    <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-200 text-gray-800">
+                    <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200">
                       Default
                     </span>
                   </div>
-                  <p class="text-xs text-gray-500 mt-1">
+                  <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
                     Anyone with the link can view without signing in. No annotation capabilities.
                   </p>
                 </div>
@@ -226,11 +226,11 @@
                   type="radio"
                   :value="true"
                   v-model="allowAnnotations"
-                  class="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                  class="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600 dark:bg-gray-700"
                 >
                 <div class="ml-3 flex-1">
                   <div class="flex items-center">
-                    <span class="text-sm font-medium text-gray-900 group-hover:text-blue-700">
+                    <span class="text-sm font-medium text-gray-900 dark:text-white group-hover:text-blue-700 dark:group-hover:text-blue-400">
                       Allow annotations
                     </span>
                     <svg
@@ -247,7 +247,7 @@
                       />
                     </svg>
                   </div>
-                  <p class="text-xs text-gray-500 mt-1">
+                  <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
                     Recipients must sign in to view and can add annotations.
                   </p>
                 </div>
@@ -269,10 +269,10 @@
 
       <!-- Modal Footer -->
       <div
-        class="flex items-center justify-end space-x-3 p-6 border-t border-gray-200 bg-gray-50"
+        class="flex items-center justify-end space-x-3 p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900"
       >
         <button
-          class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+          class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
           @click="closeModal"
         >
           Close

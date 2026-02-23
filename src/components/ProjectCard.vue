@@ -1,10 +1,10 @@
 <template>
   <div
     :class="[
-      'project-card relative group bg-white border rounded-lg overflow-hidden cursor-pointer transition-all',
+      'project-card relative group bg-white dark:bg-gray-800 border rounded-lg overflow-hidden cursor-pointer transition-all',
       isSelected
-        ? 'border-blue-500 ring-2 ring-blue-200'
-        : 'border-gray-200 hover:border-gray-300 hover:shadow-md',
+        ? 'border-blue-500 ring-2 ring-blue-200 dark:ring-blue-900'
+        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:shadow-md',
       isDragging && 'opacity-50',
     ]"
     draggable="true"
@@ -24,14 +24,16 @@
       <input
         type="checkbox"
         :checked="isSelected"
-        class="w-4 h-4 text-blue-600 bg-white border-gray-300 rounded focus:ring-blue-500"
+        class="w-4 h-4 text-blue-600 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500"
         @click.stop
         @change="toggleSelection"
       />
     </div>
 
     <!-- Thumbnail -->
-    <div class="aspect-video bg-gray-100 relative overflow-hidden">
+    <div
+      class="aspect-video bg-gray-100 dark:bg-gray-900 relative overflow-hidden"
+    >
       <img
         v-if="project.thumbnailUrl"
         :src="project.thumbnailUrl"
@@ -58,7 +60,7 @@
       <div class="absolute top-2 left-12">
         <span
           v-if="project.projectType === 'dual'"
-          class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800"
+          class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-300"
         >
           <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
             <path
@@ -79,16 +81,18 @@
 
     <!-- Content -->
     <div class="p-3">
-      <h3 class="font-medium text-gray-900 truncate mb-1">
+      <h3 class="font-medium text-gray-900 dark:text-white truncate mb-1">
         {{ project.title }}
       </h3>
-      <div class="flex items-center justify-between text-xs text-gray-500">
+      <div
+        class="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400"
+      >
         <span>{{ formatDate(project.createdAt) }}</span>
         <div class="flex items-center gap-1">
           <!-- Annotation count pill -->
           <span
             v-if="annotationCount && annotationCount > 0"
-            class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+            class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300"
           >
             <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
               <path
@@ -103,7 +107,7 @@
           <!-- Comment count pill -->
           <span
             v-if="commentCount && commentCount > 0"
-            class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800"
+            class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300"
           >
             <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
               <path
@@ -126,11 +130,11 @@
       ]"
     >
       <button
-        class="p-1.5 bg-white rounded-md shadow-md hover:bg-gray-50 relative z-30"
+        class="p-1.5 bg-white dark:bg-gray-800 rounded-md shadow-md hover:bg-gray-50 dark:hover:bg-gray-700 relative z-30"
         @click.stop="toggleActions"
       >
         <svg
-          class="w-4 h-4 text-gray-600"
+          class="w-4 h-4 text-gray-600 dark:text-gray-300"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -147,22 +151,22 @@
       <!-- Dropdown Menu -->
       <div
         v-if="showActions"
-        class="absolute right-0 mt-1 w-48 bg-white rounded-md shadow-lg z-50 py-1 border border-gray-200"
+        class="absolute right-0 mt-1 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg z-50 py-1 border border-gray-200 dark:border-gray-700"
         @click.stop
       >
         <button
-          class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+          class="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
           @click="openProject"
         >
           Open
         </button>
         <button
-          class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+          class="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
           @click="shareProject"
         >
           Share
         </button>
-        <hr class="my-1" />
+        <hr class="my-1 border-gray-200 dark:border-gray-700" />
         <button
           class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50"
           @click.stop="deleteProject"

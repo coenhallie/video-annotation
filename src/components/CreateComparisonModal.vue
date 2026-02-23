@@ -15,13 +15,13 @@
         <!-- Modal Container -->
         <div class="absolute inset-0 flex items-center justify-center p-4">
           <div
-            class="relative bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col"
+            class="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col"
             @click.stop
           >
             <!-- Header with Progress -->
             <div class="relative">
               <!-- Progress Bar -->
-              <div class="absolute top-0 left-0 right-0 h-1 bg-gray-100">
+              <div class="absolute top-0 left-0 right-0 h-1 bg-gray-100 dark:bg-gray-700">
                 <div
                   class="h-full bg-gradient-to-r from-purple-500 to-blue-500 transition-all duration-500"
                   :style="{ width: progressPercentage + '%' }"
@@ -29,18 +29,18 @@
               </div>
 
               <!-- Header Content -->
-              <div class="px-8 py-6 border-b border-gray-100">
+              <div class="px-8 py-6 border-b border-gray-100 dark:border-gray-700">
                 <div class="flex items-center justify-between">
                   <div>
-                    <h2 class="text-2xl font-bold text-gray-900">
+                    <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
                       Create Video Comparison
                     </h2>
-                    <p class="mt-1 text-sm text-gray-500">
+                    <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
                       {{ stepDescription }}
                     </p>
                   </div>
                   <button
-                    class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-all"
+                    class="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-all"
                     @click="closeModal"
                   >
                     <svg
@@ -73,7 +73,7 @@
                           ? 'bg-gradient-to-r from-purple-500 to-blue-500 text-white shadow-lg scale-110'
                           : currentStepIndex > index
                           ? 'bg-green-500 text-white'
-                          : 'bg-gray-200 text-gray-500',
+                          : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400',
                       ]"
                     >
                       <svg
@@ -142,7 +142,7 @@
                     />
                   </svg>
                 </div>
-                <p class="text-gray-900 font-medium">
+                <p class="text-gray-900 dark:text-white font-medium">
                   {{ error }}
                 </p>
                 <button
@@ -165,6 +165,7 @@
                     stroke="currentColor"
                     viewBox="0 0 24 24"
                   >
+
                     <path
                       stroke-linecap="round"
                       stroke-linejoin="round"
@@ -173,10 +174,10 @@
                     />
                   </svg>
                 </div>
-                <h3 class="text-lg font-medium text-gray-900 mb-2">
+                <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">
                   No videos available
                 </h3>
-                <p class="text-gray-600 text-center max-w-md">
+                <p class="text-gray-600 dark:text-gray-400 text-center max-w-md">
                   You need at least two videos to create a comparison. Upload
                   some videos first to get started.
                 </p>
@@ -191,10 +192,10 @@
               <!-- Step 1: Select Video A -->
               <div v-else-if="currentStep === 'select-video-a'">
                 <div class="mb-6">
-                  <h3 class="text-lg font-semibold text-gray-900 mb-2">
+                  <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
                     Select the first video
                   </h3>
-                  <p class="text-gray-600">
+                  <p class="text-gray-600 dark:text-gray-400">
                     Choose the video you want to display on the left side of the
                     comparison
                   </p>
@@ -230,7 +231,7 @@
                   <div
                     v-for="video in filteredVideosForA"
                     :key="video.id"
-                    class="group relative bg-white border-2 border-gray-200 rounded-xl overflow-hidden hover:border-purple-400 hover:shadow-xl transition-all cursor-pointer"
+                    class="group relative bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden hover:border-purple-400 dark:hover:border-purple-400 hover:shadow-xl transition-all cursor-pointer"
                     @click="selectVideoA(video)"
                   >
                     <!-- Thumbnail -->
@@ -320,12 +321,12 @@
               <div v-else-if="currentStep === 'select-video-b'">
                 <!-- Selected Video A Preview -->
                 <div
-                  class="mb-6 p-4 bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-xl"
+                  class="mb-6 p-4 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 border border-purple-200 dark:border-purple-800 rounded-xl"
                 >
                   <div class="flex items-center gap-4">
                     <div class="flex-shrink-0">
                       <div
-                        class="w-20 h-14 bg-white rounded-lg overflow-hidden shadow-md"
+                        class="w-20 h-14 bg-white dark:bg-gray-800 rounded-lg overflow-hidden shadow-md"
                       >
                         <img
                           v-if="selectedVideoA?.thumbnailUrl"
@@ -335,7 +336,7 @@
                         />
                         <div
                           v-else
-                          class="w-full h-full flex items-center justify-center bg-gray-100"
+                          class="w-full h-full flex items-center justify-center bg-gray-100 dark:bg-gray-900"
                         >
                           <svg
                             class="w-8 h-8 text-gray-400"
@@ -354,10 +355,10 @@
                       </div>
                     </div>
                     <div class="flex-1">
-                      <p class="text-sm font-medium text-purple-900">
+                      <p class="text-sm font-medium text-purple-900 dark:text-purple-300">
                         Video A (Left)
                       </p>
-                      <p class="text-purple-700 font-semibold">
+                      <p class="text-purple-700 dark:text-purple-400 font-semibold">
                         {{ selectedVideoA?.title }}
                       </p>
                     </div>
@@ -365,10 +366,10 @@
                 </div>
 
                 <div class="mb-6">
-                  <h3 class="text-lg font-semibold text-gray-900 mb-2">
+                  <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
                     Select the second video
                   </h3>
-                  <p class="text-gray-600">
+                  <p class="text-gray-600 dark:text-gray-400">
                     Choose the video you want to display on the right side of
                     the comparison
                   </p>
@@ -404,7 +405,7 @@
                   <div
                     v-for="video in filteredVideosForB"
                     :key="video.id"
-                    class="group relative bg-white border-2 border-gray-200 rounded-xl overflow-hidden hover:border-purple-400 hover:shadow-xl transition-all cursor-pointer"
+                    class="group relative bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden hover:border-purple-400 dark:hover:border-purple-400 hover:shadow-xl transition-all cursor-pointer"
                     @click="selectVideoB(video)"
                   >
                     <!-- Thumbnail -->
@@ -495,13 +496,13 @@
                 <!-- Selected Videos Preview -->
                 <div class="grid grid-cols-2 gap-4 mb-8">
                   <div
-                    class="bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200 rounded-xl p-4"
+                    class="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 border border-purple-200 dark:border-purple-800 rounded-xl p-4"
                   >
-                    <p class="text-sm font-medium text-purple-900 mb-2">
+                    <p class="text-sm font-medium text-purple-900 dark:text-purple-300 mb-2">
                       Video A (Left)
                     </p>
-                    <div class="bg-white rounded-lg overflow-hidden shadow-md">
-                      <div class="aspect-video bg-gray-100">
+                    <div class="bg-white dark:bg-gray-800 rounded-lg overflow-hidden shadow-md">
+                      <div class="aspect-video bg-gray-100 dark:bg-gray-900">
                         <img
                           v-if="selectedVideoA?.thumbnailUrl"
                           :src="selectedVideoA.thumbnailUrl"
@@ -510,10 +511,10 @@
                         />
                       </div>
                       <div class="p-3">
-                        <p class="font-semibold text-gray-900 text-sm truncate">
+                        <p class="font-semibold text-gray-900 dark:text-white text-sm truncate">
                           {{ selectedVideoA?.title }}
                         </p>
-                        <p class="text-xs text-gray-500 mt-1">
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
                           {{ formatDuration(selectedVideoA?.duration || 0) }} •
                           {{ selectedVideoA?.fps || '—' }} FPS
                         </p>
@@ -522,13 +523,13 @@
                   </div>
 
                   <div
-                    class="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-xl p-4"
+                    class="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4"
                   >
-                    <p class="text-sm font-medium text-blue-900 mb-2">
+                    <p class="text-sm font-medium text-blue-900 dark:text-blue-300 mb-2">
                       Video B (Right)
                     </p>
-                    <div class="bg-white rounded-lg overflow-hidden shadow-md">
-                      <div class="aspect-video bg-gray-100">
+                    <div class="bg-white dark:bg-gray-800 rounded-lg overflow-hidden shadow-md">
+                      <div class="aspect-video bg-gray-100 dark:bg-gray-900">
                         <img
                           v-if="selectedVideoB?.thumbnailUrl"
                           :src="selectedVideoB.thumbnailUrl"
@@ -537,10 +538,10 @@
                         />
                       </div>
                       <div class="p-3">
-                        <p class="font-semibold text-gray-900 text-sm truncate">
+                        <p class="font-semibold text-gray-900 dark:text-white text-sm truncate">
                           {{ selectedVideoB?.title }}
                         </p>
-                        <p class="text-xs text-gray-500 mt-1">
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
                           {{ formatDuration(selectedVideoB?.duration || 0) }} •
                           {{ selectedVideoB?.fps || '—' }} FPS
                         </p>
@@ -552,27 +553,27 @@
                 <!-- Form -->
                 <div class="space-y-6">
                   <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       Comparison Title *
                     </label>
                     <input
                       v-model="comparisonTitle"
                       type="text"
                       placeholder="Enter a descriptive title for this comparison"
-                      class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all"
+                      class="w-full px-4 py-3 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all placeholder-gray-500 dark:placeholder-gray-400"
                       @keydown.enter="createComparison"
                     />
                   </div>
 
                   <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       Description (Optional)
                     </label>
                     <textarea
                       v-model="comparisonDescription"
                       rows="3"
                       placeholder="Add notes about what you're comparing..."
-                      class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all resize-none"
+                      class="w-full px-4 py-3 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all resize-none placeholder-gray-500 dark:placeholder-gray-400"
                     />
                   </div>
                 </div>
@@ -598,17 +599,17 @@
                       </svg>
                     </div>
                   </div>
-                  <h3 class="text-xl font-semibold text-gray-900 mb-2">
+                  <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-2">
                     Creating your comparison...
                   </h3>
-                  <p class="text-gray-600">This will just take a moment</p>
+                  <p class="text-gray-600 dark:text-gray-400">This will just take a moment</p>
                 </div>
               </div>
             </div>
 
             <!-- Footer Actions -->
             <div
-              class="flex-shrink-0 px-8 py-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl"
+              class="flex-shrink-0 px-8 py-4 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 rounded-b-2xl"
             >
               <div class="flex items-center justify-between">
                 <button
@@ -616,7 +617,7 @@
                     currentStep !== 'select-video-a' &&
                     currentStep !== 'creating'
                   "
-                  class="px-6 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                  class="px-6 py-2.5 text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                   @click="goBack"
                 >
                   ← Back
@@ -625,7 +626,7 @@
 
                 <div class="flex items-center gap-3">
                   <button
-                    class="px-6 py-2.5 text-gray-500 hover:text-gray-700 transition-colors"
+                    class="px-6 py-2.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
                     @click="closeModal"
                   >
                     Cancel

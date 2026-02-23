@@ -13,6 +13,7 @@ import {
 import DualTimeline from '@/components/DualTimeline.vue';
 import VideoTimeline from '@/components/VideoTimeline.vue';
 import AnnotationPanel from '@/components/AnnotationPanel.vue';
+import ThemeToggle from '@/components/ThemeToggle.vue';
 
 import SharedVideoAuthPrompt from '@/components/SharedVideoAuthPrompt.vue';
 import VideoUpload from '@/components/VideoUpload.vue';
@@ -63,6 +64,7 @@ const {
   id: videoId,
   duration,
   isPlaying,
+  currentTime,
   currentFrame,
   totalFrames,
   fps
@@ -1040,9 +1042,41 @@ const loadSharedComparisonAuthenticated = async (sharedComparisonData: any) => {
   }
 };
 
+const handleKeydown = (e: KeyboardEvent) => {
+  // Ignore if user is typing in an input or textarea
+  const target = e.target as HTMLElement;
+  if (['INPUT', 'TEXTAREA'].includes(target.tagName) || target.isContentEditable) {
+    return;
+  }
+
+  if (e.key === 'ArrowRight') {
+    e.preventDefault();
+    unifiedVideoPlayerRef.value?.stepFrame(1);
+  } else if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    unifiedVideoPlayerRef.value?.stepFrame(-1);
+  } else if (e.key === ' ' || e.code === 'Space') {
+    e.preventDefault();
+
+    let isCurrentlyPlaying = false;
+    if (playerMode.value === 'single') {
+      isCurrentlyPlaying = isPlaying.value;
+    } else if (playerMode.value === 'dual' && dualVideoPlayer) {
+      isCurrentlyPlaying = dualVideoPlayer.videoAIsPlaying?.value || dualVideoPlayer.videoBIsPlaying?.value || false;
+    }
+
+    if (isCurrentlyPlaying) {
+      unifiedVideoPlayerRef.value?.pause();
+    } else {
+      unifiedVideoPlayerRef.value?.play();
+    }
+  }
+};
+
 let authSubscription: { unsubscribe: () => void } | null = null;
 
 onMounted(async () => {
+  window.addEventListener('keydown', handleKeydown);
   try {
     isAppLoading.value = true;
 
@@ -1128,6 +1162,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleKeydown);
   authSubscription?.unsubscribe();
   authSubscription = null;
 });
@@ -1209,9 +1244,9 @@ watch(
   <!-- Error state -->
   <div
     v-if="hasError"
-    class="min-h-screen bg-red-50 flex items-center justify-center p-4"
+    class="min-h-screen bg-red-50 dark:bg-red-900 flex items-center justify-center p-4"
   >
-    <div class="max-w-md w-full bg-white rounded-lg shadow-lg p-6">
+    <div class="max-w-md w-full bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
       <div class="flex items-center mb-4">
         <svg
           class="w-8 h-8 text-red-500 mr-3"
@@ -1226,12 +1261,12 @@ watch(
             d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.314 16.5c-.77.833.192 2.5 1.732 2.5z"
           />
         </svg>
-        <h2 class="text-lg font-semibold text-gray-900">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
           Something went wrong
         </h2>
       </div>
 
-      <p class="text-gray-600 mb-4">
+      <p class="text-gray-600 dark:text-gray-300 mb-4">
         {{ errorMessage }}
       </p>
 
@@ -1258,13 +1293,13 @@ watch(
   <!-- Loading state while auth is initializing -->
   <div
     v-else-if="isLoading"
-    class="min-h-screen bg-white flex items-center justify-center"
+    class="min-h-screen bg-white dark:bg-gray-900 flex items-center justify-center"
   >
     <div class="text-center">
       <div
         class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"
       />
-      <p class="text-gray-600">Loading...</p>
+      <p class="text-gray-600 dark:text-gray-400">Loading...</p>
     </div>
   </div>
 
@@ -1273,18 +1308,18 @@ watch(
   <!-- Main app when user is authenticated OR when viewing shared video/comparison OR showing auth prompt -->
   <div
     v-else
-    class="min-h-screen bg-white flex flex-col"
+    class="min-h-screen bg-white dark:bg-gray-900 flex flex-col"
   >
     <!-- Header -->
-    <header class="bg-white border-b border-gray-200 px-6 py-4">
+    <header class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4">
       <div class="flex items-center justify-between">
         <div class="flex items-center space-x-3">
-          <h1 class="text-xl font-medium text-gray-900">Perspecto</h1>
+          <h1 class="text-xl font-medium text-gray-900 dark:text-white">Perspecto</h1>
           <span
-            class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 border border-orange-200 cursor-pointer hover:bg-orange-200 transition-colors"
+            class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200 border border-orange-200 dark:border-orange-800 cursor-pointer hover:bg-orange-200 dark:hover:bg-orange-800 transition-colors"
             @click="isChangelogModalOpen = true"
           >
-            BETA v3.1
+            BETA v3.4
           </span>
         </div>
 
@@ -1295,7 +1330,7 @@ watch(
         >
           <!-- Load Previous Videos Button -->
           <button
-            class="p-2 text-gray-600 hover:text-green-600 hover:bg-gray-50 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+            class="p-2 text-gray-600 dark:text-gray-300 hover:text-green-600 dark:hover:text-green-400 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
             title="Upload video"
             @click="layoutStore.openProjectModal()"
           >
@@ -1316,7 +1351,7 @@ watch(
 
           <!-- Manage Shared Links Button -->
           <button
-            class="p-2 text-gray-600 hover:text-blue-600 hover:bg-gray-50 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            class="p-2 text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             title="Manage shared links"
             @click="isSharedLinksModalOpen = true"
           >
@@ -1335,10 +1370,12 @@ watch(
             </svg>
           </button>
 
+
+
           <!-- Share Video Button -->
           <button
             :disabled="!canShare"
-            class="p-2 text-gray-600 hover:text-purple-600 hover:bg-gray-50 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:text-gray-300 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+            class="p-2 text-gray-600 dark:text-gray-300 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:text-gray-300 dark:disabled:text-gray-600 disabled:cursor-not-allowed disabled:hover:bg-transparent"
             title="Share current video"
             @click="layoutStore.openShareModal()"
           >
@@ -1361,7 +1398,7 @@ watch(
         <!-- Shared Video/Comparison Info -->
         <div
           v-if="isSharedVideo || isSharedComparison"
-          class="flex items-center space-x-2 text-sm text-gray-600"
+          class="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300"
         >
           <svg
             class="w-4 h-4"
@@ -1383,7 +1420,7 @@ watch(
 
         <!-- User Info and Sign Out (for authenticated users) -->
         <div v-else-if="user" class="flex items-center space-x-4">
-          <div class="flex items-center space-x-2 text-sm text-gray-600">
+          <div class="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
             <svg
               class="w-4 h-4"
               fill="none"
@@ -1401,8 +1438,9 @@ watch(
               (user as any)?.email || 'Loading...'
             }}</span>
           </div>
+          <ThemeToggle />
           <button
-            class="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+            class="px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
             @click="handleSignOut"
           >
             Sign Out
@@ -1469,7 +1507,7 @@ watch(
         </div>
 
         <!-- Timeline -->
-        <div class="bg-gray-900 p-4 border-t border-gray-800">
+        <div class="bg-gray-900 dark:bg-black p-4 border-t border-gray-800 dark:border-gray-800">
           <!-- Single Video Timeline -->
           <VideoTimeline
             v-if="playerMode === 'single'"
@@ -1538,7 +1576,7 @@ watch(
 
       <!-- Sidebar with Calibration and Annotation Panel -->
       <aside
-        class="w-96 min-w-96 max-w-96 flex-shrink-0 bg-white border-l border-gray-200 flex flex-col overflow-hidden"
+        class="w-96 min-w-96 max-w-96 flex-shrink-0 bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden"
       >
 
 
@@ -1594,7 +1632,7 @@ watch(
           />
           <div
             v-else
-            class="flex items-center justify-center h-full text-gray-500"
+            class="flex items-center justify-center h-full text-gray-500 dark:text-gray-400"
           >
             <div class="text-center">
               <svg
@@ -1649,14 +1687,14 @@ watch(
 
           <!-- Modal Content -->
           <div
-            class="relative bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-auto p-6"
+            class="relative bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-auto p-6"
             @click.stop
           >
             <!-- Header -->
             <div class="flex items-center justify-between mb-6">
-              <h2 class="text-xl font-semibold text-gray-900">Upload Video</h2>
+              <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Upload Video</h2>
               <button
-                class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                class="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                 @click="layoutStore.closeVideoUploadModal()"
               >
                 <svg
@@ -1709,14 +1747,14 @@ watch(
 
           <!-- Modal Content -->
           <div
-            class="relative bg-white rounded-xl shadow-2xl w-full max-w-7xl mx-4 max-h-[90vh] overflow-hidden flex flex-col"
+            class="relative bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-7xl mx-4 max-h-[90vh] overflow-hidden flex flex-col"
             @click.stop
           >
             <!-- Header -->
-            <div class="flex items-center justify-between p-6 border-b border-gray-200 flex-shrink-0">
-              <h2 class="text-2xl font-semibold text-gray-900">Manage Shared Links</h2>
+            <div class="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+              <h2 class="text-2xl font-semibold text-gray-900 dark:text-white">Manage Shared Links</h2>
               <button
-                class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                class="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                 @click="isSharedLinksModalOpen = false"
               >
                 <svg

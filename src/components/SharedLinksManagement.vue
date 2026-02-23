@@ -1,5 +1,5 @@
 <template>
-  <div class="shared-links-management">
+  <div class="shared-links-management dark:text-gray-200">
     <!-- Controls Bar -->
     <div class="controls-bar">
       <!-- Search -->
@@ -21,7 +21,7 @@
           v-model="searchQuery"
           type="text"
           placeholder="Search by video title..."
-          class="search-input"
+          class="search-input bg-white dark:bg-gray-800 dark:text-white dark:border-gray-700"
         >
         <button
           v-if="searchQuery"
@@ -36,13 +36,13 @@
 
       <!-- Filters -->
       <div class="filters">
-        <select v-model="permissionFilter" class="filter-select">
+        <select v-model="permissionFilter" class="filter-select bg-white dark:bg-gray-800 dark:text-white dark:border-gray-700">
           <option value="all">All Permissions</option>
           <option value="view-only">View-only</option>
           <option value="annotate">Annotation Enabled</option>
         </select>
 
-        <select v-model="sortBy" class="filter-select">
+        <select v-model="sortBy" class="filter-select bg-white dark:bg-gray-800 dark:text-white dark:border-gray-700">
           <option value="date-desc">Newest First</option>
           <option value="date-asc">Oldest First</option>
           <option value="title-asc">Title A-Z</option>
@@ -100,7 +100,7 @@
           <tr
             v-for="video in filteredVideos"
             :key="`${video.type}-${video.id}`"
-            class="table-row"
+            class="table-row transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/50"
           >
             <td class="video-cell">
               <div class="video-info">
@@ -135,7 +135,7 @@
                 <input
                   :value="video.shareUrl"
                   readonly
-                  class="link-input"
+                  class="link-input bg-gray-50 dark:bg-gray-900 dark:text-gray-300 dark:border-gray-700"
                   @click="selectLink"
                 >
                 <button
@@ -170,20 +170,20 @@
 
     <!-- Confirmation Dialog -->
     <div v-if="confirmDialog.show" class="modal-overlay" @click="closeConfirmDialog">
-      <div class="modal-content" @click.stop>
+      <div class="modal-content bg-white dark:bg-gray-800" @click.stop>
         <div class="modal-header">
-          <h3 class="modal-title">{{ confirmDialog.title }}</h3>
-          <button @click="closeConfirmDialog" class="close-button">
+          <h3 class="modal-title text-gray-900 dark:text-white">{{ confirmDialog.title }}</h3>
+          <button @click="closeConfirmDialog" class="close-button text-gray-400 hover:text-gray-500 dark:hover:text-gray-300">
             <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
         <div class="modal-body">
-          <p>{{ confirmDialog.message }}</p>
+          <p class="text-gray-600 dark:text-gray-300">{{ confirmDialog.message }}</p>
         </div>
-        <div class="modal-footer">
-          <button @click="closeConfirmDialog" class="button-secondary">Cancel</button>
+        <div class="modal-footer bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700">
+          <button @click="closeConfirmDialog" class="button-secondary bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600">Cancel</button>
           <button @click="confirmAction" class="button-primary" :class="confirmDialog.type">
             {{ confirmDialog.confirmText }}
           </button>
@@ -456,12 +456,12 @@ onMounted(() => {
 .title {
   font-size: 1.875rem;
   font-weight: 700;
-  color: #111827;
+  color: var(--color-text-primary);
   margin: 0 0 0.5rem 0;
 }
 
 .subtitle {
-  color: #6b7280;
+  color: var(--color-text-secondary);
   margin: 0;
 }
 
@@ -470,19 +470,21 @@ onMounted(() => {
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 1rem;
-  background: white;
-  border: 1px solid #d1d5db;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
   border-radius: 0.375rem;
-  color: #374151;
+  color: var(--color-text-primary);
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .refresh-button:hover:not(:disabled) {
-  background: #f9fafb;
-  border-color: #9ca3af;
+  background: var(--color-bg-secondary);
+  border-color: var(--color-text-muted);
 }
+
+
 
 .refresh-button:disabled {
   opacity: 0.6;
@@ -530,9 +532,11 @@ onMounted(() => {
 .search-input {
   width: 100%;
   padding: 0.5rem 2.5rem 0.5rem 2.5rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-border);
   border-radius: 0.375rem;
   font-size: 0.875rem;
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
 }
 
 .search-input:focus {
@@ -567,16 +571,21 @@ onMounted(() => {
 
 .filter-select {
   padding: 0.5rem 2rem 0.5rem 0.75rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-border);
   border-radius: 0.375rem;
   font-size: 0.875rem;
-  background: white;
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
   cursor: pointer;
   appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
   background-position: right 0.5rem center;
   background-repeat: no-repeat;
   background-size: 1.25rem;
+}
+
+:global(.dark) .filter-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%239ca3af' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
 }
 
 .filter-select:focus {
@@ -643,8 +652,8 @@ onMounted(() => {
 }
 
 .table-container {
-  background: white;
-  border: 1px solid #e5e7eb;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
   border-radius: 0.5rem;
   overflow: hidden;
 }
@@ -655,8 +664,8 @@ onMounted(() => {
 }
 
 .shared-links-table thead {
-  background: #f9fafb;
-  border-bottom: 1px solid #e5e7eb;
+  background: var(--color-bg-secondary);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .shared-links-table th {
@@ -671,15 +680,16 @@ onMounted(() => {
 
 .shared-links-table td {
   padding: 1rem;
-  border-top: 1px solid #f3f4f6;
+  border-top: 1px solid var(--color-border-light);
+  color: var(--color-text-primary);
+}
+
+:global(.dark) .shared-links-table td {
+  border-top-color: var(--color-border);
 }
 
 .table-row {
   transition: background 0.2s;
-}
-
-.table-row:hover {
-  background: #f9fafb;
 }
 
 .video-cell {
@@ -713,6 +723,11 @@ onMounted(() => {
   color: #9ca3af;
 }
 
+:global(.dark) .thumbnail-placeholder {
+  background: #374151;
+  color: #9ca3af;
+}
+
 .thumbnail-placeholder svg {
   width: 1.5rem;
   height: 1.5rem;
@@ -725,7 +740,7 @@ onMounted(() => {
 
 .video-title {
   font-weight: 600;
-  color: #111827;
+  color: var(--color-text-primary);
   margin-bottom: 0.25rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -742,10 +757,11 @@ onMounted(() => {
 
 .permission-select {
   padding: 0.5rem 2rem 0.5rem 0.75rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-border);
   border-radius: 0.375rem;
   font-size: 0.875rem;
-  background: white;
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
   cursor: pointer;
   appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
@@ -753,6 +769,10 @@ onMounted(() => {
   background-repeat: no-repeat;
   background-size: 1.25rem;
   min-width: 150px;
+}
+
+:global(.dark) .permission-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%239ca3af' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
 }
 
 .permission-select:focus {
@@ -772,39 +792,46 @@ onMounted(() => {
 .link-input {
   flex: 1;
   padding: 0.375rem 0.5rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-border);
   border-radius: 0.25rem;
   font-size: 0.75rem;
   font-family: monospace;
-  background: #f9fafb;
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
   cursor: pointer;
 }
 
 .link-input:focus {
   outline: none;
   border-color: #3b82f6;
-  background: white;
+  background: var(--color-bg-primary);
 }
 
 .copy-button {
   padding: 0.375rem;
-  background: white;
-  border: 1px solid #d1d5db;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
   border-radius: 0.25rem;
-  color: #6b7280;
+  color: var(--color-text-secondary);
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .copy-button:hover {
-  background: #f9fafb;
-  color: #374151;
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
 }
 
 .copy-button.copied {
   background: #dcfce7;
   border-color: #86efac;
   color: #166534;
+}
+
+:global(.dark) .copy-button.copied {
+  background: #064e3b;
+  border-color: #065f46;
+  color: #6ee7b7;
 }
 
 .actions-cell {
@@ -821,14 +848,24 @@ onMounted(() => {
 }
 
 .action-button.revoke {
-  background: white;
+  background: var(--color-bg-primary);
   border-color: #fecaca;
   color: #ef4444;
+}
+
+:global(.dark) .action-button.revoke {
+  background: transparent;
+  border-color: #7f1d1d;
+  color: #f87171;
 }
 
 .action-button.revoke:hover {
   background: #fef2f2;
   border-color: #ef4444;
+}
+
+:global(.dark) .action-button.revoke:hover {
+  background: #450a0a;
 }
 
 .modal-overlay {
@@ -842,11 +879,10 @@ onMounted(() => {
 }
 
 .modal-content {
-  background: white;
+  /* Background handled by utility classes */
   border-radius: 0.5rem;
   max-width: 28rem;
   width: 100%;
-  margin: 1rem;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
 }
 
@@ -855,13 +891,13 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 1.5rem;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .modal-title {
   font-size: 1.125rem;
   font-weight: 600;
-  color: #111827;
+  color: var(--color-text-primary);
   margin: 0;
 }
 
@@ -876,8 +912,8 @@ onMounted(() => {
 }
 
 .close-button:hover {
-  background: #f3f4f6;
-  color: #374151;
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
 }
 
 .modal-body {
@@ -885,7 +921,7 @@ onMounted(() => {
 }
 
 .modal-body p {
-  color: #6b7280;
+  color: var(--color-text-secondary);
   margin: 0;
 }
 
@@ -894,23 +930,23 @@ onMounted(() => {
   justify-content: flex-end;
   gap: 0.75rem;
   padding: 1.5rem;
-  border-top: 1px solid #e5e7eb;
-  background: #f9fafb;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-bg-secondary);
 }
 
 .button-secondary {
   padding: 0.5rem 1rem;
-  background: white;
-  border: 1px solid #d1d5db;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
   border-radius: 0.375rem;
-  color: #374151;
+  color: var(--color-text-primary);
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .button-secondary:hover {
-  background: #f9fafb;
+  background: var(--color-bg-tertiary);
 }
 
 .button-primary {
@@ -959,10 +995,22 @@ onMounted(() => {
   border: 1px solid #86efac;
 }
 
+:global(.dark) .notification.success {
+  background: #064e3b;
+  color: #6ee7b7;
+  border-color: #065f46;
+}
+
 .notification.error {
   background: #fee2e2;
   color: #991b1b;
   border: 1px solid #fecaca;
+}
+
+:global(.dark) .notification.error {
+  background: #7f1d1d;
+  color: #fca5a5;
+  border-color: #450a0a;
 }
 
 .notification-icon {

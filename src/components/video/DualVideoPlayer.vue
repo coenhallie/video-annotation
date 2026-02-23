@@ -201,6 +201,9 @@ const onError = (id: 'A' | 'B', e: any) => {
 defineExpose({
     videoARef,
     videoBRef,
+    seekFrame,
+    play,
+    pause
     // Add other fields as needed by UnifiedVideoPlayer
 });
 </script>

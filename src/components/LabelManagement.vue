@@ -1,5 +1,5 @@
 <template>
-  <div class="label-management w-full">
+  <div class="label-management w-full bg-white dark:bg-gray-900">
     <!-- Loading State -->
     <div
       v-if="loading"
@@ -7,9 +7,9 @@
     >
       <div class="text-center">
         <div
-          class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"
+          class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100"
         />
-        <p class="mt-2 text-sm text-gray-600">
+        <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
           Loading labels...
         </p>
       </div>
@@ -20,7 +20,7 @@
       <!-- Header -->
       <div class="flex items-center justify-between mb-6">
         <div>
-          <h2 class="text-xl font-semibold text-gray-900">
+          <h2 class="text-xl font-semibold text-gray-900 dark:text-gray-100">
             Label Management
           </h2>
           <p class="text-sm text-gray-600 mt-1">
@@ -50,7 +50,7 @@
 
       <!-- Statistics -->
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div class="bg-white p-4 rounded-lg border border-gray-200">
+        <div class="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
           <div class="flex items-center">
             <div class="flex-shrink-0">
               <div
@@ -75,21 +75,21 @@
               <p class="text-sm font-medium text-gray-500">
                 Total Labels
               </p>
-              <p class="text-2xl font-semibold text-gray-900">
+              <p class="text-2xl font-semibold text-gray-900 dark:text-gray-100">
                 {{ labels.length }}
               </p>
             </div>
           </div>
         </div>
 
-        <div class="bg-white p-4 rounded-lg border border-gray-200">
+        <div class="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
           <div class="flex items-center">
             <div class="flex-shrink-0">
               <div
-                class="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center"
+                class="w-8 h-8 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center"
               >
                 <svg
-                  class="w-4 h-4 text-green-600"
+                  class="w-4 h-4 text-green-600 dark:text-green-400"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -104,24 +104,24 @@
               </div>
             </div>
             <div class="ml-4">
-              <p class="text-sm font-medium text-gray-500">
+              <p class="text-sm font-medium text-gray-500 dark:text-gray-400">
                 Custom Labels
               </p>
-              <p class="text-2xl font-semibold text-gray-900">
+              <p class="text-2xl font-semibold text-gray-900 dark:text-gray-100">
                 {{ customLabels.length }}
               </p>
             </div>
           </div>
         </div>
 
-        <div class="bg-white p-4 rounded-lg border border-gray-200">
+        <div class="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
           <div class="flex items-center">
             <div class="flex-shrink-0">
               <div
-                class="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center"
+                class="w-8 h-8 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center"
               >
                 <svg
-                  class="w-4 h-4 text-purple-600"
+                  class="w-4 h-4 text-purple-600 dark:text-purple-400"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -136,10 +136,10 @@
               </div>
             </div>
             <div class="ml-4">
-              <p class="text-sm font-medium text-gray-500">
+              <p class="text-sm font-medium text-gray-500 dark:text-gray-400">
                 Most Used
               </p>
-              <p class="text-lg font-semibold text-gray-900">
+              <p class="text-lg font-semibold text-gray-900 dark:text-gray-100">
                 {{ mostUsedLabel?.name || 'None' }}
               </p>
             </div>
@@ -178,14 +178,14 @@
                 v-model="searchQuery"
                 type="text"
                 placeholder="Search labels..."
-                class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                class="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md leading-5 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
               >
             </div>
           </div>
           <div class="flex gap-2">
             <select
               v-model="filterType"
-              class="block w-full pl-3 pr-10 py-2 text-base border border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 rounded-md"
+              class="block w-full pl-3 pr-10 py-2 text-base border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-blue-500 focus:border-blue-500 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 sm:text-sm"
             >
               <option value="all">
                 All Labels
@@ -202,8 +202,8 @@
       </div>
 
       <!-- Labels List -->
-      <div class="bg-white shadow overflow-hidden sm:rounded-md">
-        <ul class="divide-y divide-gray-200">
+      <div class="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-md">
+        <ul class="divide-y divide-gray-200 dark:divide-gray-700">
           <li
             v-for="label in filteredLabels"
             :key="label.id"
@@ -247,7 +247,7 @@
               <div class="flex items-center space-x-2">
                 <button
                   v-if="!label.isDefault"
-                  class="text-blue-600 hover:text-blue-900 text-sm font-medium"
+                  class="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 text-sm font-medium"
                   @click="editLabel(label)"
                 >
                   Edit
@@ -263,8 +263,8 @@
                   :class="[
                     'text-sm font-medium',
                     label.isActive
-                      ? 'text-gray-600 hover:text-gray-900'
-                      : 'text-green-600 hover:text-green-900',
+                      ? 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
+                      : 'text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300',
                   ]"
                   @click="toggleLabelActive(label)"
                 >
@@ -292,7 +292,7 @@
               d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"
             />
           </svg>
-          <h3 class="mt-2 text-sm font-medium text-gray-900">
+          <h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">
             No labels found
           </h3>
           <p class="mt-1 text-sm text-gray-500">
@@ -312,11 +312,11 @@
         @click="closeForm"
       >
         <div
-          class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white"
+          class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white dark:bg-gray-800 dark:border-gray-700"
           @click.stop
         >
           <div class="mt-3">
-            <h3 class="text-lg font-medium text-gray-900 mb-4">
+            <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
               {{ editingLabel ? 'Edit Label' : 'Create New Label' }}
             </h3>
 
@@ -327,7 +327,7 @@
               <div>
                 <label
                   for="labelName"
-                  class="block text-sm font-medium text-gray-700"
+                  class="block text-sm font-medium text-gray-700 dark:text-gray-300"
                 >
                   Name *
                 </label>
@@ -337,7 +337,7 @@
                   type="text"
                   required
                   maxlength="50"
-                  class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  class="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
                   placeholder="Enter label name"
                 >
               </div>
@@ -345,7 +345,7 @@
               <div>
                 <label
                   for="labelDescription"
-                  class="block text-sm font-medium text-gray-700"
+                  class="block text-sm font-medium text-gray-700 dark:text-gray-300"
                 >
                   Description
                 </label>
@@ -354,13 +354,13 @@
                   v-model="labelForm.description"
                   rows="3"
                   maxlength="200"
-                  class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  class="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
                   placeholder="Optional description"
                 />
               </div>
 
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Color *
                 </label>
                 <div class="grid grid-cols-6 gap-2">
@@ -383,7 +383,7 @@
               <div class="flex justify-end space-x-3 pt-4">
                 <button
                   type="button"
-                  class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                   @click="closeForm"
                 >
                   Cancel
@@ -410,15 +410,15 @@
         @click="labelToDelete = null"
       >
         <div
-          class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white"
+          class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white dark:bg-gray-800 dark:border-gray-700"
           @click.stop
         >
           <div class="mt-3 text-center">
             <div
-              class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100"
+              class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 dark:bg-red-900/30"
             >
               <svg
-                class="h-6 w-6 text-red-600"
+                class="h-6 w-6 text-red-600 dark:text-red-400"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -431,11 +431,11 @@
                 />
               </svg>
             </div>
-            <h3 class="text-lg font-medium text-gray-900 mt-2">
+            <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100 mt-2">
               Delete Label
             </h3>
             <div class="mt-2 px-7 py-3">
-              <p class="text-sm text-gray-500">
+              <p class="text-sm text-gray-500 dark:text-gray-400">
                 Are you sure you want to delete "{{ labelToDelete.name }}"?
                 {{
                   (labelStats[labelToDelete.id]?.usageCount || 0) > 0
@@ -446,7 +446,7 @@
             </div>
             <div class="flex justify-center space-x-3 px-4 py-3">
               <button
-                class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                 @click="labelToDelete = null"
               >
                 Cancel
@@ -639,7 +639,7 @@ const saveLabel = async () => {
       // Update existing label
       const updated = await LabelService.updateLabel(editingLabel.value.id, {
         name: labelForm.value.name.trim(),
-        description: labelForm.value.description.trim() || undefined,
+        description: labelForm.value.description.trim() || '',
         color: labelForm.value.color,
       });
 
@@ -653,7 +653,7 @@ const saveLabel = async () => {
       // Create new label
       const created = await LabelService.createLabel({
         name: labelForm.value.name.trim(),
-        description: labelForm.value.description.trim() || undefined,
+        description: labelForm.value.description.trim() || '',
         color: labelForm.value.color,
         userId: user.value?.id,
         projectId: props.projectId || undefined,

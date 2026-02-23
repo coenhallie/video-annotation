@@ -182,14 +182,14 @@ initializeForm();
 </script>
 
 <template>
-  <div class="comment-form p-4 bg-gray-50 border-b border-gray-200">
+  <div class="comment-form p-4 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
     <!-- Form Header -->
     <div class="flex justify-between items-center mb-3">
-      <h5 class="text-sm font-medium text-gray-900">
+      <h5 class="text-sm font-medium text-gray-900 dark:text-gray-100">
         {{ formTitle }}
       </h5>
       <button
-        class="btn-ghost p-1"
+        class="btn-ghost p-1 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
         :disabled="isSubmitting"
         title="Cancel"
         @click="handleCancel"
@@ -217,11 +217,11 @@ initializeForm();
     <!-- Error Message -->
     <div
       v-if="error"
-      class="mb-3 p-2 bg-red-50 border border-red-200 rounded-md"
+      class="mb-3 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md"
     >
       <div class="flex items-center">
         <svg
-          class="icon icon-sm text-red-400 mr-2"
+          class="icon icon-sm text-red-400 dark:text-red-500 mr-2"
           viewBox="0 0 24 24"
         >
           <circle
@@ -242,7 +242,7 @@ initializeForm();
             y2="15"
           />
         </svg>
-        <p class="text-sm text-red-700">
+        <p class="text-sm text-red-700 dark:text-red-300">
           {{ error }}
         </p>
       </div>
@@ -255,7 +255,7 @@ initializeForm();
     >
       <label
         for="display-name"
-        class="block text-sm font-medium text-gray-700 mb-1"
+        class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
       >
         Display Name
       </label>
@@ -264,12 +264,12 @@ initializeForm();
         ref="displayNameRef"
         v-model="displayName"
         type="text"
-        class="form-input"
+        class="form-input bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100"
         placeholder="Enter your display name"
         maxlength="50"
         :disabled="isSubmitting"
       >
-      <p class="mt-1 text-xs text-gray-500">
+      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
         This name will be shown with your comment
       </p>
     </div>
@@ -278,7 +278,7 @@ initializeForm();
     <div class="mb-3">
       <label
         for="comment-content"
-        class="block text-sm font-medium text-gray-700 mb-1"
+        class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
       >
         Comment
       </label>
@@ -286,7 +286,7 @@ initializeForm();
         id="comment-content"
         ref="textareaRef"
         v-model="content"
-        class="form-textarea"
+        class="form-textarea bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100"
         rows="3"
         placeholder="Write your comment..."
         :maxlength="MAX_CONTENT_LENGTH"
@@ -306,7 +306,7 @@ initializeForm();
     <!-- Form Actions -->
     <div class="flex justify-end space-x-2">
       <button
-        class="btn btn-secondary"
+        class="btn btn-secondary dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 dark:border-gray-600"
         :disabled="isSubmitting"
         @click="handleCancel"
       >
@@ -352,19 +352,19 @@ initializeForm();
 }
 
 .form-input {
-  @apply w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-gray-500 transition-colors;
+  @apply w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-gray-500 transition-colors;
 }
 
 .form-input:disabled {
-  @apply bg-gray-100 cursor-not-allowed;
+  @apply bg-gray-100 dark:bg-gray-800 cursor-not-allowed opacity-60;
 }
 
 .form-textarea {
-  @apply w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-gray-500 transition-colors resize-none;
+  @apply w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-gray-500 transition-colors resize-none;
 }
 
 .form-textarea:disabled {
-  @apply bg-gray-100 cursor-not-allowed;
+  @apply bg-gray-100 dark:bg-gray-800 cursor-not-allowed opacity-60;
 }
 
 .btn:disabled {

@@ -2,7 +2,7 @@
   <div class="searchable-label-selector">
     <!-- Header -->
     <div class="flex items-center justify-between mb-3">
-      <label class="block text-sm font-medium text-gray-700">
+      <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
         Label
         <span
           v-if="required"
@@ -12,7 +12,7 @@
       <button
         v-if="!readonly && canManageLabels"
         type="button"
-        class="text-xs text-blue-600 hover:text-blue-800 underline"
+        class="text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 underline"
         @click="$emit('manage-labels')"
       >
         Manage Labels
@@ -71,7 +71,7 @@
       class="relative"
     >
       <div
-        class="min-h-[2.5rem] w-full bg-white border border-gray-300 rounded-md shadow-sm px-3 py-2 cursor-text focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500"
+        class="min-h-[2.5rem] w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm px-3 py-2 cursor-text focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500"
         :class="{
           'rounded-b-none border-b-0': showDropdown,
           'pb-1': selectedLabels.length > 0,
@@ -139,7 +139,7 @@
             v-model="searchQuery"
             type="text"
             :placeholder="getPlaceholder()"
-            class="block w-full pl-8 pr-8 py-0 text-sm bg-transparent border-0 focus:outline-none focus:ring-0 placeholder-gray-500"
+            class="block w-full pl-8 pr-8 py-0 text-sm bg-transparent border-0 focus:outline-none focus:ring-0 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-gray-100"
             :class="{ 'mt-1': selectedLabels.length > 0 && mode === 'tags' }"
             @focus="openDropdown"
             @keydown="handleKeydown"
@@ -147,7 +147,7 @@
           >
           <button
             type="button"
-            class="absolute right-2 flex items-center justify-center w-6 h-6 hover:bg-gray-100 rounded"
+            class="absolute right-2 flex items-center justify-center w-6 h-6 hover:bg-gray-100 dark:hover:bg-gray-600 rounded text-gray-400 dark:text-gray-500"
             :class="{
               'top-2': selectedLabels.length === 0 || mode !== 'tags',
               'top-7': selectedLabels.length > 0 && mode === 'tags',
@@ -175,7 +175,7 @@
       <!-- Dropdown Panel -->
       <div
         v-if="showDropdown"
-        class="absolute z-10 w-full bg-white shadow-lg max-h-60 rounded-b-md border border-t-0 border-gray-300 py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none sm:text-sm"
+        class="absolute z-10 w-full bg-white dark:bg-gray-800 shadow-lg max-h-60 rounded-b-md border border-t-0 border-gray-300 dark:border-gray-600 py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none sm:text-sm"
       >
         <!-- Quick Actions -->
         <div
@@ -207,9 +207,9 @@
 
         <!-- Default Labels Section -->
         <div v-if="filteredDefaultLabels.length > 0">
-          <div class="px-3 py-2 bg-gray-50 border-b border-gray-200">
+          <div class="px-3 py-2 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
             <h4
-              class="text-xs font-medium text-gray-500 uppercase tracking-wide"
+              class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide"
             >
               Default Labels
             </h4>
@@ -217,22 +217,22 @@
           <div
             v-for="(label, index) in filteredDefaultLabels"
             :key="label.id"
-            class="cursor-pointer select-none relative py-2 pl-3 pr-9 hover:bg-gray-50"
-            :class="{ 'bg-blue-50': highlightedIndex === index }"
+            class="cursor-pointer select-none relative py-2 pl-3 pr-9 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100"
+            :class="{ 'bg-blue-50 dark:bg-blue-900/20': highlightedIndex === index }"
             @click="toggleLabel(label.id)"
             @mouseenter="highlightedIndex = index"
           >
             <div class="flex items-center">
               <div
-                class="w-3 h-3 rounded-full mr-2 border border-gray-300"
+                class="w-3 h-3 rounded-full mr-2 border border-gray-300 dark:border-gray-500"
                 :style="{ backgroundColor: label.color }"
               />
-              <span class="block truncate text-sm text-gray-900">{{
+              <span class="block truncate text-sm text-gray-900 dark:text-gray-100">{{
                 label.name
               }}</span>
               <span
                 v-if="label.description"
-                class="block text-xs text-gray-500 ml-2"
+                class="block text-xs text-gray-500 dark:text-gray-400 ml-2"
               >{{ label.description }}</span>
             </div>
             <span
@@ -257,11 +257,11 @@
         <!-- Custom Labels Section -->
         <div v-if="filteredCustomLabels.length > 0">
           <div
-            class="px-3 py-2 bg-gray-50 border-b border-gray-200"
+            class="px-3 py-2 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700"
             :class="{ 'border-t': filteredDefaultLabels.length > 0 }"
           >
             <h4
-              class="text-xs font-medium text-gray-500 uppercase tracking-wide"
+              class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide"
             >
               Custom Labels
             </h4>
@@ -269,9 +269,9 @@
           <div
             v-for="(label, index) in filteredCustomLabels"
             :key="label.id"
-            class="cursor-pointer select-none relative py-2 pl-3 pr-9 hover:bg-gray-50"
+            class="cursor-pointer select-none relative py-2 pl-3 pr-9 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100"
             :class="{
-              'bg-blue-50':
+              'bg-blue-50 dark:bg-blue-900/20':
                 highlightedIndex === filteredDefaultLabels.length + index,
             }"
             @click="toggleLabel(label.id)"
@@ -289,7 +289,7 @@
               }}</span>
               <span
                 v-if="label.description"
-                class="block text-xs text-gray-500 ml-2"
+                class="block text-xs text-gray-500 dark:text-gray-400 ml-2"
               >{{ label.description }}</span>
             </div>
             <span

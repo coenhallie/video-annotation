@@ -5,18 +5,18 @@
     @click="closeModal"
   >
     <div
-      class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 flex flex-col max-h-[85vh]"
+      class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full mx-4 flex flex-col max-h-[85vh]"
       @click.stop
     >
       <!-- Modal Header -->
       <div
-        class="flex items-center justify-between p-6 border-b border-gray-200"
+        class="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700"
       >
-        <h2 class="text-xl font-semibold text-gray-900">
+        <h2 class="text-xl font-semibold text-gray-900 dark:text-white">
           Changelog
         </h2>
         <button
-          class="text-gray-400 hover:text-gray-600 transition-colors"
+          class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
           @click="closeModal"
         >
           <svg
@@ -40,10 +40,10 @@
         <div class="space-y-8">
           <div v-for="(entry, index) in changelogEntries" :key="index" class="border-l-4 border-blue-500 pl-4 py-1">
             <div class="flex items-baseline justify-between mb-2">
-              <h3 class="text-lg font-bold text-gray-900">{{ entry.version }}</h3>
-              <span class="text-sm text-gray-500">{{ entry.date }}</span>
+              <h3 class="text-lg font-bold text-gray-900 dark:text-white">{{ entry.version }}</h3>
+              <span class="text-sm text-gray-500 dark:text-gray-400">{{ entry.date }}</span>
             </div>
-            <ul class="list-disc list-inside space-y-1 text-gray-700">
+            <ul class="list-disc list-inside space-y-1 text-gray-700 dark:text-gray-300">
               <li v-for="(change, cIndex) in entry.changes" :key="cIndex">
                 {{ change }}
               </li>
@@ -54,10 +54,10 @@
 
       <!-- Modal Footer -->
       <div
-        class="flex items-center justify-end space-x-3 p-6 border-t border-gray-200 bg-gray-50 rounded-b-lg"
+        class="flex items-center justify-end space-x-3 p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 rounded-b-lg"
       >
         <button
-          class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+          class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
           @click="closeModal"
         >
           Close
@@ -89,6 +89,29 @@ const closeModal = () => {
 // --- MANUAL CHANGELOG ENTRIES ---
 // Add new entries to the TOP of this array
 const changelogEntries = ref([
+   {
+    version: 'Beta v3.4',
+    date: 'February 17, 2026',
+    changes: [
+      'Add frame increase/decrease using arrow keys',
+      'Use spacebar to play/pause video',
+      'Fix drawing annotation persistence'
+    ],
+  },
+  {
+    version: 'Beta v3.3',
+    date: 'February 8, 2026',
+    changes: [
+      'Added dark mode toggle',
+    ],
+  },
+  {
+    version: 'Beta v3.2',
+    date: 'February 7, 2026',
+    changes: [
+      'Removed all video analytics functionality',
+    ],
+  },
   {
     version: 'Beta v3.1',
     date: 'January 27, 2026',

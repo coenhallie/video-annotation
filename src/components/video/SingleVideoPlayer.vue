@@ -301,7 +301,8 @@ const onError = (e: Event) => {
 // Expose ref for parent components if needed
 defineExpose({
   videoRef,
-  containerRef
+  containerRef,
+  seekFrame
 });
 
 // Watchers

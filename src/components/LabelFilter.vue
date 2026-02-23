@@ -4,7 +4,7 @@
     <div class="flex items-center justify-between mb-4">
       <div class="flex items-center space-x-2">
         <svg
-          class="w-5 h-5 text-gray-500"
+          class="w-5 h-5 text-gray-500 dark:text-gray-400"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -16,7 +16,7 @@
             d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.207A1 1 0 013 6.5V4z"
           />
         </svg>
-        <h3 class="text-sm font-medium text-gray-900">
+        <h3 class="text-sm font-medium text-gray-900 dark:text-gray-100">
           Filter by Labels
         </h3>
         <span
@@ -30,7 +30,7 @@
       <!-- Clear All -->
       <button
         v-if="selectedLabels.length > 0"
-        class="text-xs text-gray-500 hover:text-gray-700 underline"
+        class="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 underline"
         @click="clearAllFilters"
       >
         Clear all
@@ -61,25 +61,25 @@
           v-model="searchQuery"
           type="text"
           placeholder="Search labels..."
-          class="block w-full pl-10 pr-3 py-2 text-sm border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+          class="block w-full pl-10 pr-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md leading-5 bg-white dark:bg-gray-700 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-gray-900 dark:text-gray-100"
         >
       </div>
     </div>
 
     <!-- Label List -->
-    <div class="max-h-64 overflow-y-auto border border-gray-200 rounded-md">
+    <div class="max-h-64 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded-md">
       <!-- Default Labels Section -->
       <div v-if="filteredDefaultLabels.length > 0">
-        <div class="px-3 py-2 bg-gray-50 border-b border-gray-200">
-          <h4 class="text-xs font-medium text-gray-500 uppercase tracking-wide">
+        <div class="px-3 py-2 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
+          <h4 class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
             Default Labels
           </h4>
         </div>
-        <div class="divide-y divide-gray-200">
+        <div class="divide-y divide-gray-200 dark:divide-gray-700">
           <label
             v-for="label in filteredDefaultLabels"
             :key="label.id"
-            class="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer"
+            class="flex items-center px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer text-gray-900 dark:text-gray-100"
           >
             <input
               v-model="selectedLabels"
@@ -92,10 +92,10 @@
                 class="w-3 h-3 rounded-full mr-2 border border-gray-300"
                 :style="{ backgroundColor: label.color }"
               />
-              <span class="text-sm text-gray-900">{{ label.name }}</span>
+              <span class="text-sm text-gray-900 dark:text-gray-100">{{ label.name }}</span>
               <span
                 v-if="labelStats[label.id]"
-                class="ml-auto text-xs text-gray-500"
+                class="ml-auto text-xs text-gray-500 dark:text-gray-400"
               >
                 {{ labelStats[label.id]?.usageCount || 0 }}
               </span>
@@ -107,18 +107,18 @@
       <!-- Custom Labels Section -->
       <div v-if="filteredCustomLabels.length > 0">
         <div
-          class="px-3 py-2 bg-gray-50 border-b border-gray-200"
+          class="px-3 py-2 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700"
           :class="{ 'border-t': filteredDefaultLabels.length > 0 }"
         >
-          <h4 class="text-xs font-medium text-gray-500 uppercase tracking-wide">
+          <h4 class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
             Custom Labels
           </h4>
         </div>
-        <div class="divide-y divide-gray-200">
+        <div class="divide-y divide-gray-200 dark:divide-gray-700">
           <label
             v-for="label in filteredCustomLabels"
             :key="label.id"
-            class="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer"
+            class="flex items-center px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer text-gray-900 dark:text-gray-100"
           >
             <input
               v-model="selectedLabels"
@@ -131,10 +131,10 @@
                 class="w-3 h-3 rounded-full mr-2 border border-gray-300"
                 :style="{ backgroundColor: label.color }"
               />
-              <span class="text-sm text-gray-900">{{ label.name }}</span>
+              <span class="text-sm text-gray-900 dark:text-gray-100">{{ label.name }}</span>
               <span
                 v-if="labelStats[label.id]"
-                class="ml-auto text-xs text-gray-500"
+                class="ml-auto text-xs text-gray-500 dark:text-gray-400"
               >
                 {{ labelStats[label.id]?.usageCount || 0 }}
               </span>
@@ -149,7 +149,7 @@
         class="px-3 py-8 text-center"
       >
         <svg
-          class="mx-auto h-8 w-8 text-gray-400"
+          class="mx-auto h-8 w-8 text-gray-400 dark:text-gray-500"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -161,7 +161,7 @@
             d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"
           />
         </svg>
-        <p class="mt-2 text-sm text-gray-500">
+        <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
           {{
             searchQuery
               ? 'No labels match your search.'

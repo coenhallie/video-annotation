@@ -681,14 +681,14 @@ defineExpose({
   <div class="comment-section">
     <!-- Header -->
     <div
-      class="flex justify-between items-center p-3 border-b border-gray-200 bg-gray-50"
+      class="flex justify-between items-center p-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800"
     >
       <div class="flex items-center space-x-2">
-        <h4 class="text-sm font-medium text-gray-900">
+        <h4 class="text-sm font-medium text-gray-900 dark:text-gray-100">
           Comments
           <span
             v-if="commentCount > 0"
-            class="text-gray-500 font-normal"
+            class="text-gray-500 dark:text-gray-400 font-normal"
           >
             ({{ commentCount }})
           </span>
@@ -717,11 +717,11 @@ defineExpose({
     <!-- Error Message -->
     <div
       v-if="error"
-      class="p-3 bg-red-50 border-l-4 border-red-400"
+      class="p-3 bg-red-50 dark:bg-red-900/20 border-l-4 border-red-400 dark:border-red-600"
     >
       <div class="flex">
         <svg
-          class="icon icon-sm text-red-400"
+          class="icon icon-sm text-red-400 dark:text-red-500"
           viewBox="0 0 24 24"
         >
           <circle
@@ -743,7 +743,7 @@ defineExpose({
           />
         </svg>
         <div class="ml-2">
-          <p class="text-sm text-red-700">
+          <p class="text-sm text-red-700 dark:text-red-300">
             {{ error }}
           </p>
         </div>
@@ -755,7 +755,7 @@ defineExpose({
       v-if="isLoading"
       class="p-4 text-center"
     >
-      <div class="inline-flex items-center space-x-2 text-gray-500">
+      <div class="inline-flex items-center space-x-2 text-gray-500 dark:text-gray-400">
         <svg
           class="animate-spin icon icon-sm"
           viewBox="0 0 24 24"
@@ -782,7 +782,7 @@ defineExpose({
     <!-- Comment Form -->
     <div
       v-if="showCommentForm"
-      class="border-b border-gray-200"
+      class="border-b border-gray-200 dark:border-gray-700"
     >
       <CommentForm
         :annotation-id="props.annotationId"
@@ -800,10 +800,10 @@ defineExpose({
     <div class="comment-list">
       <div
         v-if="!isLoading && sortedComments.length === 0"
-        class="p-4 text-center text-gray-500"
+        class="p-4 text-center text-gray-500 dark:text-gray-400"
       >
         <svg
-          class="icon icon-lg mx-auto mb-2 text-gray-300"
+          class="icon icon-lg mx-auto mb-2 text-gray-300 dark:text-gray-600"
           viewBox="0 0 24 24"
         >
           <path
@@ -815,7 +815,7 @@ defineExpose({
         </p>
         <p
           v-if="permissions.canComment"
-          class="text-xs text-gray-400 mt-1"
+          class="text-xs text-gray-400 dark:text-gray-500 mt-1"
         >
           Be the first to add a comment
         </p>
@@ -823,7 +823,7 @@ defineExpose({
 
       <div
         v-else
-        class="divide-y divide-gray-100"
+        class="divide-y divide-gray-100 dark:divide-gray-700"
       >
         <CommentItem
           v-for="comment in sortedComments"
@@ -833,7 +833,7 @@ defineExpose({
           :can-moderate="canModerateComment(comment)"
           :read-only="readOnly"
           :class="{
-            'bg-blue-50 border-l-4 border-l-blue-400': newCommentIndicators.has(
+            'bg-blue-50 dark:bg-blue-900/20 border-l-4 border-l-blue-400 dark:border-l-blue-600': newCommentIndicators.has(
               comment.id
             ),
             'animate-pulse': comment.id.toString().startsWith('temp_'),
@@ -858,9 +858,9 @@ defineExpose({
     <!-- Permission Notice -->
     <div
       v-else-if="!permissions.canComment"
-      class="p-3 bg-yellow-50 border-t border-yellow-200"
+      class="p-3 bg-yellow-50 dark:bg-yellow-900/20 border-t border-yellow-200 dark:border-yellow-700"
     >
-      <p class="text-xs text-yellow-700 text-center">
+      <p class="text-xs text-yellow-700 dark:text-yellow-400 text-center">
         {{
           permissions.reason ||
             'You do not have permission to comment on this annotation'
@@ -874,7 +874,7 @@ defineExpose({
 @import 'tailwindcss' reference;
 
 .comment-section {
-  @apply bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden;
+  @apply bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm overflow-hidden;
 }
 
 .comment-list {

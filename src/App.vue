@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { onMounted, onErrorCaptured, ref } from 'vue';
 import { useAuth } from '@/composables/useAuth';
+import { useThemeStore } from '@/stores/theme';
 import NotificationToast from '@/components/NotificationToast.vue';
 
 const { initAuth } = useAuth();
+const themeStore = useThemeStore();
 const hasError = ref(false);
 const errorMessage = ref('');
 
 onMounted(() => {
   initAuth();
+  themeStore.initTheme();
 });
 
 onErrorCaptured((error: any, instance: any, info: string) => {
@@ -34,4 +37,5 @@ onErrorCaptured((error: any, instance: any, info: string) => {
   </div>
   <RouterView v-else />
   <NotificationToast />
+  
 </template>
