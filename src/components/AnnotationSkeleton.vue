@@ -13,7 +13,7 @@
       <div
         v-for="n in skeletonCount"
         :key="n"
-        class="card mb-2 p-2 relative border-l-4 border-gray-200 dark:border-gray-700"
+        class="bg-white dark:bg-gray-800 shadow-sm rounded-lg mb-2 p-2 relative border border-gray-200 dark:border-gray-700 border-l-4"
       >
         <!-- Header row with severity and timestamp -->
         <div class="flex justify-between items-center mb-1">
@@ -174,11 +174,6 @@ defineProps({
 
 <style scoped>
 @import 'tailwindcss' reference;
-
-.card {
-  @apply bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm;
-  border-radius: 8px;
-}
 
 .skeleton-rounded {
   border-radius: 4px;

@@ -1319,7 +1319,7 @@ watch(
             class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200 border border-orange-200 dark:border-orange-800 cursor-pointer hover:bg-orange-200 dark:hover:bg-orange-800 transition-colors"
             @click="isChangelogModalOpen = true"
           >
-            BETA v3.5
+            BETA v3.6
           </span>
         </div>
 

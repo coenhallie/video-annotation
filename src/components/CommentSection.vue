@@ -696,7 +696,7 @@ defineExpose({
       </div>
 
       <button
-        v-if="permissions.canComment"
+        v-if="permissions.canComment && !readOnly"
         class="btn btn-primary btn-sm flex items-center space-x-1"
         :disabled="isLoading"
         title="Add comment"

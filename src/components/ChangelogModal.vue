@@ -89,6 +89,13 @@ const closeModal = () => {
 // --- MANUAL CHANGELOG ENTRIES ---
 // Add new entries to the TOP of this array
 const changelogEntries = ref([
+    {
+    version: 'Beta v3.6',
+    date: 'February 25, 2026',
+    changes: [
+      'Hide comment functionality in view-only mode'
+    ],
+  },
   {
     version: 'Beta v3.5',
     date: 'February 23, 2026',

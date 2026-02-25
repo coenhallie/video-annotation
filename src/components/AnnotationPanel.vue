@@ -1743,6 +1743,7 @@ defineExpose({
               :annotation-id="annotation.id"
               :current-user="user"
               :video-id="videoId"
+              :read-only="readOnly"
               @comment-added="handleCommentAdded"
               @comment-updated="handleCommentUpdated"
               @comment-deleted="handleCommentDeleted"
