@@ -14,20 +14,27 @@ export function useAuth() {
 
   const signInWithSSO = async () => {
     try {
+      // Preserve outputVideo param through the OAuth redirect
+      let redirectTo = window.location.origin;
+      const pendingOutputVideo = sessionStorage.getItem('pendingOutputVideo');
+      if (pendingOutputVideo) {
+        redirectTo = `${window.location.origin}?outputVideo=${encodeURIComponent(pendingOutputVideo)}`;
+      }
+
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'keycloak',
         options: {
           scopes: 'openid email profile',
-          redirectTo: window.location.origin,
+          redirectTo,
         },
       });
-      console.log('🔐 [useAuth] Redirect URL:', window.location.origin);
+      console.log('🔐 [useAuth] Redirect URL:', redirectTo);
       if (error) throw error;
       return data;
-    } catch (error: any) {
+    } catch (error: unknown) {
       notifyError(
         'Login failed',
-        error?.message || 'Unable to redirect to Keycloak login.'
+        error instanceof Error ? error.message : 'Unable to redirect to Keycloak login.'
       );
       throw error;
     }

@@ -19,6 +19,7 @@
       :src="videoUrl"
       :poster="poster"
       crossorigin="anonymous"
+      preload="auto"
       @click="togglePlay"
       @loadedmetadata="onLoadedMetadata"
       @timeupdate="onTimeUpdate"

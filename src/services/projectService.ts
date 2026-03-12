@@ -11,6 +11,11 @@ export class ProjectService {
   private static isVideoValid(video: any): boolean {
     if (!video) return false;
 
+    // AWS videos are always valid (URL is fetched on demand)
+    if (video.videoId && typeof video.videoId === 'string' && video.videoId.startsWith('aws:')) {
+      return true;
+    }
+
     // For URL videos, check if URL is not empty
     if (video.videoType === 'url') {
       return video.url && video.url.trim() !== '';

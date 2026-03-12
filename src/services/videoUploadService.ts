@@ -264,7 +264,7 @@ export class VideoUploadService {
     userId: string,
     metadata: VideoMetadata,
     customTitle?: string
-  ): Promise<any> {
+  ): Promise<Record<string, unknown>> {
     console.log('📝 [VideoUploadService] Creating video record:', {
       fileName: file.name,
       customTitle,
@@ -326,14 +326,14 @@ export class VideoUploadService {
         createdAt: data.createdAt,
       });
       return data;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(
         '❌ [VideoUploadService] Failed to create video record:',
         error
       );
       // Clean up uploaded file if database insert fails
       await supabase.storage.from('videos').remove([filePath]);
-      throw new Error(`Failed to save video record: ${error.message}`);
+      throw new Error(`Failed to save video record: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -345,7 +345,7 @@ export class VideoUploadService {
     userId: string,
     customTitle?: string,
     onProgress?: (progress: UploadProgress) => void
-  ): Promise<any> {
+  ): Promise<Record<string, unknown>> {
     try {
       // Step 1: Extract metadata
       const metadata = await this.extractVideoMetadata(file);

@@ -29,8 +29,16 @@ coverage
 
 *.tsbuildinfo
 
+# Environment variables
+.env
+.env.*
+!.env.example
+
 # Debug and test files (should not be committed to production)
 debug-*.*
 *.debug.?
 test-*.html
 check-homography.js
+
+# Local Netlify folder
+.netlify

@@ -69,10 +69,10 @@ export class AnnotationService {
 
     // Transform the data to include labels array
     const annotationsWithLabels =
-      data?.map((annotation: any) => ({
+      data?.map((annotation: Record<string, unknown>) => ({
         ...annotation,
         labels:
-          annotation.annotation_labels?.map((al: any) => al.labelId) || [],
+          (annotation.annotation_labels as Array<{ labelId: string }> | undefined)?.map((al) => al.labelId) || [],
       })) || [];
 
     // If comment counts are requested, fetch them for all annotations
@@ -83,7 +83,7 @@ export class AnnotationService {
     ) {
       try {
         const annotationIds = annotationsWithLabels.map(
-          (annotation) => annotation.id
+          (annotation) => annotation.id as string
         );
         const commentCounts = await Promise.all(
           annotationIds.map((id) => CommentService.getCommentCount(id))
@@ -107,7 +107,7 @@ export class AnnotationService {
     annotationId: string,
     updates: AnnotationUpdate
   ) {
-    const updatesAny = updates as any;
+    const updatesAny = updates as Record<string, unknown>;
 
     // Ensure dual video frame data and annotationType are included in updates if provided
     const finalUpdates = {
@@ -321,10 +321,10 @@ export class AnnotationService {
 
     // Transform the data to include labels array
     const annotationsWithLabels =
-      data?.map((annotation: any) => ({
+      data?.map((annotation: Record<string, unknown>) => ({
         ...annotation,
         labels:
-          annotation.annotation_labels?.map((al: any) => al.labelId) || [],
+          (annotation.annotation_labels as Array<{ labelId: string }> | undefined)?.map((al) => al.labelId) || [],
       })) || [];
 
     // If comment counts are requested, fetch them for all annotations
@@ -335,14 +335,14 @@ export class AnnotationService {
     ) {
       try {
         const annotationIds = annotationsWithLabels.map(
-          (annotation: any) => annotation.id
+          (annotation) => annotation.id as string
         );
         const commentCounts = await Promise.all(
           annotationIds.map((id: string) => CommentService.getCommentCount(id))
         );
 
         // Add comment counts to annotations
-        return annotationsWithLabels.map((annotation: any, index: number) => ({
+        return annotationsWithLabels.map((annotation, index: number) => ({
           ...annotation,
           commentCount: commentCounts[index] || 0,
         }));
@@ -419,20 +419,20 @@ export class AnnotationService {
         synchronizedFrame != null ? Math.max(synchronizedFrame, 0) : null,
       // Include dual video frame data if available - ensure non-negative values
       videoAFrame:
-        (annotation as any).videoAFrame != null
-          ? Math.max((annotation as any).videoAFrame, 0)
+        annotation.videoAFrame != null
+          ? Math.max(annotation.videoAFrame, 0)
           : null,
       videoBFrame:
-        (annotation as any).videoBFrame != null
-          ? Math.max((annotation as any).videoBFrame, 0)
+        annotation.videoBFrame != null
+          ? Math.max(annotation.videoBFrame, 0)
           : null,
       videoATimestamp:
-        (annotation as any).videoATimestamp != null
-          ? Math.max((annotation as any).videoATimestamp, 0)
+        annotation.videoATimestamp != null
+          ? Math.max(annotation.videoATimestamp, 0)
           : null,
       videoBTimestamp:
-        (annotation as any).videoBTimestamp != null
-          ? Math.max((annotation as any).videoBTimestamp, 0)
+        annotation.videoBTimestamp != null
+          ? Math.max(annotation.videoBTimestamp, 0)
           : null,
     };
 
@@ -460,7 +460,7 @@ export class AnnotationService {
   ) {
     // Note: videoContext, comparisonVideoId, and synchronizedFrame are not supported in current database schema
     // This method is kept for API compatibility but only updates basic annotation fields
-    const updates: any = {};
+    const updates: Record<string, unknown> = {};
 
     // Only update fields that exist in the database schema
     // Since video_context doesn't exist in the database, we'll just return the annotation as-is

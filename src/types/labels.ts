@@ -53,7 +53,7 @@ export interface AnnotationWithLabels {
   timestamp: number;
   frame: number;
   annotationType: string;
-  drawingData?: any;
+  drawingData?: Record<string, unknown>;
   userId?: string;
   createdAt?: string;
   updatedAt?: string;

@@ -6,6 +6,7 @@ import { logger } from '../utils/logger';
 // Global state for comment tracking across all annotations
 const newCommentsByAnnotation = ref(new Map<string, Set<string>>());
 const commentCountsByAnnotation = ref(new Map<string, number>());
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const globalCommentSubscriptions = ref(new Map<string, any>());
 const isGlobalSubscriptionActive = ref(false);
 const lastViewedTimes = ref<Record<string, string>>({});
@@ -112,7 +113,7 @@ export function useGlobalComments() {
    * Handle global comment insert events
    */
   const handleGlobalCommentInsert = (
-    dbComment: any,
+    dbComment: unknown,
     currentUserId?: string,
     videoId?: string
   ) => {
@@ -159,8 +160,8 @@ export function useGlobalComments() {
    * Handle global comment update events
    */
   const handleGlobalCommentUpdate = (
-    dbComment: any,
-    dbOldComment?: any,
+    dbComment: unknown,
+    dbOldComment?: unknown,
     currentUserId?: string,
     videoId?: string
   ) => {
@@ -181,7 +182,7 @@ export function useGlobalComments() {
    * Handle global comment delete events
    */
   const handleGlobalCommentDelete = (
-    dbComment: any,
+    dbComment: unknown,
     currentUserId?: string,
     videoId?: string
   ) => {

@@ -19,6 +19,7 @@ import SharedVideoAuthPrompt from '@/components/SharedVideoAuthPrompt.vue';
 import VideoUpload from '@/components/VideoUpload.vue';
 import UnifiedVideoPlayer from '@/components/UnifiedVideoPlayer.vue';
 import { ShareService } from '@/services/shareService';
+import { VideoService } from '@/services/videoService';
 
 // Lazy loaded components
 const ProjectManagementModal = defineAsyncComponent(() => import('@/components/ProjectManagementModal.vue'));
@@ -224,6 +225,7 @@ const currentVideoId = ref<string | null>(null);
 const currentComparisonId = ref<string | null>(null);
 const isSharedComparison = ref(false);
 const isSharedVideo = ref(false);
+const isAwsVideo = ref(false);
 
 const sharedVideoData = ref<any>(null);
 
@@ -308,6 +310,16 @@ watch(
     if (!videoB?.url && !videoB?.filePath)
       videoB = await ensureVideoHydrated(videoB);
 
+    // Refresh presigned URLs for AWS videos (they expire after ~15 min)
+    if (VideoService.isAwsVideo(videoA as any)) {
+      const freshUrl = await VideoService.refreshAwsVideoUrl(videoA as Video);
+      if (freshUrl) videoA = { ...videoA, url: freshUrl };
+    }
+    if (VideoService.isAwsVideo(videoB as any)) {
+      const freshUrl = await VideoService.refreshAwsVideoUrl(videoB as Video);
+      if (freshUrl) videoB = { ...videoB, url: freshUrl };
+    }
+
     const aUrl = getVideoUrl(videoA) || '';
     const bUrl = getVideoUrl(videoB) || '';
     console.log('🧭 [App] Watcher computed URLs:', { aUrl, bUrl });
@@ -334,7 +346,7 @@ watch(
 const { cleanupAllSessionData, cleanupForProjectSwitch } = useSessionCleanup();
 
 // Initialize notifications
-useNotifications();
+const { error: notifyError } = useNotifications();
 
 
 
@@ -491,6 +503,18 @@ const handleLoaded = async (data: any) => {
     await loadAnnotations();
   } catch (error) {
     console.error('Error in handleLoaded:', error);
+  }
+};
+
+const handleVideoError = async (_error: any) => {
+  // If this is an AWS video, the presigned URL may have expired - try refreshing
+  if (currentVideoObject.value && VideoService.isAwsVideo(currentVideoObject.value)) {
+    console.log('🔄 [App] AWS video error, attempting URL refresh...');
+    const freshUrl = await VideoService.refreshAwsVideoUrl(currentVideoObject.value);
+    if (freshUrl) {
+      currentVideoObject.value = { ...currentVideoObject.value, url: freshUrl };
+      videoStore.setVideo(freshUrl, currentVideoObject.value.id);
+    }
   }
 };
 
@@ -819,7 +843,16 @@ const handleProjectSelected = async (project: any) => {
       playerMode.value = 'single';
 
       // Pass the complete video object to preserve all properties
-      const video = project.video;
+      let video = project.video;
+
+      // For AWS videos, refresh the presigned URL before loading
+      if (VideoService.isAwsVideo(video)) {
+        const freshUrl = await VideoService.refreshAwsVideoUrl(video);
+        if (freshUrl) {
+          video = { ...video, url: freshUrl };
+        }
+        isAwsVideo.value = true;
+      }
 
       // Set the video type based on the video's actual type
       const videoType = project.video.videoType || 'upload';
@@ -1073,6 +1106,31 @@ const handleKeydown = (e: KeyboardEvent) => {
   }
 };
 
+const loadOutputVideo = async (outputVideoId: string) => {
+  if (!user.value) {
+    notifyError('Authentication required', 'Please log in to view this video.');
+    return;
+  }
+
+  try {
+    const video = await VideoService.findOrCreateOutputVideo(outputVideoId, user.value.id);
+
+    isAwsVideo.value = true;
+    currentVideoId.value = video.id;
+
+    loadVideo(video, 'url');
+
+    // Start session for annotations
+    await startSession();
+  } catch (err: any) {
+    notifyError(
+      'Failed to load video',
+      err?.message || 'Could not fetch the video from AWS. Check the project ID.',
+      10000
+    );
+  }
+};
+
 let authSubscription: { unsubscribe: () => void } | null = null;
 
 onMounted(async () => {
@@ -1150,10 +1208,19 @@ onMounted(async () => {
       } catch (error) {
         console.error('Failed to load shared content:', error);
       }
-    } else if (!user.value) {
-      // If no share link and not logged in, show the login page
-    } else if (!videoLoaded.value) {
-      layoutStore.openProjectModal();
+    } else {
+      // Check for AWS project link (from query param or sessionStorage after auth redirect)
+      const params = new URLSearchParams(window.location.search);
+      const outputVideoId = params.get('outputVideo') || sessionStorage.getItem('pendingOutputVideo');
+
+      if (outputVideoId && user.value) {
+        sessionStorage.removeItem('pendingOutputVideo');
+        await loadOutputVideo(outputVideoId);
+      } else if (!user.value) {
+        // If no share link and not logged in, show the login page
+      } else if (!videoLoaded.value) {
+        layoutStore.openProjectModal();
+      }
     }
   } finally {
     // Always set app loading to false at the end
@@ -1223,10 +1290,18 @@ watch(
         }
         pendingSharedContent.value = null;
       }
+      // Check for pending AWS project after login
+      else if (!oldUser && sessionStorage.getItem('pendingOutputVideo')) {
+        const outputVideoId = sessionStorage.getItem('pendingOutputVideo');
+        sessionStorage.removeItem('pendingOutputVideo');
+        if (outputVideoId) {
+          loadOutputVideo(outputVideoId);
+        }
+      }
       // Auto-open ProjectManagementModal after successful login
       // Only open if this is a new login (oldUser was null/undefined) and no shared content
       // Check for share URL parameters to avoid opening modal when accessing shared links
-      else if (!oldUser && !isSharedVideo.value && !isSharedComparison.value && !ShareService.parseShareUrl().id) {
+      else if (!oldUser && !isSharedVideo.value && !isSharedComparison.value && !isAwsVideo.value && !ShareService.parseShareUrl().id) {
         // Small delay to ensure the UI is fully rendered
         setTimeout(() => {
           isProjectModalOpen.value = true;
@@ -1319,7 +1394,7 @@ watch(
             class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200 border border-orange-200 dark:border-orange-800 cursor-pointer hover:bg-orange-200 dark:hover:bg-orange-800 transition-colors"
             @click="isChangelogModalOpen = true"
           >
-            BETA v3.6
+            BETA v3.7
           </span>
         </div>
 
@@ -1501,6 +1576,7 @@ watch(
                 @drawing-created="handleDrawingCreated"
                 @drawing-updated="handleDrawingUpdated"
                 @drawing-deleted="handleDrawingDeleted"
+                @error="handleVideoError"
               />
             </div>
           </div>

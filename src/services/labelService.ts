@@ -75,7 +75,7 @@ export class LabelService {
     if (includeDefault) {
       // Include default labels and user's custom labels
       if (userId) {
-        query = query.or(`isDefault.eq.true,userId.eq.${userId}`);
+        query = query.or('isDefault.eq.true,userId.eq.' + userId);
       } else {
         query = query.eq('isDefault', true);
       }
@@ -88,7 +88,7 @@ export class LabelService {
 
     // Filter by project if specified
     if (projectId) {
-      query = query.or(`projectId.is.null,projectId.eq.${projectId}`);
+      query = query.or('projectId.is.null,projectId.eq.' + projectId);
     } else {
       query = query.is('projectId', null);
     }
@@ -189,7 +189,7 @@ export class LabelService {
       throw error;
     }
 
-    return data?.map((item: any) => item.labels).filter(Boolean) || [];
+    return data?.map((item) => (item as unknown as { labels: Label }).labels).filter(Boolean) || [];
   }
 
   /**
@@ -411,13 +411,13 @@ export class LabelService {
       .ilike('name', `%${query}%`);
 
     if (userId) {
-      dbQuery = dbQuery.or(`isDefault.eq.true,userId.eq.${userId}`);
+      dbQuery = dbQuery.or('isDefault.eq.true,userId.eq.' + userId);
     } else {
       dbQuery = dbQuery.eq('isDefault', true);
     }
 
     if (projectId) {
-      dbQuery = dbQuery.or(`projectId.is.null,projectId.eq.${projectId}`);
+      dbQuery = dbQuery.or('projectId.is.null,projectId.eq.' + projectId);
     } else {
       dbQuery = dbQuery.is('projectId', null);
     }

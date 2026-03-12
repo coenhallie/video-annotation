@@ -1520,7 +1520,7 @@ defineExpose({
       <div
         v-for="annotation in sortedAnnotations"
         v-else
-        :key="annotation.id || Math.random().toString(36).slice(2)"
+        :key="annotation.id"
         class="card mb-2 p-2 transition-all duration-200 relative group"
         :class="{
           'bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-700 shadow-md ring-2 ring-blue-200 dark:ring-blue-800 cursor-default':

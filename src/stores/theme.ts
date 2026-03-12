@@ -7,12 +7,17 @@ export const useThemeStore = defineStore('theme', () => {
 
   // Actions
   function initTheme() {
-    // Check localStorage first
-    const storedTheme = localStorage.getItem('theme');
-    if (storedTheme) {
-      isDark.value = storedTheme === 'dark';
-    } else {
-      // Fallback to system preference
+    try {
+      // Check localStorage first
+      const storedTheme = localStorage.getItem('theme');
+      if (storedTheme) {
+        isDark.value = storedTheme === 'dark';
+      } else {
+        // Fallback to system preference
+        isDark.value = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      }
+    } catch {
+      // localStorage unavailable (e.g. Safari private browsing)
       isDark.value = window.matchMedia('(prefers-color-scheme: dark)').matches;
     }
     applyTheme();
@@ -21,7 +26,11 @@ export const useThemeStore = defineStore('theme', () => {
   function toggleTheme() {
     isDark.value = !isDark.value;
     applyTheme();
-    localStorage.setItem('theme', isDark.value ? 'dark' : 'light');
+    try {
+      localStorage.setItem('theme', isDark.value ? 'dark' : 'light');
+    } catch {
+      // localStorage unavailable
+    }
   }
 
   function applyTheme() {

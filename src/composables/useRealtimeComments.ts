@@ -42,7 +42,9 @@ export function useRealtimeComments(annotationId: string | Ref<string>) {
   const typingUsers = ref(new Map<string, CommentPresence>());
 
   // Subscriptions
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let commentSubscription: any = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let presenceChannel: any = null;
 
   // Event handlers
@@ -153,7 +155,7 @@ export function useRealtimeComments(annotationId: string | Ref<string>) {
 
     presenceChannel
       .on('presence', { event: 'sync' }, () => {
-        const state = presenceChannel.presenceState();
+        const state = presenceChannel!.presenceState();
         const users = new Set(Object.keys(state));
         activeUsers.value = users;
 
@@ -191,7 +193,7 @@ export function useRealtimeComments(annotationId: string | Ref<string>) {
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
-          await presenceChannel.track({
+          await presenceChannel!.track({
             userId: userId,
             userName: userName,
             annotationId: currentId,
@@ -205,7 +207,7 @@ export function useRealtimeComments(annotationId: string | Ref<string>) {
   /**
    * Handle comment insert events
    */
-  const handleCommentInsert = (dbComment: any) => {
+  const handleCommentInsert = (dbComment: unknown) => {
     const comment = dbComment as Comment;
 
     // Check if comment already exists (avoid duplicates)
@@ -231,7 +233,7 @@ export function useRealtimeComments(annotationId: string | Ref<string>) {
   /**
    * Handle comment update events
    */
-  const handleCommentUpdate = (dbComment: any, dbOldComment?: any) => {
+  const handleCommentUpdate = (dbComment: unknown, dbOldComment?: unknown) => {
     const comment = dbComment as Comment;
     const oldComment = dbOldComment ? (dbOldComment as Comment) : undefined;
 
@@ -257,7 +259,7 @@ export function useRealtimeComments(annotationId: string | Ref<string>) {
   /**
    * Handle comment delete events
    */
-  const handleCommentDelete = (dbComment: any) => {
+  const handleCommentDelete = (dbComment: unknown) => {
     const comment = dbComment as Comment;
 
     // Remove from realtime comments array

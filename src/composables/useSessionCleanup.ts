@@ -1,5 +1,22 @@
 import { ref, readonly } from 'vue';
 
+/** Structural type for drawing canvas instances used during cleanup */
+interface DrawingCanvasInstance {
+  clearAllDrawings: () => void;
+  disableDrawingMode: () => void;
+  state?: { value: { activeDrawing: unknown; isLoadingDrawings: boolean } };
+}
+
+/** Structural type for dual video player instances used during cleanup */
+interface DualVideoPlayerInstance {
+  videoAUrl?: { value: string };
+  videoBUrl?: { value: string };
+  cleanup?: () => void;
+  clearCurrentAnnotationContext?: () => void;
+  drawingCanvasA?: { clearAllDrawings: () => void };
+  drawingCanvasB?: { clearAllDrawings: () => void };
+}
+
 /**
  * Centralized session cleanup utility
  * Ensures all session data is properly cleaned up when switching projects
@@ -16,34 +33,34 @@ export function useSessionCleanup() {
 
 
       // Drawing canvas instances
-      drawingCanvas?: any;
-      drawingCanvasA?: any;
-      drawingCanvasB?: any;
+      drawingCanvas?: DrawingCanvasInstance;
+      drawingCanvasA?: DrawingCanvasInstance;
+      drawingCanvasB?: DrawingCanvasInstance;
 
       // Dual video player instance
-      dualVideoPlayer?: any;
+      dualVideoPlayer?: DualVideoPlayerInstance;
 
       // Comparison workflow instance
-      comparisonWorkflow?: any;
+      comparisonWorkflow?: { resetWorkflow: () => void };
 
       // Video session instance
-      videoSession?: any;
+      videoSession?: { endSession: () => Promise<void>; cleanup?: () => void };
 
       // Annotation and video state
-      annotations?: any;
-      videoAnnotations?: any;
-      selectedAnnotation?: any;
+      annotations?: { value: unknown[] };
+      videoAnnotations?: { cleanup?: () => void };
+      selectedAnnotation?: { value: unknown };
 
       // Video player state
-      videoState?: any;
-      currentVideoId?: any;
-      currentComparisonId?: any;
+      videoState?: Record<string, unknown>;
+      currentVideoId?: { value: unknown };
+      currentComparisonId?: { value: unknown };
 
       // Comment and realtime state
-      realtimeAnnotations?: any;
-      globalComments?: any;
-      commentPermissions?: any;
-      anonymousSession?: any;
+      realtimeAnnotations?: { cleanup?: () => void };
+      globalComments?: { cleanup?: () => void };
+      commentPermissions?: { value: unknown };
+      anonymousSession?: { value: unknown };
 
 
 
@@ -402,7 +419,7 @@ export function useSessionCleanup() {
   /**
    * Cleanup specific to drawing data
    */
-  const cleanupDrawingData = (drawingCanvas: any) => {
+  const cleanupDrawingData = (drawingCanvas: DrawingCanvasInstance | undefined) => {
     console.log('🧹 [SessionCleanup] Cleaning up drawing data...');
 
     if (drawingCanvas) {
@@ -429,17 +446,17 @@ export function useSessionCleanup() {
     newProjectType: 'single' | 'dual',
     options: {
 
-      drawingCanvas?: any;
-      drawingCanvasA?: any;
-      drawingCanvasB?: any;
-      dualVideoPlayer?: any;
-      comparisonWorkflow?: any;
-      videoSession?: any;
-      annotations?: any;
-      selectedAnnotation?: any;
-      videoState?: any;
-      currentVideoId?: any;
-      currentComparisonId?: any;
+      drawingCanvas?: DrawingCanvasInstance;
+      drawingCanvasA?: DrawingCanvasInstance;
+      drawingCanvasB?: DrawingCanvasInstance;
+      dualVideoPlayer?: DualVideoPlayerInstance;
+      comparisonWorkflow?: { resetWorkflow: () => void };
+      videoSession?: { endSession: () => Promise<void>; cleanup?: () => void };
+      annotations?: { value: unknown[] };
+      selectedAnnotation?: { value: unknown };
+      videoState?: Record<string, unknown>;
+      currentVideoId?: { value: unknown };
+      currentComparisonId?: { value: unknown };
       additionalCleanup?: (() => void | Promise<void>)[];
     } = {}
   ) => {

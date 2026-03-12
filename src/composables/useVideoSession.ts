@@ -1,11 +1,12 @@
 import { ref, readonly, onUnmounted, toValue } from 'vue';
+import type { Ref, MaybeRefOrGetter } from 'vue';
 import { supabase } from './useSupabase';
 import { useAuth } from './useAuth';
 import { ShareService } from '../services/shareService';
 import type { CommentPermissionContext } from '../services/shareService';
 import type { AnonymousSession } from '../types/database';
 
-export function useVideoSession(videoId) {
+export function useVideoSession(videoId: MaybeRefOrGetter<string | null>) {
   const { user } = useAuth();
   const currentSession = ref(null);
   const isSessionActive = ref(false);
@@ -19,8 +20,8 @@ export function useVideoSession(videoId) {
   const anonymousSession = ref<AnonymousSession | null>(null);
   const isSharedVideo = ref(false);
 
-  let activityInterval = null;
-  let heartbeatInterval = null;
+  let activityCleanup: (() => void) | null = null;
+  let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 
   const startSession = async () => {
     const currentVideoId = toValue(videoId);
@@ -30,6 +31,9 @@ export function useVideoSession(videoId) {
       return;
     }
 
+    // Clean up previous tracking before setting up new ones
+    cleanup();
+
     try {
       // Check if this is a shared video and initialize comment permissions
       await initializeCommentPermissions(currentVideoId);
@@ -37,30 +41,23 @@ export function useVideoSession(videoId) {
       // For authenticated users with valid UUID video IDs
       if (currentUser && isValidUUID(currentVideoId)) {
         // Update session activity
-        const { data, error } = await supabase.rpc('update_session_activity', {
+        await supabase.rpc('update_session_activity', {
           p_video_id: currentVideoId,
           p_user_id: currentUser.id,
         });
-
-        if (error) {
-          // Continue without session tracking if RPC fails
-        } else {
-        }
-      } else if (!currentUser) {
-      } else {
       }
 
       isSessionActive.value = true;
       lastActivity.value = new Date();
 
       // Set up activity tracking
-      setupActivityTracking();
+      activityCleanup = setupActivityTracking();
       setupHeartbeat();
-    } catch (error) {
+    } catch {
       // Continue without session tracking if it fails
       isSessionActive.value = true;
       lastActivity.value = new Date();
-      setupActivityTracking();
+      activityCleanup = setupActivityTracking();
       setupHeartbeat();
     }
   };
@@ -72,14 +69,16 @@ export function useVideoSession(videoId) {
       const { error } = await supabase
         .from('video_sessions')
         .update({ isActive: false })
-        .eq('videoId', toValue(videoId))
-        .eq('userId', toValue(user).id);
+        .eq('videoId', toValue(videoId)!)
+        .eq('userId', toValue(user)!.id);
 
       if (error) throw error;
 
       isSessionActive.value = false;
       cleanup();
-    } catch (error) {}
+    } catch {
+      // Silently fail — session cleanup is best-effort
+    }
   };
 
   /**
@@ -87,8 +86,6 @@ export function useVideoSession(videoId) {
    * This clears all session-related data without ending the database session
    */
   const resetSessionState = () => {
-    console.log('🧹 [VideoSession] Resetting session state...');
-
     // Reset session state
     currentSession.value = null;
     isSessionActive.value = false;
@@ -104,8 +101,6 @@ export function useVideoSession(videoId) {
 
     // Clean up intervals
     cleanup();
-
-    console.log('✅ [VideoSession] Session state reset completed');
   };
 
   /**
@@ -113,18 +108,13 @@ export function useVideoSession(videoId) {
    * This should be called when completely switching away from video annotation
    */
   const completeSessionCleanup = async () => {
-    console.log('🧹 [VideoSession] Starting complete session cleanup...');
-
     try {
       // End the database session
       await endSession();
 
       // Reset all state
       resetSessionState();
-
-      console.log('✅ [VideoSession] Complete session cleanup completed');
-    } catch (error) {
-      console.error('❌ [VideoSession] Error during complete cleanup:', error);
+    } catch {
       // Still reset state even if database cleanup fails
       resetSessionState();
     }
@@ -153,25 +143,22 @@ export function useVideoSession(videoId) {
     }
 
     try {
-      const { data, error } = await supabase.rpc('update_session_activity', {
+      const { error } = await supabase.rpc('update_session_activity', {
         p_video_id: currentVideoId,
         p_user_id: currentUser.id,
       });
 
-      if (error) {
-        // Don't throw error to prevent disrupting the app
-        return;
+      if (!error) {
+        lastActivity.value = new Date();
       }
-
-      lastActivity.value = new Date();
-    } catch (error) {
+    } catch {
       // Don't throw error to prevent disrupting the app
     }
   };
 
-  const setupActivityTracking = () => {
+  const setupActivityTracking = (): (() => void) => {
     // Track user interactions (removed mousemove to prevent conflicts with drawing)
-    const events = ['click', 'keydown', 'scroll'];
+    const events = ['click', 'keydown', 'scroll'] as const;
 
     const handleActivity = () => {
       lastActivity.value = new Date();
@@ -181,17 +168,20 @@ export function useVideoSession(videoId) {
       document.addEventListener(event, handleActivity, { passive: true });
     });
 
-    // Clean up event listeners
-    const cleanup = () => {
+    // Return cleanup function
+    return () => {
       events.forEach((event) => {
         document.removeEventListener(event, handleActivity);
       });
     };
-
-    return cleanup;
   };
 
   const setupHeartbeat = () => {
+    // Clear any existing heartbeat first
+    if (heartbeatInterval) {
+      clearInterval(heartbeatInterval);
+    }
+
     // Send heartbeat every 30 seconds
     heartbeatInterval = setInterval(async () => {
       const timeSinceActivity = Date.now() - lastActivity.value.getTime();
@@ -210,9 +200,9 @@ export function useVideoSession(videoId) {
   };
 
   const cleanup = () => {
-    if (activityInterval) {
-      clearInterval(activityInterval);
-      activityInterval = null;
+    if (activityCleanup) {
+      activityCleanup();
+      activityCleanup = null;
     }
     if (heartbeatInterval) {
       clearInterval(heartbeatInterval);
@@ -233,7 +223,7 @@ export function useVideoSession(videoId) {
         isSharedComparison = await ShareService.validateSharedComparisonAccess(
           currentVideoId
         );
-      } catch (comparisonError) {
+      } catch {
         // Not a comparison video, continue with regular video check
       }
 
@@ -270,7 +260,7 @@ export function useVideoSession(videoId) {
           };
         }
       }
-    } catch (error) {
+    } catch {
       // Set safe defaults
       commentPermissions.value = {
         canComment: false,
@@ -284,46 +274,42 @@ export function useVideoSession(videoId) {
    * Create an anonymous session for shared video commenting
    */
   const createAnonymousSession = async (displayName: string) => {
-    try {
-      const currentVideoId = toValue(videoId);
-      if (!currentVideoId) {
-        throw new Error('No video ID available');
-      }
+    const currentVideoId = toValue(videoId);
+    if (!currentVideoId) {
+      throw new Error('No video ID available');
+    }
 
-      // Check if this is a comparison video first
-      let session;
-      try {
-        const isSharedComparison =
-          await ShareService.validateSharedComparisonAccess(currentVideoId);
-        if (isSharedComparison) {
-          session =
-            await ShareService.createAnonymousSessionForSharedComparison(
-              currentVideoId,
-              displayName
-            );
-        } else {
-          session = await ShareService.createAnonymousSessionForSharedVideo(
+    // Check if this is a comparison video first
+    let session;
+    try {
+      const isSharedComparison =
+        await ShareService.validateSharedComparisonAccess(currentVideoId);
+      if (isSharedComparison) {
+        session =
+          await ShareService.createAnonymousSessionForSharedComparison(
             currentVideoId,
             displayName
           );
-        }
-      } catch (comparisonError) {
-        // If comparison check fails, try as regular video
+      } else {
         session = await ShareService.createAnonymousSessionForSharedVideo(
           currentVideoId,
           displayName
         );
       }
-
-      anonymousSession.value = session;
-
-      // Update comment permissions with the new session
-      await initializeCommentPermissions(currentVideoId);
-
-      return session;
-    } catch (error) {
-      throw error;
+    } catch {
+      // If comparison check fails, try as regular video
+      session = await ShareService.createAnonymousSessionForSharedVideo(
+        currentVideoId,
+        displayName
+      );
     }
+
+    anonymousSession.value = session;
+
+    // Update comment permissions with the new session
+    await initializeCommentPermissions(currentVideoId);
+
+    return session;
   };
 
   /**
@@ -358,7 +344,8 @@ export function useVideoSession(videoId) {
   };
 
   onUnmounted(() => {
-    endSession();
+    // Fire-and-forget: endSession is best-effort on unmount
+    void endSession();
     cleanup();
   });
 

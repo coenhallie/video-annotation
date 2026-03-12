@@ -46,7 +46,7 @@ export interface DatabaseUser {
   email: string;
   fullName?: string;
   avatarUrl?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
 }
@@ -61,7 +61,7 @@ export interface DatabaseVideo {
   duration: number;
   totalFrames: number;
   thumbnailUrl?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   isPublic: boolean;
   allowAnnotations: boolean; // When true, requires authentication and allows annotations
   videoType: 'url' | 'upload';
@@ -97,7 +97,7 @@ export interface DatabaseAnnotation {
   videoBFrame?: number; // Frame number for video B in dual mode
   videoATimestamp?: number; // Timestamp for video A in dual mode
   videoBTimestamp?: number; // Timestamp for video B in dual mode
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
 }
@@ -185,7 +185,7 @@ export interface Annotation {
   videoATimestamp?: number;
   videoBTimestamp?: number;
   videoContext?: VideoContext;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   userId?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -275,12 +275,12 @@ export interface SharedComparisonVideoWithCommentPermissions {
   id: string;
   title: string;
   description?: string;
-  videoA: any | null; // Will be SharedVideoWithCommentPermissions from shareService
-  videoB: any | null; // Will be SharedVideoWithCommentPermissions from shareService
+  videoA: Record<string, unknown> | null; // SharedVideoWithCommentPermissions from shareService
+  videoB: Record<string, unknown> | null; // SharedVideoWithCommentPermissions from shareService
   isPublic: boolean;
   canComment: boolean;
   allowAnnotations: boolean;
-  annotations: any[];
+  annotations: Record<string, unknown>[];
   thumbnailUrl?: string;
   duration?: number;
   fps?: number;

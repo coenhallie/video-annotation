@@ -4,10 +4,12 @@ import type {
   VideoUpdate,
   Video,
   VideoEntity,
+  ComparisonVideo,
 } from '../types/database';
 import { isComparisonVideo, isIndividualVideo } from '../types/database';
 import { VideoUploadService } from './videoUploadService';
 import { ThumbnailGenerator } from '../utils/thumbnailGenerator';
+import { AwsStorageService } from './awsStorageService';
 
 export class VideoService {
   static async findExistingUploadedVideo(url: string, ownerId: string) {
@@ -436,21 +438,22 @@ export class VideoService {
 
           // Convert ComparisonVideoRecord to ComparisonVideo type
           if (comparisonVideoRecord) {
-            const comparisonVideo: any = {
+            const comparisonVideo: ComparisonVideo = {
               id: comparisonVideoRecord.id,
               userId: comparisonVideoRecord.userId || '',
               title: comparisonVideoRecord.title || '',
-              description: comparisonVideoRecord.description,
+              ...(comparisonVideoRecord.description != null && { description: comparisonVideoRecord.description }),
               videoAId: comparisonVideoRecord.videoAId,
               videoBId: comparisonVideoRecord.videoBId,
               isPublic: comparisonVideoRecord.isPublic || false,
+              allowAnnotations: false,
               createdAt:
                 comparisonVideoRecord.createdAt || new Date().toISOString(),
               updatedAt:
                 comparisonVideoRecord.updatedAt || new Date().toISOString(),
-              thumbnailUrl: comparisonVideoRecord.thumbnailUrl,
-              videoA: comparisonVideoRecord.videoA,
-              videoB: comparisonVideoRecord.videoB,
+              ...(comparisonVideoRecord.thumbnailUrl != null && { thumbnailUrl: comparisonVideoRecord.thumbnailUrl }),
+              ...(comparisonVideoRecord.videoA != null && { videoA: comparisonVideoRecord.videoA }),
+              ...(comparisonVideoRecord.videoB != null && { videoB: comparisonVideoRecord.videoB }),
             };
             return comparisonVideo;
           }
@@ -544,6 +547,109 @@ export class VideoService {
     } catch (error) {
       throw error;
     }
+  }
+
+  /**
+   * Find an existing video record by its AWS filepath (stored in filePath).
+   */
+  static async findVideoByOutputVideoId(outputVideoId: string): Promise<Video | null> {
+    const { data, error } = await supabase
+      .from('videos')
+      .select('*')
+      .eq('videoId', `aws:${outputVideoId}`)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error finding video by AWS project ID:', error);
+      return null;
+    }
+    return data;
+  }
+
+  /**
+   * Find or create a video record for an AWS pipeline project.
+   * - If a record already exists (by filePath), refresh its presigned URL.
+   * - If not, create a new record.
+   * Returns the video record with a fresh presigned URL.
+   */
+  static async findOrCreateOutputVideo(outputVideoId: string, ownerId: string): Promise<Video> {
+    // Always fetch a fresh presigned URL
+    const presignedUrl = await AwsStorageService.getVideoUrlForProject(outputVideoId);
+    const filepath = AwsStorageService.buildFilepath(outputVideoId);
+
+    // Check for existing record
+    const existing = await this.findVideoByOutputVideoId(outputVideoId);
+
+    if (existing) {
+      // Update the URL with the fresh presigned URL
+      const { data, error } = await supabase
+        .from('videos')
+        .update({ url: presignedUrl })
+        .eq('id', existing.id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Failed to refresh AWS video URL:', error);
+        return existing;
+      }
+      return data;
+    }
+
+    // Create new video record
+    const { data, error } = await supabase
+      .from('videos')
+      .insert({
+        ownerId,
+        url: presignedUrl,
+        title: `Pipeline Output - ${outputVideoId.substring(0, 8)}`,
+        videoType: 'url',
+        videoId: `aws:${outputVideoId}`,
+        isPublic: false,
+        fps: 30,
+        duration: 1,
+        totalFrames: 30,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Failed to create AWS video record:', error);
+      throw error;
+    }
+
+    return data;
+  }
+
+  /**
+   * Refresh the presigned URL for an AWS video.
+   * Extracts the project ID from videoId (format: "aws:{projectId}").
+   */
+  static async refreshAwsVideoUrl(video: Video): Promise<string | null> {
+    if (!this.isAwsVideo(video)) return null;
+
+    const outputVideoId = video.videoId.replace(/^aws:/, '');
+    try {
+      const presignedUrl = await AwsStorageService.getVideoUrlForProject(outputVideoId);
+
+      await supabase
+        .from('videos')
+        .update({ url: presignedUrl })
+        .eq('id', video.id);
+
+      return presignedUrl;
+    } catch (error) {
+      console.error('Failed to refresh AWS presigned URL:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Check if a video is an AWS pipeline video (identified by filePath pattern).
+   */
+  static isAwsVideo(video: Video | Record<string, unknown>): boolean {
+    const videoId = (video as any)?.videoId;
+    return typeof videoId === 'string' && videoId.startsWith('aws:');
   }
 
   /**

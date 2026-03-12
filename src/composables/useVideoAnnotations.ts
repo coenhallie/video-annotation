@@ -24,7 +24,7 @@ export function useVideoAnnotations(
   const { user } = useAuth();
 
   // State
-  const currentVideo = ref<any | null>(null);
+  const currentVideo = ref<Record<string, unknown> | null>(null);
   const annotations = ref<Annotation[]>([]);
   const isLoading = ref(false);
   const error = ref<string | null>(null);
@@ -67,7 +67,15 @@ export function useVideoAnnotations(
   });
 
   // Create or get video record
-  const initializeVideo = async (videoData: any) => {
+  const initializeVideo = async (videoData: {
+    existingVideo?: Record<string, unknown>;
+    videoType?: string;
+    title?: string;
+    fps?: number;
+    duration?: number;
+    totalFrames?: number;
+    [key: string]: unknown;
+  }) => {
     if (!toValue(user)) return;
 
     try {
@@ -111,8 +119,8 @@ export function useVideoAnnotations(
 
       // Load annotations for this video
       await loadAnnotations();
-    } catch (err: any) {
-      error.value = err.message;
+    } catch (err: unknown) {
+      error.value = err instanceof Error ? err.message : String(err);
     } finally {
       isLoading.value = false;
     }
@@ -160,7 +168,7 @@ export function useVideoAnnotations(
           count: shareData.annotations?.length ?? 0,
         });
 
-        annotations.value = (shareData.annotations || []) as Annotation[];
+        annotations.value = (shareData.annotations || []) as unknown as Annotation[];
         return;
       } catch (error) {
         logger.error('[useVideoAnnotations] error loading shared video', error);
@@ -248,8 +256,8 @@ export function useVideoAnnotations(
         );
         annotations.value = dbAnnotations.map((ann) => ann as Annotation);
       }
-    } catch (err) {
-      error.value = err.message;
+    } catch (err: unknown) {
+      error.value = err instanceof Error ? err.message : String(err);
     } finally {
       isLoading.value = false;
     }
@@ -347,7 +355,7 @@ export function useVideoAnnotations(
               labels
             );
             // Add labels to the created annotation object for immediate display
-            (createdAnnotation as any).labels = labels;
+            (createdAnnotation as Record<string, unknown>).labels = labels;
           } catch (labelError) {
             logger.error(
               '[useVideoAnnotations] Failed to associate labels with comparison annotation:',
@@ -415,7 +423,7 @@ export function useVideoAnnotations(
             );
             logger.debug('[useVideoAnnotations] Labels associated:', labels);
             // Add labels to the created annotation object for immediate display
-            (createdAnnotation as any).labels = labels;
+            (createdAnnotation as Record<string, unknown>).labels = labels;
           } catch (labelError) {
             logger.error(
               '[useVideoAnnotations] Failed to associate labels:',
@@ -444,9 +452,9 @@ export function useVideoAnnotations(
         annotations.value.length
       );
       return newAnnotation;
-    } catch (err) {
+    } catch (err: unknown) {
       logger.error('[useVideoAnnotations] addAnnotation error', err);
-      error.value = (err as any).message;
+      error.value = err instanceof Error ? err.message : String(err);
       throw err;
     }
   };
@@ -483,7 +491,7 @@ export function useVideoAnnotations(
 
       // Build updates object, only including fields that are being updated
       // This prevents sending default values that might violate constraints
-      const dbUpdates: any = {};
+      const dbUpdates: Record<string, unknown> = {};
 
       // Only add fields that are explicitly provided in the updates
       if (updatesWithoutLabels.content !== undefined) {
@@ -556,7 +564,7 @@ export function useVideoAnnotations(
             actualAnnotationId
           );
           // Add labels to the updated annotation object for immediate display
-          (updatedAnnotation as any).labels = labels;
+          (updatedAnnotation as Record<string, unknown>).labels = labels;
         } catch (labelError) {
           logger.error(
             '[useVideoAnnotations] Failed to update labels:',
@@ -576,8 +584,8 @@ export function useVideoAnnotations(
       }
 
       return appAnnotation;
-    } catch (err) {
-      error.value = err.message;
+    } catch (err: unknown) {
+      error.value = err instanceof Error ? err.message : String(err);
       throw err;
     }
   };
@@ -596,8 +604,8 @@ export function useVideoAnnotations(
       annotations.value = annotations.value.filter(
         (a) => a.id !== actualAnnotationId
       );
-    } catch (err) {
-      error.value = err.message;
+    } catch (err: unknown) {
+      error.value = err instanceof Error ? err.message : String(err);
       throw err;
     }
   };

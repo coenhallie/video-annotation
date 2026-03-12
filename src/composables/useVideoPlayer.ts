@@ -188,8 +188,8 @@ export function useVideoPlayer(): UseVideoPlayer {
       await playerRef.value.play();
       isPlaying.value = true;
       error.value = null;
-    } catch (err: any) {
-      const errorMsg = `Failed to play video: ${err.message}`;
+    } catch (err: unknown) {
+      const errorMsg = `Failed to play video: ${err instanceof Error ? err.message : String(err)}`;
       error.value = errorMsg;
     }
   };
@@ -202,8 +202,8 @@ export function useVideoPlayer(): UseVideoPlayer {
     try {
       playerRef.value.pause();
       isPlaying.value = false;
-    } catch (err: any) {
-      const errorMsg = `Failed to pause video: ${err.message}`;
+    } catch (err: unknown) {
+      const errorMsg = `Failed to pause video: ${err instanceof Error ? err.message : String(err)}`;
       error.value = errorMsg;
     }
   };
@@ -248,8 +248,8 @@ export function useVideoPlayer(): UseVideoPlayer {
       updateFrameFromTime();
 
       // currentTime and frame will also be updated by timeupdate event
-    } catch (err: any) {
-      error.value = `Failed to seek: ${err.message}`;
+    } catch (err: unknown) {
+      error.value = `Failed to seek: ${err instanceof Error ? err.message : String(err)}`;
     }
   };
 
@@ -266,8 +266,8 @@ export function useVideoPlayer(): UseVideoPlayer {
       } else if (isMuted.value) {
         isMuted.value = false;
       }
-    } catch (err: any) {
-      error.value = `Failed to set volume: ${err.message}`;
+    } catch (err: unknown) {
+      error.value = `Failed to set volume: ${err instanceof Error ? err.message : String(err)}`;
     }
   };
 
@@ -282,8 +282,8 @@ export function useVideoPlayer(): UseVideoPlayer {
         playerRef.value.muted = true;
         isMuted.value = true;
       }
-    } catch (err: any) {
-      error.value = `Failed to toggle mute: ${err.message}`;
+    } catch (err: unknown) {
+      error.value = `Failed to toggle mute: ${err instanceof Error ? err.message : String(err)}`;
     }
   };
 
@@ -296,8 +296,8 @@ export function useVideoPlayer(): UseVideoPlayer {
       const clampedSpeed = Math.max(0.25, Math.min(speed, 2));
       playerRef.value.playbackRate = clampedSpeed;
       playbackSpeed.value = clampedSpeed;
-    } catch (err: any) {
-      error.value = `Failed to set playback speed: ${err.message}`;
+    } catch (err: unknown) {
+      error.value = `Failed to set playback speed: ${err instanceof Error ? err.message : String(err)}`;
     }
   };
 

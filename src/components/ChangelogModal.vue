@@ -89,6 +89,14 @@ const closeModal = () => {
 // --- MANUAL CHANGELOG ENTRIES ---
 // Add new entries to the TOP of this array
 const changelogEntries = ref([
+  {
+    version: 'Beta v3.7',
+    date: 'March 12, 2026',
+    changes: [
+      'Load pipeline output videos directly via shared link',
+      'Automatic presigned URL refresh for streamed videos',
+    ],
+  },
     {
     version: 'Beta v3.6',
     date: 'February 25, 2026',

@@ -27,13 +27,20 @@ router.beforeEach(async (to, from, next) => {
   // Check auth state
   const { data: { session } } = await supabase.auth.getSession();
   const isAuthenticated = !!session?.user;
-  
+
   // Check for share URL
   // Note: We use window.location because usage of 'to' might be complex if params are query based
   // But ShareService.parseShareUrl uses window.location.search and hash
   // We can let it run.
   const shareInfo = ShareService.parseShareUrl();
   const isSharedLink = !!(shareInfo.type && shareInfo.id);
+
+  // Check for AWS project link - store in sessionStorage so it survives auth redirects
+  const params = new URLSearchParams(window.location.search);
+  const outputVideo = params.get('outputVideo');
+  if (outputVideo) {
+    sessionStorage.setItem('pendingOutputVideo', outputVideo);
+  }
 
   if (to.name === 'login') {
     if (isAuthenticated) {

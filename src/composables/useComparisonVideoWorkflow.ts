@@ -156,12 +156,12 @@ export function useComparisonVideoWorkflow() {
       await loadComparisonMode(typedComparison);
 
       return true;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(
         '❌ [ComparisonWorkflow] Failed to create comparison:',
         err
       );
-      error.value = err.message || 'Failed to create comparison video';
+      error.value = err instanceof Error ? err.message : 'Failed to create comparison video';
       notifyError(error.value);
       return false;
     } finally {
@@ -203,9 +203,9 @@ export function useComparisonVideoWorkflow() {
 
       success('Comparison mode ready');
       return true;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('❌ [ComparisonWorkflow] Failed to start comparison:', err);
-      error.value = err.message || 'Failed to start comparison';
+      error.value = err instanceof Error ? err.message : 'Failed to start comparison';
       notifyError(error.value);
       return false;
     } finally {
@@ -257,9 +257,9 @@ export function useComparisonVideoWorkflow() {
 
       success('Comparison video loaded successfully');
       return true;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('❌ [ComparisonWorkflow] Failed to load comparison:', err);
-      error.value = err.message || 'Failed to load comparison video';
+      error.value = err instanceof Error ? err.message : 'Failed to load comparison video';
       notifyError(error.value || 'An error occurred');
       return false;
     } finally {
@@ -365,12 +365,12 @@ export function useComparisonVideoWorkflow() {
 
       success('Annotation created successfully');
       return newAnnotation;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(
         '❌ [ComparisonWorkflow] Failed to create annotation:',
         err
       );
-      notifyError(err.message || 'Failed to create annotation');
+      notifyError(err instanceof Error ? err.message : 'Failed to create annotation');
       throw err;
     }
   };
@@ -401,12 +401,12 @@ export function useComparisonVideoWorkflow() {
       }
 
       success('Annotation deleted successfully');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(
         '❌ [ComparisonWorkflow] Failed to delete annotation:',
         err
       );
-      notifyError(err.message || 'Failed to delete annotation');
+      notifyError(err instanceof Error ? err.message : 'Failed to delete annotation');
       throw err;
     }
   };

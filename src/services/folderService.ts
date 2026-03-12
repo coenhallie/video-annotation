@@ -165,7 +165,7 @@ export class FolderService {
     updates: Partial<Pick<Folder, 'name' | 'color' | 'icon' | 'sortOrder'>>
   ): Promise<Folder> {
     try {
-      const updateData: any = {};
+      const updateData: Record<string, string | number | undefined> = {};
       if (updates.name !== undefined) updateData.name = updates.name;
       if (updates.color !== undefined) updateData.color = updates.color;
       if (updates.icon !== undefined) updateData.icon = updates.icon;
@@ -460,7 +460,7 @@ export class FolderService {
           .select('project_id');
 
         // If project_folders table doesn't exist, return all projects
-        if (folderError && (folderError as any).code === '42P01') {
+        if (folderError && (folderError as unknown as { code: string }).code === '42P01') {
           console.warn(
             '⚠️ [FolderService] project_folders table does not exist, returning all projects'
           );
@@ -485,7 +485,7 @@ export class FolderService {
           .order('sort_order', { ascending: true });
 
         // If project_folders table doesn't exist, return empty array
-        if (error && (error as any).code === '42P01') {
+        if (error && (error as unknown as { code: string }).code === '42P01') {
           console.warn(
             '⚠️ [FolderService] project_folders table does not exist'
           );
@@ -532,17 +532,17 @@ export class FolderService {
   /**
    * Map database folder to Folder type
    */
-  private static mapDatabaseToFolder(dbFolder: any): Folder {
+  private static mapDatabaseToFolder(dbFolder: Record<string, unknown>): Folder {
     return {
-      id: dbFolder.id,
-      name: dbFolder.name,
-      parentId: dbFolder.parent_id,
-      ownerId: dbFolder.owner_id,
-      color: dbFolder.color,
-      icon: dbFolder.icon,
-      sortOrder: dbFolder.sort_order || 0,
-      createdAt: dbFolder.created_at,
-      updatedAt: dbFolder.updated_at,
+      id: dbFolder.id as string,
+      name: dbFolder.name as string,
+      parentId: (dbFolder.parent_id as string | null) ?? null,
+      ownerId: dbFolder.owner_id as string,
+      ...(dbFolder.color != null && { color: dbFolder.color as string }),
+      ...(dbFolder.icon != null && { icon: dbFolder.icon as string }),
+      sortOrder: (dbFolder.sort_order as number) || 0,
+      createdAt: dbFolder.created_at as string,
+      updatedAt: dbFolder.updated_at as string,
     };
   }
 }

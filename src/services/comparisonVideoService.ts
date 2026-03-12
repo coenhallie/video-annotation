@@ -61,7 +61,7 @@ export const ComparisonVideoService = {
 
     // Check for both video combinations
     const { data, error } = await query.or(
-      `and(videoAId.eq.${videoAId},videoBId.eq.${videoBId}),and(videoAId.eq.${videoBId},videoBId.eq.${videoAId})`
+      'and(videoAId.eq.' + videoAId + ',videoBId.eq.' + videoBId + '),and(videoAId.eq.' + videoBId + ',videoBId.eq.' + videoAId + ')'
     );
 
     if (error) {
@@ -110,7 +110,7 @@ export const ComparisonVideoService = {
       }
     }
 
-    const payload: Record<string, any> = {
+    const payload: Record<string, unknown> = {
       title: params.title,
       description: params.description ?? null,
       videoAId: params.videoAId,
@@ -141,11 +141,10 @@ export const ComparisonVideoService = {
         );
 
         // Create a custom error with the existing comparison info
-        const customError: any = new Error(
-          'A comparison between these videos already exists'
+        const customError = Object.assign(
+          new Error('A comparison between these videos already exists'),
+          { code: 'DUPLICATE_COMPARISON' as const, existingComparison: existing }
         );
-        customError.code = 'DUPLICATE_COMPARISON';
-        customError.existingComparison = existing;
         throw customError;
       }
       throw error;

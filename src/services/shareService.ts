@@ -16,7 +16,7 @@ export interface SharedVideoWithCommentPermissions {
   isPublic: boolean;
   canComment: boolean;
   allowAnnotations: boolean;
-  annotations: any[];
+  annotations: Record<string, unknown>[];
 }
 
 export interface CommentPermissionContext {
@@ -159,26 +159,7 @@ export class ShareService {
 
   // Copy text to clipboard
   static async copyToClipboard(text: string): Promise<void> {
-    try {
-      if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(text);
-      } else {
-        // Fallback for older browsers or non-secure contexts
-        const textArea = document.createElement('textarea');
-        textArea.value = text;
-        textArea.style.position = 'fixed';
-        textArea.style.left = '-999999px';
-        textArea.style.top = '-999999px';
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-        document.execCommand('copy');
-        textArea.remove();
-      }
-    } catch (error) {
-      console.error('❌ [ShareService] Error copying to clipboard:', error);
-      throw error;
-    }
+    await navigator.clipboard.writeText(text);
   }
 
   // Parse share URL parameters with type detection
@@ -415,7 +396,7 @@ export class ShareService {
    * Create video data for comparison sharing (allows private videos)
    */
   private static createVideoForComparison(
-    videoResult: any,
+    videoResult: { data: { id: string; title: string; description?: string; url?: string; filePath?: string; videoType: string; isPublic: boolean; allowAnnotations?: boolean } | null; error: unknown },
     fallbackTitle: string
   ): SharedVideoWithCommentPermissions | null {
     const { data: video, error } = videoResult;
@@ -455,7 +436,7 @@ export class ShareService {
    * Create placeholder for missing/private videos (legacy method)
    */
   private static createVideoPlaceholderIfNeeded(
-    videoResult: any,
+    videoResult: { data: { id: string; title: string; description?: string; url?: string; filePath?: string; videoType: string; isPublic: boolean; allowAnnotations?: boolean } | null; error: unknown },
     fallbackTitle: string
   ): SharedVideoWithCommentPermissions | null {
     const { data: video, error } = videoResult;
@@ -532,7 +513,7 @@ export class ShareService {
    * Check if commenting is allowed on a shared video
    * Note: Commenting on annotations requires the allowAnnotations flag to be true
    */
-  static canCommentOnSharedVideo(video: any): boolean {
+  static canCommentOnSharedVideo(video: { isPublic?: boolean; allowAnnotations?: boolean }): boolean {
     try {
       // Video must be public AND have annotations allowed
       // When allowAnnotations is true, only authenticated users can access and comment

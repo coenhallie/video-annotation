@@ -48,19 +48,19 @@ export interface DualVideoPlayer {
   videoBId?: Ref<string>;
 
   // Drawing canvas references
-  drawingCanvasA?: any;
-  drawingCanvasB?: any;
+  drawingCanvasA?: Ref<{ addDrawing?: (drawing: Record<string, unknown>) => void; updateDrawing?: (drawing: Record<string, unknown>) => void; deleteDrawing?: (drawingId: string) => void } | null>;
+  drawingCanvasB?: Ref<{ addDrawing?: (drawing: Record<string, unknown>) => void; updateDrawing?: (drawing: Record<string, unknown>) => void; deleteDrawing?: (drawingId: string) => void } | null>;
 
   // Method to set video sources
   setVideoSources?: (
     videoA: { url: string; id: string } | null,
     videoB: { url: string; id: string } | null
   ) => void;
-  setCanvasRefs?: (canvasA: any, canvasB: any) => void;
+  setCanvasRefs?: (canvasA: { addDrawing?: (drawing: Record<string, unknown>) => void; updateDrawing?: (drawing: Record<string, unknown>) => void; deleteDrawing?: (drawingId: string) => void } | null, canvasB: { addDrawing?: (drawing: Record<string, unknown>) => void; updateDrawing?: (drawing: Record<string, unknown>) => void; deleteDrawing?: (drawingId: string) => void } | null) => void;
 
   // Drawing methods
-  addDrawing?: (drawing: any, videoContext: 'A' | 'B') => void;
-  updateDrawing?: (drawing: any, videoContext: 'A' | 'B') => void;
+  addDrawing?: (drawing: Record<string, unknown>, videoContext: 'A' | 'B') => void;
+  updateDrawing?: (drawing: Record<string, unknown>, videoContext: 'A' | 'B') => void;
   deleteDrawing?: (drawingId: string, videoContext: 'A' | 'B') => void;
 
   // Sync control
@@ -109,6 +109,11 @@ export function useDualVideoPlayer(): DualVideoPlayer {
   const isManualSeekingA = ref(false);
   const isManualSeekingB = ref(false);
   const isIndependentMode = ref(true); // New flag for independent timeline control
+
+  // Track setTimeout IDs for cleanup
+  let seekTimeoutA: ReturnType<typeof setTimeout> | null = null;
+  let seekTimeoutB: ReturnType<typeof setTimeout> | null = null;
+  let seekTimeoutBoth: ReturnType<typeof setTimeout> | null = null;
 
   const timeToFrame = (timeInSeconds: number, which: 'A' | 'B') =>
     Math.round(
@@ -298,7 +303,8 @@ export function useDualVideoPlayer(): DualVideoPlayer {
     if (videoBRef.value) videoBRef.value.currentTime = time;
 
     // Reset flags after simultaneous seek
-    setTimeout(() => {
+    if (seekTimeoutBoth) clearTimeout(seekTimeoutBoth);
+    seekTimeoutBoth = setTimeout(() => {
       isManualSeekingA.value = false;
       isManualSeekingB.value = false;
     }, 300);
@@ -309,8 +315,8 @@ export function useDualVideoPlayer(): DualVideoPlayer {
     if (videoARef.value) {
       isManualSeekingA.value = true;
       videoARef.value.currentTime = time;
-      // Use a longer timeout and clear any existing timeout to be more reliable
-      setTimeout(() => {
+      if (seekTimeoutA) clearTimeout(seekTimeoutA);
+      seekTimeoutA = setTimeout(() => {
         isManualSeekingA.value = false;
       }, 300);
     }
@@ -320,8 +326,8 @@ export function useDualVideoPlayer(): DualVideoPlayer {
     if (videoBRef.value) {
       isManualSeekingB.value = true;
       videoBRef.value.currentTime = time;
-      // Use a longer timeout and clear any existing timeout to be more reliable
-      setTimeout(() => {
+      if (seekTimeoutB) clearTimeout(seekTimeoutB);
+      seekTimeoutB = setTimeout(() => {
         isManualSeekingB.value = false;
       }, 300);
     }
@@ -373,8 +379,8 @@ export function useDualVideoPlayer(): DualVideoPlayer {
       isManualSeekingA.value = true;
       videoARef.value.currentTime = newTime;
       videoACurrentFrame.value = newFrame;
-      // Use a longer timeout for frame stepping
-      setTimeout(() => {
+      if (seekTimeoutA) clearTimeout(seekTimeoutA);
+      seekTimeoutA = setTimeout(() => {
         isManualSeekingA.value = false;
       }, 300);
     }
@@ -389,16 +395,21 @@ export function useDualVideoPlayer(): DualVideoPlayer {
       isManualSeekingB.value = true;
       videoBRef.value.currentTime = newTime;
       videoBCurrentFrame.value = newFrame;
-      // Use a longer timeout for frame stepping
-      setTimeout(() => {
+      if (seekTimeoutB) clearTimeout(seekTimeoutB);
+      seekTimeoutB = setTimeout(() => {
         isManualSeekingB.value = false;
       }, 300);
     }
   }
 
   // Drawing canvas references - these will be set by the parent component
-  const drawingCanvasA = ref<any>(null);
-  const drawingCanvasB = ref<any>(null);
+  interface DrawingCanvas {
+    addDrawing?: (drawing: Record<string, unknown>) => void;
+    updateDrawing?: (drawing: Record<string, unknown>) => void;
+    deleteDrawing?: (drawingId: string) => void;
+  }
+  const drawingCanvasA = ref<DrawingCanvas | null>(null);
+  const drawingCanvasB = ref<DrawingCanvas | null>(null);
 
   // Method to set video sources
   function setVideoSources(
@@ -423,7 +434,7 @@ export function useDualVideoPlayer(): DualVideoPlayer {
   }
 
   // Method to set canvas references
-  function setCanvasRefs(canvasA: any, canvasB: any) {
+  function setCanvasRefs(canvasA: DrawingCanvas | null, canvasB: DrawingCanvas | null) {
     drawingCanvasA.value = canvasA;
     drawingCanvasB.value = canvasB;
     console.log('🎨 [useDualVideoPlayer] Canvas refs set:', {
@@ -433,7 +444,7 @@ export function useDualVideoPlayer(): DualVideoPlayer {
   }
 
   // Drawing methods for dual video mode
-  function addDrawing(drawing: any, videoContext: 'A' | 'B') {
+  function addDrawing(drawing: Record<string, unknown>, videoContext: 'A' | 'B') {
     const canvas =
       videoContext === 'A' ? drawingCanvasA.value : drawingCanvasB.value;
     if (canvas && canvas.addDrawing) {
@@ -449,7 +460,7 @@ export function useDualVideoPlayer(): DualVideoPlayer {
     }
   }
 
-  function updateDrawing(drawing: any, videoContext: 'A' | 'B') {
+  function updateDrawing(drawing: Record<string, unknown>, videoContext: 'A' | 'B') {
     const canvas =
       videoContext === 'A' ? drawingCanvasA.value : drawingCanvasB.value;
     if (canvas && canvas.updateDrawing) {
@@ -502,6 +513,9 @@ export function useDualVideoPlayer(): DualVideoPlayer {
   function destroy() {
     pause();
     cleanupSync?.();
+    if (seekTimeoutA) clearTimeout(seekTimeoutA);
+    if (seekTimeoutB) clearTimeout(seekTimeoutB);
+    if (seekTimeoutBoth) clearTimeout(seekTimeoutBoth);
     videoARef.value = null;
     videoBRef.value = null;
     isReady.value = false;

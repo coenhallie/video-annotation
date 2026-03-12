@@ -271,10 +271,8 @@ export class CommentService {
         throw new Error('Either videoId or comparisonVideoId is required');
       }
 
-      // Generate a unique session ID
-      const sessionId = `anon_${Date.now()}_${Math.random()
-        .toString(36)
-        .substr(2, 9)}`;
+      // Generate a cryptographically secure session ID
+      const sessionId = `anon_${crypto.randomUUID()}`;
 
       const sessionData: AnonymousSessionInsert = {
         sessionId: sessionId,
@@ -535,7 +533,7 @@ export class CommentService {
       const isAnnotationOwner =
         userId &&
         comment.annotation &&
-        (comment.annotation as any).userId === userId;
+        (comment.annotation as { userId?: string })?.userId === userId;
 
       return Boolean(isCommentAuthor || isAnnotationOwner);
     } catch (error) {
@@ -600,7 +598,7 @@ export class CommentService {
   /**
    * Get comment count for a project (video or comparison)
    */
-  static async getProjectCommentCount(project: any): Promise<number> {
+  static async getProjectCommentCount(project: { projectType: string; video: { id: string }; videoA?: { id: string }; videoB?: { id: string }; comparisonVideo?: { id: string } }): Promise<number> {
     try {
       let totalCount = 0;
 
