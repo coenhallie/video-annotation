@@ -90,6 +90,13 @@ const closeModal = () => {
 // Add new entries to the TOP of this array
 const changelogEntries = ref([
   {
+    version: 'Beta v3.8',
+    date: 'March 13, 2026',
+    changes: [
+      'Fix frame number not updating when scrubbing AWS pipeline videos',
+    ],
+  },
+  {
     version: 'Beta v3.7',
     date: 'March 12, 2026',
     changes: [

@@ -23,6 +23,7 @@
       @click="togglePlay"
       @loadedmetadata="onLoadedMetadata"
       @timeupdate="onTimeUpdate"
+      @seeked="onSeeked"
       @play="onPlay"
       @pause="onPause"
       @error="onError"
@@ -263,6 +264,21 @@ const detectFPS = (video: HTMLVideoElement) => {
 };
 
 const onTimeUpdate = () => {
+  if (videoRef.value) {
+    const time = videoRef.value.currentTime;
+    if (!props.disableGlobalStore) {
+      videoStore.updateTime(time);
+    } else {
+      localCurrentTime.value = time;
+    }
+    emit('time-update', time);
+  }
+};
+
+const onSeeked = () => {
+  // Update store with the actual time the video landed on after seeking.
+  // This is critical for remotely-served videos (e.g. AWS S3 presigned URLs)
+  // where timeupdate may not fire reliably during/after seeks.
   if (videoRef.value) {
     const time = videoRef.value.currentTime;
     if (!props.disableGlobalStore) {

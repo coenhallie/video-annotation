@@ -80,6 +80,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch, nextTick, onUnmounted } from 'vue';
+import { useVideoStore } from '@/stores/video';
 import SingleVideoPlayer from './video/SingleVideoPlayer.vue';
 import DualVideoPlayer from './video/DualVideoPlayer.vue';
 import DrawingCanvas from './DrawingCanvas.vue';
@@ -232,16 +233,22 @@ const handleDrawingDeleted = (drawingId: string, videoContext?: string) => {
 
 
 // Video Control Methods
+const videoStore = useVideoStore();
+
 const seekTo = (time: number) => {
   if (props.mode === 'single') {
     if (singlePlayerRef.value?.videoRef) {
       singlePlayerRef.value.videoRef.currentTime = time;
+      // Immediately update the store so frame number and time display update
+      // without waiting for the timeupdate event (which is unreliable during seeking,
+      // especially for remotely-served videos like AWS S3 presigned URLs)
+      videoStore.updateTime(time);
     }
   } else if (props.mode === 'dual' && dualPlayerRef.value) {
      // For dual mode, we might want to seek both videos or handle via dualVideoPlayer composable
      // But here we can delegate to the ref or composable if available
-     // The DashboardView seems to handle dual seek via dualVideoPlayer composable, 
-     // but falls back to this component for single mode. 
+     // The DashboardView seems to handle dual seek via dualVideoPlayer composable,
+     // but falls back to this component for single mode.
      // If we need to support dual seek from here:
      // (dualPlayerRef.value as any).seekTo?.(time);
   }
