@@ -671,6 +671,8 @@ const handleProjectSelected = async (project: ProjectSelection) => {
 // acts as the guard for landing on '/' (name 'dashboard') → no-op, so it never
 // collides with the AWS/share branches handled in onMounted.
 async function loadFromRoute() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('outputVideo') || ShareService.parseShareUrl().id) return; // handled by AWS/share branch
   try {
     if (route.name === 'editor-single' && route.params.id) {
       const video = await VideoService.getVideoById(route.params.id as string);
