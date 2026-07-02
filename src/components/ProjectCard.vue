@@ -140,10 +140,29 @@
     <!-- Actions Menu -->
     <div
       :class="[
-        'actions-menu absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-30',
+        'actions-menu absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-30',
         isSelected && 'opacity-100',
       ]"
     >
+      <button
+        class="p-1 text-gray-400 hover:text-gray-600 bg-white dark:bg-gray-800 rounded-md shadow-md dark:hover:bg-gray-700 relative z-30"
+        title="Add to folder"
+        @click.stop="emit('add-to-folder', props.project)"
+      >
+        <svg
+          class="w-4 h-4"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"
+          />
+        </svg>
+      </button>
       <button
         class="p-1.5 bg-white dark:bg-gray-800 rounded-md shadow-md hover:bg-gray-50 dark:hover:bg-gray-700 relative z-30"
         @click.stop="toggleActions"
@@ -231,6 +250,7 @@ const emit = defineEmits<{
   delete: [project: Project];
   dragstart: [project: Project, event: DragEvent];
   dragend: [event: DragEvent];
+  'add-to-folder': [project: Project];
 }>();
 
 // State

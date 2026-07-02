@@ -14,6 +14,7 @@ import VideoUpload from '@/components/VideoUpload.vue';
 import FolderTree from '@/components/FolderTree.vue';
 import NewFolderDialog from '@/components/NewFolderDialog.vue';
 import DeleteConfirmationDialog from '@/components/DeleteConfirmationDialog.vue';
+import MoveProjectsDialog from '@/components/MoveProjectsDialog.vue';
 import type { FolderTreeNode, Folder, DragData } from '@/types/folder';
 import { useDashboardFolders } from '@/composables/useDashboardFolders';
 import type {
@@ -31,6 +32,7 @@ const showUploadModal = ref(false);
 const showNewFolder = ref(false);
 const newFolderParent = ref<Folder | null>(null);
 const pendingDeleteFolder = ref<FolderTreeNode | null>(null);
+const moveDialogProjectIds = ref<string[] | null>(null);
 
 function onComparisonCreated(comparison: ComparisonCreatedEvent) {
   showComparisonModal.value = false;
@@ -184,6 +186,17 @@ async function onFolderDrop(node: FolderTreeNode | null, event: DragEvent) {
   const data = JSON.parse(raw) as DragData;
   if (data.type !== 'project' || Array.isArray(data.id)) return;
   await dashFolders.fileProject(data.id, node?.id ?? null);
+}
+
+function openAddToFolder(project: Project) {
+  moveDialogProjectIds.value = [project.id];
+}
+async function onMoveConfirmed(targetFolderId: string | null) {
+  const ids = moveDialogProjectIds.value ?? [];
+  for (const id of ids) {
+    await dashFolders.fileProject(id, targetFolderId);
+  }
+  moveDialogProjectIds.value = null;
 }
 
 onMounted(() => {
@@ -351,6 +364,7 @@ watch(user, (u) => {
                 :comment-count="commentCounts[project.id] ?? 0"
                 @open="openProject"
                 @dragstart="onCardDragStart"
+                @add-to-folder="openAddToFolder"
               />
               <span
                 v-if="project.owner"
@@ -375,6 +389,7 @@ watch(user, (u) => {
               :comment-count="commentCounts[project.id] ?? 0"
               @open="openProject"
               @dragstart="onCardDragStart"
+              @add-to-folder="openAddToFolder"
             />
           </div>
 
@@ -457,6 +472,14 @@ watch(user, (u) => {
       :item-count="1"
       @confirm="confirmDeleteFolder"
       @cancel="pendingDeleteFolder = null"
+    />
+    <MoveProjectsDialog
+      v-if="moveDialogProjectIds"
+      :projects="moveDialogProjectIds"
+      :folders="dashFolders.folderTree.value"
+      :current-folder-id="dashFolders.currentFolderId.value"
+      @move="onMoveConfirmed"
+      @close="moveDialogProjectIds = null"
     />
   </div>
 </template>

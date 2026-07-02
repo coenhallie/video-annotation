@@ -118,7 +118,7 @@
     <!-- Actions -->
     <div
       class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity ml-2 flex-shrink-0"
-      style="min-width: 140px"
+      style="min-width: 180px"
     >
       <button
         class="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
@@ -161,6 +161,25 @@
             stroke-linecap="round"
             stroke-linejoin="round"
             d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+          />
+        </svg>
+      </button>
+      <button
+        class="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
+        title="Add to folder"
+        @click.stop="emit('add-to-folder', props.project)"
+      >
+        <svg
+          class="w-4 h-4"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"
           />
         </svg>
       </button>
@@ -225,6 +244,7 @@ const emit = defineEmits<{
   delete: [project: Project];
   dragstart: [project: Project, event: DragEvent];
   dragend: [event: DragEvent];
+  'add-to-folder': [project: Project];
 }>();
 
 // State
