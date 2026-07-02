@@ -43,14 +43,14 @@ import type {
 import { useVideoStore } from '@/stores/video';
 import { useLayoutStore } from '@/stores/layout';
 import { storeToRefs } from 'pinia';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
 const route = useRoute();
+const router = useRouter();
 
 const videoStore = useVideoStore();
 const layoutStore = useLayoutStore();
 const {
-  isProjectModalOpen,
   isComparisonModalOpen,
   isShareModalOpen,
   isSharedLinksModalOpen,
@@ -501,23 +501,6 @@ const handleFormHide = () => {
 
 
 
-const openLoadModal = () => {
-  layoutStore.openProjectModal();
-};
-
-const closeLoadModal = () => {
-  layoutStore.closeProjectModal();
-};
-
-const openLoadModalWithTab = (tab: string) => {
-  // Close the project management modal first
-  layoutStore.closeProjectModal();
-  // If the tab is 'create', open the comparison modal
-  if (tab === 'create') {
-    layoutStore.openComparisonModal();
-  }
-};
-
 const closeComparisonModal = () => {
   layoutStore.closeComparisonModal();
 };
@@ -561,10 +544,6 @@ const handleVideoUploadSuccess = async (videoRecord: VideoUploadResult) => {
 
   // Handle the project selection
   await handleProjectSelected(uploadProject);
-
-  // Reopen the project management modal to show the new video
-  // This ensures the user sees their newly uploaded video in the list
-  isProjectModalOpen.value = true;
 };
 
 const handleVideoUploadError = (error: Error) => {
@@ -662,8 +641,6 @@ const handleProjectSelected = async (project: ProjectSelection) => {
     console.error('❌ [App] Error during project selection:', error);
     // You might want to show a user-friendly error message here
   }
-
-  closeLoadModal();
 };
 
 // Route-driven loader: resolves the :id param to a project and loads it via
@@ -976,7 +953,7 @@ watch(
       :shared-content-permission-text="sharedContentPermissionText"
       :current-video-object="currentVideoObject"
       :player-mode="playerMode"
-      @open-project-modal="layoutStore.openProjectModal()"
+      @open-project-modal="router.push({ name: 'dashboard' })"
       @open-shared-links="isSharedLinksModalOpen = true"
       @open-share-modal="layoutStore.openShareModal()"
       @sign-out="handleSignOut"
@@ -1193,7 +1170,6 @@ watch(
 
     <!-- All Modals -->
     <DashboardModals
-      :is-project-modal-open="isProjectModalOpen"
       :is-comparison-modal-open="isComparisonModalOpen"
       :is-video-upload-modal-open="isVideoUploadModalOpen"
       :is-share-modal-open="isShareModalOpen"
@@ -1204,10 +1180,7 @@ watch(
       :share-comparison-id="shareModalProps.comparisonId"
       :share-type="shareModalProps.shareType"
       :pending-shared-content="pendingSharedContent"
-      @close-project-modal="layoutStore.closeProjectModal()"
-      @project-selected="handleProjectSelected"
       @upload-video="layoutStore.openVideoUploadModal()"
-      @open-create-comparison="openLoadModalWithTab('create')"
       @close-comparison-modal="layoutStore.closeComparisonModal()"
       @comparison-created="handleComparisonCreated"
       @close-video-upload="layoutStore.closeVideoUploadModal()"

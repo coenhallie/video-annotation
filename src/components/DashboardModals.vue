@@ -3,14 +3,12 @@ import { defineAsyncComponent } from 'vue';
 import SharedVideoAuthPrompt from '@/components/SharedVideoAuthPrompt.vue';
 import VideoUpload from '@/components/VideoUpload.vue';
 import type {
-  ProjectSelection,
   ComparisonCreatedEvent,
   VideoUploadResult,
   PendingSharedContent,
 } from '@/types/component-interfaces';
 
 // Lazy loaded components
-const ProjectManagementModal = defineAsyncComponent(() => import('@/components/ProjectManagementModal.vue'));
 const CreateComparisonModal = defineAsyncComponent(() => import('@/components/CreateComparisonModal.vue'));
 const ShareModal = defineAsyncComponent(() => import('@/components/ShareModal.vue'));
 const SharedLinksManagement = defineAsyncComponent(() => import('@/components/SharedLinksManagement.vue'));
@@ -18,7 +16,6 @@ const ChangelogModal = defineAsyncComponent(() => import('@/components/Changelog
 
 defineProps<{
   // Modal visibility states
-  isProjectModalOpen: boolean;
   isComparisonModalOpen: boolean;
   isVideoUploadModalOpen: boolean;
   isShareModalOpen: boolean;
@@ -36,8 +33,6 @@ defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'close-project-modal'): void;
-  (e: 'project-selected', project: ProjectSelection): void;
   (e: 'upload-video'): void;
   (e: 'open-create-comparison'): void;
   (e: 'close-comparison-modal'): void;
@@ -54,15 +49,6 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <!-- Project Management Modal -->
-  <ProjectManagementModal
-    :is-visible="isProjectModalOpen"
-    @close="emit('close-project-modal')"
-    @project-selected="(project: ProjectSelection) => emit('project-selected', project)"
-    @upload-video="emit('upload-video')"
-    @open-load-modal="emit('open-create-comparison')"
-  />
-
   <!-- Create Comparison Modal -->
   <CreateComparisonModal
     :is-visible="isComparisonModalOpen"
