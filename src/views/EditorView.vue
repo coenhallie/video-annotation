@@ -671,23 +671,31 @@ const handleProjectSelected = async (project: ProjectSelection) => {
 // acts as the guard for landing on '/' (name 'dashboard') → no-op, so it never
 // collides with the AWS/share branches handled in onMounted.
 async function loadFromRoute() {
-  if (route.name === 'editor-single' && route.params.id) {
-    const video = await VideoService.getVideoById(route.params.id as string);
-    if (video) {
-      await handleProjectSelected({ projectType: 'single', video } as any);
+  try {
+    if (route.name === 'editor-single' && route.params.id) {
+      const video = await VideoService.getVideoById(route.params.id as string);
+      if (video) {
+        await handleProjectSelected({ projectType: 'single', video } as any);
+      }
+    } else if (route.name === 'editor-dual' && route.params.id) {
+      const comparisonVideo = await ComparisonVideoService.getComparisonVideoById(
+        route.params.id as string
+      );
+      if (comparisonVideo) {
+        await handleProjectSelected({
+          projectType: 'dual',
+          comparisonVideo,
+          videoA: (comparisonVideo as any).videoA,
+          videoB: (comparisonVideo as any).videoB,
+        } as any);
+      }
     }
-  } else if (route.name === 'editor-dual' && route.params.id) {
-    const comparisonVideo = await ComparisonVideoService.getComparisonVideoById(
-      route.params.id as string
+  } catch (err) {
+    console.warn('[EditorView] loadFromRoute failed to load', route.params.id, err);
+    notifyError(
+      'Video not found',
+      'This video could not be loaded. It may have been deleted or the link is invalid.'
     );
-    if (comparisonVideo) {
-      await handleProjectSelected({
-        projectType: 'dual',
-        comparisonVideo,
-        videoA: (comparisonVideo as any).videoA,
-        videoB: (comparisonVideo as any).videoB,
-      } as any);
-    }
   }
 }
 
