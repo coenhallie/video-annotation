@@ -12,7 +12,9 @@ import ProjectListItem from '@/components/ProjectListItem.vue';
 import CreateComparisonModal from '@/components/CreateComparisonModal.vue';
 import VideoUpload from '@/components/VideoUpload.vue';
 import FolderTree from '@/components/FolderTree.vue';
-import type { FolderTreeNode } from '@/types/folder';
+import NewFolderDialog from '@/components/NewFolderDialog.vue';
+import DeleteConfirmationDialog from '@/components/DeleteConfirmationDialog.vue';
+import type { FolderTreeNode, Folder } from '@/types/folder';
 import { useDashboardFolders } from '@/composables/useDashboardFolders';
 import type {
   ComparisonCreatedEvent,
@@ -26,6 +28,9 @@ const dashFolders = useDashboardFolders(() => user.value?.id);
 
 const showComparisonModal = ref(false);
 const showUploadModal = ref(false);
+const showNewFolder = ref(false);
+const newFolderParent = ref<Folder | null>(null);
+const pendingDeleteFolder = ref<FolderTreeNode | null>(null);
 
 function onComparisonCreated(comparison: ComparisonCreatedEvent) {
   showComparisonModal.value = false;
@@ -136,6 +141,31 @@ function openProject(project: Project) {
   }
 }
 
+function openNewFolder(parent: FolderTreeNode | null) {
+  // NewFolderDialog wants a Folder|null parent; find the matching Folder record.
+  newFolderParent.value = parent
+    ? dashFolders.folders.value.find((f) => f.id === parent.id) ?? null
+    : null;
+  showNewFolder.value = true;
+}
+async function onCreateFolder(name: string, parentId: string | null) {
+  await dashFolders.createFolder(name, parentId);
+  showNewFolder.value = false;
+}
+async function onRenameFolder(node: FolderTreeNode, newName: string) {
+  await dashFolders.renameFolder(node, newName);
+}
+function requestDeleteFolder(node: FolderTreeNode) {
+  pendingDeleteFolder.value = node;
+}
+async function confirmDeleteFolder() {
+  if (pendingDeleteFolder.value) {
+    await dashFolders.deleteFolder(pendingDeleteFolder.value);
+    pendingDeleteFolder.value = null;
+    await loadData();
+  }
+}
+
 onMounted(() => {
   loadData();
   dashFolders.loadFolders();
@@ -183,11 +213,20 @@ watch(user, (u) => {
     <main class="max-w-7xl mx-auto p-6">
       <div class="flex gap-6">
         <aside class="w-60 shrink-0">
+          <button
+            class="w-full mb-2 px-3 py-1.5 border rounded-lg text-sm"
+            @click="openNewFolder(null)"
+          >
+            + New folder
+          </button>
           <FolderTree
             :folders="dashFolders.folderTree.value"
             :selected-folder-id="dashFolders.currentFolderId.value"
             :drag-over-folder-id="dashFolders.dragOverFolderId.value"
             @select="dashFolders.selectFolder"
+            @create="openNewFolder"
+            @rename="onRenameFolder"
+            @delete="requestDeleteFolder"
           />
         </aside>
 
@@ -379,6 +418,21 @@ watch(user, (u) => {
         </div>
       </Transition>
     </Teleport>
+
+    <NewFolderDialog
+      v-if="showNewFolder"
+      :parent-folder="newFolderParent"
+      @create="onCreateFolder"
+      @close="showNewFolder = false"
+    />
+    <DeleteConfirmationDialog
+      v-if="pendingDeleteFolder"
+      item-type="folder"
+      :item-name="pendingDeleteFolder.name"
+      :item-count="1"
+      @confirm="confirmDeleteFolder"
+      @cancel="pendingDeleteFolder = null"
+    />
   </div>
 </template>
 
