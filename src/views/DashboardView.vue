@@ -14,7 +14,7 @@ import VideoUpload from '@/components/VideoUpload.vue';
 import FolderTree from '@/components/FolderTree.vue';
 import NewFolderDialog from '@/components/NewFolderDialog.vue';
 import DeleteConfirmationDialog from '@/components/DeleteConfirmationDialog.vue';
-import type { FolderTreeNode, Folder } from '@/types/folder';
+import type { FolderTreeNode, Folder, DragData } from '@/types/folder';
 import { useDashboardFolders } from '@/composables/useDashboardFolders';
 import type {
   ComparisonCreatedEvent,
@@ -166,6 +166,26 @@ async function confirmDeleteFolder() {
   }
 }
 
+function onCardDragStart(project: Project, event: DragEvent) {
+  const payload: DragData = { type: 'project', id: project.id };
+  event.dataTransfer?.setData('application/json', JSON.stringify(payload));
+  if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+}
+function onFolderDragOver(node: FolderTreeNode | null) {
+  dashFolders.dragOverFolderId.value = node?.id ?? null;
+}
+function onFolderDragLeave() {
+  dashFolders.dragOverFolderId.value = null;
+}
+async function onFolderDrop(node: FolderTreeNode | null, event: DragEvent) {
+  dashFolders.dragOverFolderId.value = null;
+  const raw = event.dataTransfer?.getData('application/json');
+  if (!raw) return;
+  const data = JSON.parse(raw) as DragData;
+  if (data.type !== 'project' || Array.isArray(data.id)) return;
+  await dashFolders.fileProject(data.id, node?.id ?? null);
+}
+
 onMounted(() => {
   loadData();
   dashFolders.loadFolders();
@@ -227,6 +247,9 @@ watch(user, (u) => {
             @create="openNewFolder"
             @rename="onRenameFolder"
             @delete="requestDeleteFolder"
+            @drop="onFolderDrop"
+            @dragover="onFolderDragOver"
+            @dragleave="onFolderDragLeave"
           />
         </aside>
 
@@ -327,6 +350,7 @@ watch(user, (u) => {
                 :annotation-count="annotationCounts[project.id] ?? 0"
                 :comment-count="commentCounts[project.id] ?? 0"
                 @open="openProject"
+                @dragstart="onCardDragStart"
               />
               <span
                 v-if="project.owner"
@@ -350,6 +374,7 @@ watch(user, (u) => {
               :annotation-count="annotationCounts[project.id] ?? 0"
               :comment-count="commentCounts[project.id] ?? 0"
               @open="openProject"
+              @dragstart="onCardDragStart"
             />
           </div>
 
