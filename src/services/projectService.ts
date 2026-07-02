@@ -3,6 +3,7 @@ import { ComparisonVideoService } from './comparisonVideoService';
 import { AnnotationService } from './annotationService';
 import { CommentService } from './commentService';
 import { supabase } from '@/composables/useSupabase';
+import { fetchOwners } from './ownerEnrichmentService';
 import type { Project } from '../types/project';
 
 export class ProjectService {
@@ -34,6 +35,107 @@ export class ProjectService {
   }
 
   /**
+   * Map raw videos + comparison videos into a unified, validity-filtered,
+   * sorted list of Project objects. Extracted from getUserProjects so it
+   * can be shared with getAllProjects.
+   */
+  private static mapToProjects(videos: any[], comparisonVideos: any[]): Project[] {
+    const projects: Project[] = [];
+
+    // Map individual videos to single projects
+    if (videos) {
+      console.log(
+        '📊 [ProjectService] Processing videos for projects:',
+        videos.map((v) => ({
+          id: v.id,
+          title: v.title,
+          originalFilename: v.originalFilename,
+          createdAt: v.createdAt,
+          videoType: v.videoType,
+          hasThumbnail: !!v.thumbnailUrl,
+        }))
+      );
+
+      for (const video of videos) {
+        if (this.isVideoValid(video)) {
+          const project = {
+            id: video.id,
+            projectType: 'single' as const,
+            title: video.title,
+            thumbnailUrl: video.thumbnailUrl,
+            createdAt: video.createdAt,
+            video: video,
+          };
+
+          console.log('✅ [ProjectService] Adding project:', {
+            id: project.id,
+            title: project.title,
+            videoTitle: video.title,
+            originalFilename: video.originalFilename,
+            createdAt: project.createdAt,
+          });
+
+          projects.push(project);
+        } else {
+          console.warn(
+            '🚨 [ProjectService] Skipping single video with invalid URL:',
+            {
+              id: video.id,
+              title: video.title,
+              videoType: video.videoType,
+              url: video.url,
+              filePath: video.filePath,
+            }
+          );
+        }
+      }
+    }
+
+    // Map comparison videos to dual projects
+    if (comparisonVideos) {
+      for (const comparisonVideo of comparisonVideos) {
+        // Ensure we have the related videos and they have valid URLs
+        if (comparisonVideo.videoA && comparisonVideo.videoB) {
+          const videoAValid = this.isVideoValid(comparisonVideo.videoA);
+          const videoBValid = this.isVideoValid(comparisonVideo.videoB);
+
+          if (videoAValid && videoBValid) {
+            projects.push({
+              id: comparisonVideo.id,
+              projectType: 'dual',
+              title: comparisonVideo.title || 'Untitled Comparison',
+              thumbnailUrl: comparisonVideo.thumbnailUrl,
+              createdAt:
+                comparisonVideo.createdAt || new Date().toISOString(),
+              videoA: comparisonVideo.videoA,
+              videoB: comparisonVideo.videoB,
+              comparisonVideo: comparisonVideo as any,
+            });
+          } else {
+            console.warn(
+              '🚨 [ProjectService] Skipping comparison video with invalid videos:',
+              {
+                id: comparisonVideo.id,
+                title: comparisonVideo.title,
+                videoAValid,
+                videoBValid,
+              }
+            );
+          }
+        }
+      }
+    }
+
+    // Sort projects by createdAt in descending order (newest first)
+    projects.sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
+    return projects;
+  }
+
+  /**
    * Get all projects (single videos and dual video comparisons) for a user
    * Returns a unified list of projects sorted by creation date (newest first)
    */
@@ -52,97 +154,7 @@ export class ProjectService {
         comparisonVideos?.length || 0
       );
 
-      const projects: Project[] = [];
-
-      // Map individual videos to single projects
-      if (videos) {
-        console.log(
-          '📊 [ProjectService] Processing videos for projects:',
-          videos.map((v) => ({
-            id: v.id,
-            title: v.title,
-            originalFilename: v.originalFilename,
-            createdAt: v.createdAt,
-            videoType: v.videoType,
-            hasThumbnail: !!v.thumbnailUrl,
-          }))
-        );
-
-        for (const video of videos) {
-          if (this.isVideoValid(video)) {
-            const project = {
-              id: video.id,
-              projectType: 'single' as const,
-              title: video.title,
-              thumbnailUrl: video.thumbnailUrl,
-              createdAt: video.createdAt,
-              video: video,
-            };
-
-            console.log('✅ [ProjectService] Adding project:', {
-              id: project.id,
-              title: project.title,
-              videoTitle: video.title,
-              originalFilename: video.originalFilename,
-              createdAt: project.createdAt,
-            });
-
-            projects.push(project);
-          } else {
-            console.warn(
-              '🚨 [ProjectService] Skipping single video with invalid URL:',
-              {
-                id: video.id,
-                title: video.title,
-                videoType: video.videoType,
-                url: video.url,
-                filePath: video.filePath,
-              }
-            );
-          }
-        }
-      }
-
-      // Map comparison videos to dual projects
-      if (comparisonVideos) {
-        for (const comparisonVideo of comparisonVideos) {
-          // Ensure we have the related videos and they have valid URLs
-          if (comparisonVideo.videoA && comparisonVideo.videoB) {
-            const videoAValid = this.isVideoValid(comparisonVideo.videoA);
-            const videoBValid = this.isVideoValid(comparisonVideo.videoB);
-
-            if (videoAValid && videoBValid) {
-              projects.push({
-                id: comparisonVideo.id,
-                projectType: 'dual',
-                title: comparisonVideo.title || 'Untitled Comparison',
-                thumbnailUrl: comparisonVideo.thumbnailUrl,
-                createdAt:
-                  comparisonVideo.createdAt || new Date().toISOString(),
-                videoA: comparisonVideo.videoA,
-                videoB: comparisonVideo.videoB,
-                comparisonVideo: comparisonVideo as any,
-              });
-            } else {
-              console.warn(
-                '🚨 [ProjectService] Skipping comparison video with invalid videos:',
-                {
-                  id: comparisonVideo.id,
-                  title: comparisonVideo.title,
-                  videoAValid,
-                  videoBValid,
-                }
-              );
-            }
-          }
-        }
-      }
-
-      // Sort projects by createdAt in descending order (newest first)
-      projects.sort(
-        (a, b) =>
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
+      const projects = this.mapToProjects(videos ?? [], comparisonVideos ?? []);
 
       console.log(
         '🎬 [ProjectService] Total projects loaded:',
@@ -154,6 +166,40 @@ export class ProjectService {
       console.error('❌ [ProjectService] Error loading projects:', error);
       throw error;
     }
+  }
+
+  /**
+   * Get all projects across all users (scope: 'all') or just the current
+   * user's projects (scope: 'mine'), with owner info attached (batched
+   * lookup via fetchOwners rather than N+1 per project).
+   */
+  static async getAllProjects(opts: {
+    scope: 'mine' | 'all';
+    userId: string;
+  }): Promise<Project[]> {
+    const { scope, userId } = opts;
+    const [videos, comparisonVideos] = await Promise.all([
+      scope === 'all' ? VideoService.getAllVideos() : VideoService.getUserVideos(userId),
+      scope === 'all'
+        ? ComparisonVideoService.getAllComparisonVideos()
+        : ComparisonVideoService.getUserComparisonVideos(userId),
+    ]);
+
+    const projects = this.mapToProjects(videos ?? [], comparisonVideos ?? []);
+
+    // Attach owner info (batched)
+    const ownerIds = projects.map((p) =>
+      p.projectType === 'single' ? (p as any).video.ownerId : (p as any).comparisonVideo.userId
+    );
+    const owners = await fetchOwners(ownerIds);
+    for (const p of projects) {
+      const oid = p.projectType === 'single' ? (p as any).video.ownerId : (p as any).comparisonVideo.userId;
+      const owner = owners[oid];
+      if (owner) {
+        p.owner = owner;
+      }
+    }
+    return projects;
   }
 
   /**
