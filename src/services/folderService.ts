@@ -451,7 +451,7 @@ export class FolderService {
         const { data: allProjects, error: allError } = await supabase
           .from('videos')
           .select('id')
-          .eq('owner_id', userId);
+          .eq('ownerId', userId);
 
         if (allError) throw allError;
 
