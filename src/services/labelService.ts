@@ -483,4 +483,28 @@ export class LabelService {
       );
     }
   }
+
+  /**
+   * Get the distinct set of labels attached to any annotation on the given videos
+   */
+  static async getLabelsForProjects(videoIds: string[]): Promise<Label[]> {
+    if (videoIds.length === 0) return [];
+    const { data: anns, error: annErr } = await supabase
+      .from('annotations')
+      .select('id')
+      .in('videoId', videoIds);
+    if (annErr || !anns?.length) return [];
+
+    const { data: rows, error } = await supabase
+      .from('annotation_labels')
+      .select('labelId, labels(*)')
+      .in('annotationId', anns.map((a) => a.id));
+    if (error || !rows) return [];
+
+    const byId = new Map<string, Label>();
+    for (const r of rows as any[]) {
+      if (r.labels && !byId.has(r.labelId)) byId.set(r.labelId, r.labels as Label);
+    }
+    return [...byId.values()];
+  }
 }
