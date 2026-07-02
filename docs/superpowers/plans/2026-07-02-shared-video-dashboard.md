@@ -1370,6 +1370,96 @@ git commit -m "feat: make library dashboard the home route"
 
 ## Phase 5 — Retire the modal + cleanup
 
+> **Decision (2026-07-02):** the project modal was the only entry point for
+> **Upload video** and **Create comparison**. Both are re-homed onto the new
+> dashboard (Task 5.0) BEFORE the modal is removed, so no feature is lost.
+
+### Task 5.0: Re-home Upload + Create-Comparison onto the dashboard
+
+**Files:**
+- Modify: `src/views/DashboardView.vue`
+
+**Interfaces:**
+- Consumes child contracts: `CreateComparisonModal` (`@/components/CreateComparisonModal.vue`)
+  — prop `is-visible: boolean`; emits `close`, `comparison-created` (`ComparisonCreatedEvent`),
+  `upload-video`. `VideoUpload` (`@/components/VideoUpload.vue`) — emits
+  `upload-success` (`VideoUploadResult`), `upload-error` (`Error`); no props.
+- Produces: dashboard toolbar buttons that open these modals locally; on success,
+  navigate into the editor for the new content.
+
+- [ ] **Step 1: Add local modal state + imports**
+
+In `src/views/DashboardView.vue` `<script setup>`, add:
+```ts
+import CreateComparisonModal from '@/components/CreateComparisonModal.vue';
+import VideoUpload from '@/components/VideoUpload.vue';
+import type { ComparisonCreatedEvent, VideoUploadResult } from '@/types/component-interfaces';
+
+const showComparisonModal = ref(false);
+const showUploadModal = ref(false);
+
+function onComparisonCreated(comparison: ComparisonCreatedEvent) {
+  showComparisonModal.value = false;
+  router.push({ name: 'editor-dual', params: { id: comparison.id } });
+}
+function onUploadSuccess(videoRecord: VideoUploadResult) {
+  showUploadModal.value = false;
+  router.push({ name: 'editor-single', params: { id: videoRecord.id } });
+}
+function onUploadError(err: Error) {
+  console.error('[DashboardView] upload failed', err);
+}
+```
+
+- [ ] **Step 2: Add toolbar buttons**
+
+In the dashboard header/toolbar area (next to the scope toggle or in the minimal
+header), add two buttons:
+```vue
+<button class="px-3 py-1.5 border rounded-lg text-sm" @click="showUploadModal = true">Upload video</button>
+<button class="px-3 py-1.5 border rounded-lg text-sm" @click="showComparisonModal = true">Create comparison</button>
+```
+
+- [ ] **Step 3: Render the two modals**
+
+Add near the end of the template. The upload modal reuses the same Teleport/overlay
+markup that `DashboardModals.vue` used (backdrop + centered card + close button + the
+`VideoUpload` component); the comparison modal is the component's own overlay:
+```vue
+<CreateComparisonModal
+  :is-visible="showComparisonModal"
+  @close="showComparisonModal = false"
+  @comparison-created="onComparisonCreated"
+  @upload-video="showUploadModal = true; showComparisonModal = false"
+/>
+<Teleport to="body">
+  <Transition name="modal">
+    <div v-if="showUploadModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="showUploadModal = false" />
+      <div class="relative bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-auto p-6" @click.stop>
+        <div class="flex items-center justify-between mb-6">
+          <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Upload Video</h2>
+          <button class="p-2 text-gray-400 hover:text-gray-600 rounded-lg" @click="showUploadModal = false">✕</button>
+        </div>
+        <VideoUpload @upload-success="onUploadSuccess" @upload-error="onUploadError" />
+      </div>
+    </div>
+  </Transition>
+</Teleport>
+```
+Copy the `.modal-*` transition CSS from `DashboardModals.vue`'s `<style scoped>` into
+this view's `<style scoped>` so the transition works.
+
+- [ ] **Step 4: Verify + commit**
+
+Run: `npm run build` (must pass) and `npx vue-tsc --noEmit` (no NEW errors).
+Manual QA (deferred): the two buttons open their modals; creating a comparison or
+uploading navigates into the editor for the new content.
+```bash
+git add src/views/DashboardView.vue
+git commit -m "feat: re-home upload and create-comparison onto the dashboard"
+```
+
 ### Task 5.1: Remove the project modal wiring from the editor
 
 **Files:**
