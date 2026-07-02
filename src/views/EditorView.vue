@@ -18,6 +18,7 @@ import UnifiedVideoPlayer from '@/components/UnifiedVideoPlayer.vue';
 import DashboardModals from '@/components/DashboardModals.vue';
 import { ShareService } from '@/services/shareService';
 import { VideoService } from '@/services/videoService';
+import { ComparisonVideoService } from '@/services/comparisonVideoService';
 import { useAuth } from '@/composables/useAuth';
 import { useVideoAnnotations } from '@/composables/useVideoAnnotations';
 import { useRealtimeAnnotations } from '@/composables/useRealtimeAnnotations';
@@ -665,6 +666,40 @@ const handleProjectSelected = async (project: ProjectSelection) => {
   closeLoadModal();
 };
 
+// Route-driven loader: resolves the :id param to a project and loads it via
+// the existing handleProjectSelected entry point. The route-name check also
+// acts as the guard for landing on '/' (name 'dashboard') → no-op, so it never
+// collides with the AWS/share branches handled in onMounted.
+async function loadFromRoute() {
+  if (route.name === 'editor-single' && route.params.id) {
+    const video = await VideoService.getVideoById(route.params.id as string);
+    if (video) {
+      await handleProjectSelected({ projectType: 'single', video } as any);
+    }
+  } else if (route.name === 'editor-dual' && route.params.id) {
+    const comparisonVideo = await ComparisonVideoService.getComparisonVideoById(
+      route.params.id as string
+    );
+    if (comparisonVideo) {
+      await handleProjectSelected({
+        projectType: 'dual',
+        comparisonVideo,
+        videoA: (comparisonVideo as any).videoA,
+        videoB: (comparisonVideo as any).videoB,
+      } as any);
+    }
+  }
+}
+
+// Reload when navigating editor → editor (param changes), not just on mount.
+// Non-immediate: the initial load is driven by onMounted.
+watch(
+  () => [route.name, route.params.id],
+  () => {
+    loadFromRoute();
+  }
+);
+
 const shareModalProps = computed(() => {
   if (playerMode.value === 'dual') {
     return {
@@ -780,7 +815,9 @@ onMounted(async () => {
       } else if (!user.value) {
         // If no share link and not logged in, show the login page
       } else if (!videoLoaded.value) {
-        layoutStore.openProjectModal();
+        // Load the workspace from the route param (single/dual editor routes).
+        // On '/' (name 'dashboard') this is a no-op.
+        await loadFromRoute();
       }
     }
   } finally {
@@ -837,15 +874,9 @@ watch(
           loadOutputVideo(outputVideoId);
         }
       }
-      // Auto-open ProjectManagementModal after successful login
-      // Only open if this is a new login (oldUser was null/undefined) and no shared content
-      // Check for share URL parameters to avoid opening modal when accessing shared links
-      else if (!oldUser && !isSharedVideo.value && !isSharedComparison.value && !isAwsVideo.value && !ShareService.parseShareUrl().id) {
-        // Small delay to ensure the UI is fully rendered
-        setTimeout(() => {
-          isProjectModalOpen.value = true;
-        }, 100);
-      }
+      // (Removed: auto-open ProjectManagementModal after login. Logged-in users
+      // now land on the dashboard/editor route instead of a modal. Task 5.x
+      // removes the remaining modal wiring.)
     } else {
       endSession();
     }

@@ -8,7 +8,17 @@ const router = createRouter({
     {
       path: '/',
       name: 'dashboard',
-      component: () => import('../views/DashboardView.vue'),
+      component: () => import('../views/EditorView.vue'), // temporary; swapped in Task 4.2
+    },
+    {
+      path: '/video/:id',
+      name: 'editor-single',
+      component: () => import('../views/EditorView.vue'),
+    },
+    {
+      path: '/comparison/:id',
+      name: 'editor-dual',
+      component: () => import('../views/EditorView.vue'),
     },
     {
       path: '/login',
