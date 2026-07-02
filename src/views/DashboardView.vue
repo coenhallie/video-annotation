@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuth } from '@/composables/useAuth';
+import { useNotifications } from '@/composables/useNotifications';
 import { ProjectService } from '@/services/projectService';
 import { LabelService } from '@/services/labelService';
 import type { Project } from '@/types/project';
@@ -24,6 +25,7 @@ import type {
 
 const router = useRouter();
 const { user, signOut } = useAuth();
+const { error: notifyError } = useNotifications();
 
 const dashFolders = useDashboardFolders(() => user.value?.id);
 
@@ -151,20 +153,32 @@ function openNewFolder(parent: FolderTreeNode | null) {
   showNewFolder.value = true;
 }
 async function onCreateFolder(name: string, parentId: string | null) {
-  await dashFolders.createFolder(name, parentId);
-  showNewFolder.value = false;
+  try {
+    await dashFolders.createFolder(name, parentId);
+    showNewFolder.value = false;
+  } catch (err) {
+    notifyError('Could not create folder', folderErrorMessage(err));
+  }
 }
 async function onRenameFolder(node: FolderTreeNode, newName: string) {
-  await dashFolders.renameFolder(node, newName);
+  try {
+    await dashFolders.renameFolder(node, newName);
+  } catch (err) {
+    notifyError('Could not rename folder', folderErrorMessage(err));
+  }
 }
 function requestDeleteFolder(node: FolderTreeNode) {
   pendingDeleteFolder.value = node;
 }
 async function confirmDeleteFolder() {
   if (pendingDeleteFolder.value) {
-    await dashFolders.deleteFolder(pendingDeleteFolder.value);
-    pendingDeleteFolder.value = null;
-    await loadData();
+    try {
+      await dashFolders.deleteFolder(pendingDeleteFolder.value);
+      pendingDeleteFolder.value = null;
+      await loadData();
+    } catch (err) {
+      notifyError('Could not delete folder', folderErrorMessage(err));
+    }
   }
 }
 
@@ -183,9 +197,18 @@ async function onFolderDrop(node: FolderTreeNode | null, event: DragEvent) {
   dashFolders.dragOverFolderId.value = null;
   const raw = event.dataTransfer?.getData('application/json');
   if (!raw) return;
-  const data = JSON.parse(raw) as DragData;
+  let data: DragData;
+  try {
+    data = JSON.parse(raw) as DragData;
+  } catch {
+    return; // not our payload
+  }
   if (data.type !== 'project' || Array.isArray(data.id)) return;
-  await dashFolders.fileProject(data.id, node?.id ?? null);
+  try {
+    await dashFolders.fileProject(data.id, node?.id ?? null);
+  } catch (err) {
+    notifyError('Could not move video to folder', folderErrorMessage(err));
+  }
 }
 
 function openAddToFolder(project: Project) {
@@ -193,10 +216,23 @@ function openAddToFolder(project: Project) {
 }
 async function onMoveConfirmed(targetFolderId: string | null) {
   const ids = moveDialogProjectIds.value ?? [];
-  for (const id of ids) {
-    await dashFolders.fileProject(id, targetFolderId);
-  }
   moveDialogProjectIds.value = null;
+  try {
+    for (const id of ids) {
+      await dashFolders.fileProject(id, targetFolderId);
+    }
+  } catch (err) {
+    notifyError('Could not move video to folder', folderErrorMessage(err));
+  }
+}
+
+// Turn a Supabase/RLS error into a friendly message.
+function folderErrorMessage(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  if (/row-level security|violates row-level/i.test(msg)) {
+    return 'You must be signed in to organize folders. (Folder changes require a real login — the local dev bypass cannot write to folders.)';
+  }
+  return msg;
 }
 
 onMounted(() => {
@@ -247,7 +283,7 @@ watch(user, (u) => {
       <div class="flex gap-6">
         <aside class="w-60 shrink-0">
           <button
-            class="w-full mb-2 px-3 py-1.5 border rounded-lg text-sm"
+            class="w-full mb-3 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
             @click="openNewFolder(null)"
           >
             + New folder
