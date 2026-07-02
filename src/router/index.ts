@@ -8,7 +8,7 @@ const router = createRouter({
     {
       path: '/',
       name: 'dashboard',
-      component: () => import('../views/EditorView.vue'), // temporary; swapped in Task 4.2
+      component: () => import('../views/DashboardView.vue'),
     },
     {
       path: '/video/:id',
