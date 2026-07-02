@@ -469,7 +469,7 @@ watch(user, (u) => {
       v-if="pendingDeleteFolder"
       item-type="folder"
       :item-name="pendingDeleteFolder.name"
-      :item-count="1"
+      :item-count="0"
       @confirm="confirmDeleteFolder"
       @cancel="pendingDeleteFolder = null"
     />
