@@ -61,6 +61,36 @@ router.beforeEach(async (to, from, next) => {
     return;
   }
 
+  // Deep-link redirect: the dashboard home (route '/') renders the library, which
+  // has no share/AWS handling — that logic lives in EditorView.onMounted. When a
+  // share or AWS deep-link lands on the dashboard, redirect to the editor route so
+  // EditorView mounts and reads window.location.search. We preserve `to.query` so
+  // the query string survives the redirect.
+  //
+  // No infinite loop: this block is gated on `to.name === 'dashboard'`. After the
+  // redirect the guard re-runs with `to.name` = 'editor-single'/'editor-dual', so
+  // this block is skipped.
+  if (to.name === 'dashboard') {
+    // Share links are allowed even when unauthenticated (isSharedLink gate below).
+    if (shareInfo.type === 'video' && shareInfo.id) {
+      next({ name: 'editor-single', params: { id: shareInfo.id }, query: to.query });
+      return;
+    } else if (shareInfo.type === 'comparison' && shareInfo.id) {
+      next({ name: 'editor-dual', params: { id: shareInfo.id }, query: to.query });
+      return;
+    } else if (isAuthenticated) {
+      // AWS videos require a logged-in user (loadOutputVideo needs `user`). When not
+      // authenticated we deliberately fall through to the access check below, which
+      // sends the user to login; pendingOutputVideo is already stashed and survives
+      // the OAuth round-trip.
+      const awsId = outputVideo || sessionStorage.getItem('pendingOutputVideo');
+      if (awsId) {
+        next({ name: 'editor-single', params: { id: awsId }, query: to.query });
+        return;
+      }
+    }
+  }
+
   // Determine if we can access dashboard
   // Access if: Authenticated OR Shared Link
   if (isAuthenticated || isSharedLink) {
