@@ -42,10 +42,10 @@ defineEmits<{
         v-if="user && !isSharedVideo && !isSharedComparison"
         class="flex items-center space-x-4"
       >
-        <!-- Load Previous Videos Button -->
+        <!-- Back to Library Button -->
         <button
           class="p-2 text-gray-600 dark:text-gray-300 hover:text-green-600 dark:hover:text-green-400 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-          title="Upload video"
+          title="Back to library"
           @click="$emit('open-project-modal')"
         >
           <svg
