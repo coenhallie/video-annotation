@@ -185,7 +185,7 @@
       <!-- Dropdown Menu -->
       <div
         v-if="showActions"
-        class="absolute right-0 mt-1 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg z-50 py-1 border border-gray-200 dark:border-gray-700"
+        class="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg z-50 py-1 border border-gray-200 dark:border-gray-700"
         @click.stop
       >
         <button
