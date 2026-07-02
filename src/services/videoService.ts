@@ -231,6 +231,18 @@ export class VideoService {
     return data;
   }
 
+  static async getAllVideos() {
+    const { data, error } = await supabase
+      .from('videos')
+      .select('*')
+      .order('createdAt', { ascending: false });
+    if (error) {
+      handleServiceError('VideoService.getAllVideos', error);
+      throw error;
+    }
+    return data;
+  }
+
   static async getMostRecentUserVideo(userId: string) {
     const { data, error } = await supabase
       .from('videos')

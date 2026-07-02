@@ -177,6 +177,23 @@ export const ComparisonVideoService = {
   },
 
   /**
+   * Return all comparison videos (no user filter).
+   */
+  async getAllComparisonVideos(): Promise<ComparisonVideoRecord[]> {
+    const { data, error } = await supabase
+      .from('comparison_videos')
+      .select(
+        'id, title, description, createdAt, updatedAt, userId, videoAId, videoBId, isPublic, thumbnailUrl, videoA:videoAId(*), videoB:videoBId(*)'
+      )
+      .order('createdAt', { ascending: false });
+    if (error) {
+      console.warn('⚠️ [ComparisonVideoService] getAllComparisonVideos error:', error);
+      return [];
+    }
+    return (data || []) as unknown as ComparisonVideoRecord[];
+  },
+
+  /**
    * Delete a comparison video record by id.
    */
   async deleteComparisonVideo(id: string): Promise<void> {
