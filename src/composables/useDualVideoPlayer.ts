@@ -282,6 +282,9 @@ export function useDualVideoPlayer(): DualVideoPlayer {
 
   onUnmounted(() => {
     if (cleanupSync) cleanupSync();
+    if (seekTimeoutA) clearTimeout(seekTimeoutA);
+    if (seekTimeoutB) clearTimeout(seekTimeoutB);
+    if (seekTimeoutBoth) clearTimeout(seekTimeoutBoth);
   });
 
   function play() {

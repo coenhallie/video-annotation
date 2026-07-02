@@ -213,12 +213,15 @@ const timelineBClasses = computed(() => ({
         <div class="flex items-center justify-between mb-2">
           <h3 class="text-sm font-medium text-white">
             Video A Timeline
-            <span v-if="selectedTimeline === 'A'" class="ml-2 text-blue-400"
-              >●</span
-            >
+            <span
+              v-if="selectedTimeline === 'A'"
+              class="ml-2 text-blue-400"
+            >●</span>
           </h3>
           <div class="flex items-center space-x-4">
-            <div class="text-xs text-gray-400">{{ videoAFps }}fps</div>
+            <div class="text-xs text-gray-400">
+              {{ videoAFps }}fps
+            </div>
             <!-- Individual Play/Pause Button for Video A -->
             <button
               class="flex items-center justify-center w-8 h-8 bg-gray-700 hover:bg-gray-600 border border-gray-500 rounded-full transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-lg"
@@ -281,12 +284,15 @@ const timelineBClasses = computed(() => ({
         <div class="flex items-center justify-between mb-2">
           <h3 class="text-sm font-medium text-white">
             Video B Timeline
-            <span v-if="selectedTimeline === 'B'" class="ml-2 text-blue-400"
-              >●</span
-            >
+            <span
+              v-if="selectedTimeline === 'B'"
+              class="ml-2 text-blue-400"
+            >●</span>
           </h3>
           <div class="flex items-center space-x-4">
-            <div class="text-xs text-gray-400">{{ videoBFps }}fps</div>
+            <div class="text-xs text-gray-400">
+              {{ videoBFps }}fps
+            </div>
             <!-- Individual Play/Pause Button for Video B -->
             <button
               class="flex items-center justify-center w-8 h-8 bg-gray-700 hover:bg-gray-600 border border-gray-500 rounded-full transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-lg"

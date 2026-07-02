@@ -10,6 +10,7 @@ import { isComparisonVideo, isIndividualVideo } from '../types/database';
 import { VideoUploadService } from './videoUploadService';
 import { ThumbnailGenerator } from '../utils/thumbnailGenerator';
 import { AwsStorageService } from './awsStorageService';
+import { handleServiceError } from '../utils/errorHandler';
 
 export class VideoService {
   static async findExistingUploadedVideo(url: string, ownerId: string) {
@@ -105,7 +106,7 @@ export class VideoService {
         .single();
 
       if (error) {
-        console.error('❌ [VideoService] Database insert failed:', error);
+        handleServiceError('VideoService.createVideo', error);
         throw error;
       }
 
@@ -176,7 +177,7 @@ export class VideoService {
       .order('createdAt', { ascending: false });
 
     if (error) {
-      console.error('❌ [VideoService] Error fetching videos:', error);
+      handleServiceError('VideoService.getUserVideos', error);
       throw error;
     }
 
@@ -263,7 +264,7 @@ export class VideoService {
       .maybeSingle();
 
     if (error) {
-      console.error('Error finding video by URL:', error);
+      handleServiceError('VideoService.findVideoByUrl', error);
       return null;
     }
     return data;
@@ -316,7 +317,7 @@ export class VideoService {
       .single();
 
     if (error) {
-      console.error('Error creating URL video:', error);
+      handleServiceError('VideoService.createUrlVideo', error);
       throw error;
     }
     return data;
@@ -560,7 +561,7 @@ export class VideoService {
       .maybeSingle();
 
     if (error) {
-      console.error('Error finding video by AWS project ID:', error);
+      handleServiceError('VideoService.findVideoByOutputVideoId', error);
       return null;
     }
     return data;
@@ -590,7 +591,7 @@ export class VideoService {
         .single();
 
       if (error) {
-        console.error('Failed to refresh AWS video URL:', error);
+        handleServiceError('VideoService.findOrCreateOutputVideo', error);
         return existing;
       }
       return data;
@@ -614,7 +615,7 @@ export class VideoService {
       .single();
 
     if (error) {
-      console.error('Failed to create AWS video record:', error);
+      handleServiceError('VideoService.findOrCreateOutputVideo', error);
       throw error;
     }
 
@@ -639,7 +640,7 @@ export class VideoService {
 
       return presignedUrl;
     } catch (error) {
-      console.error('Failed to refresh AWS presigned URL:', error);
+      handleServiceError('VideoService.refreshAwsVideoUrl', error);
       return null;
     }
   }

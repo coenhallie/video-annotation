@@ -30,7 +30,10 @@
           />
         </svg>
       </button>
-      <div v-else class="w-4" />
+      <div
+        v-else
+        class="w-4"
+      />
 
       <!-- Folder Icon -->
       <svg
@@ -52,7 +55,10 @@
       </svg>
 
       <!-- Folder Name -->
-      <span v-if="!isRenaming" class="text-sm font-medium flex-1 truncate">
+      <span
+        v-if="!isRenaming"
+        class="text-sm font-medium flex-1 truncate"
+      >
         {{ folder.name }}
       </span>
       <input
@@ -65,7 +71,7 @@
         @keydown.enter="confirmRename"
         @keydown.esc="cancelRename"
         @blur="confirmRename"
-      />
+      >
 
       <!-- Project Count Badge -->
       <span
@@ -140,7 +146,10 @@
     </div>
 
     <!-- Children -->
-    <div v-if="isExpanded && folder.children.length > 0" class="ml-2">
+    <div
+      v-if="isExpanded && folder.children.length > 0"
+      class="ml-2"
+    >
       <FolderTreeItem
         v-for="child in folder.children"
         :key="child.id"

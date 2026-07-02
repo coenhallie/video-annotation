@@ -42,9 +42,9 @@ export function useRealtimeComments(annotationId: string | Ref<string>) {
   const typingUsers = ref(new Map<string, CommentPresence>());
 
   // Subscriptions
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   let commentSubscription: any = null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   let presenceChannel: any = null;
 
   // Event handlers

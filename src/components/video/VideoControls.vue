@@ -30,11 +30,29 @@
           :aria-label="isPlaying ? 'Pause' : 'Play'"
           @click="$emit('toggle-play')"
         >
-          <svg v-if="isPlaying" class="control-icon" viewBox="0 0 24 24">
-            <rect x="6" y="4" width="4" height="16" />
-            <rect x="14" y="4" width="4" height="16" />
+          <svg
+            v-if="isPlaying"
+            class="control-icon"
+            viewBox="0 0 24 24"
+          >
+            <rect
+              x="6"
+              y="4"
+              width="4"
+              height="16"
+            />
+            <rect
+              x="14"
+              y="4"
+              width="4"
+              height="16"
+            />
           </svg>
-          <svg v-else class="control-icon" viewBox="0 0 24 24">
+          <svg
+            v-else
+            class="control-icon"
+            viewBox="0 0 24 24"
+          >
             <polygon points="5,3 19,12 5,21" />
           </svg>
         </button>
@@ -68,10 +86,24 @@
             :aria-label="isMuted ? 'Unmute' : 'Mute'"
             @click="$emit('toggle-mute')"
           >
-            <svg v-if="isMuted" class="control-icon" viewBox="0 0 24 24">
+            <svg
+              v-if="isMuted"
+              class="control-icon"
+              viewBox="0 0 24 24"
+            >
               <polygon points="11,5 6,9 2,9 2,15 6,15 11,19" />
-              <line x1="23" y1="9" x2="17" y2="15" />
-              <line x1="17" y1="9" x2="23" y2="15" />
+              <line
+                x1="23"
+                y1="9"
+                x2="17"
+                y2="15"
+              />
+              <line
+                x1="17"
+                y1="9"
+                x2="23"
+                y2="15"
+              />
             </svg>
             <svg
               v-else-if="volume < 0.5"
@@ -81,7 +113,11 @@
               <polygon points="11,5 6,9 2,9 2,15 6,15 11,19" />
               <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
             </svg>
-            <svg v-else class="control-icon" viewBox="0 0 24 24">
+            <svg
+              v-else
+              class="control-icon"
+              viewBox="0 0 24 24"
+            >
               <polygon points="11,5 6,9 2,9 2,15 6,15 11,19" />
               <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
               <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
@@ -96,7 +132,7 @@
             class="volume-slider"
             :aria-label="'Volume: ' + Math.round(volume * 100) + '%'"
             @input="(e) => $emit('volume-change', parseFloat((e.target as HTMLInputElement).value))"
-          />
+          >
         </div>
 
         <!-- Speed controls -->
@@ -107,20 +143,34 @@
             :aria-label="'Playback speed: ' + playbackRate + 'x'"
             @change="(e) => $emit('speed-change', parseFloat((e.target as HTMLSelectElement).value))"
           >
-            <option value="0.1">0.1x</option>
-            <option value="0.25">0.25x</option>
-            <option value="0.5">0.5x</option>
-            <option value="1">1x</option>
-            <option value="1.25">1.25x</option>
-            <option value="1.5">1.5x</option>
-            <option value="2">2x</option>
+            <option value="0.1">
+              0.1x
+            </option>
+            <option value="0.25">
+              0.25x
+            </option>
+            <option value="0.5">
+              0.5x
+            </option>
+            <option value="1">
+              1x
+            </option>
+            <option value="1.25">
+              1.25x
+            </option>
+            <option value="1.5">
+              1.5x
+            </option>
+            <option value="2">
+              2x
+            </option>
           </select>
         </div>
       </div>
       
       <!-- Right side slot for extra controls like Pose/Calibration toggle -->
       <div class="controls-right">
-        <slot name="right-controls"></slot>
+        <slot name="right-controls" />
       </div>
     </div>
   </div>

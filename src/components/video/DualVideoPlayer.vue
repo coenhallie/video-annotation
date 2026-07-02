@@ -24,7 +24,7 @@
               :current-time="currentTime"
               :current-frame="currentFrame"
               :video-element="videoElement"
-            ></slot>
+            />
           </template>
         </SingleVideoPlayer>
       </div>
@@ -52,7 +52,7 @@
               :current-time="currentTime"
               :current-frame="currentFrame"
               :video-element="videoElement"
-            ></slot>
+            />
           </template>
         </SingleVideoPlayer>
       </div>
@@ -72,14 +72,14 @@
       @speed-change="setPlaybackRate"
     >
       <template #right-controls>
-        <slot name="controls-right"></slot>
+        <slot name="controls-right" />
       </template>
     </VideoControls>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, computed, nextTick } from 'vue';
+import { ref, watch, computed } from 'vue';
 import SingleVideoPlayer from './SingleVideoPlayer.vue';
 import VideoControls from './VideoControls.vue';
 import { useDualVideoPlayer } from '../../composables/useDualVideoPlayer';

@@ -38,13 +38,22 @@
       <!-- Modal Content (Scrollable) -->
       <div class="p-6 overflow-y-auto flex-1">
         <div class="space-y-8">
-          <div v-for="(entry, index) in changelogEntries" :key="index" class="border-l-4 border-blue-500 pl-4 py-1">
+          <div
+            v-for="(entry, index) in changelogEntries"
+            :key="index"
+            class="border-l-4 border-blue-500 pl-4 py-1"
+          >
             <div class="flex items-baseline justify-between mb-2">
-              <h3 class="text-lg font-bold text-gray-900 dark:text-white">{{ entry.version }}</h3>
+              <h3 class="text-lg font-bold text-gray-900 dark:text-white">
+                {{ entry.version }}
+              </h3>
               <span class="text-sm text-gray-500 dark:text-gray-400">{{ entry.date }}</span>
             </div>
             <ul class="list-disc list-inside space-y-1 text-gray-700 dark:text-gray-300">
-              <li v-for="(change, cIndex) in entry.changes" :key="cIndex">
+              <li
+                v-for="(change, cIndex) in entry.changes"
+                :key="cIndex"
+              >
                 {{ change }}
               </li>
             </ul>
@@ -93,7 +102,14 @@ const changelogEntries = ref([
     version: 'Beta v3.8',
     date: 'March 13, 2026',
     changes: [
+      'Major codebase refactor for improved performance and maintainability',
       'Fix frame number not updating when scrubbing AWS pipeline videos',
+      'Fix drawing annotations not saving when added to an annotation',
+      'Fix frame counter showing -1 and not updating until video is played',
+      'Fix silent error swallowing in drawing canvas and comment handlers',
+      'Fix memory leaks in dual video player and comment subscriptions',
+      'Consolidate video state into single source of truth',
+      'Standardize error handling across all services',
     ],
   },
   {

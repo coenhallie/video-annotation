@@ -6,6 +6,7 @@ import type {
   Annotation,
 } from '../types/database';
 import { CommentService, type CommentPermissions } from './commentService';
+import { handleServiceError } from '../utils/errorHandler';
 
 export class AnnotationService {
   static async createAnnotation(annotationData: AnnotationInsert) {
@@ -68,12 +69,13 @@ export class AnnotationService {
     }
 
     // Transform the data to include labels array
-    const annotationsWithLabels =
-      data?.map((annotation: Record<string, unknown>) => ({
+    const annotationsWithLabels = (data?.map(
+      (annotation: Record<string, unknown>) => ({
         ...annotation,
         labels:
           (annotation.annotation_labels as Array<{ labelId: string }> | undefined)?.map((al) => al.labelId) || [],
-      })) || [];
+      })
+    ) || []) as unknown as Array<Annotation & { labels: string[] }>;
 
     // If comment counts are requested, fetch them for all annotations
     if (
@@ -96,6 +98,7 @@ export class AnnotationService {
         }));
       } catch (commentError) {
         // Return annotations without comment counts if comment service fails
+        handleServiceError('AnnotationService.getVideoAnnotations', commentError);
         return annotationsWithLabels;
       }
     }
@@ -201,6 +204,7 @@ export class AnnotationService {
         }));
       } catch (commentError) {
         // Return annotations without comments if comment service fails
+        handleServiceError('AnnotationService.getAnnotationsAtFrame', commentError);
         return data;
       }
     }
@@ -252,6 +256,7 @@ export class AnnotationService {
         userId
       );
     } catch (error) {
+      handleServiceError('AnnotationService.canUserCommentOnAnnotation', error);
       return {
         canComment: false,
         canModerate: false,
@@ -284,6 +289,7 @@ export class AnnotationService {
 
       return canModerate;
     } catch (error) {
+      handleServiceError('AnnotationService.canUserModerateAnnotationComments', error);
       return false;
     }
   }
@@ -320,12 +326,13 @@ export class AnnotationService {
     }
 
     // Transform the data to include labels array
-    const annotationsWithLabels =
-      data?.map((annotation: Record<string, unknown>) => ({
+    const annotationsWithLabels = (data?.map(
+      (annotation: Record<string, unknown>) => ({
         ...annotation,
         labels:
           (annotation.annotation_labels as Array<{ labelId: string }> | undefined)?.map((al) => al.labelId) || [],
-      })) || [];
+      })
+    ) || []) as unknown as Array<Annotation & { labels: string[] }>;
 
     // If comment counts are requested, fetch them for all annotations
     if (
@@ -348,6 +355,7 @@ export class AnnotationService {
         }));
       } catch (commentError) {
         // Return annotations without comment counts if comment service fails
+        handleServiceError('AnnotationService.getComparisonVideoAnnotations', commentError);
         return annotationsWithLabels;
       }
     }

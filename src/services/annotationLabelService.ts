@@ -116,11 +116,9 @@ export class AnnotationLabelService {
       const labelsByAnnotation: Record<string, any[]> = {};
 
       data?.forEach((item) => {
-        if (!labelsByAnnotation[item.annotationId]) {
-          labelsByAnnotation[item.annotationId] = [];
-        }
+        const group = (labelsByAnnotation[item.annotationId] ??= []);
         if (item.labels) {
-          labelsByAnnotation[item.annotationId].push(item.labels);
+          group.push(item.labels);
         }
       });
 

@@ -7,10 +7,10 @@
         isDragOver
           ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 scale-[1.02]'
           : isUploading
-          ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 cursor-not-allowed'
-          : uploadError
-          ? 'border-red-500 bg-red-50 dark:bg-red-900/20'
-          : 'border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-gray-700'
+            ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 cursor-not-allowed'
+            : uploadError
+              ? 'border-red-500 bg-red-50 dark:bg-red-900/20'
+              : 'border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-gray-700'
       ]"
       @drop="handleDrop"
       @dragover="handleDragOver"

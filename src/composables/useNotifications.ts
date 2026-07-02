@@ -11,12 +11,19 @@ export interface Notification {
 const notifications = ref<Notification[]>([]);
 
 export function useNotifications() {
-  const addNotification = (notification: Omit<Notification, 'id'>) => {
+  const addNotification = (notification: {
+    type: Notification['type'];
+    title: string;
+    message?: string | undefined;
+    duration?: number | undefined;
+  }) => {
     const id = Date.now().toString();
     const newNotification: Notification = {
       id,
-      ...notification,
+      type: notification.type,
+      title: notification.title,
       duration: notification.duration ?? 3000, // Default 3 seconds if not specified
+      ...(notification.message !== undefined && { message: notification.message }),
     };
 
     notifications.value.push(newNotification);

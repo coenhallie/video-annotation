@@ -1,5 +1,8 @@
 <template>
-  <div class="fixed inset-0 z-50 overflow-y-auto" @click="$emit('close')">
+  <div
+    class="fixed inset-0 z-50 overflow-y-auto"
+    @click="$emit('close')"
+  >
     <div
       class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0"
     >
@@ -65,9 +68,7 @@
                           d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"
                         />
                       </svg>
-                      <span class="text-sm font-medium"
-                        >Root (All Projects)</span
-                      >
+                      <span class="text-sm font-medium">Root (All Projects)</span>
                     </div>
                   </div>
 

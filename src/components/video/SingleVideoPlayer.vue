@@ -1,15 +1,34 @@
 <template>
-  <div ref="containerRef" class="video-wrapper" :class="{ paused: !isPlaying }">
+  <div
+    ref="containerRef"
+    class="video-wrapper"
+    :class="{ paused: !isPlaying }"
+  >
     <!-- Loading indicator -->
-    <div v-if="isLoading" class="loading-overlay">
+    <div
+      v-if="isLoading"
+      class="loading-overlay"
+    >
       <div class="loading-spinner" />
-      <div class="loading-text">Loading video...</div>
+      <div class="loading-text">
+        Loading video...
+      </div>
     </div>
 
     <!-- Error message -->
-    <div v-if="error" class="error-overlay">
-      <p class="error-message">{{ error }}</p>
-      <button class="retry-button" @click="$emit('retry')">Try Again</button>
+    <div
+      v-if="error"
+      class="error-overlay"
+    >
+      <p class="error-message">
+        {{ error }}
+      </p>
+      <button
+        class="retry-button"
+        @click="$emit('retry')"
+      >
+        Try Again
+      </button>
     </div>
 
     <!-- Video Element -->
@@ -37,7 +56,7 @@
       :current-time="currentTime" 
       :current-frame="currentFrame"
       :video-element="videoRef"
-    ></slot>
+    />
 
     <!-- Controls -->
     <VideoControls
@@ -54,7 +73,7 @@
       @speed-change="setPlaybackRate"
     >
       <template #right-controls>
-        <slot name="custom-controls"></slot>
+        <slot name="custom-controls" />
       </template>
     </VideoControls>
   </div>
@@ -236,7 +255,7 @@ const detectFPS = (video: HTMLVideoElement) => {
     const defaultFps = 30;
     const initialTotalFrames = Math.floor(video.duration * defaultFps);
     if (!props.disableGlobalStore) {
-      if (videoStore.fps === 0) {
+      if (videoStore.fps <= 0) {
         videoStore.setFrameData(
              storeRefs!.currentFrame.value, 
              initialTotalFrames, 

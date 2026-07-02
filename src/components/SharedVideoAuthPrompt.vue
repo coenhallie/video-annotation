@@ -73,7 +73,9 @@
                 />
               </svg>
               <div class="text-sm text-blue-900">
-                <p class="font-medium mb-1">With authentication:</p>
+                <p class="font-medium mb-1">
+                  With authentication:
+                </p>
                 <ul class="list-disc list-inside space-y-1 text-blue-800">
                   <li>View the {{ contentType }}</li>
                   <li>See all existing annotations</li>
@@ -105,7 +107,9 @@
                 />
               </svg>
               <div class="text-sm text-gray-700">
-                <p class="font-medium mb-1">Without authentication (view-only):</p>
+                <p class="font-medium mb-1">
+                  Without authentication (view-only):
+                </p>
                 <ul class="list-disc list-inside space-y-1 text-gray-600">
                   <li>View the {{ contentType }}</li>
                   <li>See all existing annotations</li>

@@ -1,9 +1,15 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { logger } from '../utils/logger';
+import { formatTime, formatFrame } from '@/utils/formatters';
 
 /* Narrow annotation typing for the template to satisfy TS plugin */
-/** @typedef {{ id?: string; title?: string; timestamp: number; severity?: string }} TimelineAnnotation */
+interface TimelineAnnotation {
+  id?: string;
+  title?: string;
+  timestamp: number;
+  severity?: string;
+}
 
 const __name = 'VideoTimelineComponent';
 
@@ -65,7 +71,7 @@ const props = defineProps({
 
 const emit = defineEmits(['seek-to-time', 'annotation-click', 'play', 'pause']);
 
-const timelineRef = ref(null);
+const timelineRef = ref<HTMLElement | null>(null);
 const isDragging = ref(false);
 
 // Debouncing for smooth scrubbing
@@ -83,21 +89,8 @@ const progressPercentage = computed(() => {
   return percentage;
 });
 
-// Optimized formatters with memoization-like behavior
-const formatTime = (seconds) => {
-  if (!seconds || isNaN(seconds)) return '0:00';
-  const minutes = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${minutes}:${secs.toString().padStart(2, '0')}`;
-};
-
-const formatFrame = (frameNumber) => {
-  if (!frameNumber || isNaN(frameNumber)) return 'Frame 0';
-  return `Frame ${frameNumber.toLocaleString()}`;
-};
-
 // Debounced timeline interaction for smooth scrubbing
-const debouncedSeek = (time, immediate = false) => {
+const debouncedSeek = (time: number, immediate = false) => {
   if (seekTimeout) {
     clearTimeout(seekTimeout);
   }
@@ -112,7 +105,7 @@ const debouncedSeek = (time, immediate = false) => {
 };
 
 // Simplified timeline interaction - use time-based seeking for consistency
-const handleTimelineClick = (event, immediate = false) => {
+const handleTimelineClick = (event: MouseEvent, immediate = false) => {
   if (!timelineRef.value || !props.duration) {
     return;
   }
@@ -138,13 +131,13 @@ const handleTimelineMouseDown = (event: MouseEvent): void => {
 
   handleTimelineClick(event, true); // Immediate seek on initial click
 
-  const handleMouseMove = (e) => {
+  const handleMouseMove = (e: MouseEvent) => {
     if (isDragging.value) {
       handleTimelineClick(e, false); // Debounced seek during drag
     }
   };
 
-  const handleMouseUp = (e) => {
+  const handleMouseUp = (e: MouseEvent) => {
     if (isDragging.value) {
       handleTimelineClick(e, true); // Immediate seek on release
     }
@@ -170,14 +163,17 @@ const SEVERITY_COLORS = {
   high: '#ef4444',
 };
 
-const getSeverityColor = (severity) => {
-  return SEVERITY_COLORS[severity] || SEVERITY_COLORS.medium;
+const getSeverityColor = (severity?: string) => {
+  return (
+    SEVERITY_COLORS[severity as keyof typeof SEVERITY_COLORS] ||
+    SEVERITY_COLORS.medium
+  );
 };
 
 // Optimized annotation positioning - use time-based for consistency
 /* (removed duplicate definition) */
 
-const getAnnotationStyle = (annotation /** @type {TimelineAnnotation} */) => {
+const getAnnotationStyle = (annotation: TimelineAnnotation) => {
   if (!props.duration) return { display: 'none' };
 
   // Always use time-based positioning for consistency with video player
@@ -346,15 +342,24 @@ const handlePlayPause = (): void => {
       <!-- Severity Legend -->
       <div class="flex space-x-3">
         <div class="flex items-center space-x-1.5 text-xs text-gray-400">
-          <div class="w-2 h-2 rounded-sm" style="background-color: #34d399" />
+          <div
+            class="w-2 h-2 rounded-sm"
+            style="background-color: #34d399"
+          />
           <span>Low</span>
         </div>
         <div class="flex items-center space-x-1.5 text-xs text-gray-400">
-          <div class="w-2 h-2 rounded-sm" style="background-color: #fbbf24" />
+          <div
+            class="w-2 h-2 rounded-sm"
+            style="background-color: #fbbf24"
+          />
           <span>Medium</span>
         </div>
         <div class="flex items-center space-x-1.5 text-xs text-gray-400">
-          <div class="w-2 h-2 rounded-sm" style="background-color: #ef4444" />
+          <div
+            class="w-2 h-2 rounded-sm"
+            style="background-color: #ef4444"
+          />
           <span>High</span>
         </div>
       </div>

@@ -19,7 +19,9 @@ const handleLogin = async () => {
   >
     <div class="w-full max-w-md p-8 bg-white rounded-2xl shadow-xl">
       <div class="text-center space-y-4 mb-8">
-        <h1 class="text-3xl font-bold text-gray-800">Perspecto</h1>
+        <h1 class="text-3xl font-bold text-gray-800">
+          Perspecto
+        </h1>
         <p class="text-gray-600">
           Collaborative video analysis platform
         </p>
@@ -27,8 +29,8 @@ const handleLogin = async () => {
 
       <div class="space-y-6">
         <button
-          @click="handleLogin"
           class="w-full flex items-center justify-center px-4 py-4 font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transform hover:scale-[1.02] transition-all duration-200 shadow-lg hover:shadow-xl group"
+          @click="handleLogin"
         >
           <svg
             class="w-5 h-5 mr-3 transition-transform group-hover:translate-x-1"

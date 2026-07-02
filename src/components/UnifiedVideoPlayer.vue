@@ -36,7 +36,7 @@
 
       <!-- Custom Controls Slot if needed -->
       <template #custom-controls>
-        <slot name="custom-controls"></slot>
+        <slot name="custom-controls" />
       </template>
     </SingleVideoPlayer>
 
@@ -66,20 +66,17 @@
           @drawing-updated="(d) => handleDrawingUpdated(d, 'A')"
           @drawing-deleted="(id) => handleDrawingDeleted(id, 'A')"
         />
-        
       </template>
 
       <template #controls-right>
-         <slot name="controls-right"></slot>
+        <slot name="controls-right" />
       </template>
     </DualVideoPlayer>
-
-
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch, nextTick, onUnmounted } from 'vue';
+import { ref, computed } from 'vue';
 import { useVideoStore } from '@/stores/video';
 import SingleVideoPlayer from './video/SingleVideoPlayer.vue';
 import DualVideoPlayer from './video/DualVideoPlayer.vue';

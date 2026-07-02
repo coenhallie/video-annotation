@@ -6,38 +6,39 @@ import {
   computed,
   onErrorCaptured,
   onBeforeUnmount,
-  defineAsyncComponent,
   type ComponentPublicInstance,
   type Ref,
 } from 'vue';
 import DualTimeline from '@/components/DualTimeline.vue';
 import VideoTimeline from '@/components/VideoTimeline.vue';
 import AnnotationPanel from '@/components/AnnotationPanel.vue';
-import ThemeToggle from '@/components/ThemeToggle.vue';
+import DashboardHeader from '@/components/DashboardHeader.vue';
 
-import SharedVideoAuthPrompt from '@/components/SharedVideoAuthPrompt.vue';
-import VideoUpload from '@/components/VideoUpload.vue';
 import UnifiedVideoPlayer from '@/components/UnifiedVideoPlayer.vue';
+import DashboardModals from '@/components/DashboardModals.vue';
 import { ShareService } from '@/services/shareService';
 import { VideoService } from '@/services/videoService';
-
-// Lazy loaded components
-const ProjectManagementModal = defineAsyncComponent(() => import('@/components/ProjectManagementModal.vue'));
-const CreateComparisonModal = defineAsyncComponent(() => import('@/components/CreateComparisonModal.vue'));
-const ShareModal = defineAsyncComponent(() => import('@/components/ShareModal.vue'));
-const SharedLinksManagement = defineAsyncComponent(() => import('@/components/SharedLinksManagement.vue'));
-const ChangelogModal = defineAsyncComponent(() => import('@/components/ChangelogModal.vue'));
 import { useAuth } from '@/composables/useAuth';
 import { useVideoAnnotations } from '@/composables/useVideoAnnotations';
 import { useRealtimeAnnotations } from '@/composables/useRealtimeAnnotations';
 import { useVideoSession } from '@/composables/useVideoSession';
 import { useDrawingCanvas } from '@/composables/useDrawingCanvas';
+import { useDrawingCoordinator } from '@/composables/useDrawingCoordinator';
 import { useComparisonVideoWorkflow } from '@/composables/useComparisonVideoWorkflow';
 import { useDualVideoPlayer } from '@/composables/useDualVideoPlayer';
 import { useSessionCleanup } from '@/composables/useSessionCleanup';
 import { useNotifications } from '@/composables/useNotifications';
+import { useDashboardKeyboard } from '@/composables/useDashboardKeyboard';
+import { useSharedContent } from '@/composables/useSharedContent';
+import { useVideoEventHandlers } from '@/composables/useVideoEventHandlers';
 import { supabase } from '@/composables/useSupabase';
-import type { Video, Annotation } from '@/types/database';
+import type { Video, Annotation, ComparisonVideo } from '@/types/database';
+import type {
+  ProjectSelection,
+  ComparisonCreatedEvent,
+  VideoUploadResult,
+  AnnotationFormData,
+} from '@/types/component-interfaces';
 import { useVideoStore } from '@/stores/video';
 import { useLayoutStore } from '@/stores/layout';
 import { storeToRefs } from 'pinia';
@@ -68,12 +69,19 @@ const {
   currentTime,
   currentFrame,
   totalFrames,
-  fps
+  fps,
+  playerMode,
+  currentVideoId,
+  currentComparisonId,
+  currentVideoType,
+  currentVideoObject,
+  videoLoaded,
+  isAwsVideo,
 } = storeToRefs(videoStore);
 
 
 // Helper function to get the correct video URL
-const getVideoUrl = (video: any) => {
+const getVideoUrl = (video: Partial<Video> & { url?: string; videoType?: string; filePath?: string }) => {
   if (video.url && video.url.trim() !== '') {
     return video.url;
   }
@@ -114,7 +122,7 @@ type UnifiedVideoPlayerInstance = ComponentPublicInstance<
 const hasError = ref(false);
 const errorMessage = ref('');
 
-onErrorCaptured((error: any, instance: any, info: string) => {
+onErrorCaptured((error: Error, instance: ComponentPublicInstance | null, info: string) => {
   console.error('App Error Boundary caught error:', error);
   console.error('Component instance:', instance);
   console.error('Error info:', info);
@@ -138,25 +146,26 @@ const isLoading = computed(() => {
 // Check for password reset token in URL
 
 
-// Player mode management
-const playerMode = ref<'single' | 'dual'>('single');
-
 // Active video context for dual mode
  // 'A' or 'B'
 
 // Unified video state management
 // Video state managed by Pinia
-// Video state managed by Pinia
 // Removed local videoState reactive object
-
-const currentVideoType = ref<'url' | 'upload'>('url');
-const currentVideoObject = ref<any>(null);
 
 
 // Drawing functionality
 const drawingCanvas = useDrawingCanvas();
 const drawingCanvasA = useDrawingCanvas();
 const drawingCanvasB = useDrawingCanvas();
+
+// Unified drawing coordinator (eliminates single/dual branching in consumers)
+const drawingCoordinator = useDrawingCoordinator({
+  playerMode,
+  singleCanvas: drawingCanvas,
+  canvasA: drawingCanvasA,
+  canvasB: drawingCanvasB,
+});
 
 // Dual video player state
 const dualVideoPlayer = useDualVideoPlayer();
@@ -207,7 +216,7 @@ const {
   })
 );
 
-const handleAddAnnotation = async (annotationData: any) => {
+const handleAddAnnotation = async (annotationData: AnnotationFormData) => {
   return await addAnnotation(annotationData);
 };
 
@@ -219,20 +228,7 @@ const annotationPanelRef = ref<InstanceType<typeof AnnotationPanel> | null>(null
 
 
 
-const videoLoaded = ref(false);
-const currentVideoId = ref<string | null>(null);
-
-const currentComparisonId = ref<string | null>(null);
-const isSharedComparison = ref(false);
-const isSharedVideo = ref(false);
-const isAwsVideo = ref(false);
-
-const sharedVideoData = ref<any>(null);
-
-// Shared video authentication state
-const showAuthPrompt = ref(false);
-const userDeclinedAuth = ref(false);
-const pendingSharedContent = ref<{type: 'video' | 'comparison', id: string, data: any} | null>(null);
+// videoLoaded, currentVideoId, currentComparisonId, isAwsVideo are now from videoStore via storeToRefs
 
 const isChangelogModalOpen = ref(false);
 
@@ -343,7 +339,55 @@ watch(
   { immediate: true, deep: true }
 );
 
-const { cleanupAllSessionData, cleanupForProjectSwitch } = useSessionCleanup();
+const { registerCleanup, runAllCleanups, runProjectSwitchCleanups } = useSessionCleanup();
+
+// ── Register cleanup functions ────────────────────────────────────────────────
+// Each registration captures a reactive reference; the cleanup fn reads the
+// current value at the time it runs, so late-bound state is handled correctly.
+
+// Drawing canvases (project-switch) — delegated to the coordinator
+registerCleanup('drawingCanvas', () => {
+  drawingCoordinator.cleanup();
+});
+
+// Dual video player (project-switch)
+registerCleanup('dualVideoPlayer', () => {
+  if (!dualVideoPlayer) return;
+  if (dualVideoPlayer.videoAUrl) dualVideoPlayer.videoAUrl.value = '';
+  if (dualVideoPlayer.videoBUrl) dualVideoPlayer.videoBUrl.value = '';
+  dualVideoPlayer.destroy();
+});
+
+// Comparison workflow (project-switch)
+registerCleanup('comparisonWorkflow', () => {
+  if (comparisonWorkflow) comparisonWorkflow.resetWorkflow();
+});
+
+// Video session (project-switch)
+registerCleanup('videoSession', async () => {
+  await endSession();
+});
+
+// Annotations (project-switch)
+registerCleanup('annotations', () => {
+  if (annotations.value && Array.isArray(annotations.value)) {
+    try {
+      annotations.value.splice(0, annotations.value.length);
+    } catch {
+      // Array may be readonly
+    }
+  }
+  if (selectedAnnotation.value) selectedAnnotation.value = null;
+});
+
+// Video state reset (project-switch) — resets all video state including IDs
+registerCleanup('videoState', () => {
+  videoStore.resetForProjectSwitch();
+});
+
+// Note: realtime annotations cleanup is handled by Vue's onBeforeUnmount.
+// Comment permissions and anonymous session are reset internally by
+// useVideoSession when endSession() runs (already registered above).
 
 // Initialize notifications
 const { error: notifyError } = useNotifications();
@@ -356,14 +400,7 @@ watch(
   annotations,
   (newAnnotations) => {
     if (newAnnotations) {
-      if (playerMode.value === 'dual') {
-        // In dual mode, load drawings into both canvas composables with video context
-        drawingCanvasA.loadDrawingsFromAnnotations(newAnnotations as any, 'A');
-        drawingCanvasB.loadDrawingsFromAnnotations(newAnnotations as any, 'B');
-      } else {
-        // In single mode, load into the main drawing canvas
-        drawingCanvas.loadDrawingsFromAnnotations(newAnnotations as any);
-      }
+      drawingCoordinator.loadDrawingsFromAnnotations(newAnnotations as any);
     }
   },
   { immediate: true, deep: true }
@@ -378,287 +415,71 @@ watch(selectedAnnotation, (newAnnotation, oldAnnotation) => {
   }
 
   if (newAnnotation && newAnnotation.frame !== undefined) {
-    // Update the current frame for the drawing canvas
-    // The DrawingCanvas component will automatically show the drawings for this frame
+    // Update the current frame for all relevant drawing canvases via coordinator
+    drawingCoordinator.setCurrentFrame(
+      newAnnotation.frame,
+      newAnnotation.videoAFrame,
+      newAnnotation.videoBFrame,
+    );
+
+    // Also keep the single canvas frame in sync (used by handleFrameUpdate)
     drawingCanvas.currentFrame.value = newAnnotation.frame;
-
-    if (playerMode.value === 'dual') {
-      // In dual mode, update both canvas frames
-      if (drawingCanvasA.currentFrame) {
-        drawingCanvasA.currentFrame.value =
-          newAnnotation.videoAFrame || newAnnotation.frame;
-      }
-      if (drawingCanvasB.currentFrame) {
-        drawingCanvasB.currentFrame.value =
-          newAnnotation.videoBFrame || newAnnotation.frame;
-      }
-    }
-
-    // No need to reload drawings here - they're already loaded
-    // The DrawingCanvas component watches currentFrame and will display the correct drawings
   }
 });
 
 
 
-// Event handlers for video player events
-const handleTimeUpdate = (data: { currentTime: number; duration: number }) => {
-  // Use store action to update time - this ensures frame is calculated based on FPS
-  videoStore.updateTime(data.currentTime);
-  
-  if (data.duration && data.duration > 0 && duration.value !== data.duration) {
-    duration.value = data.duration;
-  }
-};
-
-const handleFrameUpdate = (data: {
-  currentFrame: number;
-  totalFrames: number;
-  fps: number;
-}) => {
-  try {
-    if (data && typeof data === 'object') {
-      if (typeof data.currentFrame === 'number') {
-        currentFrame.value = data.currentFrame;
-      }
-      if (typeof data.totalFrames === 'number') {
-        totalFrames.value = data.totalFrames;
-      }
-      if (typeof data.fps === 'number') {
-        fps.value = data.fps;
-      }
-
-      if (
-        drawingCanvas &&
-        drawingCanvas.currentFrame &&
-        typeof data.currentFrame === 'number'
-      ) {
-        drawingCanvas.currentFrame.value = data.currentFrame;
-      }
-    }
-  } catch (error) {
-    console.error('Error in handleFrameUpdate:', error);
-  }
-};
-
-const handleFPSDetected = (data: { fps: number; totalFrames: number }) => {
-  try {
-    if (data && typeof data === 'object') {
-      if (typeof data.fps === 'number') {
-        fps.value = data.fps;
-      }
-      if (typeof data.totalFrames === 'number') {
-        totalFrames.value = data.totalFrames;
-      }
-    }
-  } catch (error) {
-    console.error('Error in handleFPSDetected:', error);
-  }
-};
-
-const handleLoaded = async (data: any) => {
-  try {
-    if (!data) {
-      console.error('handleLoaded called with no data');
-      return;
-    }
-
-    videoLoaded.value = true;
-
-    if (data.duration !== undefined) {
-      videoStore.updateDuration(data.duration);
-    }
-
-    if (data.dimensions) {
-      videoStore.setDimensions(data.dimensions.width, data.dimensions.height);
-    }
-
-    if (data.id) {
-      currentVideoId.value = data.id as string;
-    }
-
-    // Initialize video with complete data object, not just ID
-    if (data) {
-      // For uploaded videos, we need to pass the existing video record
-      // to prevent creating duplicates
-      const initData = {
-        ...data,
-        videoType: currentVideoType.value || 'url',
-        // If we have a stored video object (from loadVideo), use it as existingVideo
-        existingVideo:
-          currentVideoObject.value ||
-          (currentVideoId.value
-            ? {
-                id: currentVideoId.value,
-                url: videoUrl.value,
-                title: data.title || currentVideoObject.value?.title,
-                videoType: currentVideoType.value || 'url',
-                ...currentVideoObject.value,
-              }
-            : null),
-      };
-      await initializeVideo(initData);
-    }
-
-    await loadAnnotations();
-  } catch (error) {
-    console.error('Error in handleLoaded:', error);
-  }
-};
-
-const handleVideoError = async (_error: any) => {
-  // If this is an AWS video, the presigned URL may have expired - try refreshing
-  if (currentVideoObject.value && VideoService.isAwsVideo(currentVideoObject.value)) {
-    console.log('🔄 [App] AWS video error, attempting URL refresh...');
-    const freshUrl = await VideoService.refreshAwsVideoUrl(currentVideoObject.value);
-    if (freshUrl) {
-      currentVideoObject.value = { ...currentVideoObject.value, url: freshUrl };
-      videoStore.setVideo(freshUrl, currentVideoObject.value.id);
-    }
-  }
-};
-
-const handleSeekToTime = (time: number) => {
-  if ((unifiedVideoPlayerRef.value as any)?.seekTo) {
-    (unifiedVideoPlayerRef.value as any).seekTo(time);
-  }
-};
-
-const handleDualVideoAction = (
-  action: string,
-  context: string,
-  ...args: any[]
-) => {
-  if (!dualVideoPlayer) return;
-
-  const methodName = `${action}Video${context}`;
-  if (typeof (dualVideoPlayer as any)[methodName] === 'function') {
-    (dualVideoPlayer as any)[methodName](...args);
-  }
-};
-
-const handleSeekVideoA = (time: number) =>
-  handleDualVideoAction('seek', 'A', time);
-const handleSeekVideoB = (time: number) =>
-  handleDualVideoAction('seek', 'B', time);
-const handlePlayVideoA = () => handleDualVideoAction('play', 'A');
-const handlePauseVideoA = () => handleDualVideoAction('pause', 'A');
-const handlePlayVideoB = () => handleDualVideoAction('play', 'B');
-const handlePauseVideoB = () => handleDualVideoAction('pause', 'B');
-const handleFrameStepVideoA = (direction: string) =>
-  handleDualVideoAction('stepFrame', 'A', direction);
-const handleFrameStepVideoB = (direction: string) =>
-  handleDualVideoAction('stepFrame', 'B', direction);
-
-const handleSeekToTimeWithFade = async (time: number) => {
-  if (playerMode.value === 'dual' && dualVideoPlayer) {
-    (dualVideoPlayer as any).seekVideoA?.(time);
-    (dualVideoPlayer as any).seekVideoB?.(time);
-  } else {
-    if (
-      (unifiedVideoPlayerRef.value as any)?.performVideoFadeTransition &&
-      (unifiedVideoPlayerRef.value as any)?.seekTo
-    ) {
-      await (unifiedVideoPlayerRef.value as any).performVideoFadeTransition(
-        () => {
-          (unifiedVideoPlayerRef.value as any).seekTo(time);
-        }
-      );
-    } else if ((unifiedVideoPlayerRef.value as any)?.seekTo) {
-      (unifiedVideoPlayerRef.value as any).seekTo(time);
-    }
-  }
-};
-
-const handleAnnotationClick = async (annotation: any) => {
-  selectedAnnotation.value = annotation;
-
-  // Update the current frame for the drawing canvas based on mode
-  if (playerMode.value === 'dual') {
-    // In dual mode, only update canvas frames if specific video frames are defined
-    // This prevents frame misalignment by not falling back to generic frame property
-    if (drawingCanvasA.currentFrame && annotation.videoAFrame !== undefined) {
-      drawingCanvasA.currentFrame.value = annotation.videoAFrame;
-    }
-    if (drawingCanvasB.currentFrame && annotation.videoBFrame !== undefined) {
-      drawingCanvasB.currentFrame.value = annotation.videoBFrame;
-    }
-    // Note: Drawings will be automatically updated via the watch on selectedAnnotation
-  } else {
-    // In single mode, use the generic frame property
-    if (annotation.frame !== undefined) {
-      drawingCanvas.currentFrame.value = annotation.frame;
-    }
-    // Note: Drawings will be automatically updated via the watch on selectedAnnotation
-  }
-
-  // Seek to the annotation's timestamp
-  if (playerMode.value === 'dual' && dualVideoPlayer) {
-    if (
-      annotation.videoAFrame !== undefined &&
-      annotation.videoBFrame !== undefined
-    ) {
-      const videoATime =
-        annotation.videoATimestamp ||
-        annotation.videoAFrame / (dualVideoPlayer.videoAState?.fps || 30);
-      const videoBTime =
-        annotation.videoBTimestamp ||
-        annotation.videoBFrame / (dualVideoPlayer.videoBState?.fps || 30);
-
-      (dualVideoPlayer as any).seekVideoA?.(videoATime);
-      (dualVideoPlayer as any).seekVideoB?.(videoBTime);
-    } else if (annotation.timestamp !== undefined) {
-      // Fallback to timestamp if dual mode frames are not properly set
-      await handleSeekToTimeWithFade(annotation.timestamp);
-    }
-  } else if (annotation.timestamp !== undefined) {
-    // Single mode: use timestamp
-    await handleSeekToTimeWithFade(annotation.timestamp);
-  }
-};
-
-const handleAnnotationEdit = () => {
-  if (!annotationPanelRef.value) return;
-  (annotationPanelRef.value as any).isEditing = true;
-};
-
-const handleDrawingCreated = (drawing: any, videoContext?: string) => {
-  if (playerMode.value === 'dual') {
-    // videoContext is now passed directly as a parameter from UnifiedVideoPlayer
-    const context = videoContext || 'A'; // default to 'A' if not provided
-    (dualVideoPlayer as any).addDrawing?.(drawing, context);
-    // Forward drawing data to annotation panel for dual mode
-    if (annotationPanelRef.value?.onDrawingCreated) {
-      annotationPanelRef.value.onDrawingCreated(drawing, context);
-    }
-  } else {
-    drawingCanvas.addDrawing(drawing);
-    // Forward drawing data to annotation panel for single mode
-    if (annotationPanelRef.value?.onDrawingCreated) {
-      annotationPanelRef.value.onDrawingCreated(drawing);
-    }
-  }
-};
-
-const handleDrawingUpdated = (drawing: any, videoContext?: string) => {
-  if (playerMode.value === 'dual') {
-    // videoContext is now passed directly as a parameter from UnifiedVideoPlayer
-    const context = videoContext || 'A'; // default to 'A' if not provided
-    (dualVideoPlayer as any).updateDrawing?.(drawing, context);
-  } else {
-    (drawingCanvas as any).updateDrawing?.(drawing);
-  }
-};
-
-const handleDrawingDeleted = (drawingId: string, videoContext?: string) => {
-  if (playerMode.value === 'dual') {
-    // videoContext is now passed directly as a parameter from UnifiedVideoPlayer
-    const context = videoContext || 'A'; // default to 'A' if not provided
-    (dualVideoPlayer as any).deleteDrawing?.(drawingId, context);
-  } else {
-    (drawingCanvas as any).deleteDrawing?.(drawingId);
-  }
-};
+// ── Video event handlers (extracted composable) ──────────────────────────────
+const {
+  handleTimeUpdate,
+  handleFrameUpdate,
+  handleFPSDetected,
+  handleLoaded,
+  handleVideoError,
+  handleSeekToTime,
+  handleSeekToTimeWithFade,
+  handleTimelinePlay,
+  handleTimelinePause,
+  handleDrawingCreated,
+  handleDrawingUpdated,
+  handleDrawingDeleted,
+  handleDualVideoLoaded,
+  handleSeekVideoA,
+  handleSeekVideoB,
+  handlePlayVideoA,
+  handlePauseVideoA,
+  handlePlayVideoB,
+  handlePauseVideoB,
+  handleFrameStepVideoA,
+  handleFrameStepVideoB,
+  handleAnnotationClick,
+  handleAnnotationEdit,
+} = useVideoEventHandlers({
+  videoStore,
+  duration,
+  currentFrame,
+  totalFrames,
+  fps,
+  isPlaying,
+  playerMode,
+  videoLoaded,
+  videoUrl,
+  currentVideoId,
+  currentVideoType,
+  currentVideoObject,
+  selectedAnnotation,
+  drawingCoordinator,
+  drawingCanvas,
+  drawingCanvasA,
+  drawingCanvasB,
+  dualVideoPlayer,
+  dualVideoPlayerRef,
+  comparisonWorkflow,
+  unifiedVideoPlayerRef,
+  annotationPanelRef,
+  initializeVideo,
+  loadAnnotations,
+});
 
 const handleCreateAnonymousSession = async (displayName: string) => {
   try {
@@ -675,24 +496,6 @@ const handleFormShow = () => {
 
 const handleFormHide = () => {
   isAnnotationFormVisible.value = false;
-};
-
-const handleTimelinePlay = () => {
-  if (playerMode.value === 'single' && unifiedVideoPlayerRef.value) {
-    (unifiedVideoPlayerRef.value as any).play();
-  } else if (playerMode.value === 'dual' && dualVideoPlayer) {
-    (dualVideoPlayer as any).playVideoA?.();
-    (dualVideoPlayer as any).playVideoB?.();
-  }
-};
-
-const handleTimelinePause = () => {
-  if (playerMode.value === 'single' && unifiedVideoPlayerRef.value) {
-    (unifiedVideoPlayerRef.value as any).pause();
-  } else if (playerMode.value === 'dual' && dualVideoPlayer) {
-    (dualVideoPlayer as any).pauseVideoA?.();
-    (dualVideoPlayer as any).pauseVideoB?.();
-  }
 };
 
 
@@ -718,7 +521,7 @@ const closeComparisonModal = () => {
   layoutStore.closeComparisonModal();
 };
 
-const handleComparisonCreated = (comparison: any) => {
+const handleComparisonCreated = (comparison: ComparisonCreatedEvent) => {
   // Handle comparison created from ProjectManagementModal
   handleProjectSelected({
     projectType: 'dual',
@@ -738,22 +541,22 @@ const closeVideoUpload = () => {
   layoutStore.closeVideoUploadModal();
 };
 
-const handleVideoUploadSuccess = async (videoRecord: any) => {
+const handleVideoUploadSuccess = async (videoRecord: VideoUploadResult) => {
   console.log('✅ Video upload successful:', videoRecord);
 
   // Close the upload modal
   closeVideoUpload();
 
   // Create a project-like object for the uploaded video
-  const uploadProject = {
-    id: videoRecord.projectId,
+  const uploadProject: ProjectSelection = {
     title:
       videoRecord.title || videoRecord.originalFilename || 'Uploaded Video',
     video: videoRecord,
     videoId: videoRecord.id,
-    createdAt: videoRecord.createdAt,
-    updatedAt: videoRecord.updatedAt,
   };
+  if (videoRecord.projectId) uploadProject.id = videoRecord.projectId;
+  if (videoRecord.createdAt) uploadProject.createdAt = videoRecord.createdAt;
+  if (videoRecord.updatedAt) uploadProject.updatedAt = videoRecord.updatedAt;
 
   // Handle the project selection
   await handleProjectSelected(uploadProject);
@@ -763,14 +566,14 @@ const handleVideoUploadSuccess = async (videoRecord: any) => {
   isProjectModalOpen.value = true;
 };
 
-const handleVideoUploadError = (error: any) => {
+const handleVideoUploadError = (error: Error) => {
   console.error('❌ Video upload failed:', error);
   // Error is already handled by the VideoUpload component
 };
 
 
 
-const loadVideo = (video: any, type = 'upload') => {
+const loadVideo = (video: Partial<Video> & { id?: string; url?: string }, type: 'url' | 'upload' | 'shared' = 'upload') => {
   videoLoaded.value = false;
   try {
     playerMode.value = 'single';
@@ -786,7 +589,7 @@ const loadVideo = (video: any, type = 'upload') => {
   }
 };
 
-const handleProjectSelected = async (project: any) => {
+const handleProjectSelected = async (project: ProjectSelection) => {
   try {
     console.log(
       '🔄 [App] Project selected:',
@@ -811,43 +614,21 @@ const handleProjectSelected = async (project: any) => {
         `🧹 [App] Cleaning up before project switch: ${currentProjectType} → ${newProjectType}`
       );
 
-      await cleanupForProjectSwitch(currentProjectType, newProjectType, {
-        drawingCanvas,
-        drawingCanvasA,
-        drawingCanvasB,
-        dualVideoPlayer,
-        comparisonWorkflow,
-        videoSession: { endSession },
-        annotations,
-        selectedAnnotation,
-        // videoState can be cleanup using store reset if needed
-        currentVideoId,
-        currentComparisonId,
-        additionalCleanup: [
-          // End current video session
-          async () => {
-            try {
-              await endSession();
-            } catch (error) {
-              console.warn('Error ending session during cleanup:', error);
-            }
-          },
-        ],
-      });
+      await runProjectSwitchCleanups();
     }
 
-    if (project.projectType === 'single') {
+    if (project.projectType === 'single' && project.video) {
       console.log('🎬 [App] Loading single video project');
 
       // Set player mode first
       playerMode.value = 'single';
 
       // Pass the complete video object to preserve all properties
-      let video = project.video;
+      let video: Partial<Video> & { id?: string; url?: string } = project.video;
 
       // For AWS videos, refresh the presigned URL before loading
-      if (VideoService.isAwsVideo(video)) {
-        const freshUrl = await VideoService.refreshAwsVideoUrl(video);
+      if (VideoService.isAwsVideo(video as Record<string, unknown>)) {
+        const freshUrl = await VideoService.refreshAwsVideoUrl(video as Video);
         if (freshUrl) {
           video = { ...video, url: freshUrl };
         }
@@ -855,9 +636,9 @@ const handleProjectSelected = async (project: any) => {
       }
 
       // Set the video type based on the video's actual type
-      const videoType = project.video.videoType || 'upload';
+      const videoType = (project.video.videoType || 'upload') as 'url' | 'upload' | 'shared';
       loadVideo(video, videoType);
-      currentVideoId.value = project.video.id;
+      currentVideoId.value = project.video.id || null;
       currentComparisonId.value = null;
 
       // Load annotations for the new video
@@ -870,8 +651,8 @@ const handleProjectSelected = async (project: any) => {
       currentComparisonId.value = project.comparisonVideo?.id || null;
       currentVideoId.value = null;
 
-      if (comparisonWorkflow) {
-        await comparisonWorkflow.loadComparisonVideo(project.comparisonVideo);
+      if (comparisonWorkflow && project.comparisonVideo) {
+        await comparisonWorkflow.loadComparisonVideo(project.comparisonVideo as ComparisonVideo);
       }
     }
 
@@ -882,24 +663,6 @@ const handleProjectSelected = async (project: any) => {
   }
 
   closeLoadModal();
-};
-
-const handleDualVideoLoaded = async () => {
-  if (dualVideoPlayerRef.value) {
-    const videoAState = (dualVideoPlayerRef.value as any).videoAState;
-    const videoBState = (dualVideoPlayerRef.value as any).videoBState;
-
-    if (
-      videoAState.duration > 0 &&
-      videoAState.fps > 0 &&
-      videoBState.duration > 0 &&
-      videoBState.fps > 0
-    ) {
-      if (comparisonWorkflow) {
-        (comparisonWorkflow as any).setDualVideoReady?.(true);
-      }
-    }
-  }
 };
 
 const shareModalProps = computed(() => {
@@ -937,174 +700,35 @@ const closeSharedLinksManagement = () => {
   isSharedLinksModalOpen.value = false;
 };
 
-// Shared video authentication handlers
-const handleAuthSignIn = () => {
-  showAuthPrompt.value = false;
-  userDeclinedAuth.value = false;
-  // The Login component will be shown since user is not authenticated
-  // After successful login, the pending shared content will be loaded
-};
+// ── Shared content (extracted composable) ────────────────────────────────────
+const {
+  isSharedVideo,
+  isSharedComparison,
+  sharedVideoData,
+  showAuthPrompt,
+  pendingSharedContent,
+  sharedContentPermissionText,
+  handleAuthSignIn,
+  handleAuthContinueReadOnly,
+  initSharedContent,
+  handleUserLogin: handleSharedContentUserLogin,
+} = useSharedContent({
+  user,
+  currentVideoId,
+  currentComparisonId,
+  playerMode,
+  loadVideo,
+  startSession,
+  comparisonWorkflow,
+});
 
-const handleAuthContinueReadOnly = () => {
-  userDeclinedAuth.value = true;
-  
-  // Load the shared content in read-only mode BEFORE closing the prompt
-  // This ensures the isSharedVideo/isSharedComparison flags are set first
-  if (pendingSharedContent.value) {
-    if (pendingSharedContent.value.type === 'video') {
-      loadSharedVideoReadOnly(pendingSharedContent.value.data);
-    } else if (pendingSharedContent.value.type === 'comparison') {
-      loadSharedComparisonReadOnly(pendingSharedContent.value.data);
-    }
-    pendingSharedContent.value = null;
-  }
-  
-  // Close the prompt AFTER loading content to avoid unmounting the main div
-  showAuthPrompt.value = false;
-};
-
-const loadSharedVideoReadOnly = (shareData: any) => {
-  isSharedVideo.value = true;
-  sharedVideoData.value = shareData;
-  currentVideoId.value = shareData.id;
-  
-  loadVideo(
-    {
-      id: shareData.id,
-      url: shareData.url,
-    },
-    'shared'
-  );
-};
-
-const loadSharedComparisonReadOnly = async (sharedComparisonData: any) => {
-  isSharedComparison.value = true;
-  currentComparisonId.value = sharedComparisonData.id;
-
-  const comparisonVideo = {
-    id: sharedComparisonData.id,
-    title: sharedComparisonData.title,
-    description: sharedComparisonData.description,
-    videoAId: sharedComparisonData.videoA?.id || 'placeholder',
-    videoBId: sharedComparisonData.videoB?.id || 'placeholder',
-    videoA: sharedComparisonData.videoA,
-    videoB: sharedComparisonData.videoB,
-    isPublic: sharedComparisonData.isPublic,
-    userId: '',
-    createdAt: '',
-    updatedAt: '',
-  };
-
-  if (comparisonWorkflow) {
-    await comparisonWorkflow.loadComparisonVideo(comparisonVideo as any);
-    playerMode.value = 'dual';
-    
-    // Start the session to initialize permissions even in read-only mode
-    if (currentComparisonId.value) {
-      await startSession();
-    }
-  }
-};
-
-const loadSharedVideoAuthenticated = async (shareData: any) => {
-  try {
-    // Re-fetch the shared video data now that user is authenticated
-    // This ensures canComment is correctly set based on current auth state
-    const freshShareData = await ShareService.getSharedVideoWithCommentPermissions(shareData.id);
-    
-    isSharedVideo.value = true;
-    sharedVideoData.value = freshShareData;
-    currentVideoId.value = freshShareData.id;
-    
-    loadVideo(
-      {
-        id: freshShareData.id,
-        url: freshShareData.url,
-      },
-      'shared'
-    );
-    
-    // Start the video session with proper permissions
-    if (currentVideoId.value) {
-      await startSession();
-    }
-  } catch (error) {
-    console.error('Error loading authenticated shared video:', error);
-    // Fallback to original data if re-fetch fails
-    loadSharedVideoReadOnly(shareData);
-  }
-};
-
-const loadSharedComparisonAuthenticated = async (sharedComparisonData: any) => {
-  try {
-    // Re-fetch the shared comparison data now that user is authenticated
-    // This ensures canComment is correctly set based on current auth state
-    const freshComparisonData = await ShareService.getSharedComparisonVideoWithCommentPermissions(sharedComparisonData.id);
-    
-    isSharedComparison.value = true;
-    currentComparisonId.value = freshComparisonData.id;
-
-    const comparisonVideo = {
-      id: freshComparisonData.id,
-      title: freshComparisonData.title,
-      description: freshComparisonData.description,
-      videoAId: freshComparisonData.videoA?.id || 'placeholder',
-      videoBId: freshComparisonData.videoB?.id || 'placeholder',
-      videoA: freshComparisonData.videoA,
-      videoB: freshComparisonData.videoB,
-      isPublic: freshComparisonData.isPublic,
-      userId: '',
-      createdAt: '',
-      updatedAt: '',
-    };
-
-    if (comparisonWorkflow) {
-      await comparisonWorkflow.loadComparisonVideo(comparisonVideo as any);
-      playerMode.value = 'dual';
-      
-      // Start the video session with proper permissions after loading
-      // This ensures the activeContentId computed property has the currentComparisonId
-      if (currentComparisonId.value) {
-        await startSession();
-      }
-    }
-  } catch (error) {
-    console.error('Error loading authenticated shared comparison:', error);
-    // Fallback to original data if re-fetch fails
-    loadSharedComparisonReadOnly(sharedComparisonData);
-  }
-};
-
-const handleKeydown = (e: KeyboardEvent) => {
-  // Ignore if user is typing in an input or textarea
-  const target = e.target as HTMLElement;
-  if (['INPUT', 'TEXTAREA'].includes(target.tagName) || target.isContentEditable) {
-    return;
-  }
-
-  if (e.key === 'ArrowRight') {
-    e.preventDefault();
-    unifiedVideoPlayerRef.value?.stepFrame(1);
-  } else if (e.key === 'ArrowLeft') {
-    e.preventDefault();
-    unifiedVideoPlayerRef.value?.stepFrame(-1);
-  } else if (e.key === ' ' || e.code === 'Space') {
-    e.preventDefault();
-
-    let isCurrentlyPlaying = false;
-    if (playerMode.value === 'single') {
-      isCurrentlyPlaying = isPlaying.value;
-    } else if (playerMode.value === 'dual' && dualVideoPlayer) {
-      isCurrentlyPlaying = dualVideoPlayer.videoAIsPlaying?.value || dualVideoPlayer.videoBIsPlaying?.value || false;
-    }
-
-    if (isCurrentlyPlaying) {
-      unifiedVideoPlayerRef.value?.pause();
-    } else {
-      unifiedVideoPlayerRef.value?.play();
-    }
-  }
-};
+// ── Keyboard shortcuts (extracted composable) ────────────────────────────────
+useDashboardKeyboard({
+  playerMode,
+  isPlaying,
+  dualVideoPlayer,
+  unifiedVideoPlayerRef,
+});
 
 const loadOutputVideo = async (outputVideoId: string) => {
   if (!user.value) {
@@ -1134,80 +758,17 @@ const loadOutputVideo = async (outputVideoId: string) => {
 let authSubscription: { unsubscribe: () => void } | null = null;
 
 onMounted(async () => {
-  window.addEventListener('keydown', handleKeydown);
   try {
     isAppLoading.value = true;
 
     // Initialize auth
     await initAuth();
 
-
-
+    // Check for shared content in the URL (delegated to composable)
     const shareInfo = ShareService.parseShareUrl();
 
     if (shareInfo.type && shareInfo.id) {
-      try {
-        if (shareInfo.type === 'video') {
-          const shareData =
-            await ShareService.getSharedVideoWithCommentPermissions(
-              shareInfo.id
-            );
-
-          // Check if this shared video requires authentication for annotations
-          const requiresAuth = shareData.canComment && !user.value;
-          
-          if (requiresAuth) {
-            // Store the pending content and show auth prompt
-            pendingSharedContent.value = {
-              type: 'video',
-              id: shareInfo.id,
-              data: shareData
-            };
-            showAuthPrompt.value = true;
-          } else if (user.value && shareData.canComment) {
-            // User is authenticated and video allows annotations - load with full permissions
-            await loadSharedVideoAuthenticated(shareData);
-          } else {
-            // Annotations not allowed or user not authenticated, load in read-only mode
-            loadSharedVideoReadOnly(shareData);
-          }
-        } else if (shareInfo.type === 'comparison') {
-          try {
-            // Load shared comparison video with proper permissions
-            const sharedComparisonData =
-              await ShareService.getSharedComparisonVideoWithCommentPermissions(
-                shareInfo.id
-              );
-
-            // Check if this shared comparison requires authentication for annotations
-            const requiresAuth = sharedComparisonData.canComment && !user.value;
-
-            if (requiresAuth) {
-              // Store the pending content and show auth prompt
-              pendingSharedContent.value = {
-                type: 'comparison',
-                id: shareInfo.id,
-                data: sharedComparisonData
-              };
-              showAuthPrompt.value = true;
-            } else if (user.value && sharedComparisonData.canComment) {
-              // User is authenticated and comparison allows annotations - load with full permissions
-              await loadSharedComparisonAuthenticated(sharedComparisonData);
-            } else {
-              // Annotations not allowed or user not authenticated, load in read-only mode
-              loadSharedComparisonReadOnly(sharedComparisonData);
-            }
-          } catch (error) {
-            console.error(
-              '❌ [App] Failed to load shared comparison video:',
-              error
-            );
-            throw error;
-          }
-        }
-      } catch (error) {
-        console.error('Failed to load shared content:', error);
-      }
+      await initSharedContent();
     } else {
       // Check for AWS project link (from query param or sessionStorage after auth redirect)
       const params = new URLSearchParams(window.location.search);
@@ -1229,7 +790,6 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
-  window.removeEventListener('keydown', handleKeydown);
   authSubscription?.unsubscribe();
   authSubscription = null;
 });
@@ -1244,32 +804,17 @@ watch(playerMode, (newMode) => {
 
 
 
-// Computed property for shared content permission text
-const sharedContentPermissionText = computed(() => {
-  if (isSharedComparison.value) {
-    const comparison = comparisonWorkflow.currentComparison.value;
-    const hasAnnotationPermission = comparison && (comparison as any).allowAnnotations;
-    return hasAnnotationPermission
-      ? 'Shared Comparison (Annotations Enabled)'
-      : 'Shared Comparison (View Only)';
-  } else if (isSharedVideo.value) {
-    const hasAnnotationPermission = sharedVideoData.value?.allowAnnotations;
-    return hasAnnotationPermission
-      ? 'Shared Video (Annotations Enabled)'
-      : 'Shared Video (View Only)';
-  }
-  return 'Shared Content';
-});
-
 // Logout and cleanup
 const handleSignOut = async () => {
   try {
     await signOut();
-    await cleanupAllSessionData();
+    await runAllCleanups();
   } catch (error) {
     console.error('Error during sign out and cleanup:', error);
   }
 };
+
+const reloadPage = () => window.location.reload();
 
 watch(
   () => user.value,
@@ -1282,13 +827,7 @@ watch(
 
       // Check if user just logged in and we have pending shared content
       if (!oldUser && pendingSharedContent.value) {
-        // User logged in after seeing auth prompt, load the shared content WITH full permissions
-        if (pendingSharedContent.value.type === 'video') {
-          loadSharedVideoAuthenticated(pendingSharedContent.value.data);
-        } else if (pendingSharedContent.value.type === 'comparison') {
-          loadSharedComparisonAuthenticated(pendingSharedContent.value.data);
-        }
-        pendingSharedContent.value = null;
+        handleSharedContentUserLogin();
       }
       // Check for pending AWS project after login
       else if (!oldUser && sessionStorage.getItem('pendingOutputVideo')) {
@@ -1357,7 +896,7 @@ watch(
         </button>
         <button
           class="flex-1 bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700 transition-colors"
-          @click="window.location.reload()"
+          @click="reloadPage"
         >
           Reload Page
         </button>
@@ -1374,7 +913,9 @@ watch(
       <div
         class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"
       />
-      <p class="text-gray-600 dark:text-gray-400">Loading...</p>
+      <p class="text-gray-600 dark:text-gray-400">
+        Loading...
+      </p>
     </div>
   </div>
 
@@ -1386,143 +927,20 @@ watch(
     class="min-h-screen bg-white dark:bg-gray-900 flex flex-col"
   >
     <!-- Header -->
-    <header class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4">
-      <div class="flex items-center justify-between">
-        <div class="flex items-center space-x-3">
-          <h1 class="text-xl font-medium text-gray-900 dark:text-white">Perspecto</h1>
-          <span
-            class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200 border border-orange-200 dark:border-orange-800 cursor-pointer hover:bg-orange-200 dark:hover:bg-orange-800 transition-colors"
-            @click="isChangelogModalOpen = true"
-          >
-            BETA v3.8
-          </span>
-        </div>
-
-        <!-- Action Buttons (only for authenticated users) -->
-        <div
-          v-if="user && !isSharedVideo && !isSharedComparison"
-          class="flex items-center space-x-4"
-        >
-          <!-- Load Previous Videos Button -->
-          <button
-            class="p-2 text-gray-600 dark:text-gray-300 hover:text-green-600 dark:hover:text-green-400 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-            title="Upload video"
-            @click="layoutStore.openProjectModal()"
-          >
-            <svg
-              class="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
-              />
-            </svg>
-          </button>
-
-          <!-- Manage Shared Links Button -->
-          <button
-            class="p-2 text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-            title="Manage shared links"
-            @click="isSharedLinksModalOpen = true"
-          >
-            <svg
-              class="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-              />
-            </svg>
-          </button>
-
-
-
-          <!-- Share Video Button -->
-          <button
-            :disabled="!canShare"
-            class="p-2 text-gray-600 dark:text-gray-300 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:text-gray-300 dark:disabled:text-gray-600 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-            title="Share current video"
-            @click="layoutStore.openShareModal()"
-          >
-            <svg
-              class="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z"
-              />
-            </svg>
-          </button>
-        </div>
-
-        <!-- Shared Video/Comparison Info -->
-        <div
-          v-if="isSharedVideo || isSharedComparison"
-          class="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300"
-        >
-          <svg
-            class="w-4 h-4"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z"
-            />
-          </svg>
-          <span class="font-medium">
-            {{ sharedContentPermissionText }}
-          </span>
-        </div>
-
-        <!-- User Info and Sign Out (for authenticated users) -->
-        <div v-else-if="user" class="flex items-center space-x-4">
-          <div class="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
-            <svg
-              class="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-              />
-            </svg>
-            <span class="font-medium">{{
-              (user as any)?.email || 'Loading...'
-            }}</span>
-          </div>
-          <ThemeToggle />
-          <button
-            class="px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
-            @click="handleSignOut"
-          >
-            Sign Out
-          </button>
-        </div>
-      </div>
-    </header>
+    <DashboardHeader
+      :user="user"
+      :is-shared-video="isSharedVideo"
+      :is-shared-comparison="isSharedComparison"
+      :can-share="canShare"
+      :shared-content-permission-text="sharedContentPermissionText"
+      :current-video-object="currentVideoObject"
+      :player-mode="playerMode"
+      @open-project-modal="layoutStore.openProjectModal()"
+      @open-shared-links="isSharedLinksModalOpen = true"
+      @open-share-modal="layoutStore.openShareModal()"
+      @sign-out="handleSignOut"
+      @open-changelog="isChangelogModalOpen = true"
+    />
 
     <!-- Main Content -->
     <main class="flex-1 flex overflow-hidden">
@@ -1654,8 +1072,6 @@ watch(
       <aside
         class="w-96 min-w-96 max-w-96 flex-shrink-0 bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden"
       >
-
-
         <!-- Annotation Panel -->
         <div class="flex-1 overflow-hidden">
           <AnnotationPanel
@@ -1687,6 +1103,7 @@ watch(
             :drawing-canvas-b-ref="
               (unifiedVideoPlayerRef as any)?.drawingCanvasBRef || null
             "
+            :drawing-coordinator="drawingCoordinator"
             :video-a-current-frame="
               dualVideoPlayer?.videoACurrentFrame?.value || 0
             "
@@ -1724,184 +1141,47 @@ watch(
                   d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4"
                 />
               </svg>
-              <p class="text-sm">Initializing annotation panel...</p>
+              <p class="text-sm">
+                Initializing annotation panel...
+              </p>
             </div>
           </div>
         </div>
       </aside>
     </main>
 
-    <!-- Project Management Modal -->
-    <ProjectManagementModal
-      :is-visible="isProjectModalOpen"
-      @close="layoutStore.closeProjectModal()"
+    <!-- All Modals -->
+    <DashboardModals
+      :is-project-modal-open="isProjectModalOpen"
+      :is-comparison-modal-open="isComparisonModalOpen"
+      :is-video-upload-modal-open="isVideoUploadModalOpen"
+      :is-share-modal-open="isShareModalOpen"
+      :is-shared-links-modal-open="isSharedLinksModalOpen"
+      :show-auth-prompt="showAuthPrompt"
+      :is-changelog-modal-open="isChangelogModalOpen"
+      :share-video-id="shareModalProps.videoId || ''"
+      :share-comparison-id="shareModalProps.comparisonId"
+      :share-type="shareModalProps.shareType"
+      :pending-shared-content="pendingSharedContent"
+      @close-project-modal="layoutStore.closeProjectModal()"
       @project-selected="handleProjectSelected"
       @upload-video="layoutStore.openVideoUploadModal()"
-      @open-load-modal="openLoadModalWithTab('create')"
-    />
-
-    <!-- Create Comparison Modal -->
-    <CreateComparisonModal
-      :is-visible="isComparisonModalOpen"
-      @close="layoutStore.closeComparisonModal()"
+      @open-create-comparison="openLoadModalWithTab('create')"
+      @close-comparison-modal="layoutStore.closeComparisonModal()"
       @comparison-created="handleComparisonCreated"
-      @upload-video="layoutStore.openVideoUploadModal()"
-    />
-
-    <!-- Video Upload Modal -->
-    <Teleport to="body">
-      <Transition name="modal">
-        <div
-          v-if="isVideoUploadModalOpen"
-          class="fixed inset-0 z-50 flex items-center justify-center p-4"
-        >
-          <!-- Backdrop -->
-          <div
-            class="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            @click="layoutStore.closeVideoUploadModal()"
-          />
-
-          <!-- Modal Content -->
-          <div
-            class="relative bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-auto p-6"
-            @click.stop
-          >
-            <!-- Header -->
-            <div class="flex items-center justify-between mb-6">
-              <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Upload Video</h2>
-              <button
-                class="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                @click="layoutStore.closeVideoUploadModal()"
-              >
-                <svg
-                  class="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
-            </div>
-
-            <!-- Video Upload Component -->
-            <VideoUpload
-              @upload-success="handleVideoUploadSuccess"
-              @upload-error="handleVideoUploadError"
-            />
-          </div>
-        </div>
-      </Transition>
-    </Teleport>
-
-    <!-- Share Video Modal -->
-    <ShareModal
-      :is-visible="isShareModalOpen"
-      :video-id="shareModalProps.videoId || ''"
-      :comparison-id="shareModalProps.comparisonId"
-      :share-type="shareModalProps.shareType"
-      @close="layoutStore.closeShareModal()"
-    />
-
-    <!-- Shared Links Management Modal -->
-    <Teleport to="body">
-      <Transition name="modal">
-        <div
-          v-if="isSharedLinksModalOpen"
-          class="fixed inset-0 z-50 flex items-center justify-center"
-        >
-          <!-- Backdrop -->
-          <div
-            class="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            @click="closeSharedLinksManagement"
-          />
-
-          <!-- Modal Content -->
-          <div
-            class="relative bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-7xl mx-4 max-h-[90vh] overflow-hidden flex flex-col"
-            @click.stop
-          >
-            <!-- Header -->
-            <div class="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
-              <h2 class="text-2xl font-semibold text-gray-900 dark:text-white">Manage Shared Links</h2>
-              <button
-                class="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                @click="isSharedLinksModalOpen = false"
-              >
-                <svg
-                  class="w-6 h-6"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
-            </div>
-
-            <!-- Component Container -->
-            <div class="flex-1 overflow-auto">
-              <SharedLinksManagement />
-            </div>
-          </div>
-        </div>
-      </Transition>
-    </Teleport>
-
-
-    <!-- Shared Video Authentication Prompt -->
-    <SharedVideoAuthPrompt
-      :is-visible="showAuthPrompt"
-      :content-type="pendingSharedContent?.type === 'comparison' ? 'comparison video' : 'video'"
-      @sign-in="handleAuthSignIn"
-      @continue-read-only="handleAuthContinueReadOnly"
-    />
-
-    <!-- Changelog Modal -->
-    <ChangelogModal
-      :is-visible="isChangelogModalOpen"
-      @close="isChangelogModalOpen = false"
+      @close-video-upload="layoutStore.closeVideoUploadModal()"
+      @upload-success="handleVideoUploadSuccess"
+      @upload-error="handleVideoUploadError"
+      @close-share-modal="layoutStore.closeShareModal()"
+      @close-shared-links="closeSharedLinksManagement"
+      @auth-sign-in="handleAuthSignIn"
+      @auth-continue-read-only="handleAuthContinueReadOnly"
+      @close-changelog="isChangelogModalOpen = false"
     />
   </div>
-
-
 </template>
 
 <style scoped>
-/* Modal transition styles */
-.modal-enter-active,
-.modal-leave-active {
-  transition: opacity 0.3s ease;
-}
-
-.modal-enter-from,
-.modal-leave-to {
-  opacity: 0;
-}
-
-.modal-enter-active .relative,
-.modal-leave-active .relative {
-  transition: transform 0.3s ease;
-}
-
-.modal-enter-from .relative {
-  transform: scale(0.95);
-}
-
-.modal-leave-to .relative {
-  transform: scale(0.95);
-}
-
 /* Calibration lines wrapper - fixed positioning to overlay on video */
 .calibration-lines-wrapper {
   position: fixed;

@@ -72,8 +72,8 @@
                         currentStepIndex === index
                           ? 'bg-gradient-to-r from-purple-500 to-blue-500 text-white shadow-lg scale-110'
                           : currentStepIndex > index
-                          ? 'bg-green-500 text-white'
-                          : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400',
+                            ? 'bg-green-500 text-white'
+                            : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400',
                       ]"
                     >
                       <svg
@@ -88,7 +88,10 @@
                           clip-rule="evenodd"
                         />
                       </svg>
-                      <span v-else class="font-semibold">{{ index + 1 }}</span>
+                      <span
+                        v-else
+                        class="font-semibold"
+                      >{{ index + 1 }}</span>
                     </div>
                     <div
                       v-if="index < steps.length - 1"
@@ -119,7 +122,9 @@
                     class="absolute top-0 animate-spin rounded-full h-16 w-16 border-4 border-transparent border-t-purple-500"
                   />
                 </div>
-                <p class="mt-4 text-gray-600">Loading your videos...</p>
+                <p class="mt-4 text-gray-600">
+                  Loading your videos...
+                </p>
               </div>
 
               <!-- Error State -->
@@ -209,7 +214,7 @@
                       type="text"
                       placeholder="Search videos..."
                       class="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all"
-                    />
+                    >
                     <svg
                       class="absolute left-4 top-3.5 w-5 h-5 text-gray-400"
                       fill="none"
@@ -243,7 +248,7 @@
                         :src="video.thumbnailUrl"
                         :alt="video.title"
                         class="w-full h-full object-cover"
-                      />
+                      >
                       <div
                         v-else
                         class="w-full h-full flex items-center justify-center"
@@ -267,7 +272,9 @@
                         class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end"
                       >
                         <div class="p-4 text-white">
-                          <p class="text-sm font-medium">Click to select</p>
+                          <p class="text-sm font-medium">
+                            Click to select
+                          </p>
                         </div>
                       </div>
                     </div>
@@ -333,7 +340,7 @@
                           :src="selectedVideoA.thumbnailUrl"
                           :alt="selectedVideoA.title"
                           class="w-full h-full object-cover"
-                        />
+                        >
                         <div
                           v-else
                           class="w-full h-full flex items-center justify-center bg-gray-100 dark:bg-gray-900"
@@ -383,7 +390,7 @@
                       type="text"
                       placeholder="Search videos..."
                       class="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all"
-                    />
+                    >
                     <svg
                       class="absolute left-4 top-3.5 w-5 h-5 text-gray-400"
                       fill="none"
@@ -417,7 +424,7 @@
                         :src="video.thumbnailUrl"
                         :alt="video.title"
                         class="w-full h-full object-cover"
-                      />
+                      >
                       <div
                         v-else
                         class="w-full h-full flex items-center justify-center"
@@ -441,7 +448,9 @@
                         class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end"
                       >
                         <div class="p-4 text-white">
-                          <p class="text-sm font-medium">Click to select</p>
+                          <p class="text-sm font-medium">
+                            Click to select
+                          </p>
                         </div>
                       </div>
                     </div>
@@ -508,7 +517,7 @@
                           :src="selectedVideoA.thumbnailUrl"
                           :alt="selectedVideoA.title"
                           class="w-full h-full object-cover"
-                        />
+                        >
                       </div>
                       <div class="p-3">
                         <p class="font-semibold text-gray-900 dark:text-white text-sm truncate">
@@ -535,7 +544,7 @@
                           :src="selectedVideoB.thumbnailUrl"
                           :alt="selectedVideoB.title"
                           class="w-full h-full object-cover"
-                        />
+                        >
                       </div>
                       <div class="p-3">
                         <p class="font-semibold text-gray-900 dark:text-white text-sm truncate">
@@ -562,7 +571,7 @@
                       placeholder="Enter a descriptive title for this comparison"
                       class="w-full px-4 py-3 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all placeholder-gray-500 dark:placeholder-gray-400"
                       @keydown.enter="createComparison"
-                    />
+                    >
                   </div>
 
                   <div>
@@ -602,7 +611,9 @@
                   <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-2">
                     Creating your comparison...
                   </h3>
-                  <p class="text-gray-600 dark:text-gray-400">This will just take a moment</p>
+                  <p class="text-gray-600 dark:text-gray-400">
+                    This will just take a moment
+                  </p>
                 </div>
               </div>
             </div>
@@ -615,7 +626,7 @@
                 <button
                   v-if="
                     currentStep !== 'select-video-a' &&
-                    currentStep !== 'creating'
+                      currentStep !== 'creating'
                   "
                   class="px-6 py-2.5 text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                   @click="goBack"
@@ -638,7 +649,10 @@
                     @click="createComparison"
                   >
                     <span v-if="!isCreating">Create Comparison</span>
-                    <span v-else class="flex items-center gap-2">
+                    <span
+                      v-else
+                      class="flex items-center gap-2"
+                    >
                       <svg
                         class="animate-spin h-4 w-4"
                         fill="none"

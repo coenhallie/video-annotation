@@ -6,6 +6,7 @@ import type {
   AnonymousSession,
   AnonymousSessionInsert,
 } from '../types/database';
+import { handleServiceError } from '../utils/errorHandler';
 
 export interface CreateCommentParams {
   annotationId: string;
@@ -94,13 +95,13 @@ export class CommentService {
         .single();
 
       if (error) {
-        console.error('❌ [CommentService] Failed to create comment:', error);
+        handleServiceError('CommentService.createComment', error);
         throw error;
       }
 
       return data;
     } catch (error) {
-      console.error('❌ [CommentService] Error creating comment:', error);
+      handleServiceError('CommentService.createComment', error);
       throw error;
     }
   }
@@ -122,16 +123,13 @@ export class CommentService {
         .order('createdAt', { ascending: true });
 
       if (error) {
-        console.error('❌ [CommentService] Error getting comments:', error);
+        handleServiceError('CommentService.getAnnotationComments', error);
         throw error;
       }
 
       return data || [];
     } catch (error) {
-      console.error(
-        '❌ [CommentService] Error getting annotation comments:',
-        error
-      );
+      handleServiceError('CommentService.getAnnotationComments', error);
       throw error;
     }
   }
@@ -164,7 +162,7 @@ export class CommentService {
         );
 
         if (error) {
-          console.error('❌ [CommentService] Error updating comment:', error);
+          handleServiceError('CommentService.updateComment', error);
           throw error;
         }
 
@@ -185,10 +183,7 @@ export class CommentService {
           .single();
 
         if (fetchError) {
-          console.error(
-            '❌ [CommentService] Error fetching updated comment:',
-            fetchError
-          );
+          handleServiceError('CommentService.updateComment', fetchError);
           throw fetchError;
         }
 
@@ -212,14 +207,14 @@ export class CommentService {
           .single();
 
         if (error) {
-          console.error('❌ [CommentService] Error updating comment:', error);
+          handleServiceError('CommentService.updateComment', error);
           throw error;
         }
 
         return data;
       }
     } catch (error) {
-      console.error('❌ [CommentService] Error updating comment:', error);
+      handleServiceError('CommentService.updateComment', error);
       throw error;
     }
   }
@@ -245,11 +240,11 @@ export class CommentService {
         .eq('id', commentId);
 
       if (error) {
-        console.error('❌ [CommentService] Error deleting comment:', error);
+        handleServiceError('CommentService.deleteComment', error);
         throw error;
       }
     } catch (error) {
-      console.error('❌ [CommentService] Error deleting comment:', error);
+      handleServiceError('CommentService.deleteComment', error);
       throw error;
     }
   }
@@ -288,19 +283,13 @@ export class CommentService {
         .single();
 
       if (error) {
-        console.error(
-          '❌ [CommentService] Error creating anonymous session:',
-          error
-        );
+        handleServiceError('CommentService.createAnonymousSession', error);
         throw error;
       }
 
       return data;
     } catch (error) {
-      console.error(
-        '❌ [CommentService] Error creating anonymous session:',
-        error
-      );
+      handleServiceError('CommentService.createAnonymousSession', error);
       throw error;
     }
   }
@@ -323,19 +312,13 @@ export class CommentService {
           // No rows returned
           return null;
         }
-        console.error(
-          '❌ [CommentService] Error getting anonymous session:',
-          error
-        );
+        handleServiceError('CommentService.getAnonymousSession', error);
         throw error;
       }
 
       return data;
     } catch (error) {
-      console.error(
-        '❌ [CommentService] Error getting anonymous session:',
-        error
-      );
+      handleServiceError('CommentService.getAnonymousSession', error);
       throw error;
     }
   }
@@ -581,16 +564,13 @@ export class CommentService {
         .eq('annotationId', annotationId);
 
       if (error) {
-        console.error(
-          '❌ [CommentService] Error getting comment count:',
-          error
-        );
+        handleServiceError('CommentService.getCommentCount', error);
         return 0;
       }
 
       return count || 0;
     } catch (error) {
-      console.error('❌ [CommentService] Error getting comment count:', error);
+      handleServiceError('CommentService.getCommentCount', error);
       return 0;
     }
   }

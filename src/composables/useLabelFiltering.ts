@@ -1,7 +1,7 @@
 import { ref, computed, watch } from 'vue';
 import { LabelService } from '../services/labelService';
 import type { FilterState, LabelFilter } from '../types/labels';
-import type { PanelAnnotation } from '../components/AnnotationPanel.vue';
+import type { PanelAnnotation } from '../types/component-interfaces';
 
 const STORAGE_KEY = 'video-annotation-label-filters';
 

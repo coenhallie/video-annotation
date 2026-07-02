@@ -200,9 +200,9 @@
               <!-- View-only option -->
               <label class="flex items-start cursor-pointer group">
                 <input
+                  v-model="allowAnnotations"
                   type="radio"
                   :value="false"
-                  v-model="allowAnnotations"
                   class="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600 dark:bg-gray-700"
                 >
                 <div class="ml-3 flex-1">
@@ -223,9 +223,9 @@
               <!-- Annotation-enabled option -->
               <label class="flex items-start cursor-pointer group">
                 <input
+                  v-model="allowAnnotations"
                   type="radio"
                   :value="true"
-                  v-model="allowAnnotations"
                   class="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600 dark:bg-gray-700"
                 >
                 <div class="ml-3 flex-1">

@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
+import type { Video } from '@/types/database';
 
 export const useVideoStore = defineStore('video', () => {
   // State
@@ -15,6 +16,15 @@ export const useVideoStore = defineStore('video', () => {
   const fps = ref(0);
   const totalFrames = ref(0);
   const currentFrame = ref(0);
+
+  // Consolidated state (previously in DashboardView)
+  const playerMode = ref<'single' | 'dual'>('single');
+  const currentVideoId = ref<string | null>(null);
+  const currentComparisonId = ref<string | null>(null);
+  const currentVideoType = ref<'url' | 'upload' | 'shared'>('url');
+  const currentVideoObject = ref<Partial<Video> | null>(null);
+  const videoLoaded = ref(false);
+  const isAwsVideo = ref(false);
 
   // Getters
   const progress = computed(() => {
@@ -60,6 +70,37 @@ export const useVideoStore = defineStore('video', () => {
     isPlaying.value = playing;
   }
 
+  function setPlayerMode(mode: 'single' | 'dual') {
+    playerMode.value = mode;
+  }
+
+  function setCurrentVideo(video: Partial<Video> | null, type?: 'url' | 'upload' | 'shared') {
+    currentVideoObject.value = video;
+    if (type) {
+      currentVideoType.value = type;
+    }
+    if (video) {
+      url.value = video.url || '';
+      id.value = video.id || '';
+    }
+  }
+
+  function resetForProjectSwitch() {
+    url.value = '';
+    id.value = 'sample-video-1';
+    currentTime.value = 0;
+    duration.value = 0;
+    isPlaying.value = false;
+    currentFrame.value = 0;
+    totalFrames.value = 0;
+    fps.value = 0;
+    currentVideoId.value = null;
+    currentComparisonId.value = null;
+    currentVideoObject.value = null;
+    videoLoaded.value = false;
+    isAwsVideo.value = false;
+  }
+
   return {
     url,
     id,
@@ -73,6 +114,13 @@ export const useVideoStore = defineStore('video', () => {
     fps,
     totalFrames,
     currentFrame,
+    playerMode,
+    currentVideoId,
+    currentComparisonId,
+    currentVideoType,
+    currentVideoObject,
+    videoLoaded,
+    isAwsVideo,
     progress,
     setVideo,
     updateTime,
@@ -81,5 +129,8 @@ export const useVideoStore = defineStore('video', () => {
     setFrameData,
     togglePlay,
     setPlaying,
+    setPlayerMode,
+    setCurrentVideo,
+    resetForProjectSwitch,
   };
 });

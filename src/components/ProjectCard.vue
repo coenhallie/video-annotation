@@ -27,7 +27,7 @@
         class="w-4 h-4 text-blue-600 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500"
         @click.stop
         @change="toggleSelection"
-      />
+      >
     </div>
 
     <!-- Thumbnail -->
@@ -39,8 +39,11 @@
         :src="project.thumbnailUrl"
         :alt="project.title"
         class="w-full h-full object-cover"
-      />
-      <div v-else class="w-full h-full flex items-center justify-center">
+      >
+      <div
+        v-else
+        class="w-full h-full flex items-center justify-center"
+      >
         <svg
           class="w-12 h-12 text-gray-400"
           fill="none"
@@ -62,7 +65,11 @@
           v-if="project.projectType === 'dual'"
           class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-300"
         >
-          <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+          <svg
+            class="w-3 h-3 mr-1"
+            fill="currentColor"
+            viewBox="0 0 20 20"
+          >
             <path
               d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z"
             />
@@ -94,7 +101,11 @@
             v-if="annotationCount && annotationCount > 0"
             class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300"
           >
-            <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+            <svg
+              class="w-3 h-3"
+              fill="currentColor"
+              viewBox="0 0 20 20"
+            >
               <path
                 fill-rule="evenodd"
                 d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"
@@ -109,7 +120,11 @@
             v-if="commentCount && commentCount > 0"
             class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300"
           >
-            <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+            <svg
+              class="w-3 h-3"
+              fill="currentColor"
+              viewBox="0 0 20 20"
+            >
               <path
                 fill-rule="evenodd"
                 d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z"
@@ -166,7 +181,7 @@
         >
           Share
         </button>
-        <hr class="my-1 border-gray-200 dark:border-gray-700" />
+        <hr class="my-1 border-gray-200 dark:border-gray-700">
         <button
           class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50"
           @click.stop="deleteProject"

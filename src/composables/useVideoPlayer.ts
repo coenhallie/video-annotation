@@ -3,6 +3,13 @@
  * TypeScript conversion from JS preserving the public API.
  */
 import { ref, reactive, onUnmounted, type Ref } from 'vue';
+import {
+  formatTime as _formatTime,
+  formatFrame as _formatFrame,
+  formatFrameWithFPS as _formatFrameWithFPS,
+  timeToFrame as _timeToFrame,
+  frameToTime as _frameToTime,
+} from '@/utils/formatters';
 
 export interface PlayerState {
   isPlaying: Ref<boolean>;
@@ -96,19 +103,10 @@ export function useVideoPlayer(): UseVideoPlayer {
     totalFrames,
   }) as unknown as PlayerState;
 
-  // Frame calculation utilities
-  const timeToFrame = (timeInSeconds: number) => {
-    // Ensure fps is positive to avoid negative frame calculations
-    const validFps = fps.value > 0 ? fps.value : 30; // Default to 30 fps if not detected
-    const calculatedFrame = Math.round(timeInSeconds * validFps);
-    // Ensure frame is never negative
-    return Math.max(0, calculatedFrame);
-  };
+  // Frame calculation utilities – thin wrappers around shared formatters
+  const timeToFrame = (timeInSeconds: number) => _timeToFrame(timeInSeconds, fps.value);
 
-  const frameToTime = (frameNumber: number) => {
-    const validFps = fps.value > 0 ? fps.value : 30;
-    return frameNumber / validFps;
-  };
+  const frameToTime = (frameNumber: number) => _frameToTime(frameNumber, fps.value);
 
   const detectFPS = async () => {
     if (!playerRef.value) {
@@ -432,34 +430,12 @@ export function useVideoPlayer(): UseVideoPlayer {
     stopListening();
   });
 
-  // Format time helper
-  const formatTime = (seconds: number) => {
-    if (!seconds || isNaN(seconds)) return '0:00';
+  // Formatting helpers – thin wrappers around shared formatters
+  const formatTime = (seconds: number) => _formatTime(seconds);
 
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = Math.floor(seconds % 60);
+  const formatFrame = (frameNumber: number) => _formatFrame(frameNumber);
 
-    if (hours > 0) {
-      return `${hours}:${minutes.toString().padStart(2, '0')}:${secs
-        .toString()
-        .padStart(2, '0')}`;
-    }
-
-    return `${minutes}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  // Format frame helper
-  const formatFrame = (frameNumber: number) => {
-    if (!frameNumber || isNaN(frameNumber)) return 'Frame 0';
-    return `Frame ${frameNumber.toLocaleString()}`;
-  };
-
-  // Format frame with FPS info
-  const formatFrameWithFPS = (frameNumber: number) => {
-    if (!frameNumber || isNaN(frameNumber)) return 'Frame 0 @ 30fps';
-    return `Frame ${frameNumber.toLocaleString()} @ ${fps.value}fps`;
-  };
+  const formatFrameWithFPS = (frameNumber: number) => _formatFrameWithFPS(frameNumber, fps.value);
 
   return {
     // State

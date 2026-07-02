@@ -55,8 +55,11 @@
                     placeholder="Enter folder name"
                     @keydown.enter="createFolder"
                     @keydown.esc="$emit('close')"
-                  />
-                  <p v-if="parentFolder" class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                  >
+                  <p
+                    v-if="parentFolder"
+                    class="mt-2 text-sm text-gray-500 dark:text-gray-400"
+                  >
                     This folder will be created inside "{{ parentFolder.name }}"
                   </p>
                 </div>

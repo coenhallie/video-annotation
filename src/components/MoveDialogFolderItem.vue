@@ -28,7 +28,10 @@
             />
           </svg>
         </button>
-        <div v-else class="w-4" />
+        <div
+          v-else
+          class="w-4"
+        />
 
         <!-- Folder Icon -->
         <svg
@@ -64,7 +67,10 @@
     </div>
 
     <!-- Children -->
-    <div v-if="isExpanded && folder.children.length > 0" class="ml-2">
+    <div
+      v-if="isExpanded && folder.children.length > 0"
+      class="ml-2"
+    >
       <MoveDialogFolderItem
         v-for="child in folder.children"
         :key="child.id"

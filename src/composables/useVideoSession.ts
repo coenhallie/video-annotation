@@ -1,5 +1,5 @@
 import { ref, readonly, onUnmounted, toValue } from 'vue';
-import type { Ref, MaybeRefOrGetter } from 'vue';
+import type { MaybeRefOrGetter } from 'vue';
 import { supabase } from './useSupabase';
 import { useAuth } from './useAuth';
 import { ShareService } from '../services/shareService';

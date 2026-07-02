@@ -127,7 +127,9 @@ const initCanvas = () => {
     setupCanvasEvents();
     updateCanvasSize(); // Initial size update
     loadDrawingsForFrame();
-  } catch (error) {}
+  } catch (error) {
+    console.error('[DrawingCanvas] Error initializing canvas:', error);
+  }
 };
 
 // Setup canvas event listeners

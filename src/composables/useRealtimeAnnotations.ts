@@ -1,12 +1,24 @@
-import { ref, onUnmounted, watch, readonly, toValue } from 'vue';
+import {
+  ref,
+  onUnmounted,
+  watch,
+  readonly,
+  toValue,
+  type Ref,
+} from 'vue';
 import { supabase } from './useSupabase';
 import type { Annotation } from '../types/database';
 
-export function useRealtimeAnnotations(videoId, annotations) {
+type RealtimeChannel = ReturnType<typeof supabase.channel>;
+
+export function useRealtimeAnnotations(
+  videoId: Ref<string | null> | (() => string | null),
+  annotations: Ref<Annotation[]>
+) {
   const isConnected = ref(false);
-  const activeUsers = ref(new Set());
-  let subscription = null;
-  let presenceChannel = null;
+  const activeUsers = ref<Set<string>>(new Set());
+  let subscription: RealtimeChannel | null = null;
+  let presenceChannel: RealtimeChannel | null = null;
 
   const setupRealtimeSubscription = () => {
     if (!toValue(videoId)) return;
@@ -70,27 +82,28 @@ export function useRealtimeAnnotations(videoId, annotations) {
       });
   };
 
-  const setupPresenceTracking = (userId, userName) => {
+  const setupPresenceTracking = (userId: string, userName: string) => {
     if (!toValue(videoId) || !userId) return;
 
-    presenceChannel = supabase.channel(`presence:video:${toValue(videoId)}`, {
+    const channel = supabase.channel(`presence:video:${toValue(videoId)}`, {
       config: {
         presence: {
           key: userId,
         },
       },
     });
+    presenceChannel = channel;
 
-    presenceChannel
+    channel
       .on('presence', { event: 'sync' }, () => {
-        const state = presenceChannel.presenceState();
+        const state = channel.presenceState();
         activeUsers.value = new Set(Object.keys(state));
       })
-      .on('presence', { event: 'join' }, ({ key, newPresences }) => {})
-      .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {})
+      .on('presence', { event: 'join' }, () => {})
+      .on('presence', { event: 'leave' }, () => {})
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
-          await presenceChannel.track({
+          await channel.track({
             userId: userId,
             userName: userName,
             onlineAt: new Date().toISOString(),

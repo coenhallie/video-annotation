@@ -6,7 +6,7 @@ import { logger } from '../utils/logger';
 // Global state for comment tracking across all annotations
 const newCommentsByAnnotation = ref(new Map<string, Set<string>>());
 const commentCountsByAnnotation = ref(new Map<string, number>());
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 const globalCommentSubscriptions = ref(new Map<string, any>());
 const isGlobalSubscriptionActive = ref(false);
 const lastViewedTimes = ref<Record<string, string>>({});
@@ -61,6 +61,9 @@ export function useGlobalComments() {
     if (isGlobalSubscriptionActive.value) {
       return;
     }
+
+    // Clean up any existing subscriptions before setting up a new one
+    cleanup();
 
     const subscription = supabase
       .channel(`video_comments:${videoId}`)
@@ -153,7 +156,9 @@ export function useGlobalComments() {
         annotationId: comment.annotationId,
       };
       eventHandlers.onNewComment.forEach((handler) => handler(event));
-    } catch (error) {}
+    } catch (error) {
+      console.error('[useGlobalComments] Error handling comment insert:', error);
+    }
   };
 
   /**
@@ -175,7 +180,9 @@ export function useGlobalComments() {
         annotationId: comment.annotationId,
       };
       eventHandlers.onCommentUpdate.forEach((handler) => handler(event));
-    } catch (error) {}
+    } catch (error) {
+      console.error('[useGlobalComments] Error handling comment update:', error);
+    }
   };
 
   /**
@@ -211,7 +218,9 @@ export function useGlobalComments() {
         annotationId: comment.annotationId,
       };
       eventHandlers.onCommentDelete.forEach((handler) => handler(event));
-    } catch (error) {}
+    } catch (error) {
+      console.error('[useGlobalComments] Error handling comment delete:', error);
+    }
   };
 
   /**

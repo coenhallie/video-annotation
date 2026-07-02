@@ -107,7 +107,7 @@
                     placeholder="Search projects and folders..."
                     class="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none placeholder-gray-500 dark:placeholder-gray-400"
                     @input="handleSearch"
-                  />
+                  >
                   <svg
                     class="absolute left-3 top-2.5 w-4 h-4 text-gray-400"
                     fill="none"
@@ -220,7 +220,10 @@
                 >
                   All Projects
                 </button>
-                <template v-for="(crumb, index) in breadcrumbs" :key="crumb.id">
+                <template
+                  v-for="(crumb, index) in breadcrumbs"
+                  :key="crumb.id"
+                >
                   <svg
                     class="w-4 h-4 text-gray-400"
                     fill="none"
@@ -396,7 +399,9 @@
                     <div
                       class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"
                     />
-                    <p class="text-gray-600 dark:text-gray-400">Loading projects...</p>
+                    <p class="text-gray-600 dark:text-gray-400">
+                      Loading projects...
+                    </p>
                   </div>
                 </div>
 
@@ -404,8 +409,8 @@
                 <div
                   v-if="
                     viewMode === 'grid' &&
-                    filteredProjects.length > 0 &&
-                    !isLoading
+                      filteredProjects.length > 0 &&
+                      !isLoading
                   "
                   class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4"
                 >
@@ -429,8 +434,8 @@
                 <div
                   v-if="
                     viewMode === 'list' &&
-                    filteredProjects.length > 0 &&
-                    !isLoading
+                      filteredProjects.length > 0 &&
+                      !isLoading
                   "
                   class="space-y-2"
                 >
@@ -530,15 +535,13 @@
                     Press
                     <kbd
                       class="px-1.5 py-0.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-xs"
-                      >⌘K</kbd
-                    >
+                    >⌘K</kbd>
                     for quick search
                   </span>
                   <span>
                     <kbd
                       class="px-1.5 py-0.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-xs"
-                      >⌘A</kbd
-                    >
+                    >⌘A</kbd>
                     to select all
                   </span>
                 </div>

@@ -1,11 +1,11 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type Session } from '@supabase/supabase-js';
 import type { Database } from '../types/database';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 // Session cache to reduce excessive calls
-let sessionCache = null;
+let sessionCache: Session | null = null;
 let sessionCacheTime = 0;
 const SESSION_CACHE_DURATION = 5000; // 5 seconds
 

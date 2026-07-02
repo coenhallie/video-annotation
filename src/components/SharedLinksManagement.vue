@@ -25,68 +25,155 @@
         >
         <button
           v-if="searchQuery"
-          @click="searchQuery = ''"
           class="clear-search"
+          @click="searchQuery = ''"
         >
-          <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          <svg
+            class="icon"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M6 18L18 6M6 6l12 12"
+            />
           </svg>
         </button>
       </div>
 
       <!-- Filters -->
       <div class="filters">
-        <select v-model="permissionFilter" class="filter-select bg-white dark:bg-gray-800 dark:text-white dark:border-gray-700">
-          <option value="all">All Permissions</option>
-          <option value="view-only">View-only</option>
-          <option value="annotate">Annotation Enabled</option>
+        <select
+          v-model="permissionFilter"
+          class="filter-select bg-white dark:bg-gray-800 dark:text-white dark:border-gray-700"
+        >
+          <option value="all">
+            All Permissions
+          </option>
+          <option value="view-only">
+            View-only
+          </option>
+          <option value="annotate">
+            Annotation Enabled
+          </option>
         </select>
 
-        <select v-model="sortBy" class="filter-select bg-white dark:bg-gray-800 dark:text-white dark:border-gray-700">
-          <option value="date-desc">Newest First</option>
-          <option value="date-asc">Oldest First</option>
-          <option value="title-asc">Title A-Z</option>
-          <option value="title-desc">Title Z-A</option>
+        <select
+          v-model="sortBy"
+          class="filter-select bg-white dark:bg-gray-800 dark:text-white dark:border-gray-700"
+        >
+          <option value="date-desc">
+            Newest First
+          </option>
+          <option value="date-asc">
+            Oldest First
+          </option>
+          <option value="title-asc">
+            Title A-Z
+          </option>
+          <option value="title-desc">
+            Title Z-A
+          </option>
         </select>
       </div>
     </div>
 
     <!-- Loading State -->
-    <div v-if="isLoading" class="loading-state">
+    <div
+      v-if="isLoading"
+      class="loading-state"
+    >
       <div class="spinner" />
       <p>Loading shared videos...</p>
     </div>
 
     <!-- Error State -->
-    <div v-else-if="error" class="error-state">
-      <svg class="error-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    <div
+      v-else-if="error"
+      class="error-state"
+    >
+      <svg
+        class="error-icon"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+        />
       </svg>
-      <p class="error-message">{{ error }}</p>
-      <button @click="loadSharedVideos" class="retry-button">Try Again</button>
+      <p class="error-message">
+        {{ error }}
+      </p>
+      <button
+        class="retry-button"
+        @click="loadSharedVideos"
+      >
+        Try Again
+      </button>
     </div>
 
     <!-- Empty State -->
-    <div v-else-if="filteredVideos.length === 0 && !searchQuery && permissionFilter === 'all'" class="empty-state">
-      <svg class="empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z" />
+    <div
+      v-else-if="filteredVideos.length === 0 && !searchQuery && permissionFilter === 'all'"
+      class="empty-state"
+    >
+      <svg
+        class="empty-icon"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z"
+        />
       </svg>
       <h3>No Shared Videos</h3>
       <p>You haven't shared any videos yet. Share a video to manage its link here.</p>
     </div>
 
     <!-- No Results State -->
-    <div v-else-if="filteredVideos.length === 0" class="empty-state">
-      <svg class="empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+    <div
+      v-else-if="filteredVideos.length === 0"
+      class="empty-state"
+    >
+      <svg
+        class="empty-icon"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+        />
       </svg>
       <h3>No Results Found</h3>
       <p>No videos match your search or filter criteria.</p>
-      <button @click="clearFilters" class="retry-button">Clear Filters</button>
+      <button
+        class="retry-button"
+        @click="clearFilters"
+      >
+        Clear Filters
+      </button>
     </div>
 
     <!-- Table View -->
-    <div v-else class="table-container">
+    <div
+      v-else
+      class="table-container"
+    >
       <table class="shared-links-table">
         <thead>
           <tr>
@@ -109,25 +196,48 @@
                   class="thumbnail"
                   :style="{ backgroundImage: `url(${video.thumbnailUrl})` }"
                 />
-                <div v-else class="thumbnail-placeholder">
-                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                <div
+                  v-else
+                  class="thumbnail-placeholder"
+                >
+                  <svg
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                    />
                   </svg>
                 </div>
                 <div class="video-details">
-                  <div class="video-title">{{ video.title }}</div>
-                  <div v-if="video.description" class="video-description">{{ video.description }}</div>
+                  <div class="video-title">
+                    {{ video.title }}
+                  </div>
+                  <div
+                    v-if="video.description"
+                    class="video-description"
+                  >
+                    {{ video.description }}
+                  </div>
                 </div>
               </div>
             </td>
             <td>
               <select
                 :value="video.allowAnnotations ? 'annotate' : 'view-only'"
-                @change="handlePermissionChange(video, ($event.target as HTMLSelectElement).value)"
                 class="permission-select"
+                @change="handlePermissionChange(video, ($event.target as HTMLSelectElement).value)"
               >
-                <option value="view-only">View-only</option>
-                <option value="annotate">Annotations</option>
+                <option value="view-only">
+                  View-only
+                </option>
+                <option value="annotate">
+                  Annotations
+                </option>
               </select>
             </td>
             <td class="link-cell">
@@ -139,27 +249,59 @@
                   @click="selectLink"
                 >
                 <button
-                  @click="copyLink(video.shareUrl)"
                   class="copy-button"
                   :class="{ 'copied': copiedId === video.id }"
+                  @click="copyLink(video.shareUrl)"
                 >
-                  <svg v-if="copiedId !== video.id" class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  <svg
+                    v-if="copiedId !== video.id"
+                    class="icon"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                    />
                   </svg>
-                  <svg v-else class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                  <svg
+                    v-else
+                    class="icon"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M5 13l4 4L19 7"
+                    />
                   </svg>
                 </button>
               </div>
             </td>
             <td class="actions-cell">
               <button
-                @click="confirmRevoke(video)"
                 class="action-button revoke"
                 title="Revoke sharing"
+                @click="confirmRevoke(video)"
               >
-                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                <svg
+                  class="icon"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
+                  />
                 </svg>
               </button>
             </td>
@@ -169,22 +311,55 @@
     </div>
 
     <!-- Confirmation Dialog -->
-    <div v-if="confirmDialog.show" class="modal-overlay" @click="closeConfirmDialog">
-      <div class="modal-content bg-white dark:bg-gray-800" @click.stop>
+    <div
+      v-if="confirmDialog.show"
+      class="modal-overlay"
+      @click="closeConfirmDialog"
+    >
+      <div
+        class="modal-content bg-white dark:bg-gray-800"
+        @click.stop
+      >
         <div class="modal-header">
-          <h3 class="modal-title text-gray-900 dark:text-white">{{ confirmDialog.title }}</h3>
-          <button @click="closeConfirmDialog" class="close-button text-gray-400 hover:text-gray-500 dark:hover:text-gray-300">
-            <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          <h3 class="modal-title text-gray-900 dark:text-white">
+            {{ confirmDialog.title }}
+          </h3>
+          <button
+            class="close-button text-gray-400 hover:text-gray-500 dark:hover:text-gray-300"
+            @click="closeConfirmDialog"
+          >
+            <svg
+              class="icon"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
           </button>
         </div>
         <div class="modal-body">
-          <p class="text-gray-600 dark:text-gray-300">{{ confirmDialog.message }}</p>
+          <p class="text-gray-600 dark:text-gray-300">
+            {{ confirmDialog.message }}
+          </p>
         </div>
         <div class="modal-footer bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700">
-          <button @click="closeConfirmDialog" class="button-secondary bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600">Cancel</button>
-          <button @click="confirmAction" class="button-primary" :class="confirmDialog.type">
+          <button
+            class="button-secondary bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600"
+            @click="closeConfirmDialog"
+          >
+            Cancel
+          </button>
+          <button
+            class="button-primary"
+            :class="confirmDialog.type"
+            @click="confirmAction"
+          >
             {{ confirmDialog.confirmText }}
           </button>
         </div>
@@ -192,12 +367,38 @@
     </div>
 
     <!-- Success Notification -->
-    <div v-if="notification.show" class="notification" :class="notification.type">
-      <svg v-if="notification.type === 'success'" class="notification-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+    <div
+      v-if="notification.show"
+      class="notification"
+      :class="notification.type"
+    >
+      <svg
+        v-if="notification.type === 'success'"
+        class="notification-icon"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+        />
       </svg>
-      <svg v-else class="notification-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      <svg
+        v-else
+        class="notification-icon"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+        />
       </svg>
       <span>{{ notification.message }}</span>
     </div>
