@@ -194,6 +194,24 @@ export const ComparisonVideoService = {
   },
 
   /**
+   * Fetch one comparison video by id with joined videos.
+   */
+  async getComparisonVideoById(id: string): Promise<ComparisonVideoRecord | null> {
+    const { data, error } = await supabase
+      .from('comparison_videos')
+      .select(
+        'id, title, description, createdAt, updatedAt, userId, videoAId, videoBId, isPublic, thumbnailUrl, videoA:videoAId(*), videoB:videoBId(*)'
+      )
+      .eq('id', id)
+      .maybeSingle();
+    if (error) {
+      console.warn('⚠️ [ComparisonVideoService] getComparisonVideoById error:', error);
+      return null;
+    }
+    return (data as unknown as ComparisonVideoRecord) ?? null;
+  },
+
+  /**
    * Delete a comparison video record by id.
    */
   async deleteComparisonVideo(id: string): Promise<void> {
