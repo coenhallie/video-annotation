@@ -801,9 +801,13 @@ onMounted(async () => {
         await loadOutputVideo(outputVideoId);
       } else if (!user.value) {
         // If no share link and not logged in, show the login page
-      } else if (!videoLoaded.value) {
-        // Load the workspace from the route param (single/dual editor routes).
-        // On '/' (name 'dashboard') this is a no-op.
+      } else {
+        // Always load the workspace from the current route param on mount.
+        // Do NOT gate on `videoLoaded`: the video store is a singleton that
+        // persists a previously-opened video across editor unmount/remount, so
+        // gating here would keep showing the stale video after returning via the
+        // dashboard and opening a different one. loadFromRoute self-guards — it
+        // no-ops on '/' (name 'dashboard') and early-returns on share/AWS params.
         await loadFromRoute();
       }
     }
