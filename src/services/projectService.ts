@@ -2,6 +2,7 @@ import { VideoService } from './videoService';
 import { ComparisonVideoService } from './comparisonVideoService';
 import { AnnotationService } from './annotationService';
 import { CommentService } from './commentService';
+import { supabase } from '@/composables/useSupabase';
 import type { Project } from '../types/project';
 
 export class ProjectService {
@@ -299,5 +300,75 @@ export class ProjectService {
       console.error('❌ [ProjectService] Error getting project counts:', error);
       return { annotationCounts: {}, commentCounts: {} };
     }
+  }
+
+  /**
+   * Batched counts for a page of projects — bounded number of grouped
+   * queries total, replacing the per-project N+1 in getProjectCounts.
+   *
+   * PostgREST can't express a cross-column OR in a single `.in(...)`, so
+   * the annotation read is split into two column-filtered queries (one for
+   * single-video projects via `videoId`, one for dual projects via
+   * `comparisonVideoId`), plus one comments query — 3 queries total,
+   * still O(1) in the number of projects.
+   */
+  static async getProjectCountsBatched(projects: Project[]): Promise<{
+    annotationCounts: Record<string, number>;
+    commentCounts: Record<string, number>;
+  }> {
+    const annotationCounts: Record<string, number> = {};
+    const commentCounts: Record<string, number> = {};
+    if (projects.length === 0) return { annotationCounts, commentCounts };
+
+    const videoIds = projects
+      .filter((p) => p.projectType === 'single')
+      .map((p) => (p as any).video.id as string);
+    const comparisonIds = projects
+      .filter((p) => p.projectType === 'dual')
+      .map((p) => (p as any).comparisonVideo.id as string);
+
+    // Map annotation id -> owning project id, and seed annotation counts.
+    const annToProject: Record<string, string> = {};
+    const ids = [...videoIds, ...comparisonIds];
+    for (const id of ids) annotationCounts[id] = 0;
+
+    // Single-video projects: annotations filtered by videoId.
+    const { data: annRowsByVideo } = await supabase
+      .from('annotations')
+      .select('id, videoId, comparisonVideoId')
+      .in('videoId', videoIds.length ? videoIds : ['__none__']);
+
+    // Dual projects: annotations filtered by comparisonVideoId. This is a
+    // separate query (not chained as OR) because PostgREST can't express a
+    // cross-column OR within a single `.in(...)`.
+    const { data: annRowsByComparison } = await supabase
+      .from('annotations')
+      .select('id, videoId, comparisonVideoId')
+      .in(
+        'comparisonVideoId',
+        comparisonIds.length ? comparisonIds : ['__none__']
+      );
+
+    const allAnn = [...(annRowsByVideo ?? []), ...(annRowsByComparison ?? [])];
+    for (const a of allAnn) {
+      const pid = a.videoId ?? a.comparisonVideoId;
+      if (pid == null) continue;
+      annToProject[a.id] = pid;
+      annotationCounts[pid] = (annotationCounts[pid] ?? 0) + 1;
+      commentCounts[pid] = commentCounts[pid] ?? 0;
+    }
+
+    const annIds = Object.keys(annToProject);
+    if (annIds.length) {
+      const { data: commentRows } = await supabase
+        .from('annotation_comments')
+        .select('annotationId')
+        .in('annotationId', annIds);
+      for (const c of commentRows ?? []) {
+        const pid = annToProject[c.annotationId];
+        if (pid) commentCounts[pid] = (commentCounts[pid] ?? 0) + 1;
+      }
+    }
+    return { annotationCounts, commentCounts };
   }
 }
