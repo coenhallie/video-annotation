@@ -330,7 +330,10 @@ export class ProjectService {
     // Map annotation id -> owning project id, and seed annotation counts.
     const annToProject: Record<string, string> = {};
     const ids = [...videoIds, ...comparisonIds];
-    for (const id of ids) annotationCounts[id] = 0;
+    for (const id of ids) {
+      annotationCounts[id] = 0;
+      commentCounts[id] = 0;
+    }
 
     // Single-video projects: annotations filtered by videoId.
     const { data: annRowsByVideo } = await supabase
