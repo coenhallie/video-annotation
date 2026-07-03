@@ -8,7 +8,6 @@ import { LabelService } from '@/services/labelService';
 import type { Project } from '@/types/project';
 import type { Label } from '@/types/labels';
 import ThemeToggle from '@/components/ThemeToggle.vue';
-import ProjectCard from '@/components/ProjectCard.vue';
 import ProjectListItem from '@/components/ProjectListItem.vue';
 import CreateComparisonModal from '@/components/CreateComparisonModal.vue';
 import VideoUpload from '@/components/VideoUpload.vue';
@@ -58,7 +57,6 @@ function onUploadError(err: Error) {
 const scope = ref<'mine' | 'all'>(
   (localStorage.getItem('dashboardScope') as 'mine' | 'all') || 'all'
 );
-const viewMode = ref<'grid' | 'list'>('grid');
 const searchQuery = ref('');
 const isLoading = ref(false);
 const projects = ref<Project[]>([]);
@@ -394,13 +392,6 @@ watch(user, (u) => {
               placeholder="Search videos or owners…"
               class="flex-1 min-w-[12rem] px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
             >
-
-            <button
-              class="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-              @click="viewMode = viewMode === 'grid' ? 'list' : 'grid'"
-            >
-              {{ viewMode === 'grid' ? 'List' : 'Grid' }}
-            </button>
           </div>
 
           <!-- Label chips (visual only — label-based filtering is a follow-up) -->
@@ -439,36 +430,6 @@ watch(user, (u) => {
             class="text-center text-gray-500 py-12"
           >
             No videos found.
-          </div>
-
-          <div
-            v-else-if="viewMode === 'grid'"
-            class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
-          >
-            <div
-              v-for="project in paginatedProjects"
-              :key="project.id"
-              class="relative"
-            >
-              <ProjectCard
-                :project="project"
-                :is-selected="false"
-                :is-inspected="selectedProject?.id === project.id"
-                :is-dragging="false"
-                :annotation-count="annotationCounts[project.id] ?? 0"
-                :comment-count="commentCounts[project.id] ?? 0"
-                @inspect="inspectProject"
-                @open="openProject"
-                @dragstart="onCardDragStart"
-                @add-to-folder="openAddToFolder"
-              />
-              <span
-                v-if="project.owner"
-                class="absolute bottom-2 left-2 z-20 text-xs px-1.5 py-0.5 rounded bg-black/60 text-white pointer-events-none"
-              >
-                {{ project.owner.name }}
-              </span>
-            </div>
           </div>
 
           <div
