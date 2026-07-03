@@ -6,6 +6,7 @@ import {
   computed,
   onErrorCaptured,
   onBeforeUnmount,
+  nextTick,
   type ComponentPublicInstance,
   type Ref,
 } from 'vue';
@@ -226,6 +227,9 @@ const selectedAnnotation = ref<Annotation | null>(null);
 // Component Refs
 const unifiedVideoPlayerRef = ref<UnifiedVideoPlayerInstance | null>(null);
 const annotationPanelRef = ref<InstanceType<typeof AnnotationPanel> | null>(null);
+// Deep-link seek target from `?t=` (set by annotation-panel navigation); consumed
+// once the video finishes loading (see watch(videoLoaded, ...) below).
+const pendingSeekTime = ref<number | null>(null);
 
 
 
@@ -651,6 +655,10 @@ async function loadFromRoute() {
   const params = new URLSearchParams(window.location.search);
   if (params.get('outputVideo') || ShareService.parseShareUrl().id) return; // handled by AWS/share branch
   try {
+    const tParam = route.query.t;
+    pendingSeekTime.value =
+      tParam != null && tParam !== '' ? parseFloat(String(tParam)) : null;
+
     if (route.name === 'editor-single' && route.params.id) {
       const video = await VideoService.getVideoById(route.params.id as string);
       if (video) {
@@ -686,6 +694,16 @@ watch(
     loadFromRoute();
   }
 );
+
+// When arriving via an annotation deep-link (?t=), seek once the player is ready.
+watch(videoLoaded, async (loaded) => {
+  if (!loaded || pendingSeekTime.value == null) return;
+  const time = pendingSeekTime.value;
+  pendingSeekTime.value = null;
+  await nextTick();
+  (unifiedVideoPlayerRef.value as unknown as { seekTo?: (t: number) => void })
+    ?.seekTo?.(time);
+});
 
 const shareModalProps = computed(() => {
   if (playerMode.value === 'dual') {
