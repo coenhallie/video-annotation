@@ -37,6 +37,7 @@
         </span>
         <span v-if="project.owner">{{ project.owner.name }}</span>
         <span>{{ formatDate(project.createdAt) }}</span>
+        <span>{{ formatDuration(getDuration()) }}</span>
       </div>
     </div>
 
@@ -113,6 +114,19 @@
             >
               {{ a.content }}
             </p>
+            <div
+              v-if="a.labels && a.labels.length > 0"
+              class="mt-1 flex flex-wrap gap-1"
+            >
+              <span
+                v-for="label in resolveLabels(a.labels)"
+                :key="label.id"
+                class="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded-full font-medium text-white"
+                :style="{ backgroundColor: label.color }"
+              >
+                {{ label.name }}
+              </span>
+            </div>
           </div>
         </li>
       </ul>
@@ -146,14 +160,16 @@
 <script setup lang="ts">
 import type { Project } from '@/types/project';
 import type { PanelAnnotation, LabelSummaryEntry } from '@/composables/useVideoDetails';
+import type { Label } from '@/types/labels';
 
-defineProps<{
+const props = defineProps<{
   project: Project;
   annotations: PanelAnnotation[];
   loading: boolean;
   labelSummary: LabelSummaryEntry[];
   annotationCount: number;
   commentCount: number;
+  labelMap?: Map<string, Label>;
 }>();
 
 const emit = defineEmits<{
@@ -174,5 +190,38 @@ function formatTimestamp(seconds: number): string {
 function formatDate(dateString: string): string {
   const date = new Date(dateString);
   return date.toLocaleDateString();
+}
+
+function getDuration(): number {
+  if (props.project.projectType === 'single') {
+    return props.project.video.duration;
+  }
+  return Math.max(
+    props.project.videoA?.duration || 0,
+    props.project.videoB?.duration || 0
+  );
+}
+
+function formatDuration(seconds: number): string {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+
+  if (hours > 0) {
+    return `${hours}:${minutes.toString().padStart(2, '0')}:${secs
+      .toString()
+      .padStart(2, '0')}`;
+  }
+  return `${minutes}:${secs.toString().padStart(2, '0')}`;
+}
+
+function resolveLabels(ids: string[]): Label[] {
+  if (!props.labelMap) return [];
+  const result: Label[] = [];
+  for (const id of ids) {
+    const label = props.labelMap.get(id);
+    if (label) result.push(label);
+  }
+  return result;
 }
 </script>

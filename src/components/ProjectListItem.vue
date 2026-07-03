@@ -2,7 +2,7 @@
   <div
     :class="[
       'project-list-item group flex items-center gap-4 p-3 bg-white dark:bg-gray-800 border rounded-lg cursor-pointer transition-all',
-      isSelected
+      isSelected || isInspected
         ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
         : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700',
       isDragging && 'opacity-50',
@@ -232,6 +232,7 @@ import ShareModal from './ShareModal.vue';
 const props = defineProps<{
   project: Project;
   isSelected: boolean;
+  isInspected?: boolean;
   isDragging: boolean;
   commentCount?: number;
   annotationCount?: number;

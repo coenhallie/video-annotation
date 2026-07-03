@@ -113,6 +113,7 @@ function openAnnotation(project: Project, annotation: PanelAnnotation) {
 
 // Close the panel on Escape.
 function onKeydown(e: KeyboardEvent) {
+  if (shareTarget.value) return; // let the Share modal handle its own Escape
   if (e.key === 'Escape' && selectedProject.value) closeDetails();
 }
 
@@ -451,7 +452,8 @@ watch(user, (u) => {
             >
               <ProjectCard
                 :project="project"
-                :is-selected="selectedProject?.id === project.id"
+                :is-selected="false"
+                :is-inspected="selectedProject?.id === project.id"
                 :is-dragging="false"
                 :annotation-count="annotationCounts[project.id] ?? 0"
                 :comment-count="commentCounts[project.id] ?? 0"
@@ -477,7 +479,8 @@ watch(user, (u) => {
               v-for="project in paginatedProjects"
               :key="project.id"
               :project="project"
-              :is-selected="selectedProject?.id === project.id"
+              :is-selected="false"
+              :is-inspected="selectedProject?.id === project.id"
               :is-dragging="false"
               :annotation-count="annotationCounts[project.id] ?? 0"
               :comment-count="commentCounts[project.id] ?? 0"
@@ -522,6 +525,7 @@ watch(user, (u) => {
             :annotations="videoDetails.annotations.value"
             :loading="videoDetails.loading.value"
             :label-summary="detailsLabelSummary"
+            :label-map="labelMap"
             :annotation-count="annotationCounts[selectedProject.id] ?? 0"
             :comment-count="commentCounts[selectedProject.id] ?? 0"
             @close="closeDetails"
@@ -613,6 +617,7 @@ watch(user, (u) => {
               :annotations="videoDetails.annotations.value"
               :loading="videoDetails.loading.value"
               :label-summary="detailsLabelSummary"
+              :label-map="labelMap"
               :annotation-count="annotationCounts[selectedProject.id] ?? 0"
               :comment-count="commentCounts[selectedProject.id] ?? 0"
               @close="closeDetails"

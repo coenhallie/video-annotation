@@ -656,8 +656,9 @@ async function loadFromRoute() {
   if (params.get('outputVideo') || ShareService.parseShareUrl().id) return; // handled by AWS/share branch
   try {
     const tParam = route.query.t;
-    pendingSeekTime.value =
-      tParam != null && tParam !== '' ? parseFloat(String(tParam)) : null;
+    const parsedT =
+      tParam != null && tParam !== '' ? parseFloat(String(tParam)) : NaN;
+    pendingSeekTime.value = Number.isFinite(parsedT) ? parsedT : null;
 
     if (route.name === 'editor-single' && route.params.id) {
       const video = await VideoService.getVideoById(route.params.id as string);
@@ -701,8 +702,7 @@ watch(videoLoaded, async (loaded) => {
   const time = pendingSeekTime.value;
   pendingSeekTime.value = null;
   await nextTick();
-  (unifiedVideoPlayerRef.value as unknown as { seekTo?: (t: number) => void })
-    ?.seekTo?.(time);
+  await handleSeekToTimeWithFade(time);
 });
 
 const shareModalProps = computed(() => {

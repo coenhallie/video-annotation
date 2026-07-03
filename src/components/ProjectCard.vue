@@ -2,7 +2,7 @@
   <div
     :class="[
       'project-card relative group bg-white dark:bg-gray-800 border rounded-lg overflow-hidden cursor-pointer transition-all',
-      isSelected
+      isSelected || isInspected
         ? 'border-blue-500 ring-2 ring-blue-200 dark:ring-blue-900'
         : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:shadow-md',
       isDragging && 'opacity-50',
@@ -238,6 +238,7 @@ import ShareModal from './ShareModal.vue';
 const props = defineProps<{
   project: Project;
   isSelected: boolean;
+  isInspected?: boolean;
   isDragging: boolean;
   commentCount?: number;
   annotationCount?: number;
