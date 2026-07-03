@@ -241,6 +241,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   select: [project: Project, event: MouseEvent];
   open: [project: Project];
+  inspect: [project: Project];
   delete: [project: Project];
   dragstart: [project: Project, event: DragEvent];
   dragend: [event: DragEvent];
@@ -255,7 +256,8 @@ const handleClick = (event: MouseEvent) => {
   if (event.ctrlKey || event.metaKey || event.shiftKey) {
     emit('select', props.project, event);
   } else {
-    emit('open', props.project);
+    // Plain click now opens the details panel (not the editor).
+    emit('inspect', props.project);
   }
 };
 

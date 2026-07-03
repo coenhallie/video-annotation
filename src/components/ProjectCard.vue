@@ -247,6 +247,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   select: [project: Project, event: MouseEvent];
   open: [project: Project];
+  inspect: [project: Project];
   delete: [project: Project];
   dragstart: [project: Project, event: DragEvent];
   dragend: [event: DragEvent];
@@ -282,7 +283,7 @@ const toggleActions = (event: Event) => {
 };
 
 const handleClick = (event: MouseEvent) => {
-  // Don't open project if clicking on actions area
+  // Don't react if clicking on actions area
   const target = event.target as HTMLElement;
   if (target.closest('.actions-menu')) {
     return;
@@ -291,7 +292,8 @@ const handleClick = (event: MouseEvent) => {
   if (event.ctrlKey || event.metaKey || event.shiftKey) {
     emit('select', props.project, event);
   } else {
-    emit('open', props.project);
+    // Plain click now opens the details panel (not the editor).
+    emit('inspect', props.project);
   }
 };
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuth } from '@/composables/useAuth';
 import { useNotifications } from '@/composables/useNotifications';
@@ -16,6 +16,13 @@ import FolderTree from '@/components/FolderTree.vue';
 import NewFolderDialog from '@/components/NewFolderDialog.vue';
 import DeleteConfirmationDialog from '@/components/DeleteConfirmationDialog.vue';
 import MoveProjectsDialog from '@/components/MoveProjectsDialog.vue';
+import VideoDetailsPanel from '@/components/VideoDetailsPanel.vue';
+import ShareModal from '@/components/ShareModal.vue';
+import {
+  useVideoDetails,
+  summarizeLabels,
+  type PanelAnnotation,
+} from '@/composables/useVideoDetails';
 import type { FolderTreeNode, Folder, DragData } from '@/types/folder';
 import { useDashboardFolders } from '@/composables/useDashboardFolders';
 import type {
@@ -65,6 +72,50 @@ const itemsPerPage = ref(20);
 const activeLabelIds = ref<Set<string>>(new Set());
 const availableLabels = ref<Label[]>([]);
 
+const selectedProject = ref<Project | null>(null);
+const videoDetails = useVideoDetails();
+const shareTarget = ref<Project | null>(null);
+
+// Fast lookup for resolving annotation label ids → label name/color.
+const labelMap = computed(() => {
+  const m = new Map<string, Label>();
+  for (const l of availableLabels.value) m.set(l.id, l);
+  return m;
+});
+
+const detailsLabelSummary = computed(() =>
+  summarizeLabels(videoDetails.annotations.value, labelMap.value)
+);
+
+function inspectProject(project: Project) {
+  // Toggle off if the same card is clicked again.
+  if (selectedProject.value?.id === project.id) {
+    closeDetails();
+    return;
+  }
+  selectedProject.value = project;
+  videoDetails.selectProject(project);
+}
+
+function closeDetails() {
+  selectedProject.value = null;
+  videoDetails.clear();
+}
+
+function openAnnotation(project: Project, annotation: PanelAnnotation) {
+  const name = project.projectType === 'single' ? 'editor-single' : 'editor-dual';
+  router.push({
+    name,
+    params: { id: project.id },
+    query: { t: String(annotation.timestamp ?? 0) },
+  });
+}
+
+// Close the panel on Escape.
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && selectedProject.value) closeDetails();
+}
+
 async function loadData() {
   if (!user.value) return;
   isLoading.value = true;
@@ -95,15 +146,17 @@ watch(scope, (s) => {
 });
 
 // Reset to page 1 whenever the result set changes, so we never strand the
-// user on an out-of-range (and thus empty, hidden-pagination) page.
-watch([scope, searchQuery], () => {
+// user on an out-of-range (and thus empty, hidden-pagination) page. Also
+// close the details panel so it never points at a project that scrolled
+// out of the current folder/scope.
+watch([scope, searchQuery, dashFolders.currentFolderId], () => {
   currentPage.value = 1;
+  closeDetails();
 });
 
-// Reload and reset to page 1 whenever the selected folder changes.
+// Reload whenever the selected folder changes.
 // (`currentFolderId` is persisted inside the composable via `selectFolder`.)
 watch(dashFolders.currentFolderId, () => {
-  currentPage.value = 1;
   loadData();
 });
 
@@ -238,6 +291,10 @@ function folderErrorMessage(err: unknown): string {
 onMounted(() => {
   loadData();
   dashFolders.loadFolders();
+  window.addEventListener('keydown', onKeydown);
+});
+onUnmounted(() => {
+  window.removeEventListener('keydown', onKeydown);
 });
 watch(user, (u) => {
   if (u) {
@@ -394,10 +451,11 @@ watch(user, (u) => {
             >
               <ProjectCard
                 :project="project"
-                :is-selected="false"
+                :is-selected="selectedProject?.id === project.id"
                 :is-dragging="false"
                 :annotation-count="annotationCounts[project.id] ?? 0"
                 :comment-count="commentCounts[project.id] ?? 0"
+                @inspect="inspectProject"
                 @open="openProject"
                 @dragstart="onCardDragStart"
                 @add-to-folder="openAddToFolder"
@@ -419,10 +477,11 @@ watch(user, (u) => {
               v-for="project in paginatedProjects"
               :key="project.id"
               :project="project"
-              :is-selected="false"
+              :is-selected="selectedProject?.id === project.id"
               :is-dragging="false"
               :annotation-count="annotationCounts[project.id] ?? 0"
               :comment-count="commentCounts[project.id] ?? 0"
+              @inspect="inspectProject"
               @open="openProject"
               @dragstart="onCardDragStart"
               @add-to-folder="openAddToFolder"
@@ -452,6 +511,26 @@ watch(user, (u) => {
             </button>
           </div>
         </div>
+
+        <!-- Desktop docked details panel -->
+        <aside
+          v-if="selectedProject"
+          class="hidden lg:block w-96 shrink-0 self-start sticky top-6 h-[calc(100vh-6rem)]"
+        >
+          <VideoDetailsPanel
+            :project="selectedProject"
+            :annotations="videoDetails.annotations.value"
+            :loading="videoDetails.loading.value"
+            :label-summary="detailsLabelSummary"
+            :annotation-count="annotationCounts[selectedProject.id] ?? 0"
+            :comment-count="commentCounts[selectedProject.id] ?? 0"
+            @close="closeDetails"
+            @open="openProject"
+            @share="(p) => (shareTarget = p)"
+            @add-to-folder="openAddToFolder"
+            @annotation-click="openAnnotation"
+          />
+        </aside>
       </div>
     </main>
 
@@ -516,6 +595,44 @@ watch(user, (u) => {
       :current-folder-id="dashFolders.currentFolderId.value"
       @move="onMoveConfirmed"
       @close="moveDialogProjectIds = null"
+    />
+
+    <Teleport to="body">
+      <Transition name="modal">
+        <div
+          v-if="selectedProject"
+          class="lg:hidden fixed inset-0 z-50 flex justify-end"
+        >
+          <div
+            class="absolute inset-0 bg-black/50"
+            @click="closeDetails"
+          />
+          <div class="relative w-[90%] max-w-sm h-full">
+            <VideoDetailsPanel
+              :project="selectedProject"
+              :annotations="videoDetails.annotations.value"
+              :loading="videoDetails.loading.value"
+              :label-summary="detailsLabelSummary"
+              :annotation-count="annotationCounts[selectedProject.id] ?? 0"
+              :comment-count="commentCounts[selectedProject.id] ?? 0"
+              @close="closeDetails"
+              @open="openProject"
+              @share="(p) => (shareTarget = p)"
+              @add-to-folder="openAddToFolder"
+              @annotation-click="openAnnotation"
+            />
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <ShareModal
+      v-if="shareTarget"
+      :is-visible="true"
+      :video-id="shareTarget.projectType === 'single' ? shareTarget.video?.id : ''"
+      :comparison-id="shareTarget.projectType === 'dual' ? shareTarget.comparisonVideo?.id : ''"
+      :share-type="shareTarget.projectType === 'single' ? 'video' : 'comparison'"
+      @close="shareTarget = null"
     />
   </div>
 </template>
