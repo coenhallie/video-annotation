@@ -27,42 +27,52 @@ export async function getProgress(
   videoId: string,
   userId: string
 ): Promise<WatchProgressRow | null> {
-  const { data, error } = await supabase
-    .from('video_watch_progress')
-    .select(COLUMNS)
-    .eq('videoId', videoId)
-    .eq('userId', userId)
-    .maybeSingle();
+  try {
+    const { data, error } = await supabase
+      .from('video_watch_progress')
+      .select(COLUMNS)
+      .eq('videoId', videoId)
+      .eq('userId', userId)
+      .maybeSingle();
 
-  if (error) {
-    console.warn('⚠️ [watchProgress] getProgress error:', error);
+    if (error) {
+      console.warn('⚠️ [watchProgress] getProgress error:', error);
+      return null;
+    }
+    return (data as WatchProgressRow | null) ?? null;
+  } catch (err) {
+    console.warn('⚠️ [watchProgress] getProgress failed:', err);
     return null;
   }
-  return (data as WatchProgressRow | null) ?? null;
 }
 
 export async function getProgressForVideo(
   videoId: string
 ): Promise<UserWatchProgress[]> {
-  const { data, error } = await supabase
-    .from('video_watch_progress')
-    .select(COLUMNS)
-    .eq('videoId', videoId)
-    .order('percentWatched', { ascending: false });
+  try {
+    const { data, error } = await supabase
+      .from('video_watch_progress')
+      .select(COLUMNS)
+      .eq('videoId', videoId)
+      .order('percentWatched', { ascending: false });
 
-  if (error || !data) {
-    if (error) {
-      console.warn('⚠️ [watchProgress] getProgressForVideo error:', error);
+    if (error || !data) {
+      if (error) {
+        console.warn('⚠️ [watchProgress] getProgressForVideo error:', error);
+      }
+      return [];
     }
+
+    const rows = data as WatchProgressRow[];
+    const owners = await fetchOwners(rows.map((r) => r.userId));
+    return rows.map((r) => ({
+      ...r,
+      user: owners[r.userId] ?? { id: r.userId, name: 'Unknown' },
+    }));
+  } catch (err) {
+    console.warn('⚠️ [watchProgress] getProgressForVideo failed:', err);
     return [];
   }
-
-  const rows = data as WatchProgressRow[];
-  const owners = await fetchOwners(rows.map((r) => r.userId));
-  return rows.map((r) => ({
-    ...r,
-    user: owners[r.userId] ?? { id: r.userId, name: 'Unknown' },
-  }));
 }
 
 export async function upsertProgress(
@@ -71,23 +81,28 @@ export async function upsertProgress(
   ranges: WatchedRange[],
   duration: number
 ): Promise<boolean> {
-  const watchedRanges = mergeRanges(ranges);
-  const { error } = await supabase.from('video_watch_progress').upsert(
-    {
-      userId,
-      videoId,
-      watchedRanges,
-      percentWatched: percentFromRanges(watchedRanges, duration),
-      updatedAt: new Date().toISOString(),
-    },
-    { onConflict: 'userId,videoId' }
-  );
+  try {
+    const watchedRanges = mergeRanges(ranges);
+    const { error } = await supabase.from('video_watch_progress').upsert(
+      {
+        userId,
+        videoId,
+        watchedRanges,
+        percentWatched: percentFromRanges(watchedRanges, duration),
+        updatedAt: new Date().toISOString(),
+      },
+      { onConflict: 'userId,videoId' }
+    );
 
-  if (error) {
-    console.warn('⚠️ [watchProgress] upsertProgress error:', error);
+    if (error) {
+      console.warn('⚠️ [watchProgress] upsertProgress error:', error);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn('⚠️ [watchProgress] upsertProgress failed:', err);
     return false;
   }
-  return true;
 }
 
 /**

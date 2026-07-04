@@ -1,14 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 let queryResult: { data: unknown; error: unknown } = { data: null, error: null };
+let rejectWith: unknown = null;
+
+const settle = () =>
+  rejectWith ? Promise.reject(rejectWith) : Promise.resolve(queryResult);
 
 const chain: Record<string, any> = {};
 for (const m of ['select', 'eq', 'order', 'upsert']) {
   chain[m] = vi.fn(() => chain);
 }
-chain.maybeSingle = vi.fn(() => Promise.resolve(queryResult));
+chain.maybeSingle = vi.fn(() => settle());
 chain.then = (onFulfilled: any, onRejected: any) =>
-  Promise.resolve(queryResult).then(onFulfilled, onRejected);
+  settle().then(onFulfilled, onRejected);
 
 const fromMock = vi.fn(() => chain);
 
@@ -28,6 +32,7 @@ beforeEach(() => {
     chain[m].mockClear();
   }
   queryResult = { data: null, error: null };
+  rejectWith = null;
 });
 
 describe('getProgress', () => {
@@ -50,6 +55,12 @@ describe('getProgress', () => {
     const { getProgress } = await import('@/services/watchProgressService');
     queryResult = { data: null, error: { message: 'boom' } };
     expect(await getProgress('v1', 'u1')).toBeNull();
+  });
+
+  it('returns null on a rejected promise without throwing', async () => {
+    const { getProgress } = await import('@/services/watchProgressService');
+    rejectWith = new Error('network drop');
+    await expect(getProgress('v1', 'u1')).resolves.toBeNull();
   });
 });
 
@@ -80,6 +91,14 @@ describe('getProgressForVideo', () => {
     );
     queryResult = { data: null, error: { message: 'boom' } };
     expect(await getProgressForVideo('v1')).toEqual([]);
+  });
+
+  it('returns [] on a rejected promise without throwing', async () => {
+    const { getProgressForVideo } = await import(
+      '@/services/watchProgressService'
+    );
+    rejectWith = new Error('network drop');
+    await expect(getProgressForVideo('v1')).resolves.toEqual([]);
   });
 });
 
@@ -116,6 +135,16 @@ describe('upsertProgress', () => {
     );
     queryResult = { data: null, error: { message: 'boom' } };
     expect(await upsertProgress('u1', 'v1', [[0, 1]], 10)).toBe(false);
+  });
+
+  it('returns false on a rejected promise without throwing', async () => {
+    const { upsertProgress } = await import(
+      '@/services/watchProgressService'
+    );
+    rejectWith = new Error('network drop');
+    await expect(
+      upsertProgress('u1', 'v1', [[0, 1]], 10)
+    ).resolves.toBe(false);
   });
 });
 
