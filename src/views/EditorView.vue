@@ -498,13 +498,26 @@ const singleWatchProgress = useWatchProgress({
   duration,
   userId: watchUserId,
 });
+// Dual tracking should only ever see a real video id: useDualVideoPlayer
+// initializes videoAId/videoBId to placeholder strings ('video-a'/'video-b')
+// before a real source is loaded, and useWatchProgress fires immediately
+// once videoId+userId are truthy, so we gate on dual mode and filter out
+// the placeholders to avoid pointless Supabase calls with non-UUID ids.
+const watchVideoAId = computed(() => {
+  const id = dualVideoPlayer?.videoAId?.value;
+  return playerMode.value === 'dual' && id && id !== 'video-a' ? id : null;
+});
+const watchVideoBId = computed(() => {
+  const id = dualVideoPlayer?.videoBId?.value;
+  return playerMode.value === 'dual' && id && id !== 'video-b' ? id : null;
+});
 const watchProgressA = useWatchProgress({
-  videoId: computed(() => dualVideoPlayer?.videoAId?.value ?? null),
+  videoId: watchVideoAId,
   duration: computed(() => dualVideoPlayer?.videoAState?.duration || 0),
   userId: watchUserId,
 });
 const watchProgressB = useWatchProgress({
-  videoId: computed(() => dualVideoPlayer?.videoBId?.value ?? null),
+  videoId: watchVideoBId,
   duration: computed(() => dualVideoPlayer?.videoBState?.duration || 0),
   userId: watchUserId,
 });
