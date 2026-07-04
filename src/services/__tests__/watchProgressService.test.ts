@@ -33,6 +33,9 @@ beforeEach(() => {
   }
   queryResult = { data: null, error: null };
   rejectWith = null;
+  // error-path tests exercise the service's console.warn-and-swallow contract;
+  // keep the test output pristine
+  vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
 
 describe('getProgress', () => {
