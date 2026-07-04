@@ -573,6 +573,14 @@ const watchBreakdownTitle = computed(() =>
     ? `Video A: ${watchProgressA.percentWatched.value}% · Video B: ${watchProgressB.percentWatched.value}%`
     : ''
 );
+const watchHintVisible = computed(() =>
+  playerMode.value === 'dual'
+    ? !!(
+        dualVideoPlayer?.videoAState?.isLoaded ||
+        dualVideoPlayer?.videoBState?.isLoaded
+      )
+    : videoLoaded.value
+);
 
 const handleCreateAnonymousSession = async (displayName: string) => {
   try {
@@ -1202,7 +1210,7 @@ watch(
       >
         <!-- Own watch-coverage hint (informational, never blocks annotating) -->
         <div
-          v-if="user && videoLoaded"
+          v-if="user && watchHintVisible"
           class="px-4 py-2 text-xs text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700"
           :title="watchBreakdownTitle"
         >

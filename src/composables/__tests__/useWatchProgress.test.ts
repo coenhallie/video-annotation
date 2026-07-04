@@ -113,6 +113,17 @@ describe('useWatchProgress', () => {
     expect(wp.percentWatched.value).toBe(11);
   });
 
+  it('sanitizes malformed DB-stored watchedRanges instead of throwing', async () => {
+    getProgressMock.mockResolvedValue({
+      userId: 'u1',
+      videoId: 'v1',
+      watchedRanges: [['a', 'b'], [5], {}, [0, 10]] as any,
+      percentWatched: 0,
+    });
+    const { wp } = await setup();
+    expect(wp.percentWatched.value).toBe(10);
+  });
+
   it('reloads when the video changes', async () => {
     const { wp, videoId } = await setup();
     wp.onTimeUpdate(3, true);
