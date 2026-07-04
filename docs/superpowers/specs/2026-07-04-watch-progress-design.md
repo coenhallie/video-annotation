@@ -25,16 +25,19 @@ can exceed 100%).
 
 New table `video_watch_progress`, one row per user per video:
 
-| column            | type        | notes                                          |
-| ----------------- | ----------- | ---------------------------------------------- |
-| `id`              | uuid PK     | default `gen_random_uuid()`                    |
-| `user_id`         | uuid        | FK → `auth.users`, part of unique constraint   |
-| `video_id`        | uuid        | FK → `videos(id)` on delete cascade            |
-| `watched_ranges`  | jsonb       | array of `[startSec, endSec]` merged intervals |
-| `percent_watched` | numeric     | 0–100, computed client-side on write           |
-| `updated_at`      | timestamptz | default `now()`                                |
+| column            | type        | notes                                                                     |
+| ----------------- | ----------- | ------------------------------------------------------------------------- |
+| `id`              | uuid PK     | default `gen_random_uuid()`                                                |
+| `"userId"`        | uuid        | no FK (user rows live in `public.users` synced from Keycloak; matches other tables) |
+| `"videoId"`       | uuid        | FK → `videos(id)` on delete cascade                                        |
+| `"watchedRanges"` | jsonb       | array of `[startSec, endSec)` merged intervals                             |
+| `"percentWatched"`| numeric     | 0–100, computed client-side on write                                       |
+| `"updatedAt"`     | timestamptz | default `now()`                                                            |
 
-Unique constraint on `(user_id, video_id)` so writes are upserts.
+Columns are camelCase double-quoted, matching the rest of the schema. Unique
+constraint on `("userId", "videoId")` so writes are upserts. Stored ranges
+are re-validated on read (non-tuple JSONB entries are dropped) since the
+table has no RLS.
 
 Comparison videos are tracked per underlying video: watching video A of a
 comparison updates the row for A's `video_id`, video B updates B's. No
