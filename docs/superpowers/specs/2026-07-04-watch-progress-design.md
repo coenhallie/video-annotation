@@ -49,16 +49,25 @@ pending RLS phase (see shared-video-dashboard Phase 1).
 
 ## Components
 
+### `src/utils/watchedRanges.ts`
+
+Pure interval math (no dependencies): `mergeRanges(ranges)`,
+`addSecond(ranges, currentTime)`, `percentFromRanges(ranges, duration)`,
+`type WatchedRange = [number, number]` (half-open `[start, end)` seconds).
+
 ### `src/services/watchProgressService.ts`
 
 - `getProgress(videoId, userId)` → row or null.
 - `getProgressForVideo(videoId)` → all users' rows (for the collaborator
   list), enriched with owner/user display info via the existing
   `ownerEnrichmentService` pattern.
-- `upsertProgress(videoId, ranges, percent)` → upsert on
-  `(user_id, video_id)`.
-- Pure helpers (exported for tests): `mergeRanges(ranges)`,
-  `addSecond(ranges, sec)`, `percentFromRanges(ranges, duration)`.
+- `upsertProgress(userId, videoId, ranges, duration)` → merges ranges,
+  computes percent, upserts on `("userId", "videoId")`.
+- `mergeDualProgress(a, b)` (pure) → per-user minimum across a dual
+  project's two videos (missing video counts as 0), sorted descending.
+- All Supabase-touching functions are wrapped in try/catch: they
+  `console.warn` and return safe fallbacks (`null`/`[]`/`false`), never
+  throwing into the player path.
 
 ### `src/composables/useWatchProgress.ts`
 
