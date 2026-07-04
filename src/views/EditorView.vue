@@ -33,6 +33,7 @@ import { useNotifications } from '@/composables/useNotifications';
 import { useDashboardKeyboard } from '@/composables/useDashboardKeyboard';
 import { useSharedContent } from '@/composables/useSharedContent';
 import { useVideoEventHandlers } from '@/composables/useVideoEventHandlers';
+import { useWatchProgress } from '@/composables/useWatchProgress';
 import { supabase } from '@/composables/useSupabase';
 import type { Video, Annotation, ComparisonVideo } from '@/types/database';
 import type {
@@ -485,6 +486,80 @@ const {
   initializeVideo,
   loadAnnotations,
 });
+
+// ── Watch-progress tracking (informational; spec 2026-07-04) ────────────────
+const watchUserId = computed(() => user.value?.id ?? null);
+
+// Wrap store refs in computed: ComputedRef is covariant (readonly value), so
+// it always satisfies ReadableRef<string | null | undefined> regardless of the
+// store ref's exact nullability.
+const singleWatchProgress = useWatchProgress({
+  videoId: computed(() => currentVideoId.value ?? null),
+  duration,
+  userId: watchUserId,
+});
+const watchProgressA = useWatchProgress({
+  videoId: computed(() => dualVideoPlayer?.videoAId?.value ?? null),
+  duration: computed(() => dualVideoPlayer?.videoAState?.duration || 0),
+  userId: watchUserId,
+});
+const watchProgressB = useWatchProgress({
+  videoId: computed(() => dualVideoPlayer?.videoBId?.value ?? null),
+  duration: computed(() => dualVideoPlayer?.videoBState?.duration || 0),
+  userId: watchUserId,
+});
+
+watch(currentTime, (t) => {
+  if (playerMode.value === 'single' && typeof t === 'number') {
+    singleWatchProgress.onTimeUpdate(t, isPlaying.value);
+  }
+});
+watch(
+  () => dualVideoPlayer?.videoACurrentTime?.value,
+  (t) => {
+    if (playerMode.value === 'dual' && typeof t === 'number') {
+      watchProgressA.onTimeUpdate(t, !!dualVideoPlayer?.videoAIsPlaying?.value);
+    }
+  }
+);
+watch(
+  () => dualVideoPlayer?.videoBCurrentTime?.value,
+  (t) => {
+    if (playerMode.value === 'dual' && typeof t === 'number') {
+      watchProgressB.onTimeUpdate(t, !!dualVideoPlayer?.videoBIsPlaying?.value);
+    }
+  }
+);
+// Flush promptly when playback pauses (composable also flushes on unmount/unload)
+watch(isPlaying, (playing) => {
+  if (!playing) void singleWatchProgress.flush();
+});
+watch(
+  () => dualVideoPlayer?.videoAIsPlaying?.value,
+  (playing) => {
+    if (!playing) void watchProgressA.flush();
+  }
+);
+watch(
+  () => dualVideoPlayer?.videoBIsPlaying?.value,
+  (playing) => {
+    if (!playing) void watchProgressB.flush();
+  }
+);
+
+const ownWatchPercent = computed(() =>
+  playerMode.value === 'dual'
+    ? Math.min(
+        watchProgressA.percentWatched.value,
+        watchProgressB.percentWatched.value
+      )
+    : singleWatchProgress.percentWatched.value
+);
+const watchBreakdownTitle = computed(() =>
+  playerMode.value === 'dual'
+    ? `Video A: ${watchProgressA.percentWatched.value}% · Video B: ${watchProgressB.percentWatched.value}%`
+    : ''
+);
 
 const handleCreateAnonymousSession = async (displayName: string) => {
   try {
@@ -1112,6 +1187,15 @@ watch(
       <aside
         class="w-96 min-w-96 max-w-96 flex-shrink-0 bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden"
       >
+        <!-- Own watch-coverage hint (informational, never blocks annotating) -->
+        <div
+          v-if="user && videoLoaded"
+          class="px-4 py-2 text-xs text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700"
+          :title="watchBreakdownTitle"
+        >
+          You've watched {{ Math.round(ownWatchPercent) }}% of this video
+        </div>
+
         <!-- Annotation Panel -->
         <div class="flex-1 overflow-hidden">
           <AnnotationPanel
