@@ -73,6 +73,40 @@
       </span>
     </div>
 
+    <!-- Watch coverage per collaborator -->
+    <div
+      v-if="watchProgress.length > 0"
+      class="p-4 border-b border-gray-200 dark:border-gray-700"
+    >
+      <h3 class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
+        Watched
+      </h3>
+      <ul class="space-y-2">
+        <li
+          v-for="w in watchProgress"
+          :key="w.userId"
+          class="flex items-center gap-2"
+        >
+          <span class="text-xs text-gray-700 dark:text-gray-200 truncate flex-1">
+            {{ w.user.name }}
+          </span>
+          <div
+            class="w-24 h-1.5 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden shrink-0"
+          >
+            <div
+              class="h-full rounded-full bg-blue-500"
+              :style="{ width: `${Math.min(100, w.percentWatched)}%` }"
+            />
+          </div>
+          <span
+            class="text-xs text-gray-500 dark:text-gray-400 w-9 text-right shrink-0"
+          >
+            {{ Math.round(w.percentWatched) }}%
+          </span>
+        </li>
+      </ul>
+    </div>
+
     <!-- Annotations list -->
     <div class="flex-1 overflow-y-auto min-h-0">
       <div v-if="loading" class="p-4 space-y-2">
@@ -158,9 +192,15 @@
 </template>
 
 <script setup lang="ts">
+import { ref, watch } from 'vue';
 import type { Project } from '@/types/project';
 import type { PanelAnnotation, LabelSummaryEntry } from '@/composables/useVideoDetails';
 import type { Label } from '@/types/labels';
+import {
+  getProgressForVideo,
+  mergeDualProgress,
+  type UserWatchProgress,
+} from '@/services/watchProgressService';
 
 const props = defineProps<{
   project: Project;
@@ -179,6 +219,33 @@ const emit = defineEmits<{
   'add-to-folder': [project: Project];
   'annotation-click': [project: Project, annotation: PanelAnnotation];
 }>();
+
+const watchProgress = ref<UserWatchProgress[]>([]);
+// Monotonic token so only the latest request may commit its result —
+// id-equality alone can't order two in-flight fetches for the same project.
+let watchProgressReq = 0;
+
+watch(
+  () => props.project,
+  async (project) => {
+    const reqId = ++watchProgressReq;
+    watchProgress.value = [];
+    if (!project) return;
+    const rows =
+      project.projectType === 'single'
+        ? await getProgressForVideo(project.video.id)
+        : mergeDualProgress(
+            ...(await Promise.all([
+              getProgressForVideo(project.videoA.id),
+              getProgressForVideo(project.videoB.id),
+            ]))
+          );
+    if (watchProgressReq === reqId) {
+      watchProgress.value = rows;
+    }
+  },
+  { immediate: true }
+);
 
 function formatTimestamp(seconds: number): string {
   const s = Math.max(0, Math.floor(seconds || 0));
