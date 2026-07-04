@@ -82,6 +82,37 @@ describe('useWatchProgress', () => {
     expect(wp.percentWatched.value).toBe(21);
   });
 
+  it('merges DB-stored ranges with seconds marked while the load was in flight', async () => {
+    const { useWatchProgress } = await import('@/composables/useWatchProgress');
+    let resolveLoad!: (value: unknown) => void;
+    getProgressMock.mockReturnValue(
+      new Promise((resolve) => {
+        resolveLoad = resolve;
+      })
+    );
+    const videoId = ref<string | null>('v1');
+    const userId = ref<string | null>('u1');
+    const duration = ref(100);
+    const wp = useWatchProgress({ videoId, duration, userId });
+
+    // The load kicked off synchronously (immediate watcher) but is still
+    // pending — mark a second while it's in flight.
+    wp.onTimeUpdate(0.5, true);
+    expect(wp.percentWatched.value).toBe(1);
+
+    resolveLoad({
+      userId: 'u1',
+      videoId: 'v1',
+      watchedRanges: [[10, 20]],
+      percentWatched: 10,
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // Stored [10,20) = 10s plus the live-marked [0,1) = 1s → 11/100 = 11%.
+    expect(wp.percentWatched.value).toBe(11);
+  });
+
   it('reloads when the video changes', async () => {
     const { wp, videoId } = await setup();
     wp.onTimeUpdate(3, true);

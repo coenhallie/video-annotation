@@ -78,10 +78,10 @@ export function useWatchProgress(options: {
   watch([videoId, userId], () => void loadExisting(), { immediate: true });
 
   const flushOnUnload = () => void flush();
-  if (typeof window !== 'undefined') {
-    window.addEventListener('beforeunload', flushOnUnload);
-  }
   if (getCurrentInstance()) {
+    if (typeof window !== 'undefined') {
+      window.addEventListener('beforeunload', flushOnUnload);
+    }
     onBeforeUnmount(() => {
       void flush();
       if (typeof window !== 'undefined') {
