@@ -593,11 +593,26 @@ export class VideoService {
     // Check for existing record
     const existing = await this.findVideoByOutputVideoId(outputVideoId);
 
+    // Generate a thumbnail whenever the record has none yet: new records, plus
+    // backfill for AWS videos created before thumbnails existed. Requires CORS
+    // on the S3 bucket; failure is non-fatal and leaves the video without one.
+    let thumbnailUrl: string | null = null;
+    if (!existing?.thumbnailUrl) {
+      try {
+        thumbnailUrl = await ThumbnailGenerator.generateSmallThumbnail(presignedUrl);
+      } catch (error) {
+        console.warn('⚠️ Failed to generate thumbnail for AWS video:', error);
+      }
+    }
+
     if (existing) {
-      // Update the URL with the fresh presigned URL
+      // Update the URL with the fresh presigned URL (and backfilled thumbnail, if any)
       const { data, error } = await supabase
         .from('videos')
-        .update({ url: presignedUrl })
+        .update({
+          url: presignedUrl,
+          ...(thumbnailUrl ? { thumbnailUrl } : {}),
+        })
         .eq('id', existing.id)
         .select()
         .single();
@@ -622,6 +637,7 @@ export class VideoService {
         fps: 30,
         duration: 1,
         totalFrames: 30,
+        ...(thumbnailUrl ? { thumbnailUrl } : {}),
       })
       .select()
       .single();
