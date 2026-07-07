@@ -120,4 +120,20 @@ describe('findOrCreateOutputVideo thumbnails', () => {
     expect(generateSmallThumbnail).not.toHaveBeenCalled();
     expect(state.updated).toEqual({ url: 'https://s3.example.com/presigned.mp4' });
   });
+
+  it('creates the record without a thumbnail when generation never settles', async () => {
+    vi.useFakeTimers();
+    try {
+      generateSmallThumbnail.mockReturnValue(new Promise(() => {}));
+
+      const pending = callFindOrCreate();
+      await vi.advanceTimersByTimeAsync(15_000);
+      await pending;
+
+      expect(state.inserted).not.toBeNull();
+      expect('thumbnailUrl' in state.inserted).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

@@ -599,7 +599,16 @@ export class VideoService {
     let thumbnailUrl: string | null = null;
     if (!existing?.thumbnailUrl) {
       try {
-        thumbnailUrl = await ThumbnailGenerator.generateSmallThumbnail(presignedUrl);
+        // Race against a timeout: generateSmallThumbnail can stall forever on a
+        // hung media load (no error event fires), and this await sits on the
+        // deep-link open path behind the app loading screen.
+        const THUMBNAIL_TIMEOUT_MS = 15_000;
+        thumbnailUrl = await Promise.race([
+          ThumbnailGenerator.generateSmallThumbnail(presignedUrl),
+          new Promise<null>((resolve) =>
+            setTimeout(() => resolve(null), THUMBNAIL_TIMEOUT_MS)
+          ),
+        ]);
       } catch (error) {
         console.warn('⚠️ Failed to generate thumbnail for AWS video:', error);
       }
