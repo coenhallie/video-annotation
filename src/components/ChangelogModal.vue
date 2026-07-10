@@ -99,6 +99,21 @@ const closeModal = () => {
 // Add new entries to the TOP of this array
 const changelogEntries = ref([
   {
+    version: 'Beta v3.9',
+    date: 'July 9, 2026',
+    changes: [
+      'New video library: browse all shared videos with search, All/My Videos scope toggle, and pagination',
+      'Organize videos into folders with drag & drop filing and folder filtering',
+      'Video details sidebar: preview annotations, jump straight to their timestamps, and see per-video stats',
+      'Watch progress tracking: see how much of each video you and your team have watched',
+      'Filter videos by annotation labels via the new Filter button next to the search bar',
+      'New football-tracking QA label set (EVT/PITCH/TEAM/NPL/PLR/PLY/BALL) with descriptions shown in tooltips',
+      'Thumbnails for AWS pipeline videos',
+      'Click the Perspecto title to return to the library',
+      'Security: database access is now protected with row-level security policies',
+    ],
+  },
+  {
     version: 'Beta v3.8',
     date: 'March 13, 2026',
     changes: [

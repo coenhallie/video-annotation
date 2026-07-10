@@ -3,8 +3,8 @@
     <!-- Root folder -->
     <div
       :class="[
-        'folder-item px-2 py-1.5 rounded-md cursor-pointer flex items-center gap-2 hover:bg-gray-100',
-        selectedFolderId === null && 'bg-blue-50 text-blue-700',
+        'folder-item px-2 py-1.5 rounded-md cursor-pointer flex items-center gap-2 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors',
+        selectedFolderId === null && 'bg-blue-50 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300',
       ]"
       @click="$emit('select', null)"
       @dragover.prevent="handleRootDragOver"

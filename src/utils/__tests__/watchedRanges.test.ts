@@ -3,6 +3,7 @@ import {
   mergeRanges,
   addSecond,
   percentFromRanges,
+  sanitizeRanges,
   type WatchedRange,
 } from '@/utils/watchedRanges';
 
@@ -62,6 +63,23 @@ describe('addSecond', () => {
   it('ignores negative and non-finite times', () => {
     expect(addSecond([], -1)).toEqual([]);
     expect(addSecond([], NaN)).toEqual([]);
+  });
+});
+
+describe('sanitizeRanges', () => {
+  it('keeps well-formed tuples and drops malformed entries', () => {
+    expect(
+      sanitizeRanges([[0, 2], [3], ['a', 4], null, { 0: 1, 1: 2 }, [5, 6]])
+    ).toEqual([
+      [0, 2],
+      [5, 6],
+    ]);
+  });
+
+  it('returns [] for non-array input', () => {
+    expect(sanitizeRanges(null)).toEqual([]);
+    expect(sanitizeRanges('[[0,1]]')).toEqual([]);
+    expect(sanitizeRanges(undefined)).toEqual([]);
   });
 });
 

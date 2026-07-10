@@ -383,13 +383,17 @@ export class CommentService {
         };
       }
 
-      let videoData: { isPublic: boolean; ownerId: string } | null = null;
+      let videoData: {
+        isPublic: boolean;
+        ownerId: string;
+        allowAnnotations: boolean;
+      } | null = null;
 
       // Check if it's a comparison annotation
       if (annotation.comparisonVideoId) {
         const { data: comparisonVideo, error: comparisonError } = await supabase
           .from('comparison_videos')
-          .select('isPublic, userId')
+          .select('isPublic, userId, allowAnnotations')
           .eq('id', annotation.comparisonVideoId)
           .single();
 
@@ -408,11 +412,12 @@ export class CommentService {
         videoData = {
           isPublic: comparisonVideo.isPublic,
           ownerId: comparisonVideo.userId,
+          allowAnnotations: comparisonVideo.allowAnnotations === true,
         };
       } else if (annotation.videoId) {
         const { data: video, error: videoError } = await supabase
           .from('videos')
-          .select('isPublic, ownerId')
+          .select('isPublic, ownerId, allowAnnotations')
           .eq('id', annotation.videoId)
           .single();
 
@@ -428,6 +433,7 @@ export class CommentService {
         videoData = {
           isPublic: video.isPublic,
           ownerId: video.ownerId,
+          allowAnnotations: video.allowAnnotations === true,
         };
       } else {
         console.error(
@@ -449,10 +455,11 @@ export class CommentService {
       }
 
       // Check if user can comment
-      // For public videos/comparisons, anyone can comment (including anonymous users)
-      // For private videos/comparisons, only owners and annotation owners can comment
+      // Public videos/comparisons: authenticated users may comment when the
+      // share allows annotations — anonymous visitors are view-only
+      // Private videos/comparisons: only owners and annotation owners can comment
       const canComment =
-        videoData.isPublic || // Public video/comparison - allows anyone including anonymous users
+        (userId && videoData.isPublic && videoData.allowAnnotations) || // Authenticated user on a share with annotations enabled
         (userId && videoData.ownerId === userId) || // Video/comparison owner
         (userId && annotation.userId === userId); // Annotation owner
 

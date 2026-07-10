@@ -44,6 +44,7 @@
     <DualVideoPlayer
       v-else-if="mode === 'dual'"
       ref="dualPlayerRef"
+      :dual-video-player="dualVideoPlayer ?? null"
       :video-a-url="videoAUrl || ''"
       :video-b-url="videoBUrl || ''"
       @video-a-loaded="emit('video-a-loaded')"

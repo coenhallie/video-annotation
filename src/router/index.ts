@@ -36,7 +36,12 @@ const router = createRouter({
 router.beforeEach(async (to, from, next) => {
   // Check auth state
   const { data: { session } } = await supabase.auth.getSession();
-  const isAuthenticated = !!session?.user;
+  // DEV-ONLY: treat as authenticated when the local bypass flag is set. Compile-time
+  // dead in production (`import.meta.env.DEV` is false in `vite build`) and requires
+  // the explicit VITE_DEV_AUTH_BYPASS flag (local, gitignored .env). See useAuth.ts.
+  const devAuthBypass =
+    import.meta.env.DEV && import.meta.env.VITE_DEV_AUTH_BYPASS === 'true';
+  const isAuthenticated = !!session?.user || devAuthBypass;
 
   // Check for share URL
   // Note: We use window.location because usage of 'to' might be complex if params are query based

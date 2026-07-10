@@ -488,23 +488,61 @@ export class LabelService {
    * Get the distinct set of labels attached to any annotation on the given videos
    */
   static async getLabelsForProjects(videoIds: string[]): Promise<Label[]> {
-    if (videoIds.length === 0) return [];
-    const { data: anns, error: annErr } = await supabase
+    return (await this.getProjectLabelData(videoIds)).labels;
+  }
+
+  /**
+   * Distinct labels used across the given projects, plus which label ids each
+   * project carries. Single projects are keyed by their video id, dual projects
+   * by their comparison-video id (annotations reference one or the other).
+   */
+  static async getProjectLabelData(
+    videoIds: string[],
+    comparisonVideoIds: string[] = []
+  ): Promise<{ labels: Label[]; labelIdsByProject: Record<string, string[]> }> {
+    const empty = { labels: [], labelIdsByProject: {} };
+    if (videoIds.length === 0 && comparisonVideoIds.length === 0) return empty;
+
+    let annQuery = supabase
       .from('annotations')
-      .select('id')
-      .in('videoId', videoIds);
-    if (annErr || !anns?.length) return [];
+      .select('id, videoId, comparisonVideoId');
+    if (comparisonVideoIds.length === 0) {
+      annQuery = annQuery.in('videoId', videoIds);
+    } else if (videoIds.length === 0) {
+      annQuery = annQuery.in('comparisonVideoId', comparisonVideoIds);
+    } else {
+      annQuery = annQuery.or(
+        `videoId.in.(${videoIds.join(',')}),comparisonVideoId.in.(${comparisonVideoIds.join(',')})`
+      );
+    }
+    const { data: anns, error: annErr } = await annQuery;
+    if (annErr || !anns?.length) return empty;
+
+    const projectByAnnotation = new Map<string, string>();
+    for (const a of anns as any[]) {
+      const projectKey = a.videoId ?? a.comparisonVideoId;
+      if (a.id && projectKey) projectByAnnotation.set(a.id, projectKey);
+    }
 
     const { data: rows, error } = await supabase
       .from('annotation_labels')
-      .select('labelId, labels(*)')
+      .select('annotationId, labelId, labels(*)')
       .in('annotationId', anns.map((a) => a.id));
-    if (error || !rows) return [];
+    if (error || !rows) return empty;
 
     const byId = new Map<string, Label>();
+    const setsByProject = new Map<string, Set<string>>();
     for (const r of rows as any[]) {
+      if (!r.labelId) continue;
       if (r.labels && !byId.has(r.labelId)) byId.set(r.labelId, r.labels as Label);
+      const projectKey = projectByAnnotation.get(r.annotationId);
+      if (projectKey) {
+        if (!setsByProject.has(projectKey)) setsByProject.set(projectKey, new Set());
+        setsByProject.get(projectKey)!.add(r.labelId);
+      }
     }
-    return [...byId.values()];
+    const labelIdsByProject: Record<string, string[]> = {};
+    for (const [key, ids] of setsByProject) labelIdsByProject[key] = [...ids];
+    return { labels: [...byId.values()], labelIdsByProject };
   }
 }

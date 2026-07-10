@@ -42,7 +42,7 @@
     </div>
 
     <!-- Stat row -->
-    <div class="grid grid-cols-3 divide-x divide-gray-200 dark:divide-gray-700 border-b border-gray-200 dark:border-gray-700">
+    <div class="grid grid-cols-2 divide-x divide-gray-200 dark:divide-gray-700 border-b border-gray-200 dark:border-gray-700">
       <div class="p-3 text-center">
         <div class="text-lg font-semibold text-gray-900 dark:text-white">{{ annotationCount }}</div>
         <div class="text-xs text-gray-500 dark:text-gray-400">Annotations</div>
@@ -51,29 +51,9 @@
         <div class="text-lg font-semibold text-gray-900 dark:text-white">{{ commentCount }}</div>
         <div class="text-xs text-gray-500 dark:text-gray-400">Comments</div>
       </div>
-      <div class="p-3 text-center">
-        <div class="text-lg font-semibold text-gray-900 dark:text-white">{{ labelSummary.length }}</div>
-        <div class="text-xs text-gray-500 dark:text-gray-400">Labels</div>
-      </div>
     </div>
 
-    <!-- Labels -->
-    <div
-      v-if="labelSummary.length > 0"
-      class="p-4 border-b border-gray-200 dark:border-gray-700 flex flex-wrap gap-2"
-    >
-      <span
-        v-for="l in labelSummary"
-        :key="l.id"
-        class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium text-white"
-        :style="{ backgroundColor: l.color }"
-      >
-        {{ l.name }}
-        <span class="opacity-80">{{ l.count }}</span>
-      </span>
-    </div>
-
-    <!-- Watch coverage per collaborator -->
+    <!-- Team watch coverage (union of all users' ranges; hover for breakdown) -->
     <div
       v-if="watchProgress.length > 0"
       class="p-4 border-b border-gray-200 dark:border-gray-700"
@@ -81,30 +61,35 @@
       <h3 class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
         Watched
       </h3>
-      <ul class="space-y-2">
-        <li
-          v-for="w in watchProgress"
-          :key="w.userId"
-          class="flex items-center gap-2"
+      <div class="group relative flex items-center gap-2">
+        <div
+          class="flex-1 h-1.5 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden"
         >
-          <span class="text-xs text-gray-700 dark:text-gray-200 truncate flex-1">
-            {{ w.user.name }}
-          </span>
           <div
-            class="w-24 h-1.5 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden shrink-0"
+            class="h-full rounded-full bg-blue-500"
+            :style="{ width: `${coveragePercent}%` }"
+          />
+        </div>
+        <span
+          class="text-xs text-gray-500 dark:text-gray-400 shrink-0"
+        >
+          {{ Math.round(coveragePercent) }}%
+        </span>
+        <div
+          class="absolute bottom-full left-0 mb-2 hidden group-hover:block z-10 rounded-md bg-gray-900 dark:bg-gray-700 text-white text-xs px-3 py-2 shadow-lg space-y-1 pointer-events-none"
+        >
+          <div
+            v-for="w in watchProgress"
+            :key="w.userId"
+            class="flex items-center justify-between gap-4 whitespace-nowrap"
           >
-            <div
-              class="h-full rounded-full bg-blue-500"
-              :style="{ width: `${Math.min(100, w.percentWatched)}%` }"
-            />
+            <span class="truncate max-w-40">{{ w.user.name }}</span>
+            <span class="text-gray-300">
+              {{ Math.round(w.percentWatched) }}% · {{ formatDuration(watchedSeconds(w)) }}
+            </span>
           </div>
-          <span
-            class="text-xs text-gray-500 dark:text-gray-400 w-9 text-right shrink-0"
-          >
-            {{ Math.round(w.percentWatched) }}%
-          </span>
-        </li>
-      </ul>
+        </div>
+      </div>
     </div>
 
     <!-- Annotations list -->
@@ -180,13 +165,6 @@
       >
         Share
       </button>
-      <button
-        class="px-3 py-2 rounded-lg text-sm border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-        title="Add to folder"
-        @click="emit('add-to-folder', project)"
-      >
-        Folder
-      </button>
     </div>
   </div>
 </template>
@@ -194,19 +172,19 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 import type { Project } from '@/types/project';
-import type { PanelAnnotation, LabelSummaryEntry } from '@/composables/useVideoDetails';
+import type { PanelAnnotation } from '@/composables/useVideoDetails';
 import type { Label } from '@/types/labels';
 import {
   getProgressForVideo,
   mergeDualProgress,
   type UserWatchProgress,
 } from '@/services/watchProgressService';
+import { percentFromRanges, sanitizeRanges } from '@/utils/watchedRanges';
 
 const props = defineProps<{
   project: Project;
   annotations: PanelAnnotation[];
   loading: boolean;
-  labelSummary: LabelSummaryEntry[];
   annotationCount: number;
   commentCount: number;
   labelMap?: Map<string, Label>;
@@ -216,11 +194,28 @@ const emit = defineEmits<{
   close: [];
   open: [project: Project];
   share: [project: Project];
-  'add-to-folder': [project: Project];
   'annotation-click': [project: Project, annotation: PanelAnnotation];
 }>();
 
 const watchProgress = ref<UserWatchProgress[]>([]);
+// True team coverage: the union of everyone's watched ranges, so overlap
+// doesn't double-count (ten people watching the same first 10% ⇒ 10%).
+const coveragePercent = ref(0);
+
+// Union coverage of one video across all users. DB-sourced ranges are
+// untrusted (no RLS) — sanitize before any range math.
+function unionPercent(rows: UserWatchProgress[], duration: number): number {
+  return percentFromRanges(
+    rows.flatMap((r) => sanitizeRanges(r.watchedRanges)),
+    duration
+  );
+}
+
+// Approximate per-user watch time from their stored percentage — for dual
+// projects percentWatched is min(A, B), so exact seconds aren't recoverable.
+function watchedSeconds(w: UserWatchProgress): number {
+  return Math.round((w.percentWatched / 100) * getDuration());
+}
 // Monotonic token so only the latest request may commit its result —
 // id-equality alone can't order two in-flight fetches for the same project.
 let watchProgressReq = 0;
@@ -230,18 +225,26 @@ watch(
   async (project) => {
     const reqId = ++watchProgressReq;
     watchProgress.value = [];
+    coveragePercent.value = 0;
     if (!project) return;
-    const rows =
-      project.projectType === 'single'
-        ? await getProgressForVideo(project.video.id)
-        : mergeDualProgress(
-            ...(await Promise.all([
-              getProgressForVideo(project.videoA.id),
-              getProgressForVideo(project.videoB.id),
-            ]))
-          );
-    if (watchProgressReq === reqId) {
+    if (project.projectType === 'single') {
+      const rows = await getProgressForVideo(project.video.id);
+      if (watchProgressReq !== reqId) return;
       watchProgress.value = rows;
+      coveragePercent.value = unionPercent(rows, project.video.duration);
+    } else {
+      const [a, b] = await Promise.all([
+        getProgressForVideo(project.videoA.id),
+        getProgressForVideo(project.videoB.id),
+      ]);
+      if (watchProgressReq !== reqId) return;
+      watchProgress.value = mergeDualProgress(a, b);
+      // Dual coverage mirrors per-user dual semantics: a video only counts
+      // as covered where BOTH sides have been seen ⇒ take the lower side.
+      coveragePercent.value = Math.min(
+        unionPercent(a, project.videoA.duration),
+        unionPercent(b, project.videoB.duration)
+      );
     }
   },
   { immediate: true }

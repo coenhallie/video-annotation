@@ -6,6 +6,7 @@ import {
 import {
   mergeRanges,
   percentFromRanges,
+  sanitizeRanges,
   type WatchedRange,
 } from '@/utils/watchedRanges';
 
@@ -72,6 +73,46 @@ export async function getProgressForVideo(
   } catch (err) {
     console.warn('⚠️ [watchProgress] getProgressForVideo failed:', err);
     return [];
+  }
+}
+
+/**
+ * Batched team coverage for many videos in one query: per video, the union
+ * of ALL users' watched ranges, merged. Videos with no progress are absent.
+ * Ranges are sanitized here (untrusted JSONB, no RLS) — callers can feed the
+ * result straight into percentFromRanges.
+ */
+export async function getMergedRangesForVideos(
+  videoIds: string[]
+): Promise<Record<string, WatchedRange[]>> {
+  if (videoIds.length === 0) return {};
+  try {
+    const { data, error } = await supabase
+      .from('video_watch_progress')
+      .select('videoId, watchedRanges')
+      .in('videoId', videoIds);
+
+    if (error || !data) {
+      if (error) {
+        console.warn('⚠️ [watchProgress] getMergedRangesForVideos error:', error);
+      }
+      return {};
+    }
+
+    const byVideo: Record<string, WatchedRange[]> = {};
+    for (const row of data as Pick<
+      WatchProgressRow,
+      'videoId' | 'watchedRanges'
+    >[]) {
+      (byVideo[row.videoId] ??= []).push(...sanitizeRanges(row.watchedRanges));
+    }
+    for (const [id, ranges] of Object.entries(byVideo)) {
+      byVideo[id] = mergeRanges(ranges);
+    }
+    return byVideo;
+  } catch (err) {
+    console.warn('⚠️ [watchProgress] getMergedRangesForVideos failed:', err);
+    return {};
   }
 }
 

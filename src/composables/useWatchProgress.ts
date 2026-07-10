@@ -11,6 +11,7 @@ import {
   addSecond,
   mergeRanges,
   percentFromRanges,
+  sanitizeRanges,
   type WatchedRange,
 } from '@/utils/watchedRanges';
 import { getProgress, upsertProgress } from '@/services/watchProgressService';
@@ -50,19 +51,9 @@ export function useWatchProgress(options: {
     dirty = false;
     const row = await getProgress(vid, uid);
     // Guard against the ids changing again while the request was in flight;
-    // merge with seconds marked during the load.
-    // The table has no RLS, so DB-sourced watchedRanges are untrusted input —
-    // sanitize to well-formed [number, number] tuples before merging, since
-    // mergeRanges destructures each element and would throw on malformed JSONB.
-    const stored = Array.isArray(row?.watchedRanges)
-      ? row.watchedRanges.filter(
-          (r): r is WatchedRange =>
-            Array.isArray(r) &&
-            r.length === 2 &&
-            typeof r[0] === 'number' &&
-            typeof r[1] === 'number'
-        )
-      : [];
+    // merge with seconds marked during the load. DB-sourced ranges are
+    // untrusted (no RLS) — sanitize before any range math.
+    const stored = sanitizeRanges(row?.watchedRanges);
     if (loadedKey === key && stored.length) {
       ranges.value = mergeRanges([...stored, ...ranges.value]);
     }

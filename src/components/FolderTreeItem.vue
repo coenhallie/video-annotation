@@ -2,9 +2,9 @@
   <div class="folder-tree-item">
     <div
       :class="[
-        'folder-item group px-2 py-1.5 rounded-md cursor-pointer flex items-center gap-1 hover:bg-gray-100 transition-colors',
-        selectedFolderId === folder.id && 'bg-blue-50 text-blue-700',
-        dragOverFolderId === folder.id && 'bg-blue-100 ring-2 ring-blue-400',
+        'folder-item group px-2 py-1.5 rounded-md cursor-pointer flex items-center gap-1 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors',
+        selectedFolderId === folder.id && 'bg-blue-50 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300',
+        dragOverFolderId === folder.id && 'bg-blue-100 dark:bg-blue-500/30 ring-2 ring-blue-400',
       ]"
       :style="{ paddingLeft: `${level * 20 + 8}px` }"
       @click="handleClick"
@@ -15,7 +15,7 @@
       <!-- Expand/Collapse Arrow -->
       <button
         v-if="folder.children.length > 0"
-        class="p-0.5 hover:bg-gray-200 rounded"
+        class="p-0.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
         @click.stop="toggleExpanded"
       >
         <svg
@@ -66,7 +66,7 @@
         ref="renameInput"
         v-model="newName"
         type="text"
-        class="text-sm font-medium flex-1 px-1 py-0 border border-blue-400 rounded outline-none focus:ring-1 focus:ring-blue-500"
+        class="text-sm font-medium flex-1 px-1 py-0 border border-blue-400 rounded outline-none focus:ring-1 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
         @click.stop
         @keydown.enter="confirmRename"
         @keydown.esc="cancelRename"
@@ -76,7 +76,7 @@
       <!-- Project Count Badge -->
       <span
         v-if="folder.totalProjectCount > 0"
-        class="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded-full"
+        class="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded-full"
       >
         {{ folder.totalProjectCount }}
       </span>
@@ -86,7 +86,7 @@
         class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
       >
         <button
-          class="p-1 hover:bg-gray-200 rounded"
+          class="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
           title="New subfolder"
           @click.stop="createSubfolder"
         >
@@ -105,7 +105,7 @@
           </svg>
         </button>
         <button
-          class="p-1 hover:bg-gray-200 rounded"
+          class="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
           title="Rename"
           @click.stop="startRename"
         >
@@ -124,7 +124,7 @@
           </svg>
         </button>
         <button
-          class="p-1 hover:bg-red-100 text-red-600 rounded"
+          class="p-1 hover:bg-red-100 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 rounded"
           title="Delete"
           @click.stop="deleteFolder"
         >

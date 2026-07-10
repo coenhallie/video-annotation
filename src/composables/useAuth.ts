@@ -8,6 +8,46 @@ const user: Ref<User | null> = ref(null);
 const session: Ref<Session | null> = ref(null);
 const isLoading = ref(true);
 
+// DEV-ONLY auth bypass so the app is usable on localhost without the Keycloak/SSO
+// redirect. Double-gated: `import.meta.env.DEV` is compile-time false in `vite build`
+// (so this is tree-shaken out of any production bundle), AND it requires the explicit
+// VITE_DEV_AUTH_BYPASS flag from the local, gitignored .env. Never active in production.
+// Signs in with a real credential (VITE_DEV_AUTH_EMAIL / VITE_DEV_AUTH_PASSWORD)
+// rather than mocking the user client-side: the database enforces RLS policies keyed
+// on auth.uid(), so writes only work with a genuine Supabase session.
+let devSignInAttempted = false;
+async function applyDevAuthBypass() {
+  if (
+    !import.meta.env.DEV ||
+    import.meta.env.VITE_DEV_AUTH_BYPASS !== 'true' ||
+    session.value ||
+    devSignInAttempted
+  ) {
+    return;
+  }
+  devSignInAttempted = true;
+
+  const email = import.meta.env.VITE_DEV_AUTH_EMAIL;
+  const password = import.meta.env.VITE_DEV_AUTH_PASSWORD;
+  if (!email || !password) {
+    console.warn(
+      '🔓 [useAuth] DEV AUTH BYPASS enabled but VITE_DEV_AUTH_EMAIL / VITE_DEV_AUTH_PASSWORD are not set in .env'
+    );
+    return;
+  }
+
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) {
+    console.warn('🔓 [useAuth] DEV AUTH BYPASS sign-in failed:', error.message);
+    return;
+  }
+  console.warn(
+    '🔓 [useAuth] DEV AUTH BYPASS active — signed in as',
+    email,
+    '(never runs in production)'
+  );
+}
+
 export function useAuth() {
   const { error: notifyError } = useNotifications();
   const isAuthenticated = computed(() => !!user.value);
@@ -76,6 +116,9 @@ export function useAuth() {
 
       session.value = currentSession;
       user.value = currentSession?.user ?? null;
+      // Fire-and-forget: signInWithPassword triggers a SIGNED_IN event, which the
+      // onAuthStateChange listener below turns into session/user state.
+      void applyDevAuthBypass();
 
       // Listen for auth changes
       supabase.auth.onAuthStateChange((event, newSession) => {

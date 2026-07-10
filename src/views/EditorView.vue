@@ -13,7 +13,7 @@ import {
 import DualTimeline from '@/components/DualTimeline.vue';
 import VideoTimeline from '@/components/VideoTimeline.vue';
 import AnnotationPanel from '@/components/AnnotationPanel.vue';
-import DashboardHeader from '@/components/DashboardHeader.vue';
+import EditorHeader from '@/components/EditorHeader.vue';
 
 import UnifiedVideoPlayer from '@/components/UnifiedVideoPlayer.vue';
 import DashboardModals from '@/components/DashboardModals.vue';
@@ -1063,14 +1063,12 @@ watch(
     class="min-h-screen bg-white dark:bg-gray-900 flex flex-col"
   >
     <!-- Header -->
-    <DashboardHeader
+    <EditorHeader
       :user="user"
       :is-shared-video="isSharedVideo"
       :is-shared-comparison="isSharedComparison"
       :can-share="canShare"
       :shared-content-permission-text="sharedContentPermissionText"
-      :current-video-object="currentVideoObject"
-      :player-mode="playerMode"
       @open-project-modal="router.push({ name: 'dashboard' })"
       @open-shared-links="isSharedLinksModalOpen = true"
       @open-share-modal="layoutStore.openShareModal()"

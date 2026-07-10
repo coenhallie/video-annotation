@@ -82,11 +82,15 @@
 import { ref, watch, computed } from 'vue';
 import SingleVideoPlayer from './SingleVideoPlayer.vue';
 import VideoControls from './VideoControls.vue';
-import { useDualVideoPlayer } from '../../composables/useDualVideoPlayer';
+import { useDualVideoPlayer, type DualVideoPlayer as DualVideoPlayerType } from '../../composables/useDualVideoPlayer';
 
 const props = defineProps<{
   videoAUrl: string;
   videoBUrl: string;
+  // Parent-owned composable instance. When provided, this component binds the
+  // rendered <video> elements into it instead of creating its own instance, so
+  // the parent's timeline/seek/frame state reflects the real DOM elements.
+  dualVideoPlayer?: Partial<DualVideoPlayerType> | null;
 }>();
 
 const emit = defineEmits<{
@@ -99,7 +103,11 @@ const emit = defineEmits<{
 const singlePlayerA = ref<InstanceType<typeof SingleVideoPlayer> | null>(null);
 const singlePlayerB = ref<InstanceType<typeof SingleVideoPlayer> | null>(null);
 
-// Initialize Dual Video Logic
+// Use the parent's instance when provided; otherwise own one locally
+const injectedDualPlayer = props.dualVideoPlayer ?? null;
+const dualPlayer = (injectedDualPlayer ??
+  useDualVideoPlayer()) as Required<DualVideoPlayerType>;
+
 const {
   videoARef,
   videoBRef,
@@ -111,10 +119,9 @@ const {
   pause,
   seek, // Use seek for synchronized seeking
   setPlaybackRate: setDualPlaybackRate,
-  videoAId,
-  videoBId,
+  videoAState,
   setVideoSources
-} = useDualVideoPlayer();
+} = dualPlayer;
 
 // We need to bind the internal video elements to the composable refs
 watch(() => singlePlayerA.value?.videoRef, (el) => {
@@ -133,13 +140,17 @@ watch(() => singlePlayerB.value?.videoRef, (el) => {
   if (el) videoBRef.value = el;
 });
 
-// Watch URL props to update composable state
-watch(() => [props.videoAUrl, props.videoBUrl], ([urlA, urlB]) => {
-  setVideoSources?.(
-    { url: urlA, id: 'video-a' },
-    { url: urlB, id: 'video-b' }
-  );
-}, { immediate: true });
+// Watch URL props to update composable state.
+// Skipped for an injected instance: the parent already owns the sources
+// (URLs and real video IDs) and this would clobber its IDs with placeholders.
+if (!injectedDualPlayer) {
+  watch(() => [props.videoAUrl, props.videoBUrl], ([urlA, urlB]) => {
+    setVideoSources?.(
+      { url: urlA, id: 'video-a' },
+      { url: urlB, id: 'video-b' }
+    );
+  }, { immediate: true });
+}
 
 
 // Derived Synchronized State
@@ -161,8 +172,7 @@ const togglePlay = () => {
 
 const seekFrame = (frames: number) => {
   // We need to get current time and add frames
-  // Assuming 30fps for simplicity or needing to fetch FPS
-  const fps = 30; // TODO: Get actual FPS from state
+  const fps = videoAState?.fps || 30;
   const timeStep = frames / fps;
   // Use seek to sync-seek both
   if (videoARef.value) {

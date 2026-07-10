@@ -12,15 +12,6 @@
     @dragstart="handleDragStart"
     @dragend="handleDragEnd"
   >
-    <!-- Selection Checkbox -->
-    <input
-      type="checkbox"
-      :checked="isSelected"
-      class="w-4 h-4 text-blue-600 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500"
-      @click.stop
-      @change="toggleSelection"
-    >
-
     <!-- Thumbnail -->
     <div
       class="w-20 h-12 bg-gray-100 dark:bg-gray-900 rounded overflow-hidden flex-shrink-0"
@@ -63,6 +54,14 @@
           class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-300"
         >
           Dual
+        </span>
+        <!-- Team watch coverage -->
+        <span
+          v-if="watchPercent !== undefined"
+          class="ml-auto shrink-0 text-xs text-gray-500 dark:text-gray-400"
+          title="Watched"
+        >
+          {{ Math.round(watchPercent) }}%
         </span>
       </div>
       <div class="flex items-center justify-between">
@@ -114,119 +113,11 @@
         </div>
       </div>
     </div>
-
-    <!-- Actions -->
-    <div
-      class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity ml-2 flex-shrink-0"
-      style="min-width: 180px"
-    >
-      <button
-        class="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
-        title="Open"
-        @click.stop="openProject"
-      >
-        <svg
-          class="w-4 h-4"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-          />
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-          />
-        </svg>
-      </button>
-      <button
-        class="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
-        title="Share"
-        @click.stop="shareProject"
-      >
-        <svg
-          class="w-4 h-4"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          viewBox="0 0 24 24"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
-          />
-        </svg>
-      </button>
-      <button
-        class="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
-        title="Add to folder"
-        @click.stop="emit('add-to-folder', props.project)"
-      >
-        <svg
-          class="w-4 h-4"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"
-          />
-        </svg>
-      </button>
-      <button
-        class="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
-        title="Delete"
-        @click.stop="deleteProject"
-      >
-        <svg
-          class="w-4 h-4"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v3M4 7h16"
-          />
-        </svg>
-      </button>
-    </div>
   </div>
-
-  <!-- Share Modal -->
-  <ShareModal
-    :is-visible="showShareModal"
-    :video-id="
-      props.project.projectType === 'single' ? props.project.video?.id : ''
-    "
-    :comparison-id="
-      props.project.projectType === 'dual'
-        ? props.project.comparisonVideo?.id
-        : ''
-    "
-    :share-type="
-      props.project.projectType === 'single' ? 'video' : 'comparison'
-    "
-    @close="closeShareModal"
-  />
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
 import type { Project } from '../types/project';
-import ShareModal from './ShareModal.vue';
 
 // Props
 const props = defineProps<{
@@ -236,21 +127,16 @@ const props = defineProps<{
   isDragging: boolean;
   commentCount?: number;
   annotationCount?: number;
+  watchPercent?: number;
 }>();
 
 // Emits
 const emit = defineEmits<{
   select: [project: Project, event: MouseEvent];
-  open: [project: Project];
   inspect: [project: Project];
-  delete: [project: Project];
   dragstart: [project: Project, event: DragEvent];
   dragend: [event: DragEvent];
-  'add-to-folder': [project: Project];
 }>();
-
-// State
-const showShareModal = ref(false);
 
 // Methods
 const handleClick = (event: MouseEvent) => {
@@ -262,33 +148,12 @@ const handleClick = (event: MouseEvent) => {
   }
 };
 
-const toggleSelection = () => {
-  const event = new MouseEvent('click', { ctrlKey: true });
-  emit('select', props.project, event);
-};
-
 const handleDragStart = (event: DragEvent) => {
   emit('dragstart', props.project, event);
 };
 
 const handleDragEnd = (event: DragEvent) => {
   emit('dragend', event);
-};
-
-const openProject = () => {
-  emit('open', props.project);
-};
-
-const shareProject = () => {
-  showShareModal.value = true;
-};
-
-const closeShareModal = () => {
-  showShareModal.value = false;
-};
-
-const deleteProject = () => {
-  emit('delete', props.project);
 };
 
 const getDuration = () => {

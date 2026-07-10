@@ -230,10 +230,11 @@
               <span class="block truncate text-sm text-gray-900 dark:text-gray-100">{{
                 label.name
               }}</span>
-              <span
+              <LabelInfoTooltip
                 v-if="label.description"
-                class="block text-xs text-gray-500 dark:text-gray-400 ml-2"
-              >{{ label.description }}</span>
+                :description="label.description"
+                class="ml-1.5"
+              />
             </div>
             <span
               v-if="selectedLabels.includes(label.id)"
@@ -287,10 +288,11 @@
               <span class="block truncate text-sm text-gray-900">{{
                 label.name
               }}</span>
-              <span
+              <LabelInfoTooltip
                 v-if="label.description"
-                class="block text-xs text-gray-500 dark:text-gray-400 ml-2"
-              >{{ label.description }}</span>
+                :description="label.description"
+                class="ml-1.5"
+              />
             </div>
             <span
               v-if="selectedLabels.includes(label.id)"
@@ -387,6 +389,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, nextTick } from 'vue';
 import { LabelService } from '../services/labelService';
+import LabelInfoTooltip from './LabelInfoTooltip.vue';
 import { useAuth } from '../composables/useAuth';
 import type { Label } from '../types/labels';
 

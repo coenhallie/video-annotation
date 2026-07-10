@@ -7,19 +7,18 @@ import { ProjectService } from '@/services/projectService';
 import { LabelService } from '@/services/labelService';
 import type { Project } from '@/types/project';
 import type { Label } from '@/types/labels';
-import ThemeToggle from '@/components/ThemeToggle.vue';
+import AppHeader from '@/components/AppHeader.vue';
 import ProjectListItem from '@/components/ProjectListItem.vue';
 import CreateComparisonModal from '@/components/CreateComparisonModal.vue';
 import VideoUpload from '@/components/VideoUpload.vue';
 import FolderTree from '@/components/FolderTree.vue';
 import NewFolderDialog from '@/components/NewFolderDialog.vue';
 import DeleteConfirmationDialog from '@/components/DeleteConfirmationDialog.vue';
-import MoveProjectsDialog from '@/components/MoveProjectsDialog.vue';
 import VideoDetailsPanel from '@/components/VideoDetailsPanel.vue';
 import ShareModal from '@/components/ShareModal.vue';
+import ChangelogModal from '@/components/ChangelogModal.vue';
 import {
   useVideoDetails,
-  summarizeLabels,
   type PanelAnnotation,
 } from '@/composables/useVideoDetails';
 import type { FolderTreeNode, Folder, DragData } from '@/types/folder';
@@ -28,6 +27,8 @@ import type {
   ComparisonCreatedEvent,
   VideoUploadResult,
 } from '@/types/component-interfaces';
+import { getMergedRangesForVideos } from '@/services/watchProgressService';
+import { percentFromRanges } from '@/utils/watchedRanges';
 
 const router = useRouter();
 const { user, signOut } = useAuth();
@@ -40,7 +41,6 @@ const showUploadModal = ref(false);
 const showNewFolder = ref(false);
 const newFolderParent = ref<Folder | null>(null);
 const pendingDeleteFolder = ref<FolderTreeNode | null>(null);
-const moveDialogProjectIds = ref<string[] | null>(null);
 
 function onComparisonCreated(comparison: ComparisonCreatedEvent) {
   showComparisonModal.value = false;
@@ -62,17 +62,22 @@ const isLoading = ref(false);
 const projects = ref<Project[]>([]);
 const annotationCounts = ref<Record<string, number>>({});
 const commentCounts = ref<Record<string, number>>({});
+// Per-project team watch coverage (union across users), keyed by project id.
+const watchCoverage = ref<Record<string, number>>({});
 const currentPage = ref(1);
 const itemsPerPage = ref(20);
-// Label filtering is a documented follow-up: chips are rendered as a visual
-// element only. `activeLabelIds` drives selected styling but is intentionally
-// NOT referenced in `filteredProjects` yet.
-const activeLabelIds = ref<Set<string>>(new Set());
+// Labels across the loaded projects: power the filter dropdown and resolve
+// per-annotation chips in the details panel.
 const availableLabels = ref<Label[]>([]);
+// project key (video id / comparison id) → label ids used on that project.
+const labelIdsByProject = ref<Record<string, string[]>>({});
+const activeLabelIds = ref<Set<string>>(new Set());
+const showLabelFilter = ref(false);
 
 const selectedProject = ref<Project | null>(null);
 const videoDetails = useVideoDetails();
 const shareTarget = ref<Project | null>(null);
+const showChangelog = ref(false);
 
 // Fast lookup for resolving annotation label ids → label name/color.
 const labelMap = computed(() => {
@@ -80,10 +85,6 @@ const labelMap = computed(() => {
   for (const l of availableLabels.value) m.set(l.id, l);
   return m;
 });
-
-const detailsLabelSummary = computed(() =>
-  summarizeLabels(videoDetails.annotations.value, labelMap.value)
-);
 
 function inspectProject(project: Project) {
   // Toggle off if the same card is clicked again.
@@ -132,7 +133,42 @@ async function loadData() {
     const videoIds = projects.value
       .filter((p) => p.projectType === 'single')
       .map((p) => (p as Extract<Project, { projectType: 'single' }>).video.id);
-    availableLabels.value = await LabelService.getLabelsForProjects(videoIds);
+    const comparisonIds = projects.value
+      .filter((p) => p.projectType === 'dual')
+      .map((p) => p.id);
+    const labelData = await LabelService.getProjectLabelData(
+      videoIds,
+      comparisonIds
+    );
+    availableLabels.value = labelData.labels;
+    labelIdsByProject.value = labelData.labelIdsByProject;
+
+    // Team coverage per project: one batched query over every video id, then
+    // union percent per video (dual = lower of the two sides, as elsewhere).
+    const allVideoIds = projects.value.flatMap((p) =>
+      p.projectType === 'single' ? [p.video.id] : [p.videoA.id, p.videoB.id]
+    );
+    const mergedRanges = await getMergedRangesForVideos(allVideoIds);
+    const coverage: Record<string, number> = {};
+    for (const p of projects.value) {
+      coverage[p.id] =
+        p.projectType === 'single'
+          ? percentFromRanges(
+              mergedRanges[p.video.id] ?? [],
+              p.video.duration
+            )
+          : Math.min(
+              percentFromRanges(
+                mergedRanges[p.videoA.id] ?? [],
+                p.videoA.duration
+              ),
+              percentFromRanges(
+                mergedRanges[p.videoB.id] ?? [],
+                p.videoB.duration
+              )
+            );
+    }
+    watchCoverage.value = coverage;
   } finally {
     isLoading.value = false;
   }
@@ -148,16 +184,25 @@ watch(scope, (s) => {
 // user on an out-of-range (and thus empty, hidden-pagination) page. Also
 // close the details panel so it never points at a project that scrolled
 // out of the current folder/scope.
-watch([scope, searchQuery, dashFolders.currentFolderId], () => {
-  currentPage.value = 1;
-  closeDetails();
-});
+watch(
+  [scope, searchQuery, dashFolders.currentFolderId, activeLabelIds],
+  () => {
+    currentPage.value = 1;
+    closeDetails();
+  }
+);
 
 // Reload whenever the selected folder changes.
 // (`currentFolderId` is persisted inside the composable via `selectFolder`.)
 watch(dashFolders.currentFolderId, () => {
   loadData();
 });
+
+// Annotations reference single projects by video id and dual projects by
+// comparison id — same keying as `labelIdsByProject`.
+function projectLabelKey(p: Project): string {
+  return p.projectType === 'single' ? p.video.id : p.id;
+}
 
 const filteredProjects = computed(() => {
   let list = dashFolders.filterByFolder(projects.value);
@@ -167,6 +212,14 @@ const filteredProjects = computed(() => {
       (p) =>
         p.title.toLowerCase().includes(q) ||
         !!p.owner?.name.toLowerCase().includes(q)
+    );
+  }
+  if (activeLabelIds.value.size > 0) {
+    // OR semantics: keep videos that carry at least one selected label.
+    list = list.filter((p) =>
+      (labelIdsByProject.value[projectLabelKey(p)] ?? []).some((id) =>
+        activeLabelIds.value.has(id)
+      )
     );
   }
   return list;
@@ -182,11 +235,15 @@ const paginatedProjects = computed(() =>
   )
 );
 
-function toggleLabel(id: string) {
-  // Visual-only for now (label-based project filtering is a follow-up).
-  if (activeLabelIds.value.has(id)) activeLabelIds.value.delete(id);
-  else activeLabelIds.value.add(id);
-  activeLabelIds.value = new Set(activeLabelIds.value);
+function toggleLabelFilter(id: string) {
+  const next = new Set(activeLabelIds.value);
+  if (next.has(id)) next.delete(id);
+  else next.add(id);
+  activeLabelIds.value = next; // new Set so the watchers fire
+}
+
+function clearLabelFilter() {
+  activeLabelIds.value = new Set();
 }
 
 function openProject(project: Project) {
@@ -263,21 +320,6 @@ async function onFolderDrop(node: FolderTreeNode | null, event: DragEvent) {
   }
 }
 
-function openAddToFolder(project: Project) {
-  moveDialogProjectIds.value = [project.id];
-}
-async function onMoveConfirmed(targetFolderId: string | null) {
-  const ids = moveDialogProjectIds.value ?? [];
-  moveDialogProjectIds.value = null;
-  try {
-    for (const id of ids) {
-      await dashFolders.fileProject(id, targetFolderId);
-    }
-  } catch (err) {
-    notifyError('Could not move video to folder', folderErrorMessage(err));
-  }
-}
-
 // Turn a Supabase/RLS error into a friendly message.
 function folderErrorMessage(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err);
@@ -305,35 +347,25 @@ watch(user, (u) => {
 
 <template>
   <div class="min-h-screen bg-gray-50 dark:bg-gray-900">
-    <!-- Minimal inline library header (intentionally NOT the editor's DashboardHeader) -->
-    <header
-      class="flex items-center justify-between px-6 py-3 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700"
+    <AppHeader
+      @open-changelog="showChangelog = true"
+      @sign-out="signOut"
     >
-      <h1 class="text-lg font-semibold text-gray-900 dark:text-white">
-        Perspecto
-      </h1>
       <div class="flex items-center gap-2">
         <button
-          class="px-3 py-1.5 border rounded-lg text-sm border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+          class="px-3 py-1.5 border rounded-md text-sm border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
           @click="showUploadModal = true"
         >
           Upload video
         </button>
         <button
-          class="px-3 py-1.5 border rounded-lg text-sm border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+          class="px-3 py-1.5 border rounded-md text-sm border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
           @click="showComparisonModal = true"
         >
           Create comparison
         </button>
-        <ThemeToggle />
-        <button
-          class="px-3 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-          @click="signOut"
-        >
-          Sign out
-        </button>
       </div>
-    </header>
+    </AppHeader>
 
     <main class="max-w-7xl mx-auto p-6">
       <div class="flex gap-6">
@@ -392,31 +424,102 @@ watch(user, (u) => {
               placeholder="Search videos or owners…"
               class="flex-1 min-w-[12rem] px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
             >
-          </div>
 
-          <!-- Label chips (visual only — label-based filtering is a follow-up) -->
-          <div
-            v-if="availableLabels.length > 0"
-            class="flex flex-wrap gap-2 mb-4"
-          >
-            <button
-              v-for="label in availableLabels"
-              :key="label.id"
-              class="px-2 py-0.5 rounded-full text-xs font-medium border transition-colors"
-              :class="
-                activeLabelIds.has(label.id)
-                  ? 'text-white border-transparent'
-                  : 'text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700'
-              "
-              :style="
-                activeLabelIds.has(label.id)
-                  ? { backgroundColor: label.color }
-                  : {}
-              "
-              @click="toggleLabel(label.id)"
-            >
-              {{ label.name }}
-            </button>
+            <!-- Label filter -->
+            <div class="relative">
+              <button
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-sm transition-colors"
+                :class="
+                  activeLabelIds.size > 0
+                    ? 'border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/20'
+                    : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
+                "
+                @click="showLabelFilter = !showLabelFilter"
+              >
+                <svg
+                  class="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+                  />
+                </svg>
+                Filter
+                <span
+                  v-if="activeLabelIds.size > 0"
+                  class="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full bg-blue-600 text-white text-xs"
+                >
+                  {{ activeLabelIds.size }}
+                </span>
+              </button>
+
+              <div
+                v-if="showLabelFilter"
+                class="fixed inset-0 z-40"
+                @click="showLabelFilter = false"
+              />
+              <div
+                v-if="showLabelFilter"
+                class="absolute right-0 mt-2 w-72 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg"
+              >
+                <div
+                  class="flex items-center justify-between px-3 py-2 border-b border-gray-200 dark:border-gray-700"
+                >
+                  <span
+                    class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide"
+                  >
+                    Filter by label
+                  </span>
+                  <button
+                    v-if="activeLabelIds.size > 0"
+                    class="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                    @click="clearLabelFilter"
+                  >
+                    Clear
+                  </button>
+                </div>
+                <div
+                  v-if="availableLabels.length === 0"
+                  class="px-3 py-6 text-center text-sm text-gray-500 dark:text-gray-400"
+                >
+                  No labels in use yet.
+                </div>
+                <div
+                  v-else
+                  class="max-h-64 overflow-y-auto py-1"
+                >
+                  <button
+                    v-for="label in availableLabels"
+                    :key="label.id"
+                    class="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-left text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700"
+                    @click="toggleLabelFilter(label.id)"
+                  >
+                    <span
+                      class="w-3 h-3 rounded-full border border-gray-300 dark:border-gray-500 shrink-0"
+                      :style="{ backgroundColor: label.color }"
+                    />
+                    <span class="flex-1 truncate">{{ label.name }}</span>
+                    <svg
+                      v-if="activeLabelIds.has(label.id)"
+                      class="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                    >
+                      <path
+                        fill-rule="evenodd"
+                        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                        clip-rule="evenodd"
+                      />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div
@@ -445,10 +548,9 @@ watch(user, (u) => {
               :is-dragging="false"
               :annotation-count="annotationCounts[project.id] ?? 0"
               :comment-count="commentCounts[project.id] ?? 0"
+              :watch-percent="watchCoverage[project.id] ?? 0"
               @inspect="inspectProject"
-              @open="openProject"
               @dragstart="onCardDragStart"
-              @add-to-folder="openAddToFolder"
             />
           </div>
 
@@ -485,14 +587,12 @@ watch(user, (u) => {
             :project="selectedProject"
             :annotations="videoDetails.annotations.value"
             :loading="videoDetails.loading.value"
-            :label-summary="detailsLabelSummary"
             :label-map="labelMap"
             :annotation-count="annotationCounts[selectedProject.id] ?? 0"
             :comment-count="commentCounts[selectedProject.id] ?? 0"
             @close="closeDetails"
             @open="openProject"
             @share="(p) => (shareTarget = p)"
-            @add-to-folder="openAddToFolder"
             @annotation-click="openAnnotation"
           />
         </aside>
@@ -553,15 +653,6 @@ watch(user, (u) => {
       @confirm="confirmDeleteFolder"
       @cancel="pendingDeleteFolder = null"
     />
-    <MoveProjectsDialog
-      v-if="moveDialogProjectIds"
-      :projects="moveDialogProjectIds"
-      :folders="dashFolders.folderTree.value"
-      :current-folder-id="dashFolders.currentFolderId.value"
-      @move="onMoveConfirmed"
-      @close="moveDialogProjectIds = null"
-    />
-
     <Teleport to="body">
       <Transition name="modal">
         <div
@@ -577,14 +668,12 @@ watch(user, (u) => {
               :project="selectedProject"
               :annotations="videoDetails.annotations.value"
               :loading="videoDetails.loading.value"
-              :label-summary="detailsLabelSummary"
-              :label-map="labelMap"
+                :label-map="labelMap"
               :annotation-count="annotationCounts[selectedProject.id] ?? 0"
               :comment-count="commentCounts[selectedProject.id] ?? 0"
               @close="closeDetails"
               @open="openProject"
               @share="(p) => (shareTarget = p)"
-              @add-to-folder="openAddToFolder"
               @annotation-click="openAnnotation"
             />
           </div>
@@ -599,6 +688,11 @@ watch(user, (u) => {
       :comparison-id="shareTarget.projectType === 'dual' ? shareTarget.comparisonVideo?.id : ''"
       :share-type="shareTarget.projectType === 'single' ? 'video' : 'comparison'"
       @close="shareTarget = null"
+    />
+
+    <ChangelogModal
+      :is-visible="showChangelog"
+      @close="showChangelog = false"
     />
   </div>
 </template>

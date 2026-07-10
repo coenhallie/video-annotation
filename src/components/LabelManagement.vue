@@ -220,6 +220,11 @@
                     <p class="text-sm font-medium text-gray-900">
                       {{ label.name }}
                     </p>
+                    <LabelInfoTooltip
+                      v-if="label.description"
+                      :description="label.description"
+                      class="ml-1.5"
+                    />
                     <span
                       v-if="label.isDefault"
                       class="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
@@ -227,12 +232,6 @@
                       Default
                     </span>
                   </div>
-                  <p
-                    v-if="label.description"
-                    class="text-sm text-gray-500 mt-1"
-                  >
-                    {{ label.description }}
-                  </p>
                   <div class="flex items-center mt-2 text-xs text-gray-400">
                     <span>Created {{ formatDate(label.createdAt) }}</span>
                     <span
@@ -470,6 +469,7 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import { LabelService } from '../services/labelService';
 import { useAuth } from '../composables/useAuth';
+import LabelInfoTooltip from './LabelInfoTooltip.vue';
 import type { Label, LabelStats } from '../types/labels';
 import { LABEL_COLORS, DEFAULT_LABELS } from '../types/labels';
 

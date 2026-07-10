@@ -31,6 +31,22 @@ export function addSecond(
   return mergeRanges([...ranges, [sec, sec + 1]]);
 }
 
+/**
+ * Coerce untrusted input (e.g. JSONB from a table without RLS) into
+ * well-formed ranges. mergeRanges destructures each element, so malformed
+ * entries must be dropped before any range math runs.
+ */
+export function sanitizeRanges(input: unknown): WatchedRange[] {
+  if (!Array.isArray(input)) return [];
+  return input.filter(
+    (r): r is WatchedRange =>
+      Array.isArray(r) &&
+      r.length === 2 &&
+      typeof r[0] === 'number' &&
+      typeof r[1] === 'number'
+  );
+}
+
 export function percentFromRanges(
   ranges: WatchedRange[],
   duration: number

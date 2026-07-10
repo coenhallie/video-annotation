@@ -421,9 +421,9 @@ defineExpose({
         </div>
       </div>
 
-      <div class="flex items-center space-x-2">
+      <div class="relative flex items-center space-x-2">
         <!-- Filter button -->
-        <div class="relative">
+        <div>
           <button
             :class="[
               'btn flex items-center space-x-1 relative',
@@ -457,7 +457,7 @@ defineExpose({
           <!-- Filter dropdown -->
           <div
             v-if="showFilterDropdown"
-            class="absolute right-0 mt-2 w-80 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-50"
+            class="absolute top-full right-0 mt-2 w-80 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-50"
             @click.stop
           >
             <div class="p-4">

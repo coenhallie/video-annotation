@@ -34,10 +34,12 @@ export class ShareService {
   ): Promise<string> {
     try {
       // Make the video public and set annotation permissions
-      await supabase
+      const { error } = await supabase
         .from('videos')
         .update({ isPublic: true, allowAnnotations })
         .eq('id', videoId);
+
+      if (error) throw error;
 
       // Generate the shareable URL with video ID
       const baseUrl = window.location.origin;
@@ -147,10 +149,12 @@ export class ShareService {
   // Make a video private again
   static async makeVideoPrivate(videoId: string): Promise<void> {
     try {
-      await supabase
+      const { error } = await supabase
         .from('videos')
         .update({ isPublic: false })
         .eq('id', videoId);
+
+      if (error) throw error;
     } catch (error) {
       console.error('❌ [ShareService] Error making video private:', error);
       throw error;
@@ -200,10 +204,12 @@ export class ShareService {
   ): Promise<string> {
     try {
       // Make the comparison video public and set annotation permissions
-      await supabase
+      const { error } = await supabase
         .from('comparison_videos')
         .update({ isPublic: true, allowAnnotations })
         .eq('id', comparisonId);
+
+      if (error) throw error;
 
       // Generate the shareable URL
       const baseUrl = window.location.origin;
@@ -494,10 +500,12 @@ export class ShareService {
    */
   static async makeComparisonVideoPrivate(comparisonId: string): Promise<void> {
     try {
-      await supabase
+      const { error } = await supabase
         .from('comparison_videos')
         .update({ isPublic: false })
         .eq('id', comparisonId);
+
+      if (error) throw error;
     } catch (error) {
       console.error(
         '❌ [ShareService] Error making comparison video private:',
@@ -508,6 +516,22 @@ export class ShareService {
   }
 
   // ===== COMMENT PERMISSION METHODS =====
+
+  /**
+   * Whether there is an authenticated Supabase session.
+   * Commenting/annotating on shared content is gated on authentication —
+   * anonymous visitors get view-only access.
+   */
+  private static async isUserAuthenticated(): Promise<boolean> {
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      return !!session?.user;
+    } catch {
+      return false;
+    }
+  }
 
   /**
    * Check if commenting is allowed on a shared video
@@ -560,15 +584,20 @@ export class ShareService {
         };
       }
 
-      const canComment = this.canCommentOnSharedVideo(video);
       // For shared public videos with allowAnnotations, users need authentication
       // Anonymous commenting is not allowed when allowAnnotations is true
+      const isAuthenticated = await this.isUserAuthenticated();
+      const canComment =
+        isAuthenticated && this.canCommentOnSharedVideo(video);
       const isAnonymous = sessionId ? true : false;
 
       return {
         canComment,
         isAnonymous,
         ...(sessionId && { sessionId }),
+        ...(!isAuthenticated && {
+          reason: 'Sign in required to comment on shared videos',
+        }),
       };
     } catch (error) {
       console.error(
@@ -741,15 +770,22 @@ export class ShareService {
       }
 
       // Check if comparison allows annotations (must be public AND allow annotations)
-      const canComment = comparison.isPublic && comparison.allowAnnotations;
       // For shared public comparison videos with allowAnnotations, users need authentication
       // Anonymous commenting is not allowed when allowAnnotations is true
+      const isAuthenticated = await this.isUserAuthenticated();
+      const canComment =
+        isAuthenticated &&
+        comparison.isPublic === true &&
+        comparison.allowAnnotations === true;
       const isAnonymous = sessionId ? true : false;
 
       return {
         canComment,
         isAnonymous,
         ...(sessionId && { sessionId }),
+        ...(!isAuthenticated && {
+          reason: 'Sign in required to comment on shared comparisons',
+        }),
       };
     } catch (error) {
       console.error(
