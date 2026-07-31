@@ -90,6 +90,13 @@ const closeModal = () => {
 // Add new entries to the TOP of this array
 const changelogEntries = ref([
   {
+    version: 'Beta v3.8.1',
+    date: 'July 31, 2026',
+    changes: [
+      'Removed manual video upload — videos now come from the pipeline only',
+    ],
+  },
+  {
     version: 'Beta v3.8',
     date: 'March 13, 2026',
     changes: [
