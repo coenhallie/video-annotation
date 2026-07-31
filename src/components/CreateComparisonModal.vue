@@ -178,15 +178,8 @@
                   No videos available
                 </h3>
                 <p class="text-gray-600 dark:text-gray-400 text-center max-w-md">
-                  You need at least two videos to create a comparison. Upload
-                  some videos first to get started.
+                  You need at least two videos to create a comparison.
                 </p>
-                <button
-                  class="mt-6 px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:shadow-lg transform hover:scale-105 transition-all"
-                  @click="$emit('upload-video')"
-                >
-                  Upload Videos
-                </button>
               </div>
 
               <!-- Step 1: Select Video A -->
@@ -687,7 +680,7 @@ const props = defineProps({
 });
 
 // Emits
-const emit = defineEmits(['close', 'comparison-created', 'upload-video']);
+const emit = defineEmits(['close', 'comparison-created']);
 
 // Auth
 const { user } = useAuth();

@@ -16,7 +16,6 @@ import AnnotationPanel from '@/components/AnnotationPanel.vue';
 import ThemeToggle from '@/components/ThemeToggle.vue';
 
 import SharedVideoAuthPrompt from '@/components/SharedVideoAuthPrompt.vue';
-import VideoUpload from '@/components/VideoUpload.vue';
 import UnifiedVideoPlayer from '@/components/UnifiedVideoPlayer.vue';
 import { ShareService } from '@/services/shareService';
 import { VideoService } from '@/services/videoService';
@@ -52,7 +51,6 @@ const {
   isComparisonModalOpen,
   isShareModalOpen,
   isSharedLinksModalOpen,
-  isVideoUploadModalOpen,
   isAnnotationFormVisible,
 
 } = storeToRefs(layoutStore);
@@ -729,46 +727,6 @@ const handleComparisonCreated = (comparison: any) => {
   });
   closeComparisonModal();
 };
-
-const openVideoUpload = () => {
-  layoutStore.openVideoUploadModal();
-};
-
-const closeVideoUpload = () => {
-  layoutStore.closeVideoUploadModal();
-};
-
-const handleVideoUploadSuccess = async (videoRecord: any) => {
-  console.log('✅ Video upload successful:', videoRecord);
-
-  // Close the upload modal
-  closeVideoUpload();
-
-  // Create a project-like object for the uploaded video
-  const uploadProject = {
-    id: videoRecord.projectId,
-    title:
-      videoRecord.title || videoRecord.originalFilename || 'Uploaded Video',
-    video: videoRecord,
-    videoId: videoRecord.id,
-    createdAt: videoRecord.createdAt,
-    updatedAt: videoRecord.updatedAt,
-  };
-
-  // Handle the project selection
-  await handleProjectSelected(uploadProject);
-
-  // Reopen the project management modal to show the new video
-  // This ensures the user sees their newly uploaded video in the list
-  isProjectModalOpen.value = true;
-};
-
-const handleVideoUploadError = (error: any) => {
-  console.error('❌ Video upload failed:', error);
-  // Error is already handled by the VideoUpload component
-};
-
-
 
 const loadVideo = (video: any, type = 'upload') => {
   videoLoaded.value = false;
@@ -1736,7 +1694,6 @@ watch(
       :is-visible="isProjectModalOpen"
       @close="layoutStore.closeProjectModal()"
       @project-selected="handleProjectSelected"
-      @upload-video="layoutStore.openVideoUploadModal()"
       @open-load-modal="openLoadModalWithTab('create')"
     />
 
@@ -1745,59 +1702,7 @@ watch(
       :is-visible="isComparisonModalOpen"
       @close="layoutStore.closeComparisonModal()"
       @comparison-created="handleComparisonCreated"
-      @upload-video="layoutStore.openVideoUploadModal()"
     />
-
-    <!-- Video Upload Modal -->
-    <Teleport to="body">
-      <Transition name="modal">
-        <div
-          v-if="isVideoUploadModalOpen"
-          class="fixed inset-0 z-50 flex items-center justify-center p-4"
-        >
-          <!-- Backdrop -->
-          <div
-            class="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            @click="layoutStore.closeVideoUploadModal()"
-          />
-
-          <!-- Modal Content -->
-          <div
-            class="relative bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-auto p-6"
-            @click.stop
-          >
-            <!-- Header -->
-            <div class="flex items-center justify-between mb-6">
-              <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Upload Video</h2>
-              <button
-                class="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                @click="layoutStore.closeVideoUploadModal()"
-              >
-                <svg
-                  class="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
-            </div>
-
-            <!-- Video Upload Component -->
-            <VideoUpload
-              @upload-success="handleVideoUploadSuccess"
-              @upload-error="handleVideoUploadError"
-            />
-          </div>
-        </div>
-      </Transition>
-    </Teleport>
 
     <!-- Share Video Modal -->
     <ShareModal

@@ -185,27 +185,6 @@
                     </svg>
                     Create Comparison
                   </button>
-
-                  <!-- Upload Button -->
-                  <button
-                    class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
-                    @click="showUploadDialog"
-                  >
-                    <svg
-                      class="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-                      />
-                    </svg>
-                    Upload Video
-                  </button>
                 </div>
               </div>
 
@@ -369,22 +348,15 @@
                     />
                   </svg>
                   <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                    {{ searchQuery ? 'No results found' : 'No projects yet' }}
+                    {{ searchQuery ? 'No results found' : 'No videos yet' }}
                   </h3>
                   <p class="text-gray-600 dark:text-gray-400 mb-4">
                     {{
                       searchQuery
                         ? 'Try adjusting your search terms'
-                        : 'Upload a video to get started'
+                        : "Videos appear here once they've been processed by the pipeline."
                     }}
                   </p>
-                  <button
-                    v-if="!searchQuery"
-                    class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                    @click="showUploadDialog"
-                  >
-                    Upload Your First Video
-                  </button>
                 </div>
 
                 <!-- Loading State -->
@@ -608,12 +580,7 @@ const props = defineProps({
 });
 
 // Emits
-const emit = defineEmits([
-  'close',
-  'project-selected',
-  'upload-video',
-  'open-load-modal',
-]);
+const emit = defineEmits(['close', 'project-selected', 'open-load-modal']);
 
 // Composables
 const { user } = useAuth();
@@ -871,13 +838,6 @@ const findFolderInTree = (
 
 const showNewFolderDialog = () => {
   showNewFolder.value = true;
-};
-
-const showUploadDialog = () => {
-  // Emit event to trigger video upload
-  emit('upload-video');
-  // Close the project management modal
-  emit('close');
 };
 
 const showCreateComparisonDialog = () => {

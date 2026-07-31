@@ -7,7 +7,6 @@ import type {
   ComparisonVideo,
 } from '../types/database';
 import { isComparisonVideo, isIndividualVideo } from '../types/database';
-import { VideoUploadService } from './videoUploadService';
 import { ThumbnailGenerator } from '../utils/thumbnailGenerator';
 import { AwsStorageService } from './awsStorageService';
 
@@ -344,16 +343,13 @@ export class VideoService {
 
     if (fetchError) throw fetchError;
 
-    // If it's an uploaded video, use the upload service to delete it
+    const { error } = await supabase.from('videos').delete().eq('id', videoId);
+    if (error) throw new Error(`Failed to delete video record: ${error.message}`);
+
+    // Videos uploaded before manual upload was removed still have a file in
+    // storage. A failure here leaves an orphaned file but is not fatal.
     if (video && video.videoType === 'upload' && video.filePath) {
-      await VideoUploadService.deleteUploadedVideo(videoId, video.filePath);
-    } else {
-      // For URL videos, just delete the database record
-      const { error } = await supabase
-        .from('videos')
-        .delete()
-        .eq('id', videoId);
-      if (error) throw error;
+      await supabase.storage.from('videos').remove([video.filePath]);
     }
   }
 
