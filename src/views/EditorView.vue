@@ -20,6 +20,7 @@ import DashboardModals from '@/components/DashboardModals.vue';
 import AnnotationBloom from '@/components/AnnotationBloom.vue';
 import { useLabelCatalog } from '@/composables/useLabelCatalog';
 import { buildAnnotationPayload } from '@/utils/annotationPayload';
+import { groupLabelsByCategory } from '@/utils/labelCategories';
 import { ShareService } from '@/services/shareService';
 import { VideoService } from '@/services/videoService';
 import { ComparisonVideoService } from '@/services/comparisonVideoService';
@@ -232,6 +233,14 @@ const selectedAnnotation = ref<Annotation | null>(null);
 // same catalog key to see the same labels.
 const { labels: bloomLabels } = useLabelCatalog(() => user.value?.id);
 
+// AnnotationBloom itself renders nothing when none of the catalog's labels carry
+// a recognised category prefix (see groupLabelsByCategory). openBloom must guard
+// on this same condition, not just a non-empty catalog, or right-click would
+// suppress the native context menu while the bloom renders nothing.
+const bloomHasCategories = computed(
+  () => groupLabelsByCategory(bloomLabels.value).length > 0
+);
+
 const bloomOpen = ref(false);
 const bloomX = ref(0);
 const bloomY = ref(0);
@@ -255,7 +264,7 @@ const openBloom = (event: MouseEvent) => {
   if (bloomReadOnly()) return;
   if (!user.value) return;
   if (drawingCoordinator?.isDrawingMode?.value) return;
-  if (bloomLabels.value.length === 0) return;
+  if (!bloomHasCategories.value) return;
 
   event.preventDefault();
 
