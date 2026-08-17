@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue';
 import { logger } from '../utils/logger';
 import { formatTime, formatFrame } from '@/utils/formatters';
+import { isCommentAnnotation } from '@/utils/annotationPayload';
 
 /* Narrow annotation typing for the template to satisfy TS plugin */
 interface TimelineAnnotation {
@@ -9,6 +10,8 @@ interface TimelineAnnotation {
   title?: string;
   timestamp: number;
   severity?: string;
+  /** Label ids. Empty or absent means this annotation is a comment. */
+  labels?: string[];
 }
 
 const __name = 'VideoTimelineComponent';
@@ -221,6 +224,9 @@ const getSeverityColor = (severity?: string) => {
   );
 };
 
+const isComment = (annotation: TimelineAnnotation) =>
+  isCommentAnnotation(annotation);
+
 // Optimized annotation positioning - use time-based for consistency
 /* (removed duplicate definition) */
 
@@ -335,6 +341,7 @@ const handlePlayPause = (): void => {
           v-for="annotation in (annotations as unknown as TimelineAnnotation[])"
           :key="annotation?.id ?? `${annotation.timestamp}`"
           data-annotation-marker
+          :data-annotation-id="annotation?.id"
           class="absolute top-0 bottom-0 cursor-pointer transition-all duration-200 z-5 hover:scale-110"
           :class="{
             'z-9': (selectedAnnotation as any)?.id === (annotation as any)?.id,
@@ -345,14 +352,26 @@ const handlePlayPause = (): void => {
             handleAnnotationClick(annotation as TimelineAnnotation, $event)
           "
         >
-          <!-- Circle shape for annotations -->
+          <!--
+            Labels are filled dots; a comment is a hollow ring, so a note reads
+            differently from an event at a glance. Same size and hit area either way.
+          -->
           <div
-            class="w-4 h-4 rounded-full border-2 border-white shadow-lg absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 opacity-90"
-            :class="{
-              'border-yellow-400 shadow-yellow-400/50 opacity-100 scale-110':
-                (selectedAnnotation as any)?.id === (annotation as any)?.id,
-            }"
-            :style="{ backgroundColor: getSeverityColor((annotation as any)?.severity) }"
+            class="w-4 h-4 rounded-full border-2 shadow-lg absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 opacity-90"
+            :class="[
+              isComment(annotation as TimelineAnnotation)
+                ? 'border-gray-300 bg-transparent'
+                : 'border-white',
+              {
+                'border-yellow-400 shadow-yellow-400/50 opacity-100 scale-110':
+                  (selectedAnnotation as any)?.id === (annotation as any)?.id,
+              },
+            ]"
+            :style="
+              isComment(annotation as TimelineAnnotation)
+                ? undefined
+                : { backgroundColor: getSeverityColor((annotation as any)?.severity) }
+            "
           />
         </div>
       </div>
