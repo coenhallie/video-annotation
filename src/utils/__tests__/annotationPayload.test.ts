@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   buildAnnotationPayload,
   DEFAULT_ANNOTATION_COLOR,
+  isCommentAnnotation,
 } from '../annotationPayload';
 import type { Label } from '@/types/labels';
 
@@ -114,5 +115,22 @@ describe('buildAnnotationPayload', () => {
     });
 
     expect(payload.color).toBe('#123456');
+  });
+});
+
+describe('isCommentAnnotation', () => {
+  it('treats an annotation with no labels as a comment', () => {
+    expect(isCommentAnnotation({ labels: [] })).toBe(true);
+  });
+
+  it('treats a missing labels array as a comment', () => {
+    // A freshly created comment never has one written: useVideoAnnotations
+    // only sets labels on the created object when the array is non-empty.
+    expect(isCommentAnnotation({})).toBe(true);
+    expect(isCommentAnnotation({ labels: null })).toBe(true);
+  });
+
+  it('does not treat a labelled annotation as a comment', () => {
+    expect(isCommentAnnotation({ labels: ['label-ball-missed'] })).toBe(false);
   });
 });
