@@ -16,9 +16,8 @@ import LabelFilter from './LabelFilter.vue';
 import { useAuth } from '../composables/useAuth';
 import { useGlobalComments } from '../composables/useGlobalComments';
 import { useAnnotationFiltering } from '../composables/useAnnotationFiltering';
-import { LabelService } from '../services/labelService';
+import { useLabelCatalog } from '../composables/useLabelCatalog';
 import type { DrawingData, Comment } from '../types/database';
-import type { Label } from '../types/labels';
 import type { UseDrawingCanvas } from '../composables/useDrawingCanvas';
 import type { UseDrawingCoordinator } from '../composables/useDrawingCoordinator';
 import type { DualVideoPlayer } from '../composables/useDualVideoPlayer';
@@ -167,9 +166,16 @@ const {
 });
 
 // Label state
-const availableLabels = ref<Label[]>([]);
+const {
+  labels: availableLabels,
+  labelsById: labelColors,
+  load: loadLabels,
+  reload: reloadLabels,
+} = useLabelCatalog(
+  () => user.value?.id,
+  () => props.projectId ?? undefined
+);
 const showLabelManagement = ref(false);
-const labelColors = ref<Record<string, Label>>({});
 const showFilterDropdown = ref(false);
 
 // Comment state
@@ -196,23 +202,6 @@ if (import.meta.env.DEV) {
 }
 
 const timeToFrame = (timeInSeconds: number) => _timeToFrame(timeInSeconds, props.fps);
-
-// Load labels for display
-const loadLabels = async () => {
-  try {
-    const labels = await LabelService.getLabels(
-      user.value?.id,
-      props.projectId
-    );
-    availableLabels.value = labels;
-    labelColors.value = {};
-    labels.forEach((label) => {
-      labelColors.value[label.id] = label;
-    });
-  } catch (error) {
-    console.error('Failed to load labels:', error);
-  }
-};
 
 onMounted(() => {
   if (import.meta.env.DEV) {
@@ -309,7 +298,7 @@ const openLabelManagement = () => {
 
 const closeLabelManagement = () => {
   showLabelManagement.value = false;
-  loadLabels();
+  reloadLabels();
 };
 
 const handleCreateLabel = (_labelName: string) => {
