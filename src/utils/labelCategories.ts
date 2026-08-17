@@ -25,9 +25,26 @@ const CATEGORY_NAMES: Record<LabelCategoryKey, string> = {
   BALL: 'Ball',
 };
 
+/**
+ * One-character glyph per category, for the bloom's tiles. Not simply the first
+ * letter: PITCH and PLR would both claim P, so PLR takes L. Every value here is
+ * distinct, which is what makes the glyph a usable shorthand on its own.
+ */
+const CATEGORY_LETTERS: Record<LabelCategoryKey, string> = {
+  EVT: 'E',
+  PITCH: 'P',
+  TEAM: 'T',
+  NPL: 'N',
+  PLR: 'L',
+  BALL: 'B',
+};
+
 export interface LabelCategoryGroup {
   key: LabelCategoryKey;
+  /** Friendly name, e.g. "Officials" for NPL. */
   name: string;
+  /** Single distinct character shown as the tile's glyph. */
+  letter: string;
   labels: Label[];
 }
 
@@ -73,6 +90,7 @@ export function groupLabelsByCategory(labels: Label[]): LabelCategoryGroup[] {
   return CATEGORY_ORDER.filter((key) => buckets.has(key)).map((key) => ({
     key,
     name: CATEGORY_NAMES[key],
+    letter: CATEGORY_LETTERS[key],
     labels: buckets.get(key) as Label[],
   }));
 }

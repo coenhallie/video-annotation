@@ -71,6 +71,22 @@ describe('groupLabelsByCategory', () => {
     );
   });
 
+  it('gives every category a distinct single-character glyph', () => {
+    const groups = groupLabelsByCategory([
+      makeLabel('EVT MISSED'),
+      makeLabel('PITCH LINES MISMATCH'),
+      makeLabel('TEAM ASSIGN WRONG'),
+      makeLabel('NPL MISSED'),
+      makeLabel('PLR MISSED'),
+      makeLabel('BALL MISSED'),
+    ]);
+    const letters = groups.map((g) => g.letter);
+    expect(letters).toEqual(['E', 'P', 'T', 'N', 'L', 'B']);
+    // PITCH and PLR both start with P, so the glyphs must not collide.
+    expect(new Set(letters).size).toBe(letters.length);
+    expect(letters.every((l) => l.length === 1)).toBe(true);
+  });
+
   it('omits categories with no labels', () => {
     const groups = groupLabelsByCategory([makeLabel('EVT MISSED')]);
     expect(groups).toHaveLength(1);

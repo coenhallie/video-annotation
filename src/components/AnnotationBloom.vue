@@ -13,9 +13,9 @@ const props = defineProps({
   y: { type: Number, default: 0 },
   labels: { type: Array as PropType<Label[]>, default: () => [] },
   /**
-   * 'full' is a whole ring around the cursor. 'up' is a semicircle opening
-   * upward from it, for callers anchored to something that must stay visible
-   * below the cursor - the timeline.
+   * 'full' fans the tiles all the way around the cursor. 'up' fans them through
+   * the upper half only, for callers anchored to something that must stay
+   * visible below the cursor - the timeline.
    */
   arc: { type: String as PropType<'full' | 'up'>, default: 'full' },
 });
@@ -25,67 +25,100 @@ const emit = defineEmits<{
   (e: 'close'): void;
 }>();
 
-// Ring geometry, in pixels. The half bloom gets more radial room because it has
-// half the angular room: its wedges are half as wide, so they need to be deeper
-// for the same label to stay legible.
-const GEOMETRY = {
-  full: { inner: 46, outer: 132, startDeg: 0, sweepDeg: 360 },
-  up: { inner: 52, outer: 168, startDeg: -90, sweepDeg: 180 },
-} as const;
+// ── Geometry ────────────────────────────────────────────────────────────────
+// Tiles are laid out along an arc around the pivot (the cursor). The arc's
+// radius is derived from the tile count rather than fixed, so tiles never
+// overlap however many there are.
 
-const PAD = 4; // slack so strokes are not clipped by the viewBox
+const TILE = 74; // tile edge
+const TILE_RADIUS = 18; // corner rounding
+// Generous, because on an arc a tile's caption sits alongside its lower
+// neighbour, not just below its own tile.
+const TILE_GAP = 30;
+const CAPTION_GAP = 12; // tile bottom to caption baseline
+const CAPTION_H = 14;
+const PAD = 6; // slack so strokes and shadows are not clipped
 const EDGE_MARGIN = 8;
 
-const geo = computed(() => GEOMETRY[props.arc] ?? GEOMETRY.full);
-const INNER_RADIUS = computed(() => geo.value.inner);
-const OUTER_RADIUS = computed(() => geo.value.outer);
-const LABEL_RADIUS = computed(() => (geo.value.inner + geo.value.outer) / 2);
-
-// The drawing box, and where the cursor (the pivot the bloom is anchored to)
-// sits inside it. A half bloom reserves no space below the pivot, so it never
-// covers what the caller anchored it to.
-const isHalf = computed(() => props.arc === 'up');
-const BOX_W = computed(() => geo.value.outer * 2 + PAD * 2);
-const BOX_H = computed(() =>
-  isHalf.value ? geo.value.outer + PAD * 2 : geo.value.outer * 2 + PAD * 2
-);
-const PIVOT_X = computed(() => BOX_W.value / 2);
-const PIVOT_Y = computed(() =>
-  isHalf.value ? BOX_H.value - PAD : BOX_H.value / 2
-);
+// The upward fan stops short of horizontal on purpose: a tile centred at
+// exactly +/-90 degrees would straddle the pivot line, so half of it - and all
+// of its caption - would fall below whatever the bloom is anchored to.
+const ARCS = {
+  full: { startDeg: 0, sweepDeg: 360, minRadius: 118 },
+  up: { startDeg: -65, sweepDeg: 130, minRadius: 150 },
+} as const;
 
 const activeCategory = ref<LabelCategoryGroup | null>(null);
 const hoveredKey = ref<string | null>(null);
 
 const categories = computed(() => groupLabelsByCategory(props.labels));
 
-interface Segment {
+const arcSpec = computed(() => ARCS[props.arc] ?? ARCS.full);
+const isHalf = computed(() => props.arc === 'up');
+
+interface Tile {
   key: string;
-  text: string;
+  glyph: string;
+  caption: string;
   title: string;
   color: string;
-  textColor: string;
-  path: string;
-  labelX: number;
-  labelY: number;
+  glyphColor: string;
+  cx: number;
+  cy: number;
+  rotation: number;
   onPick: () => void;
 }
 
-// Dark backing (see the circle drawn behind the wedges below) and light text
-// tones share the same near-black/near-white pair used elsewhere in the
-// bloom (the hub fill is rgba(15, 23, 42, ...), i.e. the same slate-900).
+/** The items currently on screen: categories at stage 1, that category's labels at stage 2. */
+const items = computed(() =>
+  activeCategory.value ? activeCategory.value.labels : categories.value
+);
+
+/**
+ * Radius that keeps neighbouring tiles at least TILE_GAP apart. The chord
+ * between two adjacent tile centres is 2r*sin(step/2), so solve that for r.
+ */
+const arcRadius = computed(() => {
+  const { sweepDeg, minRadius } = arcSpec.value;
+  const count = Math.max(items.value.length, 1);
+  // A full circle wraps, so every tile has two neighbours; a partial arc has
+  // one fewer gap than it has tiles.
+  const gaps = sweepDeg >= 360 ? count : Math.max(count - 1, 1);
+  const stepRad = ((sweepDeg / gaps) * Math.PI) / 180;
+  const needed = (TILE + TILE_GAP) / (2 * Math.sin(stepRad / 2));
+  return Math.max(minRadius, needed);
+});
+
+/** Half-extent of the drawn content, measured from the pivot. */
+const reach = computed(
+  () => arcRadius.value + TILE / 2 + CAPTION_GAP + CAPTION_H + PAD
+);
+
+const BOX_W = computed(() => reach.value * 2);
+const BOX_H = computed(() => (isHalf.value ? reach.value + PAD : reach.value * 2));
+const PIVOT_X = computed(() => BOX_W.value / 2);
+const PIVOT_Y = computed(() =>
+  isHalf.value ? BOX_H.value - PAD : BOX_H.value / 2
+);
+
+/** Angle 0 is straight up; angles increase clockwise. */
+const polar = (radius: number, angleDeg: number) => {
+  const rad = ((angleDeg - 90) * Math.PI) / 180;
+  return {
+    x: PIVOT_X.value + radius * Math.cos(rad),
+    y: PIVOT_Y.value + radius * Math.sin(rad),
+  };
+};
+
+// ── Colour ──────────────────────────────────────────────────────────────────
+// An idle tile is opaque dark; the hovered one is filled with its own colour.
+// Both are opaque, so the glyph's contrast never depends on the video behind.
+
+const TILE_IDLE_FILL = '#16191d';
+const TILE_IDLE_STROKE = 'rgba(255, 255, 255, 0.10)';
+const TILE_IDLE_GLYPH = '#e5e7eb';
 const TEXT_ON_LIGHT = '#0f172a';
 const TEXT_ON_DARK = '#ffffff';
-
-// Same colour as the opaque backing circle in the template. Wedge fills are
-// translucent, so what actually paints the screen is the wedge colour
-// blended over this, not the wedge colour alone.
-const BACKING_FILL = '#0f172a';
-
-// The steadier (unhovered) wedge fill-opacity - see the `path` binding below.
-// It is the more translucent of the two states, i.e. the one where the
-// backing shows through the most, so it is the harder case for contrast.
-const WEDGE_IDLE_OPACITY = 0.75;
 
 const parseHexRgb = (hex: string): [number, number, number] => {
   const normalized = hex.replace('#', '');
@@ -104,131 +137,96 @@ const parseHexRgb = (hex: string): [number, number, number] => {
 };
 
 /** Relative luminance of an sRGB colour (WCAG formula, sRGB -> linear). */
-const relativeLuminanceRgb = (r: number, g: number, b: number): number => {
+const relativeLuminance = (hex: string): number => {
   const channel = (value: number) => {
     const c = value / 255;
     return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
   };
+  const [r, g, b] = parseHexRgb(hex);
   return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
 };
 
-const relativeLuminance = (hex: string): number =>
-  relativeLuminanceRgb(...parseHexRgb(hex));
-
-/**
- * Alpha-blend `hex` over the opaque backing circle at the wedge's idle
- * fill-opacity, in sRGB space (matching how the browser actually composites
- * `fill-opacity`). This is the colour that is really on screen behind the
- * label text.
- */
-const compositeOverBacking = (hex: string): [number, number, number] => {
-  const [fr, fg, fb] = parseHexRgb(hex);
-  const [br, bg, bb] = parseHexRgb(BACKING_FILL);
-  const blend = (f: number, b: number) => WEDGE_IDLE_OPACITY * f + (1 - WEDGE_IDLE_OPACITY) * b;
-  return [blend(fr, br), blend(fg, bg), blend(fb, bb)];
-};
-
-/** WCAG contrast ratio between two relative luminances. */
-const contrastRatio = (l1: number, l2: number): number => {
-  const lighter = Math.max(l1, l2);
-  const darker = Math.min(l1, l2);
-  return (lighter + 0.05) / (darker + 0.05);
-};
+const contrastRatio = (l1: number, l2: number): number =>
+  (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
 
 const TEXT_ON_LIGHT_LUMINANCE = relativeLuminance(TEXT_ON_LIGHT);
 const TEXT_ON_DARK_LUMINANCE = relativeLuminance(TEXT_ON_DARK);
 
-/**
- * Pick whichever of the two text tones has higher contrast against the
- * wedge's actual, composited on-screen colour (not its raw hex).
- */
-const textColorFor = (hex: string): string => {
-  const backgroundLuminance = relativeLuminanceRgb(...compositeOverBacking(hex));
-  const darkContrast = contrastRatio(backgroundLuminance, TEXT_ON_LIGHT_LUMINANCE);
-  const lightContrast = contrastRatio(backgroundLuminance, TEXT_ON_DARK_LUMINANCE);
-  return darkContrast >= lightContrast ? TEXT_ON_LIGHT : TEXT_ON_DARK;
+/** Whichever text tone has more contrast against a filled tile of this colour. */
+const glyphColorOn = (hex: string): string => {
+  const background = relativeLuminance(hex);
+  return contrastRatio(background, TEXT_ON_LIGHT_LUMINANCE) >=
+    contrastRatio(background, TEXT_ON_DARK_LUMINANCE)
+    ? TEXT_ON_LIGHT
+    : TEXT_ON_DARK;
 };
 
-/** Angle 0 is straight up; angles increase clockwise. */
-const polar = (radius: number, angleDeg: number) => {
-  const rad = ((angleDeg - 90) * Math.PI) / 180;
-  return {
-    x: PIVOT_X.value + radius * Math.cos(rad),
-    y: PIVOT_Y.value + radius * Math.sin(rad),
-  };
-};
+// ── Tiles ───────────────────────────────────────────────────────────────────
 
-/** Annulus wedge from startDeg to endDeg. */
-const wedgePath = (startDeg: number, endDeg: number): string => {
-  const outer = OUTER_RADIUS.value;
-  const inner = INNER_RADIUS.value;
-  const outerStart = polar(outer, startDeg);
-  const outerEnd = polar(outer, endDeg);
-  const innerEnd = polar(inner, endDeg);
-  const innerStart = polar(inner, startDeg);
-  const largeArc = endDeg - startDeg > 180 ? 1 : 0;
-  return [
-    `M ${outerStart.x} ${outerStart.y}`,
-    `A ${outer} ${outer} 0 ${largeArc} 1 ${outerEnd.x} ${outerEnd.y}`,
-    `L ${innerEnd.x} ${innerEnd.y}`,
-    `A ${inner} ${inner} 0 ${largeArc} 0 ${innerStart.x} ${innerStart.y}`,
-    'Z',
-  ].join(' ');
-};
+// Tiles lean with the arc, but only a fraction of the way, so the glyphs stay
+// close to upright and readable.
+const TILT_DAMPING = 0.1;
 
-/** Half-disc opening upward from the pivot, used for the half bloom's backing and hub. */
-const halfDiscPath = (radius: number): string => {
-  const cx = PIVOT_X.value;
-  const cy = PIVOT_Y.value;
-  return `M ${cx - radius} ${cy} A ${radius} ${radius} 0 0 1 ${cx + radius} ${cy} Z`;
-};
-
-const buildSegments = <T,>(
-  items: T[],
-  describe: (item: T) => { key: string; text: string; title: string; color: string },
+const buildTiles = <T,>(
+  list: T[],
+  describe: (item: T) => {
+    key: string;
+    glyph: string;
+    caption: string;
+    title: string;
+    color: string;
+  },
   pick: (item: T) => void
-): Segment[] => {
-  const { startDeg, sweepDeg } = geo.value;
-  const step = sweepDeg / items.length;
-  // A single item filling a whole circle would be a degenerate 360 degree arc,
-  // so leave a small gap. A half bloom never reaches 360 and needs no such gap.
-  const sweep = sweepDeg >= 360 && items.length === 1 ? 359.9 : step;
-  return items.map((item, index) => {
-    const start = startDeg + index * step;
-    const mid = start + sweep / 2;
-    const centroid = polar(LABEL_RADIUS.value, mid);
+): Tile[] => {
+  const { startDeg, sweepDeg } = arcSpec.value;
+  const count = list.length;
+  const gaps = sweepDeg >= 360 ? count : Math.max(count - 1, 1);
+  const step = sweepDeg / gaps;
+  // On a partial arc the first and last tiles sit on its ends; on a full circle
+  // they are evenly spaced with no seam, so nudge by half a step.
+  const offset = sweepDeg >= 360 ? step / 2 : 0;
+  return list.map((item, index) => {
+    const angle = count === 1 ? startDeg + sweepDeg / 2 : startDeg + offset + index * step;
+    const centre = polar(arcRadius.value, angle);
     const described = describe(item);
     return {
       ...described,
-      textColor: textColorFor(described.color),
-      path: wedgePath(start, start + sweep),
-      labelX: centroid.x,
-      labelY: centroid.y,
+      glyphColor: glyphColorOn(described.color),
+      cx: centre.x,
+      cy: centre.y,
+      rotation: angle * TILT_DAMPING,
       onPick: () => pick(item),
     };
   });
 };
 
-const segments = computed<Segment[]>(() => {
+const tiles = computed<Tile[]>(() => {
   const category = activeCategory.value;
   if (category) {
-    return buildSegments(
+    return buildTiles(
       category.labels,
-      (label) => ({
-        key: label.id,
-        text: labelShortName(label),
-        title: label.description ? `${label.name}: ${label.description}` : label.name,
-        color: label.color,
-      }),
+      (label) => {
+        const short = labelShortName(label);
+        return {
+          key: label.id,
+          // Stage 2 has no single-letter identity to lean on, so the tile
+          // carries the label's own words and the caption is dropped.
+          glyph: '',
+          caption: short,
+          title: label.description ? `${label.name}: ${label.description}` : label.name,
+          color: label.color,
+        };
+      },
       (label) => emit('select', label)
     );
   }
-  return buildSegments(
+  return buildTiles(
     categories.value,
     (group) => ({
       key: group.key,
-      text: group.name,
-      title: `${group.name} (${group.labels.length})`,
+      glyph: group.letter,
+      caption: group.key,
+      title: `${group.name} - ${group.labels.length} label${group.labels.length === 1 ? '' : 's'}`,
       color: group.labels[0]?.color ?? '#6b7280',
     }),
     (group) => {
@@ -238,10 +236,9 @@ const segments = computed<Segment[]>(() => {
   );
 });
 
-/**
- * Keep the whole ring on screen. The bloom is anchored at the cursor but slides
- * inward near a viewport edge rather than being clipped.
- */
+/** Stage 2 puts the label's words inside the tile, wrapped to fit. */
+const tileWords = (tile: Tile): string[] => (tile.glyph ? [] : tile.caption.split(' '));
+
 const position = computed(() => {
   // Clamp the pivot so the whole box stays on screen, then place the box by
   // subtracting where the pivot sits inside it.
@@ -252,12 +249,16 @@ const position = computed(() => {
   };
   const px = clamp(props.x, PIVOT_X.value, BOX_W.value, window.innerWidth);
   const py = clamp(props.y, PIVOT_Y.value, BOX_H.value, window.innerHeight);
-  return {
-    left: `${px - PIVOT_X.value}px`,
-    top: `${py - PIVOT_Y.value}px`,
-  };
+  return { left: `${px - PIVOT_X.value}px`, top: `${py - PIVOT_Y.value}px` };
 });
 
+// The Esc/Back pill sits at the pivot, in the empty middle of the fan. On a
+// half bloom the pivot is the caller's anchor edge, so lift the pill clear of it.
+const HUB_W = 60;
+const HUB_H = 26;
+const hubY = computed(() =>
+  isHalf.value ? PIVOT_Y.value - HUB_H - 4 : PIVOT_Y.value - HUB_H / 2
+);
 const hubText = computed(() => (activeCategory.value ? 'Back' : 'Esc'));
 
 const handleHub = () => {
@@ -292,8 +293,7 @@ watch(
   { immediate: true }
 );
 
-// Reposition without a close/reopen (e.g. the caller moves the bloom to a new
-// cursor location while it is still open) should also reset to stage 1,
+// Repositioning without a close/reopen should also reset to stage 1, kept
 // independent of the Escape-listener lifecycle above, which stays tied to `open`.
 watch(
   () => [props.x, props.y],
@@ -317,98 +317,111 @@ onBeforeUnmount(() => {
     @click="emit('close')"
     @contextmenu.prevent="emit('close')"
   >
-    <div
-      class="absolute"
-      :style="position"
-    >
+    <div class="absolute" :style="position">
       <svg
         :width="BOX_W"
         :height="BOX_H"
         :viewBox="`0 0 ${BOX_W} ${BOX_H}`"
-        class="drop-shadow-2xl"
       >
-        <!--
-          Opaque backing so the wedges' translucent fills always composite
-          over a known dark base instead of whatever video frame is behind
-          the bloom - otherwise contrast would shift frame to frame.
-        -->
-        <path
-          v-if="isHalf"
-          :d="halfDiscPath(OUTER_RADIUS)"
-          fill="#0f172a"
-        />
-        <circle
-          v-else
-          :cx="PIVOT_X"
-          :cy="PIVOT_Y"
-          :r="OUTER_RADIUS"
-          fill="#0f172a"
-        />
-
         <g
-          v-for="segment in segments"
-          :key="segment.key"
+          v-for="tile in tiles"
+          :key="tile.key"
           class="cursor-pointer"
-          @mouseenter="hoveredKey = segment.key"
+          @mouseenter="hoveredKey = tile.key"
           @mouseleave="hoveredKey = null"
-          @click.stop="segment.onPick()"
+          @click.stop="tile.onPick()"
         >
-          <title>{{ segment.title }}</title>
-          <path
-            :d="segment.path"
-            :fill="segment.color"
-            :fill-opacity="hoveredKey === segment.key ? 0.95 : 0.75"
-            stroke="rgba(15, 23, 42, 0.85)"
-            stroke-width="2"
-          />
-          <text
-            :x="segment.labelX"
-            :y="segment.labelY"
-            text-anchor="middle"
-            dominant-baseline="middle"
-            :fill="segment.textColor"
-            class="pointer-events-none select-none text-[10px] font-semibold uppercase tracking-wide"
-          >
-            <tspan
-              v-for="(word, index) in segment.text.split(' ')"
-              :key="index"
-              :x="segment.labelX"
-              :dy="index === 0 ? -((segment.text.split(' ').length - 1) * 5.5) : 11"
+          <title>{{ tile.title }}</title>
+
+          <g :transform="`rotate(${tile.rotation} ${tile.cx} ${tile.cy})`">
+            <rect
+              :x="tile.cx - TILE / 2"
+              :y="tile.cy - TILE / 2"
+              :width="TILE"
+              :height="TILE"
+              :rx="TILE_RADIUS"
+              :ry="TILE_RADIUS"
+              :fill="hoveredKey === tile.key ? tile.color : TILE_IDLE_FILL"
+              :stroke="hoveredKey === tile.key ? tile.color : TILE_IDLE_STROKE"
+              stroke-width="1.5"
+            />
+
+            <!-- Colour pip, so the item stays identifiable while unselected. -->
+            <circle
+              :cx="tile.cx + TILE / 2 - 15"
+              :cy="tile.cy - TILE / 2 + 15"
+              r="4"
+              :fill="hoveredKey === tile.key ? tile.glyphColor : tile.color"
+            />
+
+            <text
+              v-if="tile.glyph"
+              :x="tile.cx"
+              :y="tile.cy + 2"
+              text-anchor="middle"
+              dominant-baseline="middle"
+              :fill="hoveredKey === tile.key ? tile.glyphColor : TILE_IDLE_GLYPH"
+              class="pointer-events-none select-none text-[30px] font-light"
             >
-              {{ word }}
-            </tspan>
+              {{ tile.glyph }}
+            </text>
+
+            <!-- Stage 2: the label's own words, inside the tile. -->
+            <text
+              v-else
+              :x="tile.cx"
+              :y="tile.cy"
+              text-anchor="middle"
+              dominant-baseline="middle"
+              :fill="hoveredKey === tile.key ? tile.glyphColor : TILE_IDLE_GLYPH"
+              class="pointer-events-none select-none text-[10px] font-semibold uppercase tracking-wide"
+            >
+              <tspan
+                v-for="(word, index) in tileWords(tile)"
+                :key="index"
+                :x="tile.cx"
+                :dy="index === 0 ? -((tileWords(tile).length - 1) * 5.5) : 11"
+              >
+                {{ word }}
+              </tspan>
+            </text>
+          </g>
+
+          <!-- Caption stays upright, outside the tile. -->
+          <text
+            v-if="tile.glyph"
+            :x="tile.cx"
+            :y="tile.cy + TILE / 2 + CAPTION_GAP + 4"
+            text-anchor="middle"
+            :fill="hoveredKey === tile.key ? '#e5e7eb' : '#71717a'"
+            class="pointer-events-none select-none text-[10px] font-medium uppercase tracking-[0.18em]"
+          >
+            {{ tile.caption }}
           </text>
         </g>
 
-        <path
-          v-if="isHalf"
-          :d="halfDiscPath(INNER_RADIUS)"
-          fill="rgba(15, 23, 42, 0.92)"
-          stroke="rgba(148, 163, 184, 0.5)"
-          stroke-width="2"
-          class="cursor-pointer"
-          @click.stop="handleHub()"
-        />
-        <circle
-          v-else
-          :cx="PIVOT_X"
-          :cy="PIVOT_Y"
-          :r="INNER_RADIUS"
-          fill="rgba(15, 23, 42, 0.92)"
-          stroke="rgba(148, 163, 184, 0.5)"
-          stroke-width="2"
-          class="cursor-pointer"
-          @click.stop="handleHub()"
-        />
-        <text
-          :x="PIVOT_X"
-          :y="isHalf ? PIVOT_Y - INNER_RADIUS * 0.45 : PIVOT_Y"
-          text-anchor="middle"
-          dominant-baseline="middle"
-          class="pointer-events-none select-none fill-slate-300 text-[11px] font-semibold uppercase tracking-wide"
-        >
-          {{ hubText }}
-        </text>
+        <g class="cursor-pointer" @click.stop="handleHub()">
+          <rect
+            :x="PIVOT_X - HUB_W / 2"
+            :y="hubY"
+            :width="HUB_W"
+            :height="HUB_H"
+            :rx="HUB_H / 2"
+            :ry="HUB_H / 2"
+            fill="rgba(15, 23, 42, 0.92)"
+            stroke="rgba(148, 163, 184, 0.35)"
+            stroke-width="1.5"
+          />
+          <text
+            :x="PIVOT_X"
+            :y="hubY + HUB_H / 2 + 1"
+            text-anchor="middle"
+            dominant-baseline="middle"
+            class="pointer-events-none select-none fill-slate-400 text-[10px] font-medium uppercase tracking-[0.14em]"
+          >
+            {{ hubText }}
+          </text>
+        </g>
       </svg>
     </div>
   </div>
