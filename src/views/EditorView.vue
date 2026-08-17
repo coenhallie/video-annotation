@@ -21,7 +21,6 @@ import AnnotationQuickPick from '@/components/AnnotationQuickPick.vue';
 import { useLabelCatalog } from '@/composables/useLabelCatalog';
 import { buildAnnotationPayload } from '@/utils/annotationPayload';
 import { canCreateAnnotations } from '@/utils/annotationPermissions';
-import { groupLabelsByCategory } from '@/utils/labelCategories';
 import { ShareService } from '@/services/shareService';
 import { VideoService } from '@/services/videoService';
 import { ComparisonVideoService } from '@/services/comparisonVideoService';
@@ -274,14 +273,6 @@ const selectedAnnotation = ref<Annotation | null>(null);
 // the same catalog key to see the same labels.
 const { labels: quickPickLabels } = useLabelCatalog(() => user.value?.id);
 
-// AnnotationQuickPick renders nothing when none of the catalog's labels carry a
-// recognised category prefix (see groupLabelsByCategory). The open handlers must
-// guard on that same condition, not just a non-empty catalog, or right-click
-// would suppress the native context menu while the panel renders nothing.
-const quickPickHasCategories = computed(
-  () => groupLabelsByCategory(quickPickLabels.value).length > 0
-);
-
 const quickPickOpen = ref(false);
 const quickPickX = ref(0);
 const quickPickY = ref(0);
@@ -311,7 +302,6 @@ const openQuickPick = (event: MouseEvent) => {
   if (quickPickReadOnly()) return;
   if (!user.value) return;
   if (drawingCoordinator?.isDrawingMode?.value) return;
-  if (!quickPickHasCategories.value) return;
 
   event.preventDefault();
 
@@ -346,7 +336,6 @@ const openQuickPickAtTime = (payload: {
   if (quickPickReadOnly()) return;
   if (!user.value) return;
   if (drawingCoordinator?.isDrawingMode?.value) return;
-  if (!quickPickHasCategories.value) return;
 
   const activeFps = fps.value || 30;
   quickPickSnapshot.value = {
@@ -385,6 +374,60 @@ const handleQuickPickSelect = async (label: Label) => {
     notifyError(
       'Failed to add annotation',
       err instanceof Error ? err.message : 'The annotation could not be saved. Please try again.'
+    );
+  }
+};
+
+/**
+ * Playback pauses while a comment is being typed, so the annotator keeps
+ * looking at the frame they are describing, and resumes only if it had been
+ * running. The frame itself comes from quickPickSnapshot, taken when the panel
+ * opened, so this is purely about what is on screen.
+ */
+const commentModeWasPlaying = ref(false);
+
+const handleQuickPickCommentMode = (active: boolean) => {
+  if (active) {
+    commentModeWasPlaying.value = isPlaying.value;
+    unifiedVideoPlayerRef.value?.pause();
+    return;
+  }
+  if (commentModeWasPlaying.value) unifiedVideoPlayerRef.value?.play();
+  commentModeWasPlaying.value = false;
+};
+
+/**
+ * A comment is an annotation with no labels: the text is the body, and a real
+ * label can be attached later from the sidebar.
+ */
+const handleQuickPickComment = async (text: string) => {
+  const snapshot = quickPickSnapshot.value;
+  closeQuickPick();
+  if (!snapshot) return;
+
+  // The panel already trims and refuses empty text; this is the same last line
+  // of defence as handleAddAnnotation's permission check.
+  const content = text.trim();
+  if (!content) return;
+
+  try {
+    await handleAddAnnotation(
+      buildAnnotationPayload({
+        labels: quickPickLabels.value,
+        labelIds: [],
+        content,
+        frame: snapshot.frame,
+        fps: snapshot.fps,
+        dual: snapshot.dual,
+      })
+    );
+  } catch (err) {
+    console.error('Failed to create comment from quick pick:', err);
+    notifyError(
+      'Failed to add comment',
+      err instanceof Error
+        ? err.message
+        : 'The comment could not be saved. Please try again.'
     );
   }
 };
@@ -1342,6 +1385,8 @@ watch(
         :frame="quickPickSnapshot?.frame ?? 0"
         :fps="quickPickSnapshot?.fps ?? 30"
         @select="handleQuickPickSelect"
+        @comment="handleQuickPickComment"
+        @comment-mode="handleQuickPickCommentMode"
         @close="closeQuickPick"
       />
 
