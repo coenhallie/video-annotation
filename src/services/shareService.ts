@@ -13,6 +13,8 @@ export interface SharedVideoWithCommentPermissions {
   url?: string;
   filePath?: string;
   videoType: string;
+  /** `videos.ownerId` - needed to tell an owner from a share visitor. */
+  ownerId?: string;
   isPublic: boolean;
   canComment: boolean;
   allowAnnotations: boolean;
@@ -113,6 +115,7 @@ export class ShareService {
         url: video.url,
         filePath: video.filePath,
         videoType: video.videoType,
+        ownerId: video.ownerId,
         isPublic: video.isPublic,
         canComment: canComment,
         allowAnnotations: video.allowAnnotations || false,
@@ -378,6 +381,7 @@ export class ShareService {
         description: comparison.description,
         videoA: videoA,
         videoB: videoB,
+        ownerId: comparison.userId,
         isPublic: comparison.isPublic,
         canComment: canComment,
         allowAnnotations: comparison.allowAnnotations || false,

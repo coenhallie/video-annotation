@@ -275,6 +275,8 @@ export interface SharedComparisonVideoWithCommentPermissions {
   id: string;
   title: string;
   description?: string;
+  /** `comparison_videos.userId` - needed to tell an owner from a share visitor. */
+  ownerId?: string;
   videoA: Record<string, unknown> | null; // SharedVideoWithCommentPermissions from shareService
   videoB: Record<string, unknown> | null; // SharedVideoWithCommentPermissions from shareService
   isPublic: boolean;

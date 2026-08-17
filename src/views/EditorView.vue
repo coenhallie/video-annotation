@@ -20,6 +20,7 @@ import DashboardModals from '@/components/DashboardModals.vue';
 import AnnotationQuickPick from '@/components/AnnotationQuickPick.vue';
 import { useLabelCatalog } from '@/composables/useLabelCatalog';
 import { buildAnnotationPayload } from '@/utils/annotationPayload';
+import { canCreateAnnotations } from '@/utils/annotationPermissions';
 import { groupLabelsByCategory } from '@/utils/labelCategories';
 import { ShareService } from '@/services/shareService';
 import { VideoService } from '@/services/videoService';
@@ -198,6 +199,36 @@ const currentProjectId = computed(() => {
   return null;
 });
 
+/**
+ * Whether the signed-in user may create annotations on whatever is open.
+ *
+ * Annotating is open to any signed-in user on any video they can see, so in
+ * practice this only rules out anonymous share-link visitors - the `annotations`
+ * INSERT policies all require `auth.uid()`. It still has to be checked rather
+ * than assumed: without it the editor offers the quick pick to visitors whose
+ * insert the database answers with a 403 (`42501 new row violates row-level
+ * security policy`) after a label has already been picked.
+ *
+ * Kept separate from AnnotationPanel's `read-only` prop, which governs
+ * commenting - a view-only share denies comments but no longer denies
+ * annotations.
+ */
+const canAnnotate = computed(() => {
+  const comparison = comparisonWorkflow.currentComparison.value;
+  if (playerMode.value === 'dual' && comparison) {
+    return canCreateAnnotations(
+      {
+        // comparison_videos names its owner column `userId`, not `ownerId`.
+        ownerId: (comparison as Partial<ComparisonVideo>).userId,
+        isPublic: (comparison as Partial<ComparisonVideo>).isPublic,
+      },
+      user.value?.id
+    );
+  }
+
+  return canCreateAnnotations(currentVideoObject.value, user.value?.id);
+});
+
 // Annotations data
 const {
   annotations,
@@ -223,6 +254,16 @@ const {
 );
 
 const handleAddAnnotation = async (annotationData: AnnotationFormData) => {
+  // Last line of defence: every affordance is hidden when canAnnotate is false,
+  // so reaching here means a caller bypassed its own guard. Fail here rather
+  // than letting the database answer with a 403.
+  if (!canAnnotate.value) {
+    notifyError(
+      'You cannot annotate this video',
+      'Sign in to add annotations.'
+    );
+    return;
+  }
   return await addAnnotation(annotationData);
 };
 
@@ -255,10 +296,10 @@ const quickPickSnapshot = ref<{
   dual: { videoAFrame: number; videoBFrame: number } | null;
 } | null>(null);
 
-// A plain function, not a computed: canComment() is not reactive, so a computed
-// would cache a stale answer.
-const quickPickReadOnly = () =>
-  (isSharedVideo.value || isSharedComparison.value) && !canComment();
+// canComment() deliberately plays no part here: it answers whether this viewer
+// may *comment*, which a view-only share denies, and annotating is no longer
+// tied to the share permission.
+const quickPickReadOnly = () => !canAnnotate.value;
 
 const openQuickPick = (event: MouseEvent) => {
   // VideoControls.vue's root element (play/pause, frame-step, mute, volume,
@@ -1329,6 +1370,7 @@ watch(
             :fps="fps || 30"
             :drawing-canvas="drawingCanvas"
             :read-only="(isSharedVideo || isSharedComparison) && !canComment()"
+            :can-annotate="canAnnotate"
             :video-id="currentVideoId || ''"
             :loading="annotationsLoading"
             :is-dual-mode="playerMode === 'dual'"

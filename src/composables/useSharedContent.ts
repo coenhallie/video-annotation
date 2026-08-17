@@ -113,6 +113,11 @@ export function useSharedContent(deps: {
       {
         id: shareData.id,
         url: shareData.url || '',
+        // Carried through so the editor can tell whether this visitor may
+        // annotate; without them every share link looks view-only.
+        ...(shareData.ownerId ? { ownerId: shareData.ownerId } : {}),
+        isPublic: shareData.isPublic,
+        allowAnnotations: shareData.allowAnnotations,
       },
       'shared',
     );
@@ -133,7 +138,8 @@ export function useSharedContent(deps: {
       videoA: sharedComparisonData.videoA,
       videoB: sharedComparisonData.videoB,
       isPublic: sharedComparisonData.isPublic,
-      userId: '',
+      allowAnnotations: sharedComparisonData.allowAnnotations,
+      userId: sharedComparisonData.ownerId || '',
       createdAt: '',
       updatedAt: '',
     };
@@ -164,6 +170,9 @@ export function useSharedContent(deps: {
         {
           id: freshShareData.id,
           url: freshShareData.url || '',
+          ...(freshShareData.ownerId ? { ownerId: freshShareData.ownerId } : {}),
+          isPublic: freshShareData.isPublic,
+          allowAnnotations: freshShareData.allowAnnotations,
         },
         'shared',
       );
@@ -202,7 +211,8 @@ export function useSharedContent(deps: {
         videoA: freshComparisonData.videoA,
         videoB: freshComparisonData.videoB,
         isPublic: freshComparisonData.isPublic,
-        userId: '',
+        allowAnnotations: freshComparisonData.allowAnnotations,
+        userId: freshComparisonData.ownerId || '',
         createdAt: '',
         updatedAt: '',
       };

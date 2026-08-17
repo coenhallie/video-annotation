@@ -17,19 +17,29 @@ export interface ComparisonVideoRecord {
   videoAId: string;
   videoBId: string;
   isPublic?: boolean;
+  /** Share permission: whether visitors may annotate, not just view. */
+  allowAnnotations?: boolean;
   thumbnailUrl?: string;
   /** Optionally hydrated relations */
   videoA?: Video;
   videoB?: Video;
 }
 
+/**
+ * The one projection every read of `comparison_videos` uses. Kept in a single
+ * constant because it was previously duplicated across six queries, and a
+ * column missing from one of them silently produces `undefined` at the call
+ * site rather than an error - that is how `allowAnnotations` went missing and
+ * made shared comparisons look view-only.
+ */
+const COMPARISON_COLUMNS =
+  'id, title, description, createdAt, updatedAt, userId, videoAId, videoBId, isPublic, allowAnnotations, thumbnailUrl, videoA:videoAId(*), videoB:videoBId(*)';
+
 export const ComparisonVideoService = {
   async getById(id: string): Promise<ComparisonVideoRecord | null> {
     const { data, error } = await supabase
       .from('comparison_videos')
-      .select(
-        'id, title, description, createdAt, updatedAt, userId, videoAId, videoBId, isPublic, thumbnailUrl, videoA:videoAId(*), videoB:videoBId(*)'
-      )
+      .select(COMPARISON_COLUMNS)
       .eq('id', id)
       .single();
 
@@ -50,9 +60,7 @@ export const ComparisonVideoService = {
     // Check both combinations since A vs B is the same as B vs A
     let query = supabase
       .from('comparison_videos')
-      .select(
-        'id, title, description, createdAt, updatedAt, userId, videoAId, videoBId, isPublic, thumbnailUrl, videoA:videoAId(*), videoB:videoBId(*)'
-      );
+      .select(COMPARISON_COLUMNS);
 
     // Add user filter if provided
     if (userId) {
@@ -122,9 +130,7 @@ export const ComparisonVideoService = {
     const { data, error } = await supabase
       .from('comparison_videos')
       .insert(payload)
-      .select(
-        'id, title, description, createdAt, updatedAt, userId, videoAId, videoBId, isPublic, thumbnailUrl, videoA:videoAId(*), videoB:videoBId(*)'
-      )
+      .select(COMPARISON_COLUMNS)
       .single();
 
     if (error) {
@@ -160,9 +166,7 @@ export const ComparisonVideoService = {
   ): Promise<ComparisonVideoRecord[]> {
     const { data, error } = await supabase
       .from('comparison_videos')
-      .select(
-        'id, title, description, createdAt, updatedAt, userId, videoAId, videoBId, isPublic, thumbnailUrl, videoA:videoAId(*), videoB:videoBId(*)'
-      )
+      .select(COMPARISON_COLUMNS)
       .eq('userId', userId)
       .order('createdAt', { ascending: false });
 
@@ -182,9 +186,7 @@ export const ComparisonVideoService = {
   async getAllComparisonVideos(): Promise<ComparisonVideoRecord[]> {
     const { data, error } = await supabase
       .from('comparison_videos')
-      .select(
-        'id, title, description, createdAt, updatedAt, userId, videoAId, videoBId, isPublic, thumbnailUrl, videoA:videoAId(*), videoB:videoBId(*)'
-      )
+      .select(COMPARISON_COLUMNS)
       .order('createdAt', { ascending: false });
     if (error) {
       console.warn('⚠️ [ComparisonVideoService] getAllComparisonVideos error:', error);
@@ -199,9 +201,7 @@ export const ComparisonVideoService = {
   async getComparisonVideoById(id: string): Promise<ComparisonVideoRecord | null> {
     const { data, error } = await supabase
       .from('comparison_videos')
-      .select(
-        'id, title, description, createdAt, updatedAt, userId, videoAId, videoBId, isPublic, thumbnailUrl, videoA:videoAId(*), videoB:videoBId(*)'
-      )
+      .select(COMPARISON_COLUMNS)
       .eq('id', id)
       .maybeSingle();
     if (error) {

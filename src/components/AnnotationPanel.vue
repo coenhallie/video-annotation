@@ -53,6 +53,16 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  /**
+   * Whether the viewer may create annotations, which is narrower than
+   * `readOnly`: a view-only share still permits commenting, so the two cannot
+   * share a flag. Mirrors the `annotations` INSERT row-level security policies
+   * (see utils/annotationPermissions).
+   */
+  canAnnotate: {
+    type: Boolean,
+    default: true,
+  },
   videoId: {
     type: String,
     default: null,
@@ -366,20 +376,10 @@ defineExpose({
     <div
       class="sticky top-0 z-10 flex justify-between items-center p-2 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
     >
-      <h3
-        v-if="readOnly"
-        class="text-sm font-medium text-gray-600 dark:text-gray-300"
-      >
-        Annotations (View Only)
-      </h3>
-      <h3
-        v-else-if="!isAuthenticated"
-        class="text-sm font-medium text-gray-600 dark:text-gray-300"
-      >
-        Annotations (Comments Enabled)
-      </h3>
+      <!-- canAnnotate leads: a view-only share still denies commenting, but no
+           longer denies annotating, so readOnly must not decide this. -->
       <div
-        v-else
+        v-if="canAnnotate"
         class="flex-1 flex items-center"
       >
         <!-- Active filter indicator -->
@@ -406,6 +406,18 @@ defineExpose({
             active</span>
         </div>
       </div>
+      <h3
+        v-else-if="!readOnly && !isAuthenticated"
+        class="text-sm font-medium text-gray-600 dark:text-gray-300"
+      >
+        Annotations (Comments Enabled)
+      </h3>
+      <h3
+        v-else
+        class="text-sm font-medium text-gray-600 dark:text-gray-300"
+      >
+        Annotations (View Only)
+      </h3>
 
       <div class="relative flex items-center space-x-2">
         <!-- Filter button -->
@@ -494,7 +506,7 @@ defineExpose({
 
         <!-- Add button -->
         <button
-          v-if="!readOnly && isAuthenticated"
+          v-if="canAnnotate"
           class="btn btn-primary flex items-center space-x-1"
           title="Add new annotation"
           @click="startAddAnnotation"
@@ -523,7 +535,7 @@ defineExpose({
 
     <!-- Add/Edit Form -->
     <AnnotationForm
-      v-if="!readOnly"
+      v-if="canAnnotate"
       ref="annotationFormRef"
       :current-frame="currentFrame"
       :current-time="currentTime"
@@ -594,8 +606,19 @@ defineExpose({
         <p class="text-sm mb-1">
           No annotations yet
         </p>
-        <p class="text-xs text-gray-400 dark:text-gray-500">
+        <p
+          v-if="canAnnotate"
+          class="text-xs text-gray-400 dark:text-gray-500"
+        >
           Click "Add" to create your first annotation
+        </p>
+        <!-- No third branch: canAnnotate is briefly false while the video
+             loads, and a signed-in user should not see a sign-in prompt flash. -->
+        <p
+          v-else-if="!isAuthenticated"
+          class="text-xs text-gray-400 dark:text-gray-500"
+        >
+          Sign in to add annotations
         </p>
       </div>
 
