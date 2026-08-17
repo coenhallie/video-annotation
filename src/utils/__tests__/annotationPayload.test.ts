@@ -150,11 +150,12 @@ describe('isCommentAnnotation', () => {
     expect(isCommentAnnotation({ labels: [] })).toBe(true);
   });
 
-  it('treats a missing labels array as a comment', () => {
-    // A freshly created comment never has one written: useVideoAnnotations
-    // only sets labels on the created object when the array is non-empty.
-    expect(isCommentAnnotation({})).toBe(true);
-    expect(isCommentAnnotation({ labels: null })).toBe(true);
+  it('does not treat a missing labels array as a comment', () => {
+    // Absence means the join was never resolved, which is exactly what a
+    // realtime INSERT payload looks like. Reading it as "no labels" would draw
+    // a labelled annotation as a comment, so unknown has to stay unknown.
+    expect(isCommentAnnotation({})).toBe(false);
+    expect(isCommentAnnotation({ labels: null })).toBe(false);
   });
 
   it('does not treat a labelled annotation as a comment', () => {

@@ -343,6 +343,13 @@ export function useVideoAnnotations(
             toValue(projectId)
           );
 
+        // Always stamp the labels we were given, empty array included. Absence
+        // of the field means "not hydrated", not "no labels", and consumers
+        // such as the timeline's comment marker read the difference.
+        if (createdAnnotation) {
+          (createdAnnotation as Record<string, unknown>).labels = labels ?? [];
+        }
+
         // If there are labels, associate them with the annotation
         if (labels && labels.length > 0 && createdAnnotation?.id) {
           try {
@@ -354,8 +361,6 @@ export function useVideoAnnotations(
               '[useVideoAnnotations] Labels associated with comparison annotation:',
               labels
             );
-            // Add labels to the created annotation object for immediate display
-            (createdAnnotation as Record<string, unknown>).labels = labels;
           } catch (labelError) {
             logger.error(
               '[useVideoAnnotations] Failed to associate labels with comparison annotation:',
@@ -414,6 +419,13 @@ export function useVideoAnnotations(
           dbAnnotation
         );
 
+        // Always stamp the labels we were given, empty array included. Absence
+        // of the field means "not hydrated", not "no labels", and consumers
+        // such as the timeline's comment marker read the difference.
+        if (createdAnnotation) {
+          (createdAnnotation as Record<string, unknown>).labels = labels ?? [];
+        }
+
         // If there are labels, associate them with the annotation
         if (labels && labels.length > 0 && createdAnnotation?.id) {
           try {
@@ -422,8 +434,6 @@ export function useVideoAnnotations(
               labels
             );
             logger.debug('[useVideoAnnotations] Labels associated:', labels);
-            // Add labels to the created annotation object for immediate display
-            (createdAnnotation as Record<string, unknown>).labels = labels;
           } catch (labelError) {
             logger.error(
               '[useVideoAnnotations] Failed to associate labels:',

@@ -18,6 +18,16 @@ const COMMENT = {
   labels: [] as string[],
 };
 
+// What useRealtimeAnnotations pushes: a raw annotations row, with no labels
+// property at all because the join was never resolved. Its labels are unknown,
+// not empty, so it must not be mistaken for a comment.
+const UNHYDRATED = {
+  id: 'annotation-unhydrated',
+  title: 'BALL MISSED',
+  timestamp: 30,
+  severity: 'low',
+};
+
 function mountTimeline(selectedAnnotation?: object) {
   const root = document.createElement('div');
   document.body.appendChild(root);
@@ -31,7 +41,7 @@ function mountTimeline(selectedAnnotation?: object) {
             currentFrame: 0,
             totalFrames: 1800,
             fps: 30,
-            annotations: [LABELLED, COMMENT],
+            annotations: [LABELLED, COMMENT, UNHYDRATED],
             ...(selectedAnnotation ? { selectedAnnotation } : {}),
           });
       },
@@ -67,6 +77,18 @@ describe('VideoTimeline markers', () => {
     expect(dot!.style.backgroundColor).toBe('');
     expect(dot!.className).toContain('bg-transparent');
     expect(dot!.className).not.toContain('border-white');
+    t.unmount();
+  });
+
+  it('fills a marker whose labels were never hydrated rather than ringing it', async () => {
+    const t = mountTimeline();
+    await nextTick();
+
+    const dot = dotFor(t.root, 'annotation-unhydrated');
+    expect(dot).toBeDefined();
+    expect(dot!.style.backgroundColor).toBe('rgb(52, 211, 153)'); // low => #34d399
+    expect(dot!.className).toContain('border-white');
+    expect(dot!.className).not.toContain('bg-transparent');
     t.unmount();
   });
 

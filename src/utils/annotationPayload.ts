@@ -84,13 +84,19 @@ export function isSaveableAnnotation(input: {
  * A comment is an annotation with no labels attached, created by the quick
  * pick's comment mode with an empty labelIds.
  *
- * The same test works for a stored and a just-created comment: annotationService
- * attaches a `labels` array of ids to every loaded annotation, and
- * useVideoAnnotations only sets one on a newly created annotation when the array
- * is non-empty, so a fresh comment simply has no `labels` property.
+ * The array must actually be there. A missing or null `labels` means the join
+ * was never resolved, which is what a realtime INSERT payload looks like: a raw
+ * annotations row that says nothing about its labels. Reading that absence as
+ * "no labels" would draw a labelled annotation as a comment. Treating it as
+ * unknown errs the other way, so an un-hydrated comment shows a filled dot
+ * until it is refetched, and a labelled annotation is never misdrawn.
+ *
+ * Both fetch paths in annotationService and both create paths in
+ * useVideoAnnotations set the array, so a comment created or loaded through the
+ * app always carries an empty one.
  */
 export function isCommentAnnotation(annotation: {
   labels?: string[] | null;
 }): boolean {
-  return !annotation.labels?.length;
+  return Array.isArray(annotation.labels) && annotation.labels.length === 0;
 }
