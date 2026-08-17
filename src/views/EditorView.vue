@@ -290,6 +290,34 @@ const openBloom = (event: MouseEvent) => {
   bloomOpen.value = true;
 };
 
+/**
+ * Timeline entry point: a plain left-click on the timeline seeks and then opens
+ * the bloom where the pointer landed, so scrubbing to a moment and labelling it
+ * is one gesture. VideoTimeline suppresses this while dragging, so a scrub never
+ * pops the menu, and it hands over the time under the pointer rather than the
+ * player's current frame, which the asynchronous seek has not reached yet.
+ */
+const openBloomAtTime = (payload: {
+  time: number;
+  clientX: number;
+  clientY: number;
+}) => {
+  if (bloomReadOnly()) return;
+  if (!user.value) return;
+  if (drawingCoordinator?.isDrawingMode?.value) return;
+  if (!bloomHasCategories.value) return;
+
+  const activeFps = fps.value || 30;
+  bloomSnapshot.value = {
+    frame: Math.round(payload.time * activeFps),
+    fps: activeFps,
+    dual: null,
+  };
+  bloomX.value = payload.clientX;
+  bloomY.value = payload.clientY;
+  bloomOpen.value = true;
+};
+
 const closeBloom = () => {
   bloomOpen.value = false;
   bloomSnapshot.value = null;
@@ -1214,6 +1242,7 @@ watch(
             @annotation-click="handleAnnotationClick"
             @play="handleTimelinePlay"
             @pause="handleTimelinePause"
+            @open-bloom="openBloomAtTime"
           />
 
           <!-- Dual Video Timeline -->

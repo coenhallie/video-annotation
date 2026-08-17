@@ -69,10 +69,20 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(['seek-to-time', 'annotation-click', 'play', 'pause']);
+const emit = defineEmits([
+  'seek-to-time',
+  'annotation-click',
+  'play',
+  'pause',
+  'open-bloom',
+]);
 
 const timelineRef = ref<HTMLElement | null>(null);
 const isDragging = ref(false);
+
+// A press that moves further than this is a scrub, not a click, and must not
+// pop the annotation bloom.
+const BLOOM_DRAG_THRESHOLD_PX = 5;
 
 // Debouncing for smooth scrubbing
 let seekTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -122,12 +132,32 @@ const handleTimelineClick = (event: MouseEvent, immediate = false) => {
   }
 };
 
+/** Time under the pointer, from its x position over the timeline. */
+const timeAtPointer = (event: MouseEvent): number | null => {
+  if (!timelineRef.value || !props.duration) return null;
+  const rect = timelineRef.value.getBoundingClientRect();
+  const percentage = Math.max(
+    0,
+    Math.min((event.clientX - rect.left) / rect.width, 1)
+  );
+  return percentage * props.duration;
+};
+
 const handleTimelineMouseDown = (event: MouseEvent): void => {
   if (!props.duration) {
     return;
   }
 
   isDragging.value = true;
+
+  // Where the press started, so mouseup can tell a click from a scrub.
+  const startX = event.clientX;
+  const startY = event.clientY;
+  // Annotation markers sit inside the timeline and have their own click
+  // handler; pressing one should seek to it, not open the bloom.
+  const onAnnotationMarker = !!(event.target as HTMLElement | null)?.closest(
+    '[data-annotation-marker]'
+  );
 
   handleTimelineClick(event, true); // Immediate seek on initial click
 
@@ -140,6 +170,19 @@ const handleTimelineMouseDown = (event: MouseEvent): void => {
   const handleMouseUp = (e: MouseEvent) => {
     if (isDragging.value) {
       handleTimelineClick(e, true); // Immediate seek on release
+
+      const moved = Math.hypot(e.clientX - startX, e.clientY - startY);
+      const time = timeAtPointer(e);
+      if (
+        !onAnnotationMarker &&
+        moved <= BLOOM_DRAG_THRESHOLD_PX &&
+        time !== null
+      ) {
+        // Hand over the time under the pointer rather than letting the editor
+        // read the player's current frame: the seek above is asynchronous, so
+        // reading the frame now would capture the position before the jump.
+        emit('open-bloom', { time, clientX: e.clientX, clientY: e.clientY });
+      }
     }
     isDragging.value = false;
     document.removeEventListener('mousemove', handleMouseMove);
@@ -283,6 +326,7 @@ const handlePlayPause = (): void => {
         <div
           v-for="annotation in (annotations as unknown as TimelineAnnotation[])"
           :key="annotation?.id ?? `${annotation.timestamp}`"
+          data-annotation-marker
           class="absolute top-0 bottom-0 cursor-pointer transition-all duration-200 z-5 hover:scale-110"
           :class="{
             'z-9': (selectedAnnotation as any)?.id === (annotation as any)?.id,
