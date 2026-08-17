@@ -351,6 +351,10 @@ const openQuickPickAtTime = (payload: {
 const closeQuickPick = () => {
   quickPickOpen.value = false;
   quickPickSnapshot.value = null;
+  // Scoped to the panel, not to the in-flight promise: an insert that never
+  // settles would otherwise leave the guard set for the rest of the session,
+  // and every later Enter would be dropped in silence.
+  commentSaving.value = false;
 };
 
 const handleQuickPickSelect = async (label: Label) => {

@@ -10,7 +10,11 @@ interface TimelineAnnotation {
   title?: string;
   timestamp: number;
   severity?: string;
-  /** Label ids. Empty or absent means this annotation is a comment. */
+  /**
+   * Label ids. An empty array means this annotation is a comment; absent means
+   * the labels were never hydrated (a raw realtime row), which is not the same
+   * thing. See isCommentAnnotation.
+   */
   labels?: string[];
 }
 

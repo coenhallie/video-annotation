@@ -564,6 +564,10 @@ export function useVideoAnnotations(
 
       // If labels were provided, update them
       if (labels !== undefined) {
+        // Stamped before the association, as on the create paths: an absent
+        // labels array means "never hydrated", so leaving it off after a failed
+        // association would make an edited comment render as a filled dot.
+        (updatedAnnotation as Record<string, unknown>).labels = labels || [];
         try {
           await AnnotationLabelService.updateAnnotationLabels(
             actualAnnotationId,
@@ -573,8 +577,6 @@ export function useVideoAnnotations(
             '[useVideoAnnotations] Labels updated for annotation:',
             actualAnnotationId
           );
-          // Add labels to the updated annotation object for immediate display
-          (updatedAnnotation as Record<string, unknown>).labels = labels;
         } catch (labelError) {
           logger.error(
             '[useVideoAnnotations] Failed to update labels:',
