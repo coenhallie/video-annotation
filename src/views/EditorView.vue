@@ -386,9 +386,23 @@ const handleQuickPickSelect = async (label: Label) => {
  */
 const commentModeWasPlaying = ref(false);
 
+/**
+ * videoStore's isPlaying is written only by SingleVideoPlayer, so in a
+ * comparison it never leaves false and a paused pair would never be resumed.
+ * The dual composable keeps its own per-video flags from real play/pause
+ * events; either one running means playback was under way.
+ */
+const isPlaybackRunning = () =>
+  playerMode.value === 'dual'
+    ? Boolean(
+        dualVideoPlayer?.videoAIsPlaying?.value ||
+          dualVideoPlayer?.videoBIsPlaying?.value
+      )
+    : isPlaying.value;
+
 const handleQuickPickCommentMode = (active: boolean) => {
   if (active) {
-    commentModeWasPlaying.value = isPlaying.value;
+    commentModeWasPlaying.value = isPlaybackRunning();
     unifiedVideoPlayerRef.value?.pause();
     return;
   }
