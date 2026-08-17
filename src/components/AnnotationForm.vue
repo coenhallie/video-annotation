@@ -198,13 +198,11 @@ const annotationLabels = computed({
 });
 
 // Computed
+// A label is all that is required. Text and drawings are optional, so the
+// sidebar agrees with the cursor bloom on what a valid annotation is.
 const isSaveDisabled = computed(() => {
   if (!newAnnotation.value) return true;
-  const hasContent = newAnnotation.value.content?.trim();
-  const hasDrawing = hasDrawingData.value;
-  const hasLabel =
-    newAnnotation.value.labels && newAnnotation.value.labels.length === 1;
-  return (!hasContent && !hasDrawing) || !hasLabel;
+  return newAnnotation.value.labels?.length !== 1;
 });
 
 // Update annotation color based on selected labels
@@ -695,7 +693,7 @@ defineExpose({
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Content <span class="text-red-500">*</span></label>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Content</label>
           <textarea
             v-if="newAnnotation"
             v-model="newAnnotation.content"
