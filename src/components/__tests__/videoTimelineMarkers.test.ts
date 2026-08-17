@@ -18,7 +18,7 @@ const COMMENT = {
   labels: [] as string[],
 };
 
-function mountTimeline() {
+function mountTimeline(selectedAnnotation?: object) {
   const root = document.createElement('div');
   document.body.appendChild(root);
   const app = createApp(
@@ -32,6 +32,7 @@ function mountTimeline() {
             totalFrames: 1800,
             fps: 30,
             annotations: [LABELLED, COMMENT],
+            ...(selectedAnnotation ? { selectedAnnotation } : {}),
           });
       },
     })
@@ -65,6 +66,29 @@ describe('VideoTimeline markers', () => {
     expect(dot).toBeDefined();
     expect(dot!.style.backgroundColor).toBe('');
     expect(dot!.className).toContain('bg-transparent');
+    expect(dot!.className).not.toContain('border-white');
+    t.unmount();
+  });
+
+  it('shows a selected comment marker with the selection border and no comment border', async () => {
+    const t = mountTimeline(COMMENT);
+    await nextTick();
+
+    const dot = dotFor(t.root, 'annotation-comment');
+    expect(dot).toBeDefined();
+    expect(dot!.className).toContain('border-yellow-400');
+    expect(dot!.className).not.toContain('border-gray-300');
+    expect(dot!.style.backgroundColor).toBe('');
+    t.unmount();
+  });
+
+  it('shows a selected labelled marker with the selection border and no default border', async () => {
+    const t = mountTimeline(LABELLED);
+    await nextTick();
+
+    const dot = dotFor(t.root, 'annotation-labelled');
+    expect(dot).toBeDefined();
+    expect(dot!.className).toContain('border-yellow-400');
     expect(dot!.className).not.toContain('border-white');
     t.unmount();
   });

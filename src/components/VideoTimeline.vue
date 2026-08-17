@@ -227,6 +227,9 @@ const getSeverityColor = (severity?: string) => {
 const isComment = (annotation: TimelineAnnotation) =>
   isCommentAnnotation(annotation);
 
+const isSelected = (annotation: TimelineAnnotation) =>
+  (props.selectedAnnotation as any)?.id === (annotation as any)?.id;
+
 // Optimized annotation positioning - use time-based for consistency
 /* (removed duplicate definition) */
 
@@ -344,7 +347,7 @@ const handlePlayPause = (): void => {
           :data-annotation-id="annotation?.id"
           class="absolute top-0 bottom-0 cursor-pointer transition-all duration-200 z-5 hover:scale-110"
           :class="{
-            'z-9': (selectedAnnotation as any)?.id === (annotation as any)?.id,
+            'z-9': isSelected(annotation as TimelineAnnotation),
           }"
           :style="getAnnotationStyle(annotation as TimelineAnnotation)"
           :title="`${(annotation as any)?.title ?? 'Annotation'} (${formatTime((annotation as TimelineAnnotation).timestamp)})`"
@@ -358,15 +361,13 @@ const handlePlayPause = (): void => {
           -->
           <div
             class="w-4 h-4 rounded-full border-2 shadow-lg absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 opacity-90"
-            :class="[
-              isComment(annotation as TimelineAnnotation)
-                ? 'border-gray-300 bg-transparent'
-                : 'border-white',
-              {
-                'border-yellow-400 shadow-yellow-400/50 opacity-100 scale-110':
-                  (selectedAnnotation as any)?.id === (annotation as any)?.id,
-              },
-            ]"
+            :class="
+              isSelected(annotation as TimelineAnnotation)
+                ? 'border-yellow-400 shadow-yellow-400/50 opacity-100 scale-110'
+                : isComment(annotation as TimelineAnnotation)
+                  ? 'border-gray-300 bg-transparent'
+                  : 'border-white'
+            "
             :style="
               isComment(annotation as TimelineAnnotation)
                 ? undefined
