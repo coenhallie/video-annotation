@@ -181,41 +181,47 @@ onBeforeUnmount(() => {
     @click="emit('close')"
     @contextmenu.prevent="emit('close')"
   >
+    <!--
+      Surface, border, text and hover tones are the app's own: white/gray-800
+      panels, gray-200/gray-700 dividers, gray-900/gray-100 primary text, as
+      used by the modals and the annotation sidebar. Only the per-label colours
+      are the labels' own, because those carry meaning.
+    -->
     <div
       ref="panelRef"
       tabindex="-1"
-      class="absolute overflow-hidden rounded-2xl border border-white/10 bg-[#0e1013]/98 shadow-2xl outline-none backdrop-blur-sm"
+      class="absolute overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl outline-none dark:border-gray-700 dark:bg-gray-800"
       :style="{ ...position, width: `${PANEL_W}px` }"
       @click.stop
       @keydown="handleKeydown"
     >
       <header
-        class="flex items-center justify-between border-b border-white/[0.07] px-5 py-2.5"
+        class="flex items-center justify-between border-b border-gray-200 px-4 py-2.5 dark:border-gray-700"
       >
         <div class="flex items-center gap-2.5">
-          <span class="h-2 w-2 rounded-full bg-orange-500" />
+          <span class="h-1.5 w-1.5 rounded-full bg-orange-500" />
           <span
-            class="font-mono text-[10px] font-medium uppercase tracking-[0.22em] text-zinc-300"
+            class="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-700 dark:text-gray-200"
           >
             Annotate
           </span>
         </div>
-        <span class="font-mono text-[10px] tracking-wider text-zinc-500">
+        <span class="font-mono text-[10px] tracking-wider text-gray-400 dark:text-gray-500">
           {{ frameLabel }} &middot; {{ timecode }}
         </span>
       </header>
 
       <div class="flex min-h-[220px]">
         <!-- Categories -->
-        <ul class="w-[46%] shrink-0 border-r border-white/[0.07] py-2">
+        <ul class="w-[46%] shrink-0 border-r border-gray-200 py-1.5 dark:border-gray-700">
           <li
             v-for="group in categories"
             :key="group.key"
             class="relative flex cursor-pointer items-center gap-2.5 px-4 py-1.5 transition-colors"
             :class="
               activeCategory?.key === group.key
-                ? 'bg-white/[0.06]'
-                : 'hover:bg-white/[0.03]'
+                ? 'bg-gray-100 dark:bg-gray-700'
+                : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
             "
             @mouseenter="selectCategory(group)"
             @click="selectCategory(group)"
@@ -223,64 +229,74 @@ onBeforeUnmount(() => {
             <span
               v-if="activeCategory?.key === group.key"
               class="absolute inset-y-0 left-0 w-[3px]"
-              :style="{ backgroundColor: group.labels[0]?.color ?? '#f97316' }"
+              :style="{ backgroundColor: group.labels[0]?.color ?? '#6b7280' }"
             />
             <span
-              class="grid h-7 w-7 shrink-0 place-items-center rounded-md border font-mono text-[11px] font-semibold"
+              class="grid h-6 w-6 shrink-0 place-items-center rounded border font-mono text-[11px] font-semibold"
               :class="
                 activeCategory?.key === group.key
                   ? 'border-transparent text-white'
-                  : 'border-white/10 bg-white/[0.04] text-zinc-300'
+                  : 'border-gray-300 bg-gray-50 text-gray-600 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-300'
               "
               :style="
                 activeCategory?.key === group.key
-                  ? { backgroundColor: group.labels[0]?.color ?? '#f97316' }
+                  ? { backgroundColor: group.labels[0]?.color ?? '#6b7280' }
                   : undefined
               "
             >
               {{ group.letter }}
             </span>
             <span
-              class="flex-1 font-mono text-[11px] tracking-[0.12em]"
-              :class="activeCategory?.key === group.key ? 'text-white' : 'text-zinc-400'"
+              class="flex-1 text-[11px] font-medium tracking-[0.1em]"
+              :class="
+                activeCategory?.key === group.key
+                  ? 'text-gray-900 dark:text-gray-100'
+                  : 'text-gray-600 dark:text-gray-400'
+              "
             >
               {{ group.key }}
             </span>
-            <span class="font-mono text-[10px] text-zinc-600">
+            <span class="font-mono text-[10px] text-gray-400 dark:text-gray-500">
               {{ group.labels.length }}
             </span>
           </li>
         </ul>
 
         <!-- Labels of the active category -->
-        <ul v-if="labelRows.length" class="flex-1 py-2">
+        <ul v-if="labelRows.length" class="flex-1 py-1.5">
           <li
             v-for="row in labelRows"
             :key="row.label.id"
-            class="flex cursor-pointer items-center gap-2.5 px-4 py-1.5 transition-colors hover:bg-white/[0.04]"
+            class="flex cursor-pointer items-center gap-2.5 px-4 py-1.5 transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/50"
             :title="row.label.description || row.label.name"
             @click="commit(row.label)"
           >
             <span
-              class="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-white/10 bg-white/[0.04] font-mono text-[11px] font-semibold text-zinc-300"
+              class="grid h-6 w-6 shrink-0 place-items-center rounded border border-gray-300 bg-gray-50 font-mono text-[11px] font-semibold text-gray-600 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-300"
             >
               {{ row.letter }}
             </span>
-            <span class="font-mono text-[11px] tracking-[0.1em] text-zinc-200">
+            <span
+              class="h-2 w-2 shrink-0 rounded-full"
+              :style="{ backgroundColor: row.label.color }"
+            />
+            <span
+              class="text-[11px] font-medium tracking-[0.08em] text-gray-800 dark:text-gray-200"
+            >
               {{ row.text }}
             </span>
           </li>
         </ul>
         <div
           v-else
-          class="flex flex-1 items-center justify-center px-6 text-center font-mono text-[10px] tracking-[0.14em] text-zinc-600"
+          class="flex flex-1 items-center justify-center px-6 text-center text-[10px] tracking-[0.12em] text-gray-400 dark:text-gray-500"
         >
           Pick a category
         </div>
       </div>
 
       <footer
-        class="border-t border-white/[0.07] px-5 py-2 font-mono text-[9px] tracking-[0.16em] text-zinc-600"
+        class="border-t border-gray-200 px-4 py-2 text-[9px] tracking-[0.14em] text-gray-400 dark:border-gray-700 dark:text-gray-500"
       >
         <span v-if="activeCategory">Letter to label &middot; Esc to go back</span>
         <span v-else>Letter to pick a category &middot; Esc to close</span>
