@@ -21,6 +21,8 @@ const props = defineProps({
 
 const emit = defineEmits<{
   (e: 'select', label: Label): void;
+  (e: 'comment', text: string): void;
+  (e: 'comment-mode', active: boolean): void;
   (e: 'close'): void;
 }>();
 
@@ -28,6 +30,15 @@ const PANEL_W = 460;
 const EDGE_MARGIN = 12;
 
 const activeCategory = ref<LabelCategoryGroup | null>(null);
+
+/** Letter that opens the comment field. Free because no category claims it. */
+const COMMENT_LETTER = 'C';
+
+type QuickPickMode = 'pick' | 'comment';
+
+const mode = ref<QuickPickMode>('pick');
+const commentText = ref('');
+const commentInputRef = ref<HTMLInputElement | null>(null);
 
 const categories = computed(() => groupLabelsByCategory(props.labels));
 
@@ -72,7 +83,42 @@ const commit = (label: Label) => {
   emit('select', label);
 };
 
+const enterCommentMode = () => {
+  if (mode.value === 'comment') return;
+  mode.value = 'comment';
+  commentText.value = '';
+  emit('comment-mode', true);
+};
+
+/**
+ * Every exit from comment mode goes through here, so a listener that paused
+ * playback on the way in is always told on the way out.
+ */
+const leaveCommentMode = () => {
+  if (mode.value !== 'comment') return;
+  mode.value = 'pick';
+  commentText.value = '';
+  emit('comment-mode', false);
+};
+
+const resetToRoot = () => {
+  activeCategory.value = null;
+  leaveCommentMode();
+};
+
+/** Whitespace-only text is not a comment, so it never leaves the panel. */
+const commitComment = () => {
+  const text = commentText.value.trim();
+  if (!text) return;
+  emit('comment', text);
+  leaveCommentMode();
+};
+
 const back = () => {
+  if (mode.value === 'comment') {
+    leaveCommentMode();
+    return;
+  }
   if (activeCategory.value) activeCategory.value = null;
   else emit('close');
 };
@@ -84,6 +130,19 @@ const back = () => {
  */
 const handleKeydown = (event: KeyboardEvent) => {
   if (event.metaKey || event.ctrlKey || event.altKey) return;
+
+  // This listener is on window in capture phase and preventDefault()s every
+  // letter, so in comment mode it has to get out of the way or the input
+  // receives no characters at all. Escape is the only key it still owns; Enter
+  // is handled by the input's own binding.
+  if (mode.value === 'comment') {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      back();
+    }
+    return;
+  }
 
   if (event.key === 'Escape' || event.key === 'Backspace') {
     event.preventDefault();
@@ -102,6 +161,15 @@ const handleKeydown = (event: KeyboardEvent) => {
     event.preventDefault();
     event.stopPropagation();
     commit(row.label);
+    return;
+  }
+
+  // Root screen only. Inside a category assignLabelShortcuts may well have
+  // handed C to a label, and the label has to win there.
+  if (key === COMMENT_LETTER) {
+    event.preventDefault();
+    event.stopPropagation();
+    enterCommentMode();
     return;
   }
 
@@ -139,7 +207,7 @@ watch(
   () => props.open,
   async (open) => {
     if (open) {
-      activeCategory.value = null;
+      resetToRoot();
       // Two belts here on purpose. The window listener is capture phase so the
       // player's own global shortcuts cannot consume the keys first, and moving
       // focus into the panel means the keys are delivered to it even if
@@ -151,6 +219,9 @@ watch(
       measure();
     } else {
       window.removeEventListener('keydown', handleKeydown, true);
+      // Closing while typing still has to report the mode change, or a paused
+      // video would never be resumed.
+      resetToRoot();
     }
   },
   { immediate: true }
@@ -162,10 +233,20 @@ watch(activeCategory, async () => {
   measure();
 });
 
+// The comment screen is much shorter than the two columns, and the panel is
+// anchored upward from props.y, so it has to be re-measured.
+watch(mode, async () => {
+  await nextTick();
+  if (mode.value === 'comment') {
+    commentInputRef.value?.focus({ preventScroll: true });
+  }
+  measure();
+});
+
 watch(
   () => [props.x, props.y],
   () => {
-    if (props.open) activeCategory.value = null;
+    if (props.open) resetToRoot();
   }
 );
 
@@ -176,7 +257,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div
-    v-if="open && categories.length > 0"
+    v-if="open"
     class="fixed inset-0 z-50"
     @click="emit('close')"
     @contextmenu.prevent="emit('close')"
@@ -211,56 +292,106 @@ onBeforeUnmount(() => {
         </span>
       </header>
 
-      <div class="flex min-h-[220px]">
-        <!-- Categories -->
-        <ul class="w-[46%] shrink-0 border-r border-gray-200 py-1.5 dark:border-gray-700">
-          <li
-            v-for="group in categories"
-            :key="group.key"
-            class="relative flex cursor-pointer items-center gap-2.5 px-4 py-1.5 transition-colors"
-            :class="
-              activeCategory?.key === group.key
-                ? 'bg-gray-100 dark:bg-gray-700'
-                : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
-            "
-            @mouseenter="selectCategory(group)"
-            @click="selectCategory(group)"
+      <!-- Comment screen -->
+      <div v-if="mode === 'comment'" class="px-4 py-4">
+        <label
+          for="quick-pick-comment"
+          class="mb-2 block text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400"
+        >
+          Comment
+        </label>
+        <input
+          id="quick-pick-comment"
+          ref="commentInputRef"
+          v-model="commentText"
+          data-testid="quick-pick-comment"
+          type="text"
+          autocomplete="off"
+          placeholder="What happened on this frame?"
+          class="w-full rounded border border-gray-300 bg-white px-3 py-2 text-[12px] text-gray-900 outline-none placeholder:text-gray-400 focus:border-orange-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-500"
+          @keydown.enter.prevent="commitComment"
+        />
+      </div>
+
+      <!-- Pick screen -->
+      <div v-else class="flex min-h-[220px]">
+        <div
+          class="flex w-[46%] shrink-0 flex-col border-r border-gray-200 dark:border-gray-700"
+        >
+          <!-- Categories -->
+          <ul v-if="categories.length" class="flex-1 py-1.5">
+            <li
+              v-for="group in categories"
+              :key="group.key"
+              class="relative flex cursor-pointer items-center gap-2.5 px-4 py-1.5 transition-colors"
+              :class="
+                activeCategory?.key === group.key
+                  ? 'bg-gray-100 dark:bg-gray-700'
+                  : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
+              "
+              @mouseenter="selectCategory(group)"
+              @click="selectCategory(group)"
+            >
+              <span
+                v-if="activeCategory?.key === group.key"
+                class="absolute inset-y-0 left-0 w-[3px]"
+                :style="{ backgroundColor: group.labels[0]?.color ?? '#6b7280' }"
+              />
+              <span
+                class="grid h-6 w-6 shrink-0 place-items-center rounded border font-mono text-[11px] font-semibold"
+                :class="
+                  activeCategory?.key === group.key
+                    ? 'border-transparent text-white'
+                    : 'border-gray-300 bg-gray-50 text-gray-600 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-300'
+                "
+                :style="
+                  activeCategory?.key === group.key
+                    ? { backgroundColor: group.labels[0]?.color ?? '#6b7280' }
+                    : undefined
+                "
+              >
+                {{ group.letter }}
+              </span>
+              <span
+                class="flex-1 text-[11px] font-medium tracking-[0.1em]"
+                :class="
+                  activeCategory?.key === group.key
+                    ? 'text-gray-900 dark:text-gray-100'
+                    : 'text-gray-600 dark:text-gray-400'
+                "
+              >
+                {{ group.key }}
+              </span>
+              <span class="font-mono text-[10px] text-gray-400 dark:text-gray-500">
+                {{ group.labels.length }}
+              </span>
+            </li>
+          </ul>
+          <div
+            v-else
+            class="flex flex-1 items-center justify-center px-4 text-center text-[10px] tracking-[0.12em] text-gray-400 dark:text-gray-500"
+          >
+            No categories
+          </div>
+
+          <!-- Comment, always available: it needs no labels at all -->
+          <button
+            type="button"
+            class="flex w-full items-center gap-2.5 border-t border-gray-200 px-4 py-2 text-left transition-colors hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-700/50"
+            @click="enterCommentMode"
           >
             <span
-              v-if="activeCategory?.key === group.key"
-              class="absolute inset-y-0 left-0 w-[3px]"
-              :style="{ backgroundColor: group.labels[0]?.color ?? '#6b7280' }"
-            />
-            <span
-              class="grid h-6 w-6 shrink-0 place-items-center rounded border font-mono text-[11px] font-semibold"
-              :class="
-                activeCategory?.key === group.key
-                  ? 'border-transparent text-white'
-                  : 'border-gray-300 bg-gray-50 text-gray-600 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-300'
-              "
-              :style="
-                activeCategory?.key === group.key
-                  ? { backgroundColor: group.labels[0]?.color ?? '#6b7280' }
-                  : undefined
-              "
+              class="grid h-6 w-6 shrink-0 place-items-center rounded border border-gray-300 bg-gray-50 font-mono text-[11px] font-semibold text-gray-600 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-300"
             >
-              {{ group.letter }}
+              C
             </span>
             <span
-              class="flex-1 text-[11px] font-medium tracking-[0.1em]"
-              :class="
-                activeCategory?.key === group.key
-                  ? 'text-gray-900 dark:text-gray-100'
-                  : 'text-gray-600 dark:text-gray-400'
-              "
+              class="flex-1 text-[11px] font-medium tracking-[0.1em] text-gray-600 dark:text-gray-400"
             >
-              {{ group.key }}
+              COMMENT
             </span>
-            <span class="font-mono text-[10px] text-gray-400 dark:text-gray-500">
-              {{ group.labels.length }}
-            </span>
-          </li>
-        </ul>
+          </button>
+        </div>
 
         <!-- Labels of the active category -->
         <ul v-if="labelRows.length" class="flex-1 py-1.5">
@@ -298,8 +429,9 @@ onBeforeUnmount(() => {
       <footer
         class="border-t border-gray-200 px-4 py-2 text-[9px] tracking-[0.14em] text-gray-400 dark:border-gray-700 dark:text-gray-500"
       >
-        <span v-if="activeCategory">Letter to label &middot; Esc to go back</span>
-        <span v-else>Letter to pick a category &middot; Esc to close</span>
+        <span v-if="mode === 'comment'">Enter to save &middot; Esc to go back</span>
+        <span v-else-if="activeCategory">Letter to label &middot; Esc to go back</span>
+        <span v-else>Letter to pick a category &middot; C to comment &middot; Esc to close</span>
       </footer>
     </div>
   </div>
