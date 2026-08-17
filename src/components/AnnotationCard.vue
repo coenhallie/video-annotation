@@ -212,7 +212,13 @@ const timeToFrame = (timeInSeconds: number): number => {
       </div>
     </div>
 
-    <div>
+    <div
+      v-if="
+        annotation.annotationType === 'drawing' ||
+          annotation.drawingData ||
+          (annotation.content && annotation.content.length)
+      "
+    >
       <div class="flex items-center space-x-1 mb-0.5">
         <!-- Drawing indicator -->
         <div

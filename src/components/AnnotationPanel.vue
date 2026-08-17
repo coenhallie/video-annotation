@@ -187,9 +187,6 @@ const annotationFormRef = ref<InstanceType<typeof AnnotationForm> | null>(null);
 // Annotation being edited (passed to the form)
 const editAnnotationData = ref<PanelAnnotation | null>(null);
 
-// Default color for annotations without specific labels
-const defaultAnnotationColor = '#6b7280'; // gray-500
-
 /**
  * Stable loading state to prevent skeleton flickering
  */

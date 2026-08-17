@@ -37,11 +37,90 @@ interface Segment {
   text: string;
   title: string;
   color: string;
+  textColor: string;
   path: string;
   labelX: number;
   labelY: number;
   onPick: () => void;
 }
+
+// Dark backing (see the circle drawn behind the wedges below) and light text
+// tones share the same near-black/near-white pair used elsewhere in the
+// bloom (the hub fill is rgba(15, 23, 42, ...), i.e. the same slate-900).
+const TEXT_ON_LIGHT = '#0f172a';
+const TEXT_ON_DARK = '#ffffff';
+
+// Same colour as the opaque backing circle in the template. Wedge fills are
+// translucent, so what actually paints the screen is the wedge colour
+// blended over this, not the wedge colour alone.
+const BACKING_FILL = '#0f172a';
+
+// The steadier (unhovered) wedge fill-opacity - see the `path` binding below.
+// It is the more translucent of the two states, i.e. the one where the
+// backing shows through the most, so it is the harder case for contrast.
+const WEDGE_IDLE_OPACITY = 0.75;
+
+const parseHexRgb = (hex: string): [number, number, number] => {
+  const normalized = hex.replace('#', '');
+  const full =
+    normalized.length === 3
+      ? normalized
+          .split('')
+          .map((c) => c + c)
+          .join('')
+      : normalized;
+  return [
+    parseInt(full.slice(0, 2), 16),
+    parseInt(full.slice(2, 4), 16),
+    parseInt(full.slice(4, 6), 16),
+  ];
+};
+
+/** Relative luminance of an sRGB colour (WCAG formula, sRGB -> linear). */
+const relativeLuminanceRgb = (r: number, g: number, b: number): number => {
+  const channel = (value: number) => {
+    const c = value / 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+};
+
+const relativeLuminance = (hex: string): number =>
+  relativeLuminanceRgb(...parseHexRgb(hex));
+
+/**
+ * Alpha-blend `hex` over the opaque backing circle at the wedge's idle
+ * fill-opacity, in sRGB space (matching how the browser actually composites
+ * `fill-opacity`). This is the colour that is really on screen behind the
+ * label text.
+ */
+const compositeOverBacking = (hex: string): [number, number, number] => {
+  const [fr, fg, fb] = parseHexRgb(hex);
+  const [br, bg, bb] = parseHexRgb(BACKING_FILL);
+  const blend = (f: number, b: number) => WEDGE_IDLE_OPACITY * f + (1 - WEDGE_IDLE_OPACITY) * b;
+  return [blend(fr, br), blend(fg, bg), blend(fb, bb)];
+};
+
+/** WCAG contrast ratio between two relative luminances. */
+const contrastRatio = (l1: number, l2: number): number => {
+  const lighter = Math.max(l1, l2);
+  const darker = Math.min(l1, l2);
+  return (lighter + 0.05) / (darker + 0.05);
+};
+
+const TEXT_ON_LIGHT_LUMINANCE = relativeLuminance(TEXT_ON_LIGHT);
+const TEXT_ON_DARK_LUMINANCE = relativeLuminance(TEXT_ON_DARK);
+
+/**
+ * Pick whichever of the two text tones has higher contrast against the
+ * wedge's actual, composited on-screen colour (not its raw hex).
+ */
+const textColorFor = (hex: string): string => {
+  const backgroundLuminance = relativeLuminanceRgb(...compositeOverBacking(hex));
+  const darkContrast = contrastRatio(backgroundLuminance, TEXT_ON_LIGHT_LUMINANCE);
+  const lightContrast = contrastRatio(backgroundLuminance, TEXT_ON_DARK_LUMINANCE);
+  return darkContrast >= lightContrast ? TEXT_ON_LIGHT : TEXT_ON_DARK;
+};
 
 const polar = (radius: number, angleDeg: number) => {
   const rad = ((angleDeg - 90) * Math.PI) / 180;
@@ -79,6 +158,7 @@ const buildSegments = <T,>(
     const described = describe(item);
     return {
       ...described,
+      textColor: textColorFor(described.color),
       path: wedgePath(start, start + sweep),
       labelX: centroid.x,
       labelY: centroid.y,
@@ -201,6 +281,18 @@ onBeforeUnmount(() => {
         :viewBox="`0 0 ${SIZE} ${SIZE}`"
         class="drop-shadow-2xl"
       >
+        <!--
+          Opaque backing so the wedges' translucent fills always composite
+          over a known dark base instead of whatever video frame is behind
+          the bloom - otherwise contrast would shift frame to frame.
+        -->
+        <circle
+          :cx="CENTER"
+          :cy="CENTER"
+          :r="OUTER_RADIUS"
+          fill="#0f172a"
+        />
+
         <g
           v-for="segment in segments"
           :key="segment.key"
@@ -222,7 +314,8 @@ onBeforeUnmount(() => {
             :y="segment.labelY"
             text-anchor="middle"
             dominant-baseline="middle"
-            class="pointer-events-none select-none fill-white text-[10px] font-semibold uppercase tracking-wide"
+            :fill="segment.textColor"
+            class="pointer-events-none select-none text-[10px] font-semibold uppercase tracking-wide"
           >
             <tspan
               v-for="(word, index) in segment.text.split(' ')"
@@ -238,7 +331,7 @@ onBeforeUnmount(() => {
         <circle
           :cx="CENTER"
           :cy="CENTER"
-          :r="INNER_RADIUS - 4"
+          :r="INNER_RADIUS"
           fill="rgba(15, 23, 42, 0.92)"
           stroke="rgba(148, 163, 184, 0.5)"
           stroke-width="2"

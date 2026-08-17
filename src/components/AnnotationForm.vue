@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, type PropType } from 'vue';
 import SearchableLabelSelector from './SearchableLabelSelector.vue';
-import { buildAnnotationPayload } from '../utils/annotationPayload';
+import { buildAnnotationPayload, DEFAULT_ANNOTATION_COLOR } from '../utils/annotationPayload';
 import type { DrawingData } from '../types/database';
 import type { Label } from '../types/labels';
 import type { UseDrawingCanvas } from '../composables/useDrawingCanvas';
@@ -97,9 +97,6 @@ const emit = defineEmits<{
   (e: 'create-label', name: string): void;
 }>();
 
-// Default color for annotations without specific labels
-const defaultAnnotationColor = '#6b7280'; // gray-500
-
 // Color picker functionality
 const colorPalette = [
   '#ef4444', '#f97316', '#eab308', '#22c55e',
@@ -153,7 +150,7 @@ const showAddForm = ref(false);
 const editingAnnotation = ref<PanelAnnotation | null>(null);
 const newAnnotation = ref<NewAnnotationDraft>({
   content: '',
-  color: '#6b7280',
+  color: DEFAULT_ANNOTATION_COLOR,
   frame: 0,
   annotationType: 'text',
   drawingData: null,
@@ -210,7 +207,7 @@ const updateAnnotationColor = () => {
   const primaryLabel = props.availableLabels.find((label) =>
     newAnnotation.value.labels?.includes(label.id)
   );
-  newAnnotation.value.color = primaryLabel?.color || defaultAnnotationColor;
+  newAnnotation.value.color = primaryLabel?.color || DEFAULT_ANNOTATION_COLOR;
 };
 
 // Watch for label changes to update annotation color
@@ -238,7 +235,7 @@ watch(
 const startAddAnnotation = () => {
   newAnnotation.value = {
     content: '',
-    color: defaultAnnotationColor,
+    color: DEFAULT_ANNOTATION_COLOR,
     frame: props.currentFrame,
     annotationType: 'text',
     drawingData: null,
@@ -285,7 +282,7 @@ const startAddAnnotation = () => {
 const startEditAnnotation = (annotation: PanelAnnotation) => {
   const draft: NewAnnotationDraft = {
     content: annotation.content ?? '',
-    color: annotation.color ?? defaultAnnotationColor,
+    color: annotation.color ?? DEFAULT_ANNOTATION_COLOR,
     frame: annotation.frame ?? Math.round(annotation.timestamp * props.fps),
     annotationType: annotation.annotationType ?? 'text',
     drawingData: annotation.drawingData ?? null,
@@ -463,7 +460,7 @@ const cancelForm = () => {
   // Reset form data
   newAnnotation.value = {
     content: '',
-    color: defaultAnnotationColor,
+    color: DEFAULT_ANNOTATION_COLOR,
     frame: props.currentFrame,
     annotationType: 'text',
     drawingData: null,

@@ -261,6 +261,12 @@ const bloomReadOnly = () =>
   (isSharedVideo.value || isSharedComparison.value) && !canComment();
 
 const openBloom = (event: MouseEvent) => {
+  // VideoControls.vue's root element (play/pause, frame-step, mute, volume,
+  // speed) always renders with class "video-controls", whether it's mounted
+  // by SingleVideoPlayer (single mode) or DualVideoPlayer (dual mode). Bail
+  // out before suppressing the native context menu so right-clicking a
+  // control still gets the browser's menu instead of popping the bloom.
+  if ((event.target as HTMLElement)?.closest?.('.video-controls')) return;
   if (bloomReadOnly()) return;
   if (!user.value) return;
   if (drawingCoordinator?.isDrawingMode?.value) return;
@@ -294,16 +300,24 @@ const handleBloomSelect = async (label: Label) => {
   closeBloom();
   if (!snapshot) return;
 
-  await handleAddAnnotation(
-    buildAnnotationPayload({
-      labels: bloomLabels.value,
-      labelIds: [label.id],
-      content: '',
-      frame: snapshot.frame,
-      fps: snapshot.fps,
-      dual: snapshot.dual,
-    })
-  );
+  try {
+    await handleAddAnnotation(
+      buildAnnotationPayload({
+        labels: bloomLabels.value,
+        labelIds: [label.id],
+        content: '',
+        frame: snapshot.frame,
+        fps: snapshot.fps,
+        dual: snapshot.dual,
+      })
+    );
+  } catch (err) {
+    console.error('Failed to create annotation from bloom selection:', err);
+    notifyError(
+      'Failed to add annotation',
+      err instanceof Error ? err.message : 'The annotation could not be saved. Please try again.'
+    );
+  }
 };
 
 // Component Refs
