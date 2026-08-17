@@ -6,7 +6,6 @@ export const useLayoutStore = defineStore('layout', () => {
   const isComparisonModalOpen = ref(false);
   const isShareModalOpen = ref(false);
   const isSharedLinksModalOpen = ref(false);
-  const isVideoUploadModalOpen = ref(false);
 
   const isAnnotationFormVisible = ref(false);
   
@@ -26,26 +25,15 @@ export const useLayoutStore = defineStore('layout', () => {
   function closeShareModal() {
     isShareModalOpen.value = false;
   }
-  
-  function openVideoUploadModal() {
-    isVideoUploadModalOpen.value = true;
-  }
-  
-  function closeVideoUploadModal() {
-    isVideoUploadModalOpen.value = false;
-  }
 
   return {
     isComparisonModalOpen,
     isShareModalOpen,
     isSharedLinksModalOpen,
-    isVideoUploadModalOpen,
     isAnnotationFormVisible,
     openComparisonModal,
     closeComparisonModal,
     openShareModal,
     closeShareModal,
-    openVideoUploadModal,
-    closeVideoUploadModal,
   };
 });

@@ -7,7 +7,6 @@ import type {
   ComparisonVideo,
 } from '../types/database';
 import { isComparisonVideo, isIndividualVideo } from '../types/database';
-import { VideoUploadService } from './videoUploadService';
 import { ThumbnailGenerator } from '../utils/thumbnailGenerator';
 import { AwsStorageService } from './awsStorageService';
 import { handleServiceError } from '../utils/errorHandler';
@@ -348,7 +347,7 @@ export class VideoService {
   }
 
   static async deleteVideo(videoId: string) {
-    // First get the video to check if it's an uploaded video
+    // First get the video to check if it has a stored file to clean up
     const { data: video, error: fetchError } = await supabase
       .from('videos')
       .select('videoType, filePath')
@@ -357,16 +356,14 @@ export class VideoService {
 
     if (fetchError) throw fetchError;
 
-    // If it's an uploaded video, use the upload service to delete it
+    const { error } = await supabase.from('videos').delete().eq('id', videoId);
+    if (error) throw error;
+
+    // Legacy uploaded videos also own a storage object. Manual upload is gone, but
+    // existing objects still need removing when their row is deleted. Best effort:
+    // the row is already gone, so a storage failure must not fail the delete.
     if (video && video.videoType === 'upload' && video.filePath) {
-      await VideoUploadService.deleteUploadedVideo(videoId, video.filePath);
-    } else {
-      // For URL videos, just delete the database record
-      const { error } = await supabase
-        .from('videos')
-        .delete()
-        .eq('id', videoId);
-      if (error) throw error;
+      await supabase.storage.from('videos').remove([video.filePath]);
     }
   }
 

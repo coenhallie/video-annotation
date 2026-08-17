@@ -1,10 +1,8 @@
 <script setup lang="ts">
 import { defineAsyncComponent } from 'vue';
 import SharedVideoAuthPrompt from '@/components/SharedVideoAuthPrompt.vue';
-import VideoUpload from '@/components/VideoUpload.vue';
 import type {
   ComparisonCreatedEvent,
-  VideoUploadResult,
   PendingSharedContent,
 } from '@/types/component-interfaces';
 
@@ -17,7 +15,6 @@ const ChangelogModal = defineAsyncComponent(() => import('@/components/Changelog
 defineProps<{
   // Modal visibility states
   isComparisonModalOpen: boolean;
-  isVideoUploadModalOpen: boolean;
   isShareModalOpen: boolean;
   isSharedLinksModalOpen: boolean;
   showAuthPrompt: boolean;
@@ -33,13 +30,9 @@ defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'upload-video'): void;
   (e: 'open-create-comparison'): void;
   (e: 'close-comparison-modal'): void;
   (e: 'comparison-created', comparison: ComparisonCreatedEvent): void;
-  (e: 'close-video-upload'): void;
-  (e: 'upload-success', videoRecord: VideoUploadResult): void;
-  (e: 'upload-error', error: Error): void;
   (e: 'close-share-modal'): void;
   (e: 'close-shared-links'): void;
   (e: 'auth-sign-in'): void;
@@ -54,61 +47,7 @@ const emit = defineEmits<{
     :is-visible="isComparisonModalOpen"
     @close="emit('close-comparison-modal')"
     @comparison-created="(comparison: ComparisonCreatedEvent) => emit('comparison-created', comparison)"
-    @upload-video="emit('upload-video')"
   />
-
-  <!-- Video Upload Modal -->
-  <Teleport to="body">
-    <Transition name="modal">
-      <div
-        v-if="isVideoUploadModalOpen"
-        class="fixed inset-0 z-50 flex items-center justify-center p-4"
-      >
-        <!-- Backdrop -->
-        <div
-          class="absolute inset-0 bg-black/50 backdrop-blur-sm"
-          @click="emit('close-video-upload')"
-        />
-
-        <!-- Modal Content -->
-        <div
-          class="relative bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-auto p-6"
-          @click.stop
-        >
-          <!-- Header -->
-          <div class="flex items-center justify-between mb-6">
-            <h2 class="text-xl font-semibold text-gray-900 dark:text-white">
-              Upload Video
-            </h2>
-            <button
-              class="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-              @click="emit('close-video-upload')"
-            >
-              <svg
-                class="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
-          </div>
-
-          <!-- Video Upload Component -->
-          <VideoUpload
-            @upload-success="(videoRecord: VideoUploadResult) => emit('upload-success', videoRecord)"
-            @upload-error="(error: Error) => emit('upload-error', error)"
-          />
-        </div>
-      </div>
-    </Transition>
-  </Teleport>
 
   <!-- Share Video Modal -->
   <ShareModal

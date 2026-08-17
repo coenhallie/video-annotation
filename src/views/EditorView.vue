@@ -39,7 +39,6 @@ import type { Video, Annotation, ComparisonVideo } from '@/types/database';
 import type {
   ProjectSelection,
   ComparisonCreatedEvent,
-  VideoUploadResult,
   AnnotationFormData,
 } from '@/types/component-interfaces';
 import { useVideoStore } from '@/stores/video';
@@ -56,7 +55,6 @@ const {
   isComparisonModalOpen,
   isShareModalOpen,
   isSharedLinksModalOpen,
-  isVideoUploadModalOpen,
   isAnnotationFormVisible,
 
 } = storeToRefs(layoutStore);
@@ -617,43 +615,7 @@ const handleComparisonCreated = (comparison: ComparisonCreatedEvent) => {
   closeComparisonModal();
 };
 
-const openVideoUpload = () => {
-  layoutStore.openVideoUploadModal();
-};
-
-const closeVideoUpload = () => {
-  layoutStore.closeVideoUploadModal();
-};
-
-const handleVideoUploadSuccess = async (videoRecord: VideoUploadResult) => {
-  console.log('✅ Video upload successful:', videoRecord);
-
-  // Close the upload modal
-  closeVideoUpload();
-
-  // Create a project-like object for the uploaded video
-  const uploadProject: ProjectSelection = {
-    title:
-      videoRecord.title || videoRecord.originalFilename || 'Uploaded Video',
-    video: videoRecord,
-    videoId: videoRecord.id,
-  };
-  if (videoRecord.projectId) uploadProject.id = videoRecord.projectId;
-  if (videoRecord.createdAt) uploadProject.createdAt = videoRecord.createdAt;
-  if (videoRecord.updatedAt) uploadProject.updatedAt = videoRecord.updatedAt;
-
-  // Handle the project selection
-  await handleProjectSelected(uploadProject);
-};
-
-const handleVideoUploadError = (error: Error) => {
-  console.error('❌ Video upload failed:', error);
-  // Error is already handled by the VideoUpload component
-};
-
-
-
-const loadVideo = (video: Partial<Video> & { id?: string; url?: string }, type: 'url' | 'upload' | 'shared' = 'upload') => {
+const loadVideo =(video: Partial<Video> & { id?: string; url?: string }, type: 'url' | 'upload' | 'shared' = 'upload') => {
   videoLoaded.value = false;
   try {
     playerMode.value = 'single';
@@ -1296,7 +1258,6 @@ watch(
     <!-- All Modals -->
     <DashboardModals
       :is-comparison-modal-open="isComparisonModalOpen"
-      :is-video-upload-modal-open="isVideoUploadModalOpen"
       :is-share-modal-open="isShareModalOpen"
       :is-shared-links-modal-open="isSharedLinksModalOpen"
       :show-auth-prompt="showAuthPrompt"
@@ -1305,12 +1266,8 @@ watch(
       :share-comparison-id="shareModalProps.comparisonId"
       :share-type="shareModalProps.shareType"
       :pending-shared-content="pendingSharedContent"
-      @upload-video="layoutStore.openVideoUploadModal()"
       @close-comparison-modal="layoutStore.closeComparisonModal()"
       @comparison-created="handleComparisonCreated"
-      @close-video-upload="layoutStore.closeVideoUploadModal()"
-      @upload-success="handleVideoUploadSuccess"
-      @upload-error="handleVideoUploadError"
       @close-share-modal="layoutStore.closeShareModal()"
       @close-shared-links="closeSharedLinksManagement"
       @auth-sign-in="handleAuthSignIn"

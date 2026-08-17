@@ -66,7 +66,7 @@ export interface ProjectSelection {
   /** Discriminator for player mode. */
   projectType?: 'single' | 'dual';
   /** Individual video record (present when projectType === 'single'). */
-  video?: Video | VideoUploadResult;
+  video?: Video;
   /** Video ID shortcut. */
   videoId?: string;
   /** Comparison video record (present when projectType === 'dual'). */
@@ -85,25 +85,6 @@ export interface ComparisonCreatedEvent extends Partial<ComparisonVideo> {
   id: string;
   videoA: Video;
   videoB: Video;
-}
-
-// ---------------------------------------------------------------------------
-// Video upload
-// ---------------------------------------------------------------------------
-
-/** Shape emitted by VideoUpload on success. */
-export interface VideoUploadResult {
-  id: string;
-  title?: string;
-  originalFilename?: string;
-  projectId?: string;
-  url?: string;
-  filePath?: string;
-  videoType?: 'url' | 'upload';
-  createdAt?: string;
-  updatedAt?: string;
-  /** Allow extra fields from the database record. */
-  [key: string]: unknown;
 }
 
 // ---------------------------------------------------------------------------

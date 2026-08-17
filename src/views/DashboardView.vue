@@ -10,7 +10,6 @@ import type { Label } from '@/types/labels';
 import AppHeader from '@/components/AppHeader.vue';
 import ProjectListItem from '@/components/ProjectListItem.vue';
 import CreateComparisonModal from '@/components/CreateComparisonModal.vue';
-import VideoUpload from '@/components/VideoUpload.vue';
 import FolderTree from '@/components/FolderTree.vue';
 import NewFolderDialog from '@/components/NewFolderDialog.vue';
 import DeleteConfirmationDialog from '@/components/DeleteConfirmationDialog.vue';
@@ -23,10 +22,7 @@ import {
 } from '@/composables/useVideoDetails';
 import type { FolderTreeNode, Folder, DragData } from '@/types/folder';
 import { useDashboardFolders } from '@/composables/useDashboardFolders';
-import type {
-  ComparisonCreatedEvent,
-  VideoUploadResult,
-} from '@/types/component-interfaces';
+import type { ComparisonCreatedEvent } from '@/types/component-interfaces';
 import { getMergedRangesForVideos } from '@/services/watchProgressService';
 import { percentFromRanges } from '@/utils/watchedRanges';
 
@@ -37,7 +33,6 @@ const { error: notifyError } = useNotifications();
 const dashFolders = useDashboardFolders(() => user.value?.id);
 
 const showComparisonModal = ref(false);
-const showUploadModal = ref(false);
 const showNewFolder = ref(false);
 const newFolderParent = ref<Folder | null>(null);
 const pendingDeleteFolder = ref<FolderTreeNode | null>(null);
@@ -46,14 +41,6 @@ function onComparisonCreated(comparison: ComparisonCreatedEvent) {
   showComparisonModal.value = false;
   router.push({ name: 'editor-dual', params: { id: comparison.id } });
 }
-function onUploadSuccess(videoRecord: VideoUploadResult) {
-  showUploadModal.value = false;
-  router.push({ name: 'editor-single', params: { id: videoRecord.id } });
-}
-function onUploadError(err: Error) {
-  console.error('[DashboardView] upload failed', err);
-}
-
 const scope = ref<'mine' | 'all'>(
   (localStorage.getItem('dashboardScope') as 'mine' | 'all') || 'all'
 );
@@ -354,12 +341,6 @@ watch(user, (u) => {
       <div class="flex items-center gap-2">
         <button
           class="px-3 py-1.5 border rounded-md text-sm border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-          @click="showUploadModal = true"
-        >
-          Upload video
-        </button>
-        <button
-          class="px-3 py-1.5 border rounded-md text-sm border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
           @click="showComparisonModal = true"
         >
           Create comparison
@@ -603,41 +584,7 @@ watch(user, (u) => {
       :is-visible="showComparisonModal"
       @close="showComparisonModal = false"
       @comparison-created="onComparisonCreated"
-      @upload-video="showUploadModal = true; showComparisonModal = false"
     />
-    <Teleport to="body">
-      <Transition name="modal">
-        <div
-          v-if="showUploadModal"
-          class="fixed inset-0 z-50 flex items-center justify-center p-4"
-        >
-          <div
-            class="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            @click="showUploadModal = false"
-          />
-          <div
-            class="relative bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-auto p-6"
-            @click.stop
-          >
-            <div class="flex items-center justify-between mb-6">
-              <h2 class="text-xl font-semibold text-gray-900 dark:text-white">
-                Upload Video
-              </h2>
-              <button
-                class="p-2 text-gray-400 hover:text-gray-600 rounded-lg"
-                @click="showUploadModal = false"
-              >
-                ✕
-              </button>
-            </div>
-            <VideoUpload
-              @upload-success="onUploadSuccess"
-              @upload-error="onUploadError"
-            />
-          </div>
-        </div>
-      </Transition>
-    </Teleport>
 
     <NewFolderDialog
       v-if="showNewFolder"
