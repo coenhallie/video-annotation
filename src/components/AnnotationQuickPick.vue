@@ -118,12 +118,20 @@ const resetToRoot = () => {
   leaveCommentMode();
 };
 
-/** Whitespace-only text is not a comment, so it never leaves the panel. */
+/**
+ * Whitespace-only text is not a comment, so it never leaves the panel.
+ *
+ * The text deliberately survives the emit, and this is not an exit from comment
+ * mode. Storing the annotation is asynchronous and can fail, so the listener
+ * owns closing the panel and does it only once the annotation is actually
+ * saved. Clearing here would mean a failed save took the prose with it, with
+ * nothing left to retry from. Closing the panel resets it, which reports
+ * leaving comment mode on the way out.
+ */
 const commitComment = () => {
   const text = commentText.value.trim();
   if (!text) return;
   emit('comment', text);
-  leaveCommentMode();
 };
 
 const back = () => {

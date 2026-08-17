@@ -183,6 +183,53 @@ describe('AnnotationQuickPick comment mode', () => {
     panel.unmount();
   });
 
+  it('keeps the text and stays in comment mode after committing', async () => {
+    // Saving is asynchronous and can fail. The listener closes the panel only
+    // once the annotation is stored, so the field has to survive the emit or a
+    // rejected insert would take the prose with it.
+    const panel = mountPanel();
+    await nextTick();
+    press('c');
+    await nextTick();
+
+    const input = commentInput(panel.root) as HTMLInputElement;
+    await type(input, 'keeper off his line early');
+    input.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    );
+    await nextTick();
+
+    expect(panel.events).toContainEqual(['comment', 'keeper off his line early']);
+    expect(commentInput(panel.root)?.value).toBe('keeper off his line early');
+    expect(
+      panel.events.some(([name, value]) => name === 'comment-mode' && value === false)
+    ).toBe(false);
+    panel.unmount();
+  });
+
+  it('reports leaving comment mode once when closed after a commit', async () => {
+    // The success path is emit then close. Playback must resume exactly once.
+    const panel = mountPanel();
+    await nextTick();
+    press('c');
+    await nextTick();
+
+    const input = commentInput(panel.root) as HTMLInputElement;
+    await type(input, 'keeper off his line early');
+    input.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    );
+    await nextTick();
+
+    panel.open.value = false;
+    await nextTick();
+
+    expect(
+      panel.events.filter(([name, value]) => name === 'comment-mode' && value === false)
+    ).toHaveLength(1);
+    panel.unmount();
+  });
+
   it('does not commit whitespace-only text', async () => {
     const panel = mountPanel();
     await nextTick();

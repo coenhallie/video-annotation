@@ -410,22 +410,36 @@ const handleQuickPickCommentMode = (active: boolean) => {
   commentModeWasPlaying.value = false;
 };
 
+/** Blocks a second Enter while the first insert is still in flight. */
+const commentSaving = ref(false);
+
 /**
  * A comment is an annotation with no labels: the text is the body, and a real
  * label can be attached later from the sidebar.
+ *
+ * Unlike the label path, this one closes the panel only once the annotation is
+ * stored. A failed label save costs one keystroke to redo; a failed comment
+ * save would cost prose the user just wrote, so on failure the panel stays open
+ * in comment mode with the text intact and the video still paused, which is the
+ * state to press Enter again from.
  */
 const handleQuickPickComment = async (text: string) => {
+  if (commentSaving.value) return;
+
   const snapshot = quickPickSnapshot.value;
-  closeQuickPick();
-  if (!snapshot) return;
+  if (!snapshot) {
+    closeQuickPick();
+    return;
+  }
 
   // The panel already trims and refuses empty text; this is the same last line
   // of defence as handleAddAnnotation's permission check.
   const content = text.trim();
   if (!content) return;
 
+  commentSaving.value = true;
   try {
-    await handleAddAnnotation(
+    const created = await handleAddAnnotation(
       buildAnnotationPayload({
         labels: quickPickLabels.value,
         labelIds: [],
@@ -435,6 +449,21 @@ const handleQuickPickComment = async (text: string) => {
         dual: snapshot.dual,
       })
     );
+
+    // addAnnotation also bails without throwing when its context is
+    // incomplete, so a falsy result is a failure too and must not close over
+    // text that was never saved.
+    if (!created) {
+      notifyError(
+        'Failed to add comment',
+        'The comment could not be saved. Please try again.'
+      );
+      return;
+    }
+
+    // Only now is the text safe to lose. Closing resets the panel, which
+    // reports leaving comment mode and so resumes playback, exactly once.
+    closeQuickPick();
   } catch (err) {
     console.error('Failed to create comment from quick pick:', err);
     notifyError(
@@ -443,6 +472,10 @@ const handleQuickPickComment = async (text: string) => {
         ? err.message
         : 'The comment could not be saved. Please try again.'
     );
+  } finally {
+    // Cleared whatever happened, or a failure would block the retry this
+    // whole arrangement exists to allow.
+    commentSaving.value = false;
   }
 };
 
