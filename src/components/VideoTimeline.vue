@@ -434,6 +434,19 @@ const handlePlayPause = (): void => {
           />
           <span>High</span>
         </div>
+        <!--
+          A comment carries no severity, so it gets the marker's own hollow
+          ring rather than a filled swatch. Round, unlike its square
+          neighbours, because that is what makes it read as the ring on the
+          timeline above.
+        -->
+        <div class="flex items-center space-x-1.5 text-xs text-gray-400">
+          <div
+            class="w-2 h-2 rounded-full border"
+            style="border-color: #d1d5db"
+          />
+          <span>Comment</span>
+        </div>
       </div>
     </div>
   </div>
