@@ -111,6 +111,7 @@ const segments = computed<Segment[]>(() => {
     }),
     (group) => {
       activeCategory.value = group;
+      hoveredKey.value = null;
     }
   );
 });
@@ -134,16 +135,20 @@ const position = computed(() => {
 const hubText = computed(() => (activeCategory.value ? 'Back' : 'Esc'));
 
 const handleHub = () => {
-  if (activeCategory.value) activeCategory.value = null;
-  else emit('close');
+  if (activeCategory.value) {
+    activeCategory.value = null;
+    hoveredKey.value = null;
+  } else emit('close');
 };
 
 const handleKeydown = (event: KeyboardEvent) => {
   if (event.key !== 'Escape') return;
   event.preventDefault();
   event.stopPropagation();
-  if (activeCategory.value) activeCategory.value = null;
-  else emit('close');
+  if (activeCategory.value) {
+    activeCategory.value = null;
+    hoveredKey.value = null;
+  } else emit('close');
 };
 
 watch(
@@ -161,6 +166,19 @@ watch(
   { immediate: true }
 );
 
+// Reposition without a close/reopen (e.g. the caller moves the bloom to a new
+// cursor location while it is still open) should also reset to stage 1,
+// independent of the Escape-listener lifecycle above, which stays tied to `open`.
+watch(
+  () => [props.x, props.y],
+  () => {
+    if (props.open) {
+      activeCategory.value = null;
+      hoveredKey.value = null;
+    }
+  }
+);
+
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKeydown, true);
 });
@@ -176,7 +194,6 @@ onBeforeUnmount(() => {
     <div
       class="absolute -translate-x-1/2 -translate-y-1/2"
       :style="position"
-      @click.stop
     >
       <svg
         :width="SIZE"
@@ -190,7 +207,7 @@ onBeforeUnmount(() => {
           class="cursor-pointer"
           @mouseenter="hoveredKey = segment.key"
           @mouseleave="hoveredKey = null"
-          @click="segment.onPick()"
+          @click.stop="segment.onPick()"
         >
           <title>{{ segment.title }}</title>
           <path
@@ -211,7 +228,7 @@ onBeforeUnmount(() => {
               v-for="(word, index) in segment.text.split(' ')"
               :key="index"
               :x="segment.labelX"
-              :dy="index === 0 ? -((segment.text.split(' ').length - 1) * 5) : 11"
+              :dy="index === 0 ? -((segment.text.split(' ').length - 1) * 5.5) : 11"
             >
               {{ word }}
             </tspan>
@@ -226,7 +243,7 @@ onBeforeUnmount(() => {
           stroke="rgba(148, 163, 184, 0.5)"
           stroke-width="2"
           class="cursor-pointer"
-          @click="handleHub()"
+          @click.stop="handleHub()"
         />
         <text
           :x="CENTER"
