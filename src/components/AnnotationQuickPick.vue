@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, onBeforeUnmount, type PropType } from 'vue';
+import { computed, nextTick, ref, watch, onBeforeUnmount, type PropType } from 'vue';
 import {
   assignLabelShortcuts,
   groupLabelsByCategory,
@@ -24,7 +24,7 @@ const emit = defineEmits<{
   (e: 'close'): void;
 }>();
 
-const PANEL_W = 520;
+const PANEL_W = 460;
 const EDGE_MARGIN = 12;
 
 const activeCategory = ref<LabelCategoryGroup | null>(null);
@@ -140,9 +140,14 @@ watch(
   async (open) => {
     if (open) {
       activeCategory.value = null;
-      // Capture phase so the player's global shortcuts do not consume the keys.
+      // Two belts here on purpose. The window listener is capture phase so the
+      // player's own global shortcuts cannot consume the keys first, and moving
+      // focus into the panel means the keys are delivered to it even if
+      // something else owns focus when it opens. Whichever handler runs first
+      // stops propagation, so a keystroke is never acted on twice.
       window.addEventListener('keydown', handleKeydown, true);
-      await Promise.resolve();
+      await nextTick();
+      panelRef.value?.focus({ preventScroll: true });
       measure();
     } else {
       window.removeEventListener('keydown', handleKeydown, true);
@@ -153,7 +158,7 @@ watch(
 
 // Re-measure when the right column's length changes the panel's height.
 watch(activeCategory, async () => {
-  await Promise.resolve();
+  await nextTick();
   measure();
 });
 
@@ -178,33 +183,35 @@ onBeforeUnmount(() => {
   >
     <div
       ref="panelRef"
-      class="absolute overflow-hidden rounded-2xl border border-white/10 bg-[#0e1013]/98 shadow-2xl backdrop-blur-sm"
+      tabindex="-1"
+      class="absolute overflow-hidden rounded-2xl border border-white/10 bg-[#0e1013]/98 shadow-2xl outline-none backdrop-blur-sm"
       :style="{ ...position, width: `${PANEL_W}px` }"
       @click.stop
+      @keydown="handleKeydown"
     >
       <header
-        class="flex items-center justify-between border-b border-white/[0.07] px-5 py-3"
+        class="flex items-center justify-between border-b border-white/[0.07] px-5 py-2.5"
       >
         <div class="flex items-center gap-2.5">
           <span class="h-2 w-2 rounded-full bg-orange-500" />
           <span
-            class="font-mono text-[11px] font-medium uppercase tracking-[0.22em] text-zinc-300"
+            class="font-mono text-[10px] font-medium uppercase tracking-[0.22em] text-zinc-300"
           >
             Annotate
           </span>
         </div>
-        <span class="font-mono text-[11px] tracking-wider text-zinc-500">
+        <span class="font-mono text-[10px] tracking-wider text-zinc-500">
           {{ frameLabel }} &middot; {{ timecode }}
         </span>
       </header>
 
-      <div class="flex min-h-[260px]">
+      <div class="flex min-h-[220px]">
         <!-- Categories -->
         <ul class="w-[46%] shrink-0 border-r border-white/[0.07] py-2">
           <li
             v-for="group in categories"
             :key="group.key"
-            class="relative flex cursor-pointer items-center gap-3 px-4 py-2 transition-colors"
+            class="relative flex cursor-pointer items-center gap-2.5 px-4 py-1.5 transition-colors"
             :class="
               activeCategory?.key === group.key
                 ? 'bg-white/[0.06]'
@@ -219,7 +226,7 @@ onBeforeUnmount(() => {
               :style="{ backgroundColor: group.labels[0]?.color ?? '#f97316' }"
             />
             <span
-              class="grid h-8 w-8 shrink-0 place-items-center rounded-lg border font-mono text-[13px] font-semibold"
+              class="grid h-7 w-7 shrink-0 place-items-center rounded-md border font-mono text-[11px] font-semibold"
               :class="
                 activeCategory?.key === group.key
                   ? 'border-transparent text-white'
@@ -234,12 +241,12 @@ onBeforeUnmount(() => {
               {{ group.letter }}
             </span>
             <span
-              class="flex-1 font-mono text-[13px] tracking-[0.12em]"
+              class="flex-1 font-mono text-[11px] tracking-[0.12em]"
               :class="activeCategory?.key === group.key ? 'text-white' : 'text-zinc-400'"
             >
               {{ group.key }}
             </span>
-            <span class="font-mono text-[11px] text-zinc-600">
+            <span class="font-mono text-[10px] text-zinc-600">
               {{ group.labels.length }}
             </span>
           </li>
@@ -250,30 +257,30 @@ onBeforeUnmount(() => {
           <li
             v-for="row in labelRows"
             :key="row.label.id"
-            class="flex cursor-pointer items-center gap-3 px-4 py-2 transition-colors hover:bg-white/[0.04]"
+            class="flex cursor-pointer items-center gap-2.5 px-4 py-1.5 transition-colors hover:bg-white/[0.04]"
             :title="row.label.description || row.label.name"
             @click="commit(row.label)"
           >
             <span
-              class="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-white/10 bg-white/[0.04] font-mono text-[13px] font-semibold text-zinc-300"
+              class="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-white/10 bg-white/[0.04] font-mono text-[11px] font-semibold text-zinc-300"
             >
               {{ row.letter }}
             </span>
-            <span class="font-mono text-[13px] tracking-[0.1em] text-zinc-200">
+            <span class="font-mono text-[11px] tracking-[0.1em] text-zinc-200">
               {{ row.text }}
             </span>
           </li>
         </ul>
         <div
           v-else
-          class="flex flex-1 items-center justify-center px-6 text-center font-mono text-[11px] tracking-[0.14em] text-zinc-600"
+          class="flex flex-1 items-center justify-center px-6 text-center font-mono text-[10px] tracking-[0.14em] text-zinc-600"
         >
           Pick a category
         </div>
       </div>
 
       <footer
-        class="border-t border-white/[0.07] px-5 py-2.5 font-mono text-[10px] tracking-[0.16em] text-zinc-600"
+        class="border-t border-white/[0.07] px-5 py-2 font-mono text-[9px] tracking-[0.16em] text-zinc-600"
       >
         <span v-if="activeCategory">Letter to label &middot; Esc to go back</span>
         <span v-else>Letter to pick a category &middot; Esc to close</span>
