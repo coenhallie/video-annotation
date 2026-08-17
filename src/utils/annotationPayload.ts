@@ -62,6 +62,25 @@ export function buildAnnotationPayload(
 }
 
 /**
+ * What counts as a saveable annotation: exactly one label, or no label at all
+ * and some text. The second case is a comment, which the quick pick creates
+ * from the timeline. Without it the sidebar could not re-save a comment as
+ * itself, since attaching a label is what its Update button would demand and
+ * that turns the comment into something else.
+ *
+ * Neither a label nor text is still not an annotation, so a bare drawing stays
+ * blocked, exactly as before.
+ */
+export function isSaveableAnnotation(input: {
+  labels?: string[] | null;
+  content?: string | null;
+}): boolean {
+  const labelCount = input.labels?.length ?? 0;
+  if (labelCount === 1) return true;
+  return labelCount === 0 && (input.content ?? '').trim().length > 0;
+}
+
+/**
  * A comment is an annotation with no labels attached, created by the quick
  * pick's comment mode with an empty labelIds.
  *

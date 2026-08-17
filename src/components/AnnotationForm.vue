@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, watch, type PropType } from 'vue';
 import SearchableLabelSelector from './SearchableLabelSelector.vue';
-import { buildAnnotationPayload, DEFAULT_ANNOTATION_COLOR } from '../utils/annotationPayload';
+import {
+  buildAnnotationPayload,
+  DEFAULT_ANNOTATION_COLOR,
+  isSaveableAnnotation,
+} from '../utils/annotationPayload';
 import type { DrawingData } from '../types/database';
 import type { Label } from '../types/labels';
 import type { UseDrawingCanvas } from '../composables/useDrawingCanvas';
@@ -195,11 +199,13 @@ const annotationLabels = computed({
 });
 
 // Computed
-// A label is all that is required. Text and drawings are optional, so the
-// sidebar agrees with the quick pick on what a valid annotation is.
+// Exactly one label, or no label and some text. The second case is a comment,
+// which the quick pick creates from the timeline; the rule lives in
+// annotationPayload so the sidebar and the quick pick cannot drift apart on
+// what a valid annotation is. Drawings remain optional either way.
 const isSaveDisabled = computed(() => {
   if (!newAnnotation.value) return true;
-  return newAnnotation.value.labels?.length !== 1;
+  return !isSaveableAnnotation(newAnnotation.value);
 });
 
 // Update annotation color based on selected labels

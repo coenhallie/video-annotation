@@ -3,6 +3,7 @@ import {
   buildAnnotationPayload,
   DEFAULT_ANNOTATION_COLOR,
   isCommentAnnotation,
+  isSaveableAnnotation,
 } from '../annotationPayload';
 import type { Label } from '@/types/labels';
 
@@ -115,6 +116,32 @@ describe('buildAnnotationPayload', () => {
     });
 
     expect(payload.color).toBe('#123456');
+  });
+});
+
+describe('isSaveableAnnotation', () => {
+  it('accepts exactly one label with no text', () => {
+    expect(isSaveableAnnotation({ labels: ['label-ball-missed'], content: '' })).toBe(true);
+  });
+
+  it('accepts a label-less comment with text', () => {
+    // This is what the quick pick creates. Before, the sidebar refused to
+    // re-save one without attaching a label, which changes what it is.
+    expect(isSaveableAnnotation({ labels: [], content: 'keeper off his line' })).toBe(true);
+    expect(isSaveableAnnotation({ content: 'keeper off his line' })).toBe(true);
+  });
+
+  it('rejects a label-less annotation whose text is only whitespace', () => {
+    expect(isSaveableAnnotation({ labels: [], content: '   ' })).toBe(false);
+  });
+
+  it('rejects neither a label nor text', () => {
+    expect(isSaveableAnnotation({ labels: [], content: '' })).toBe(false);
+    expect(isSaveableAnnotation({})).toBe(false);
+  });
+
+  it('still rejects more than one label', () => {
+    expect(isSaveableAnnotation({ labels: ['a', 'b'], content: 'note' })).toBe(false);
   });
 });
 
