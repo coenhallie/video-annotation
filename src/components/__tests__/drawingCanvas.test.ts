@@ -89,6 +89,7 @@ function mountCanvas(existingDrawings: unknown[] = []) {
   const root = document.createElement('div');
   document.body.appendChild(root);
   const instance = ref<any>(null);
+  const frame = ref(300);
 
   const app = createApp(
     defineComponent({
@@ -96,7 +97,7 @@ function mountCanvas(existingDrawings: unknown[] = []) {
         return () =>
           h(DrawingCanvas, {
             ref: instance,
-            currentFrame: 300,
+            currentFrame: frame.value,
             isDrawingMode: true,
             strokeWidth: 4,
             severity: 'medium',
@@ -112,7 +113,12 @@ function mountCanvas(existingDrawings: unknown[] = []) {
       return instance.value;
     },
     get canvas() {
-      return FakeCanvas.instances[0];
+      // Asserted non-null: every test calls this only after ready(), by
+      // which point initCanvas has constructed the one instance under test.
+      return FakeCanvas.instances[0]!;
+    },
+    setFrame: (value: number) => {
+      frame.value = value;
     },
     unmount: () => {
       app.unmount();
@@ -177,6 +183,29 @@ describe('DrawingCanvas undoLastStroke', () => {
     harness.component.undoLastStroke();
 
     expect(harness.canvas.getObjects()).toHaveLength(1);
+    harness.unmount();
+  });
+
+  it('declines to touch another frame once a session has been left open across a seek', async () => {
+    // A timeline click can seek while drawing mode is still open. The seek
+    // clears the canvas and re-renders it for the new frame, so the
+    // session's own strokes are no longer on the canvas: the last object
+    // there belongs to someone else's drawing, not to this session.
+    const harness = mountCanvas();
+    await ready();
+    await draw(harness);
+
+    // A jump greater than one frame skips the fade transition, so the
+    // reload settles within a couple of ticks instead of a 150ms timer.
+    harness.setFrame(400);
+    await nextTick();
+    await nextTick();
+    harness.canvas.add({ persisted: true });
+
+    harness.component.undoLastStroke();
+
+    expect(harness.canvas.getObjects()).toHaveLength(1);
+    expect(harness.component.getCurrentDrawingSession().paths).toHaveLength(1);
     harness.unmount();
   });
 });

@@ -588,10 +588,17 @@ onUnmounted(() => {
  * session's own objects in fabric's stack, so with no session path to pop there
  * is nothing here to remove: otherwise Undo would eat somebody else's saved
  * drawing off the screen.
+ *
+ * A session can also outlive the frame it started on - a timeline click can
+ * seek while drawing mode is still open. When that happens the canvas has
+ * already been cleared and re-rendered for the new frame, so the session's
+ * own strokes are gone from it and the last object on the canvas belongs to
+ * someone else's saved drawing. Undo declines rather than remove that.
  */
 const undoLastStroke = () => {
   const session = currentDrawingSession.value;
   if (!session || session.paths.length === 0) return;
+  if (session.frame !== props.currentFrame) return;
 
   session.paths.pop();
   if (session.paths.length === 0) {
