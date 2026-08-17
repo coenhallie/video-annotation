@@ -74,8 +74,10 @@ describe('groupLabelsByCategory', () => {
   it('omits categories with no labels', () => {
     const groups = groupLabelsByCategory([makeLabel('EVT MISSED')]);
     expect(groups).toHaveLength(1);
-    expect(groups[0].key).toBe('EVT');
-    expect(groups[0].name).toBe('Events');
+    const group = groups[0];
+    expect(group).toBeDefined();
+    expect(group?.key).toBe('EVT');
+    expect(group?.name).toBe('Events');
   });
 
   it('excludes labels with an unrecognised prefix', () => {
@@ -85,7 +87,9 @@ describe('groupLabelsByCategory', () => {
       makeLabel('Custom thing'),
     ]);
     expect(groups).toHaveLength(1);
-    expect(groups[0].labels.map((l) => l.name)).toEqual(['EVT MISSED']);
+    const group = groups[0];
+    expect(group).toBeDefined();
+    expect(group?.labels.map((l) => l.name)).toEqual(['EVT MISSED']);
   });
 
   it('preserves the incoming order of labels within a category', () => {
@@ -93,7 +97,9 @@ describe('groupLabelsByCategory', () => {
       makeLabel('PLR TELEPORT'),
       makeLabel('PLR MISSED'),
     ]);
-    expect(groups[0].labels.map((l) => l.name)).toEqual([
+    const group = groups[0];
+    expect(group).toBeDefined();
+    expect(group?.labels.map((l) => l.name)).toEqual([
       'PLR TELEPORT',
       'PLR MISSED',
     ]);
