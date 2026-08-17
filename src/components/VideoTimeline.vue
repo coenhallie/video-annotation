@@ -181,7 +181,15 @@ const handleTimelineMouseDown = (event: MouseEvent): void => {
         // Hand over the time under the pointer rather than letting the editor
         // read the player's current frame: the seek above is asynchronous, so
         // reading the frame now would capture the position before the jump.
-        emit('open-bloom', { time, clientX: e.clientX, clientY: e.clientY });
+        //
+        // Anchor y to the top of the bar, not the pointer: the bloom opens
+        // upward from whatever y it is given, so anchoring to the pointer
+        // would leave it overlapping the half of the bar below the click.
+        emit('open-bloom', {
+          time,
+          clientX: e.clientX,
+          clientY: timelineRef.value?.getBoundingClientRect().top ?? e.clientY,
+        });
       }
     }
     isDragging.value = false;

@@ -244,6 +244,9 @@ const bloomHasCategories = computed(
 const bloomOpen = ref(false);
 const bloomX = ref(0);
 const bloomY = ref(0);
+// The timeline opens a semicircle above the cursor so the scrub bar stays
+// visible and usable; over the video there is room for the whole ring.
+const bloomArc = ref<'full' | 'up'>('full');
 
 /**
  * Frame captured when the bloom opens. The video keeps playing while the menu is
@@ -285,6 +288,7 @@ const openBloom = (event: MouseEvent) => {
           }
         : null,
   };
+  bloomArc.value = 'full';
   bloomX.value = event.clientX;
   bloomY.value = event.clientY;
   bloomOpen.value = true;
@@ -313,6 +317,7 @@ const openBloomAtTime = (payload: {
     fps: activeFps,
     dual: null,
   };
+  bloomArc.value = 'up';
   bloomX.value = payload.clientX;
   bloomY.value = payload.clientY;
   bloomOpen.value = true;
@@ -1297,6 +1302,7 @@ watch(
         :open="bloomOpen"
         :x="bloomX"
         :y="bloomY"
+        :arc="bloomArc"
         :labels="bloomLabels"
         @select="handleBloomSelect"
         @close="closeBloom"

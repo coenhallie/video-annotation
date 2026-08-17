@@ -12,6 +12,12 @@ const props = defineProps({
   x: { type: Number, default: 0 },
   y: { type: Number, default: 0 },
   labels: { type: Array as PropType<Label[]>, default: () => [] },
+  /**
+   * 'full' is a whole ring around the cursor. 'up' is a semicircle opening
+   * upward from it, for callers anchored to something that must stay visible
+   * below the cursor - the timeline.
+   */
+  arc: { type: String as PropType<'full' | 'up'>, default: 'full' },
 });
 
 const emit = defineEmits<{
@@ -19,13 +25,34 @@ const emit = defineEmits<{
   (e: 'close'): void;
 }>();
 
-// Ring geometry, in pixels.
-const INNER_RADIUS = 46;
-const OUTER_RADIUS = 132;
-const SIZE = OUTER_RADIUS * 2 + 8; // a little slack so strokes are not clipped
-const CENTER = SIZE / 2;
-const LABEL_RADIUS = (INNER_RADIUS + OUTER_RADIUS) / 2;
+// Ring geometry, in pixels. The half bloom gets more radial room because it has
+// half the angular room: its wedges are half as wide, so they need to be deeper
+// for the same label to stay legible.
+const GEOMETRY = {
+  full: { inner: 46, outer: 132, startDeg: 0, sweepDeg: 360 },
+  up: { inner: 52, outer: 168, startDeg: -90, sweepDeg: 180 },
+} as const;
+
+const PAD = 4; // slack so strokes are not clipped by the viewBox
 const EDGE_MARGIN = 8;
+
+const geo = computed(() => GEOMETRY[props.arc] ?? GEOMETRY.full);
+const INNER_RADIUS = computed(() => geo.value.inner);
+const OUTER_RADIUS = computed(() => geo.value.outer);
+const LABEL_RADIUS = computed(() => (geo.value.inner + geo.value.outer) / 2);
+
+// The drawing box, and where the cursor (the pivot the bloom is anchored to)
+// sits inside it. A half bloom reserves no space below the pivot, so it never
+// covers what the caller anchored it to.
+const isHalf = computed(() => props.arc === 'up');
+const BOX_W = computed(() => geo.value.outer * 2 + PAD * 2);
+const BOX_H = computed(() =>
+  isHalf.value ? geo.value.outer + PAD * 2 : geo.value.outer * 2 + PAD * 2
+);
+const PIVOT_X = computed(() => BOX_W.value / 2);
+const PIVOT_Y = computed(() =>
+  isHalf.value ? BOX_H.value - PAD : BOX_H.value / 2
+);
 
 const activeCategory = ref<LabelCategoryGroup | null>(null);
 const hoveredKey = ref<string | null>(null);
@@ -122,25 +149,38 @@ const textColorFor = (hex: string): string => {
   return darkContrast >= lightContrast ? TEXT_ON_LIGHT : TEXT_ON_DARK;
 };
 
+/** Angle 0 is straight up; angles increase clockwise. */
 const polar = (radius: number, angleDeg: number) => {
   const rad = ((angleDeg - 90) * Math.PI) / 180;
-  return { x: CENTER + radius * Math.cos(rad), y: CENTER + radius * Math.sin(rad) };
+  return {
+    x: PIVOT_X.value + radius * Math.cos(rad),
+    y: PIVOT_Y.value + radius * Math.sin(rad),
+  };
 };
 
 /** Annulus wedge from startDeg to endDeg. */
 const wedgePath = (startDeg: number, endDeg: number): string => {
-  const outerStart = polar(OUTER_RADIUS, startDeg);
-  const outerEnd = polar(OUTER_RADIUS, endDeg);
-  const innerEnd = polar(INNER_RADIUS, endDeg);
-  const innerStart = polar(INNER_RADIUS, startDeg);
+  const outer = OUTER_RADIUS.value;
+  const inner = INNER_RADIUS.value;
+  const outerStart = polar(outer, startDeg);
+  const outerEnd = polar(outer, endDeg);
+  const innerEnd = polar(inner, endDeg);
+  const innerStart = polar(inner, startDeg);
   const largeArc = endDeg - startDeg > 180 ? 1 : 0;
   return [
     `M ${outerStart.x} ${outerStart.y}`,
-    `A ${OUTER_RADIUS} ${OUTER_RADIUS} 0 ${largeArc} 1 ${outerEnd.x} ${outerEnd.y}`,
+    `A ${outer} ${outer} 0 ${largeArc} 1 ${outerEnd.x} ${outerEnd.y}`,
     `L ${innerEnd.x} ${innerEnd.y}`,
-    `A ${INNER_RADIUS} ${INNER_RADIUS} 0 ${largeArc} 0 ${innerStart.x} ${innerStart.y}`,
+    `A ${inner} ${inner} 0 ${largeArc} 0 ${innerStart.x} ${innerStart.y}`,
     'Z',
   ].join(' ');
+};
+
+/** Half-disc opening upward from the pivot, used for the half bloom's backing and hub. */
+const halfDiscPath = (radius: number): string => {
+  const cx = PIVOT_X.value;
+  const cy = PIVOT_Y.value;
+  return `M ${cx - radius} ${cy} A ${radius} ${radius} 0 0 1 ${cx + radius} ${cy} Z`;
 };
 
 const buildSegments = <T,>(
@@ -148,13 +188,15 @@ const buildSegments = <T,>(
   describe: (item: T) => { key: string; text: string; title: string; color: string },
   pick: (item: T) => void
 ): Segment[] => {
-  const step = 360 / items.length;
-  // A single item would produce a degenerate 360 degree arc, so leave a small gap.
-  const sweep = items.length === 1 ? 359.9 : step;
+  const { startDeg, sweepDeg } = geo.value;
+  const step = sweepDeg / items.length;
+  // A single item filling a whole circle would be a degenerate 360 degree arc,
+  // so leave a small gap. A half bloom never reaches 360 and needs no such gap.
+  const sweep = sweepDeg >= 360 && items.length === 1 ? 359.9 : step;
   return items.map((item, index) => {
-    const start = index * step;
+    const start = startDeg + index * step;
     const mid = start + sweep / 2;
-    const centroid = polar(LABEL_RADIUS, mid);
+    const centroid = polar(LABEL_RADIUS.value, mid);
     const described = describe(item);
     return {
       ...described,
@@ -201,14 +243,18 @@ const segments = computed<Segment[]>(() => {
  * inward near a viewport edge rather than being clipped.
  */
 const position = computed(() => {
-  const halfSize = SIZE / 2;
-  const maxX = window.innerWidth - halfSize - EDGE_MARGIN;
-  const maxY = window.innerHeight - halfSize - EDGE_MARGIN;
-  const minX = halfSize + EDGE_MARGIN;
-  const minY = halfSize + EDGE_MARGIN;
+  // Clamp the pivot so the whole box stays on screen, then place the box by
+  // subtracting where the pivot sits inside it.
+  const clamp = (value: number, pivot: number, box: number, viewport: number) => {
+    const min = pivot + EDGE_MARGIN;
+    const max = viewport - EDGE_MARGIN - box + pivot;
+    return Math.min(Math.max(value, min), Math.max(min, max));
+  };
+  const px = clamp(props.x, PIVOT_X.value, BOX_W.value, window.innerWidth);
+  const py = clamp(props.y, PIVOT_Y.value, BOX_H.value, window.innerHeight);
   return {
-    left: `${Math.min(Math.max(props.x, minX), Math.max(minX, maxX))}px`,
-    top: `${Math.min(Math.max(props.y, minY), Math.max(minY, maxY))}px`,
+    left: `${px - PIVOT_X.value}px`,
+    top: `${py - PIVOT_Y.value}px`,
   };
 });
 
@@ -272,13 +318,13 @@ onBeforeUnmount(() => {
     @contextmenu.prevent="emit('close')"
   >
     <div
-      class="absolute -translate-x-1/2 -translate-y-1/2"
+      class="absolute"
       :style="position"
     >
       <svg
-        :width="SIZE"
-        :height="SIZE"
-        :viewBox="`0 0 ${SIZE} ${SIZE}`"
+        :width="BOX_W"
+        :height="BOX_H"
+        :viewBox="`0 0 ${BOX_W} ${BOX_H}`"
         class="drop-shadow-2xl"
       >
         <!--
@@ -286,9 +332,15 @@ onBeforeUnmount(() => {
           over a known dark base instead of whatever video frame is behind
           the bloom - otherwise contrast would shift frame to frame.
         -->
+        <path
+          v-if="isHalf"
+          :d="halfDiscPath(OUTER_RADIUS)"
+          fill="#0f172a"
+        />
         <circle
-          :cx="CENTER"
-          :cy="CENTER"
+          v-else
+          :cx="PIVOT_X"
+          :cy="PIVOT_Y"
           :r="OUTER_RADIUS"
           fill="#0f172a"
         />
@@ -328,9 +380,19 @@ onBeforeUnmount(() => {
           </text>
         </g>
 
+        <path
+          v-if="isHalf"
+          :d="halfDiscPath(INNER_RADIUS)"
+          fill="rgba(15, 23, 42, 0.92)"
+          stroke="rgba(148, 163, 184, 0.5)"
+          stroke-width="2"
+          class="cursor-pointer"
+          @click.stop="handleHub()"
+        />
         <circle
-          :cx="CENTER"
-          :cy="CENTER"
+          v-else
+          :cx="PIVOT_X"
+          :cy="PIVOT_Y"
           :r="INNER_RADIUS"
           fill="rgba(15, 23, 42, 0.92)"
           stroke="rgba(148, 163, 184, 0.5)"
@@ -339,8 +401,8 @@ onBeforeUnmount(() => {
           @click.stop="handleHub()"
         />
         <text
-          :x="CENTER"
-          :y="CENTER"
+          :x="PIVOT_X"
+          :y="isHalf ? PIVOT_Y - INNER_RADIUS * 0.45 : PIVOT_Y"
           text-anchor="middle"
           dominant-baseline="middle"
           class="pointer-events-none select-none fill-slate-300 text-[11px] font-semibold uppercase tracking-wide"
