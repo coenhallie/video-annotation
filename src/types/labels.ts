@@ -212,7 +212,7 @@ export const DEFAULT_LABELS: Omit<
     isActive: true,
   },
   {
-    name: 'PLY WRONG POS',
+    name: 'PLR WRONG POS',
     description:
       'The player exists but is clearly in the wrong position on the pitch.',
     color: '#06b6d4', // cyan-500
@@ -220,7 +220,7 @@ export const DEFAULT_LABELS: Omit<
     isActive: true,
   },
   {
-    name: 'PLY AS NPL',
+    name: 'PLR AS NPL',
     description:
       'The player has been incorrectly categorized as a non-player official.',
     color: '#0891b2', // cyan-600
@@ -228,7 +228,7 @@ export const DEFAULT_LABELS: Omit<
     isActive: true,
   },
   {
-    name: 'PLY KEEPER WRONG POS',
+    name: 'PLR KEEPER WRONG POS',
     description: 'A goal keeper class player is in a seriously wrong position.',
     color: '#0e7490', // cyan-700
     isDefault: true,
