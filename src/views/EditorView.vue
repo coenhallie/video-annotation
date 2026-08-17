@@ -17,6 +17,9 @@ import EditorHeader from '@/components/EditorHeader.vue';
 
 import UnifiedVideoPlayer from '@/components/UnifiedVideoPlayer.vue';
 import DashboardModals from '@/components/DashboardModals.vue';
+import AnnotationBloom from '@/components/AnnotationBloom.vue';
+import { useLabelCatalog } from '@/composables/useLabelCatalog';
+import { buildAnnotationPayload } from '@/utils/annotationPayload';
 import { ShareService } from '@/services/shareService';
 import { VideoService } from '@/services/videoService';
 import { ComparisonVideoService } from '@/services/comparisonVideoService';
@@ -41,6 +44,7 @@ import type {
   ComparisonCreatedEvent,
   AnnotationFormData,
 } from '@/types/component-interfaces';
+import type { Label } from '@/types/labels';
 import { useVideoStore } from '@/stores/video';
 import { useLayoutStore } from '@/stores/layout';
 import { storeToRefs } from 'pinia';
@@ -222,6 +226,76 @@ const handleAddAnnotation = async (annotationData: AnnotationFormData) => {
 };
 
 const selectedAnnotation = ref<Annotation | null>(null);
+
+// ── Annotation cursor bloom ──────────────────────────────────────────────────
+// AnnotationPanel is mounted without a project id, so the bloom must use the
+// same catalog key to see the same labels.
+const { labels: bloomLabels } = useLabelCatalog(() => user.value?.id);
+
+const bloomOpen = ref(false);
+const bloomX = ref(0);
+const bloomY = ref(0);
+
+/**
+ * Frame captured when the bloom opens. The video keeps playing while the menu is
+ * up, so reading the frame at click time would place every annotation late.
+ */
+const bloomSnapshot = ref<{
+  frame: number;
+  fps: number;
+  dual: { videoAFrame: number; videoBFrame: number } | null;
+} | null>(null);
+
+// A plain function, not a computed: canComment() is not reactive, so a computed
+// would cache a stale answer.
+const bloomReadOnly = () =>
+  (isSharedVideo.value || isSharedComparison.value) && !canComment();
+
+const openBloom = (event: MouseEvent) => {
+  if (bloomReadOnly()) return;
+  if (!user.value) return;
+  if (drawingCoordinator?.isDrawingMode?.value) return;
+  if (bloomLabels.value.length === 0) return;
+
+  event.preventDefault();
+
+  bloomSnapshot.value = {
+    frame: currentFrame.value ?? 0,
+    fps: fps.value || 30,
+    dual:
+      playerMode.value === 'dual'
+        ? {
+            videoAFrame: dualVideoPlayer?.videoACurrentFrame?.value ?? 0,
+            videoBFrame: dualVideoPlayer?.videoBCurrentFrame?.value ?? 0,
+          }
+        : null,
+  };
+  bloomX.value = event.clientX;
+  bloomY.value = event.clientY;
+  bloomOpen.value = true;
+};
+
+const closeBloom = () => {
+  bloomOpen.value = false;
+  bloomSnapshot.value = null;
+};
+
+const handleBloomSelect = async (label: Label) => {
+  const snapshot = bloomSnapshot.value;
+  closeBloom();
+  if (!snapshot) return;
+
+  await handleAddAnnotation(
+    buildAnnotationPayload({
+      labels: bloomLabels.value,
+      labelIds: [label.id],
+      content: '',
+      frame: snapshot.frame,
+      fps: snapshot.fps,
+      dual: snapshot.dual,
+    })
+  );
+};
 
 // Component Refs
 const unifiedVideoPlayerRef = ref<UnifiedVideoPlayerInstance | null>(null);
@@ -1045,7 +1119,10 @@ watch(
       <section class="flex-1 flex flex-col bg-black min-w-0 overflow-hidden">
         <div class="flex-1 flex items-center justify-center p-6">
           <div class="w-full h-full flex flex-col items-center justify-center">
-            <div class="relative w-full h-full max-h-full">
+            <div
+              class="relative w-full h-full max-h-full"
+              @contextmenu="openBloom"
+            >
               <!-- Unified Video Player -->
               <UnifiedVideoPlayer
                 ref="unifiedVideoPlayerRef"
@@ -1163,6 +1240,15 @@ watch(
           />
         </div>
       </section>
+
+      <AnnotationBloom
+        :open="bloomOpen"
+        :x="bloomX"
+        :y="bloomY"
+        :labels="bloomLabels"
+        @select="handleBloomSelect"
+        @close="closeBloom"
+      />
 
       <!-- Sidebar with Calibration and Annotation Panel -->
       <aside
