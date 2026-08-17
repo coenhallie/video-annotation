@@ -582,6 +582,44 @@ onUnmounted(() => {
   // sessionTimer cleanup removed since we no longer use session timers
 });
 
+/**
+ * Undo owns the strokes of the current session and nothing else. The canvas
+ * also holds the drawings loaded for this frame, and they are below the
+ * session's own objects in fabric's stack, so with no session path to pop there
+ * is nothing here to remove: otherwise Undo would eat somebody else's saved
+ * drawing off the screen.
+ */
+const undoLastStroke = () => {
+  const session = currentDrawingSession.value;
+  if (!session || session.paths.length === 0) return;
+
+  session.paths.pop();
+  if (session.paths.length === 0) {
+    currentDrawingSession.value = null;
+  }
+
+  if (!canvas.value || canvas.value.disposed) return;
+  const objects = canvas.value.getObjects();
+  const last = objects[objects.length - 1];
+  if (!last) return;
+  canvas.value.remove(last);
+  canvas.value.renderAll();
+};
+
+/**
+ * Throws away the strokes drawn since the session began and puts back exactly
+ * what is persisted for this frame.
+ *
+ * Deliberately narrower than clearDrawings and than the coordinator's
+ * clearDrawingsWithRefs: the latter also drops the frame's entry from the
+ * composable's map, so cancelling a new drawing would take an older saved one
+ * off the screen with it.
+ */
+const discardCurrentSession = async () => {
+  currentDrawingSession.value = null;
+  await loadDrawingsForFrame(true);
+};
+
 // Get current drawing session data without completing it
 const getCurrentDrawingSession = () => {
   return currentDrawingSession.value;
@@ -593,6 +631,8 @@ defineExpose({
   completeDrawingSession,
   hasDrawingsOnCurrentFrame,
   getCurrentDrawingSession,
+  undoLastStroke,
+  discardCurrentSession,
 });
 </script>
 

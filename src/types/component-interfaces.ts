@@ -25,6 +25,8 @@ export interface DrawingCanvasExpose {
   getCurrentDrawingSession?: () => DrawingData | null;
   completeDrawingSession?: (videoContext?: 'A' | 'B') => void;
   clearCurrentFrameDrawings?: () => void;
+  undoLastStroke?: () => void;
+  discardCurrentSession?: () => Promise<void> | void;
 }
 
 // ---------------------------------------------------------------------------
