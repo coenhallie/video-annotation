@@ -74,11 +74,12 @@ function mountPanel(labels: Label[] = LABELS): Harness {
 }
 
 /** Dispatch on window, where the panel's capture-phase listener lives. */
-const press = (key: string): KeyboardEvent => {
+const press = (key: string, init: KeyboardEventInit = {}): KeyboardEvent => {
   const event = new KeyboardEvent('keydown', {
     key,
     bubbles: true,
     cancelable: true,
+    ...init,
   });
   window.dispatchEvent(event);
   return event;
@@ -132,6 +133,36 @@ describe('AnnotationQuickPick comment mode', () => {
     // The capture-phase window handler must not swallow this, or the input
     // would never receive a character.
     expect(event.defaultPrevented).toBe(false);
+    panel.unmount();
+  });
+
+  // jsdom never inserts text from a synthetic keydown, so asserting the input
+  // stays empty would pass whatever the handler does. defaultPrevented is the
+  // only thing here that distinguishes swallowed from delivered.
+  it('swallows the auto-repeat of the C that opened the field', async () => {
+    const panel = mountPanel();
+    await nextTick();
+    press('c');
+    await nextTick();
+
+    const repeated = press('c', { repeat: true });
+
+    expect(repeated.defaultPrevented).toBe(true);
+    panel.unmount();
+  });
+
+  it('delivers auto-repeat again once a fresh key has been pressed', async () => {
+    const panel = mountPanel();
+    await nextTick();
+    press('c');
+    await nextTick();
+
+    // Any keydown that is not itself a repeat means the held C is long gone,
+    // so holding Backspace to erase must keep working.
+    press('a');
+    const held = press('Backspace', { repeat: true });
+
+    expect(held.defaultPrevented).toBe(false);
     panel.unmount();
   });
 

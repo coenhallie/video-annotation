@@ -83,10 +83,21 @@ const commit = (label: Label) => {
   emit('select', label);
 };
 
+/**
+ * True while a key that was already down when the comment field opened may
+ * still be auto-repeating. The C that opens the field is preventDefault()ed,
+ * but its repeats arrive after the switch to comment mode and would otherwise
+ * land "ccc" in the input. Cleared by the first keydown that is not a repeat,
+ * which is the earliest moment any key held across the switch must have been
+ * released, so holding Backspace to erase still behaves normally.
+ */
+const swallowHeldRepeats = ref(false);
+
 const enterCommentMode = () => {
   if (mode.value === 'comment') return;
   mode.value = 'comment';
   commentText.value = '';
+  swallowHeldRepeats.value = true;
   emit('comment-mode', true);
 };
 
@@ -98,6 +109,7 @@ const leaveCommentMode = () => {
   if (mode.value !== 'comment') return;
   mode.value = 'pick';
   commentText.value = '';
+  swallowHeldRepeats.value = false;
   emit('comment-mode', false);
 };
 
@@ -136,6 +148,14 @@ const handleKeydown = (event: KeyboardEvent) => {
   // receives no characters at all. Escape is the only key it still owns; Enter
   // is handled by the input's own binding.
   if (mode.value === 'comment') {
+    if (!event.repeat) {
+      swallowHeldRepeats.value = false;
+    } else if (swallowHeldRepeats.value) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
     if (event.key === 'Escape') {
       event.preventDefault();
       event.stopPropagation();
