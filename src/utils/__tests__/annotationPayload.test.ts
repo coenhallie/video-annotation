@@ -4,8 +4,11 @@ import {
   DEFAULT_ANNOTATION_COLOR,
   isCommentAnnotation,
   isSaveableAnnotation,
+  hasDrawingStrokes,
+  isDrawingAnnotation,
 } from '../annotationPayload';
 import type { Label } from '@/types/labels';
+import type { DrawingData } from '@/types/database';
 
 const ballMissed: Label = {
   id: 'label-ball-missed',
@@ -15,6 +18,23 @@ const ballMissed: Label = {
   isActive: true,
   createdAt: '2026-01-01T00:00:00Z',
   updatedAt: '2026-01-01T00:00:00Z',
+};
+
+const strokes: DrawingData = {
+  paths: [
+    {
+      points: [
+        { x: 0.1, y: 0.1 },
+        { x: 0.2, y: 0.2 },
+      ],
+      strokeWidth: 4,
+      color: '#ef4444',
+      timestamp: 1,
+    },
+  ],
+  canvasWidth: 800,
+  canvasHeight: 450,
+  frame: 300,
 };
 
 describe('buildAnnotationPayload', () => {
@@ -160,5 +180,133 @@ describe('isCommentAnnotation', () => {
 
   it('does not treat a labelled annotation as a comment', () => {
     expect(isCommentAnnotation({ labels: ['label-ball-missed'] })).toBe(false);
+  });
+});
+
+describe('buildAnnotationPayload drawing titles', () => {
+  it('titles a bare drawing Drawing', () => {
+    const payload = buildAnnotationPayload({
+      labels: [],
+      labelIds: [],
+      content: '',
+      frame: 300,
+      fps: 30,
+      drawingData: strokes,
+    });
+
+    expect(payload.title).toBe('Drawing');
+    expect(payload.annotationType).toBe('drawing');
+    expect(payload.color).toBe(DEFAULT_ANNOTATION_COLOR);
+  });
+
+  it('still prefers the label name over the drawing fallback', () => {
+    const payload = buildAnnotationPayload({
+      labels: [ballMissed],
+      labelIds: [ballMissed.id],
+      content: '',
+      frame: 300,
+      fps: 30,
+      drawingData: strokes,
+    });
+
+    expect(payload.title).toBe('BALL MISSED');
+  });
+
+  it('still prefers the content over the drawing fallback', () => {
+    const payload = buildAnnotationPayload({
+      labels: [],
+      labelIds: [],
+      content: 'keeper off his line',
+      frame: 300,
+      fps: 30,
+      drawingData: strokes,
+    });
+
+    expect(payload.title).toBe('keeper off his line');
+  });
+});
+
+describe('hasDrawingStrokes', () => {
+  it('is true for a single-mode drawing with paths', () => {
+    expect(hasDrawingStrokes(strokes)).toBe(true);
+  });
+
+  it('is true for a dual-mode drawing with paths on one video', () => {
+    expect(
+      hasDrawingStrokes({
+        paths: [],
+        canvasWidth: 800,
+        canvasHeight: 450,
+        frame: 300,
+        drawingB: {
+          paths: strokes.paths,
+          canvasWidth: 800,
+          canvasHeight: 450,
+          frame: 300,
+        },
+      })
+    ).toBe(true);
+  });
+
+  it('is false for an empty shell of either shape', () => {
+    expect(
+      hasDrawingStrokes({
+        paths: [],
+        canvasWidth: 800,
+        canvasHeight: 450,
+        frame: 300,
+      })
+    ).toBe(false);
+    expect(hasDrawingStrokes(null)).toBe(false);
+    expect(hasDrawingStrokes()).toBe(false);
+  });
+});
+
+describe('isSaveableAnnotation with drawings', () => {
+  it('accepts a label-less drawing with no text', () => {
+    // What the quick pick creates. The sidebar has to accept it too, or it
+    // could never re-save a drawing it opened.
+    expect(
+      isSaveableAnnotation({ labels: [], content: '', drawingData: strokes })
+    ).toBe(true);
+  });
+
+  it('rejects an empty drawing with no label and no text', () => {
+    expect(
+      isSaveableAnnotation({
+        labels: [],
+        content: '',
+        drawingData: {
+          paths: [],
+          canvasWidth: 800,
+          canvasHeight: 450,
+          frame: 300,
+        },
+      })
+    ).toBe(false);
+  });
+
+  it('still rejects more than one label, drawing or not', () => {
+    expect(
+      isSaveableAnnotation({ labels: ['a', 'b'], drawingData: strokes })
+    ).toBe(false);
+  });
+});
+
+describe('isDrawingAnnotation', () => {
+  it('is true for a drawing with strokes', () => {
+    expect(
+      isDrawingAnnotation({ annotationType: 'drawing', drawingData: strokes })
+    ).toBe(true);
+  });
+
+  it('is false for a comment', () => {
+    expect(
+      isDrawingAnnotation({ annotationType: 'text', drawingData: null })
+    ).toBe(false);
+  });
+
+  it('is false for a drawing type with no strokes left', () => {
+    expect(isDrawingAnnotation({ annotationType: 'drawing' })).toBe(false);
   });
 });

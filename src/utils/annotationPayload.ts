@@ -42,7 +42,10 @@ export function buildAnnotationPayload(
 
   const payload: AnnotationFormData = {
     content,
-    title: primaryLabel?.name || content.slice(0, 50) || 'Untitled',
+    title:
+      primaryLabel?.name ||
+      content.slice(0, 50) ||
+      (drawingData ? 'Drawing' : 'Untitled'),
     color: primaryLabel?.color || fallbackColor || DEFAULT_ANNOTATION_COLOR,
     timestamp: frame / fps,
     frame,
@@ -62,22 +65,38 @@ export function buildAnnotationPayload(
 }
 
 /**
+ * True when a drawing actually carries strokes. Single mode keeps its paths at
+ * the top level and dual mode nests one drawing per video, and both shapes have
+ * an empty form that is not a drawing: `addDrawing` builds a dual wrapper whose
+ * top-level `paths` is deliberately empty.
+ */
+export function hasDrawingStrokes(drawingData?: DrawingData | null): boolean {
+  if (!drawingData) return false;
+  return [drawingData, drawingData.drawingA, drawingData.drawingB].some(
+    (drawing) => (drawing?.paths?.length ?? 0) > 0
+  );
+}
+
+/**
  * What counts as a saveable annotation: exactly one label, or no label at all
- * and some text. The second case is a comment, which the quick pick creates
- * from the timeline. Without it the sidebar could not re-save a comment as
- * itself, since attaching a label is what its Update button would demand and
- * that turns the comment into something else.
+ * plus something of its own to say. That something is text, which is a comment,
+ * or strokes, which is a drawing. Both are created by the quick pick from the
+ * timeline, and the sidebar has to accept both or it could never re-save one it
+ * opened, which is what attaching a label would otherwise demand and that turns
+ * the annotation into something else.
  *
- * Neither a label nor text is still not an annotation, so a bare drawing stays
- * blocked, exactly as before.
+ * Neither a label nor any content of its own is still not an annotation.
  */
 export function isSaveableAnnotation(input: {
   labels?: string[] | null;
   content?: string | null;
+  drawingData?: DrawingData | null;
 }): boolean {
   const labelCount = input.labels?.length ?? 0;
   if (labelCount === 1) return true;
-  return labelCount === 0 && (input.content ?? '').trim().length > 0;
+  if (labelCount !== 0) return false;
+  if ((input.content ?? '').trim().length > 0) return true;
+  return hasDrawingStrokes(input.drawingData);
 }
 
 /**
@@ -99,4 +118,20 @@ export function isCommentAnnotation(annotation: {
   labels?: string[] | null;
 }): boolean {
   return Array.isArray(annotation.labels) && annotation.labels.length === 0;
+}
+
+/**
+ * A drawing is an annotation whose content is its strokes. The type alone is
+ * not enough: an annotation can be marked `drawing` and carry an empty shell,
+ * and drawing it as a drawing on the timeline would be a lie about a marker
+ * that shows nothing when you click it.
+ */
+export function isDrawingAnnotation(annotation: {
+  annotationType?: string | null;
+  drawingData?: DrawingData | null;
+}): boolean {
+  return (
+    annotation.annotationType === 'drawing' &&
+    hasDrawingStrokes(annotation.drawingData)
+  );
 }

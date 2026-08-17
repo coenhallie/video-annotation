@@ -198,11 +198,10 @@ const annotationLabels = computed({
   },
 });
 
-// Computed
-// Exactly one label, or no label and some text. The second case is a comment,
-// which the quick pick creates from the timeline; the rule lives in
-// annotationPayload so the sidebar and the quick pick cannot drift apart on
-// what a valid annotation is. Drawings remain optional either way.
+// Exactly one label, or no label and content of its own: text, which is a
+// comment, or strokes, which is a drawing. Both are created by the quick pick
+// from the timeline; the rule lives in annotationPayload so the sidebar and the
+// quick pick cannot drift apart on what a valid annotation is.
 const isSaveDisabled = computed(() => {
   if (!newAnnotation.value) return true;
   return !isSaveableAnnotation(newAnnotation.value);
