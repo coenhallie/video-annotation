@@ -1,4 +1,4 @@
-import { computed, ref, toValue, type MaybeRefOrGetter, type Ref } from 'vue';
+import { computed, ref, toValue, watch, type MaybeRefOrGetter, type Ref } from 'vue';
 import { LabelService } from '../services/labelService';
 import type { Label } from '../types/labels';
 
@@ -77,6 +77,16 @@ export function useLabelCatalog(
     if (entry.inFlight) return entry.inFlight;
     return fetchInto(entry);
   };
+
+  // Load whatever key we are currently on, and reload whenever userId/projectId
+  // change (e.g. auth resolving after mount switches the key from `::` to
+  // `abc123::`). `load()` is idempotent per key, so this costs nothing when the
+  // key's entry is already loaded or already in flight. Registered during a
+  // component's setup(), this watcher is torn down automatically with that
+  // component; it never writes anything the key depends on, so it cannot loop.
+  watch(keyFor, () => {
+    load();
+  }, { immediate: true });
 
   return { labels, labelsById, loading, load, reload };
 }
