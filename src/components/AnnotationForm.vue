@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, type PropType } from 'vue';
 import SearchableLabelSelector from './SearchableLabelSelector.vue';
+import { buildAnnotationPayload } from '../utils/annotationPayload';
 import type { DrawingData } from '../types/database';
 import type { Label } from '../types/labels';
 import type { UseDrawingCanvas } from '../composables/useDrawingCanvas';
@@ -412,37 +413,21 @@ const saveAnnotation = async () => {
       return;
     }
 
-    const primaryLabel = props.availableLabels.find((label) =>
-      baseDraft.labels?.includes(label.id)
-    );
-    const annotationColor =
-      primaryLabel?.color || baseDraft.color || defaultAnnotationColor;
-    const annotationTitle =
-      primaryLabel?.name || baseDraft.content.slice(0, 50) || 'Untitled';
-
-    const annotationData: Record<string, unknown> = {
+    const annotationData = buildAnnotationPayload({
+      labels: props.availableLabels,
+      labelIds: baseDraft.labels || [],
       content: baseDraft.content,
-      title: annotationTitle,
-      color: annotationColor,
-      timestamp: baseDraft.frame / props.fps,
       frame: baseDraft.frame,
-      annotationType: currentDrawingData ? 'drawing' : 'text',
+      fps: props.fps,
       drawingData: currentDrawingData,
-      duration: Math.max(1 / 30, 1 / 30),
-      durationFrames: Math.max(1, 1),
-      labels: baseDraft.labels || [],
-    };
-
-    console.log('🎨 [AnnotationForm] Saving annotation with data:', {
-      annotationType: annotationData.annotationType,
-      hasDrawingData: !!annotationData.drawingData,
-      frame: annotationData.frame,
+      fallbackColor: baseDraft.color,
+      dual: props.isDualMode
+        ? {
+            videoAFrame: props.videoACurrentFrame,
+            videoBFrame: props.videoBCurrentFrame,
+          }
+        : null,
     });
-
-    if (props.isDualMode) {
-      annotationData.videoAFrame = props.videoACurrentFrame;
-      annotationData.videoBFrame = props.videoBCurrentFrame;
-    }
 
     if (editingAnnotation.value) {
       annotationData.id = editingAnnotation.value.id;
