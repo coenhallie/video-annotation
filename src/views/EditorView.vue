@@ -17,7 +17,7 @@ import EditorHeader from '@/components/EditorHeader.vue';
 
 import UnifiedVideoPlayer from '@/components/UnifiedVideoPlayer.vue';
 import DashboardModals from '@/components/DashboardModals.vue';
-import AnnotationBloom from '@/components/AnnotationBloom.vue';
+import AnnotationQuickPick from '@/components/AnnotationQuickPick.vue';
 import { useLabelCatalog } from '@/composables/useLabelCatalog';
 import { buildAnnotationPayload } from '@/utils/annotationPayload';
 import { groupLabelsByCategory } from '@/utils/labelCategories';
@@ -228,31 +228,28 @@ const handleAddAnnotation = async (annotationData: AnnotationFormData) => {
 
 const selectedAnnotation = ref<Annotation | null>(null);
 
-// ── Annotation cursor bloom ──────────────────────────────────────────────────
-// AnnotationPanel is mounted without a project id, so the bloom must use the
-// same catalog key to see the same labels.
-const { labels: bloomLabels } = useLabelCatalog(() => user.value?.id);
+// ── Annotation quick pick ────────────────────────────────────────────────────
+// AnnotationPanel is mounted without a project id, so the quick pick must use
+// the same catalog key to see the same labels.
+const { labels: quickPickLabels } = useLabelCatalog(() => user.value?.id);
 
-// AnnotationBloom itself renders nothing when none of the catalog's labels carry
-// a recognised category prefix (see groupLabelsByCategory). openBloom must guard
-// on this same condition, not just a non-empty catalog, or right-click would
-// suppress the native context menu while the bloom renders nothing.
-const bloomHasCategories = computed(
-  () => groupLabelsByCategory(bloomLabels.value).length > 0
+// AnnotationQuickPick renders nothing when none of the catalog's labels carry a
+// recognised category prefix (see groupLabelsByCategory). The open handlers must
+// guard on that same condition, not just a non-empty catalog, or right-click
+// would suppress the native context menu while the panel renders nothing.
+const quickPickHasCategories = computed(
+  () => groupLabelsByCategory(quickPickLabels.value).length > 0
 );
 
-const bloomOpen = ref(false);
-const bloomX = ref(0);
-const bloomY = ref(0);
-// The timeline opens a semicircle above the cursor so the scrub bar stays
-// visible and usable; over the video there is room for the whole ring.
-const bloomArc = ref<'full' | 'up'>('full');
+const quickPickOpen = ref(false);
+const quickPickX = ref(0);
+const quickPickY = ref(0);
 
 /**
- * Frame captured when the bloom opens. The video keeps playing while the menu is
- * up, so reading the frame at click time would place every annotation late.
+ * Frame captured when the panel opens. The video keeps playing while it is up,
+ * so reading the frame at commit time would place every annotation late.
  */
-const bloomSnapshot = ref<{
+const quickPickSnapshot = ref<{
   frame: number;
   fps: number;
   dual: { videoAFrame: number; videoBFrame: number } | null;
@@ -260,24 +257,24 @@ const bloomSnapshot = ref<{
 
 // A plain function, not a computed: canComment() is not reactive, so a computed
 // would cache a stale answer.
-const bloomReadOnly = () =>
+const quickPickReadOnly = () =>
   (isSharedVideo.value || isSharedComparison.value) && !canComment();
 
-const openBloom = (event: MouseEvent) => {
+const openQuickPick = (event: MouseEvent) => {
   // VideoControls.vue's root element (play/pause, frame-step, mute, volume,
   // speed) always renders with class "video-controls", whether it's mounted
   // by SingleVideoPlayer (single mode) or DualVideoPlayer (dual mode). Bail
   // out before suppressing the native context menu so right-clicking a
-  // control still gets the browser's menu instead of popping the bloom.
+  // control still gets the browser's menu instead of popping the panel.
   if ((event.target as HTMLElement)?.closest?.('.video-controls')) return;
-  if (bloomReadOnly()) return;
+  if (quickPickReadOnly()) return;
   if (!user.value) return;
   if (drawingCoordinator?.isDrawingMode?.value) return;
-  if (!bloomHasCategories.value) return;
+  if (!quickPickHasCategories.value) return;
 
   event.preventDefault();
 
-  bloomSnapshot.value = {
+  quickPickSnapshot.value = {
     frame: currentFrame.value ?? 0,
     fps: fps.value || 30,
     dual:
@@ -288,55 +285,53 @@ const openBloom = (event: MouseEvent) => {
           }
         : null,
   };
-  bloomArc.value = 'full';
-  bloomX.value = event.clientX;
-  bloomY.value = event.clientY;
-  bloomOpen.value = true;
+  quickPickX.value = event.clientX;
+  quickPickY.value = event.clientY;
+  quickPickOpen.value = true;
 };
 
 /**
  * Timeline entry point: a plain left-click on the timeline seeks and then opens
- * the bloom where the pointer landed, so scrubbing to a moment and labelling it
+ * the panel above the pointer, so scrubbing to a moment and labelling it
  * is one gesture. VideoTimeline suppresses this while dragging, so a scrub never
  * pops the menu, and it hands over the time under the pointer rather than the
  * player's current frame, which the asynchronous seek has not reached yet.
  */
-const openBloomAtTime = (payload: {
+const openQuickPickAtTime = (payload: {
   time: number;
   clientX: number;
   clientY: number;
 }) => {
-  if (bloomReadOnly()) return;
+  if (quickPickReadOnly()) return;
   if (!user.value) return;
   if (drawingCoordinator?.isDrawingMode?.value) return;
-  if (!bloomHasCategories.value) return;
+  if (!quickPickHasCategories.value) return;
 
   const activeFps = fps.value || 30;
-  bloomSnapshot.value = {
+  quickPickSnapshot.value = {
     frame: Math.round(payload.time * activeFps),
     fps: activeFps,
     dual: null,
   };
-  bloomArc.value = 'up';
-  bloomX.value = payload.clientX;
-  bloomY.value = payload.clientY;
-  bloomOpen.value = true;
+  quickPickX.value = payload.clientX;
+  quickPickY.value = payload.clientY;
+  quickPickOpen.value = true;
 };
 
-const closeBloom = () => {
-  bloomOpen.value = false;
-  bloomSnapshot.value = null;
+const closeQuickPick = () => {
+  quickPickOpen.value = false;
+  quickPickSnapshot.value = null;
 };
 
-const handleBloomSelect = async (label: Label) => {
-  const snapshot = bloomSnapshot.value;
-  closeBloom();
+const handleQuickPickSelect = async (label: Label) => {
+  const snapshot = quickPickSnapshot.value;
+  closeQuickPick();
   if (!snapshot) return;
 
   try {
     await handleAddAnnotation(
       buildAnnotationPayload({
-        labels: bloomLabels.value,
+        labels: quickPickLabels.value,
         labelIds: [label.id],
         content: '',
         frame: snapshot.frame,
@@ -345,7 +340,7 @@ const handleBloomSelect = async (label: Label) => {
       })
     );
   } catch (err) {
-    console.error('Failed to create annotation from bloom selection:', err);
+    console.error('Failed to create annotation from quick pick:', err);
     notifyError(
       'Failed to add annotation',
       err instanceof Error ? err.message : 'The annotation could not be saved. Please try again.'
@@ -1177,7 +1172,7 @@ watch(
           <div class="w-full h-full flex flex-col items-center justify-center">
             <div
               class="relative w-full h-full max-h-full"
-              @contextmenu="openBloom"
+              @contextmenu="openQuickPick"
             >
               <!-- Unified Video Player -->
               <UnifiedVideoPlayer
@@ -1247,7 +1242,7 @@ watch(
             @annotation-click="handleAnnotationClick"
             @play="handleTimelinePlay"
             @pause="handleTimelinePause"
-            @open-bloom="openBloomAtTime"
+            @open-quick-pick="openQuickPickAtTime"
           />
 
           <!-- Dual Video Timeline -->
@@ -1298,14 +1293,15 @@ watch(
         </div>
       </section>
 
-      <AnnotationBloom
-        :open="bloomOpen"
-        :x="bloomX"
-        :y="bloomY"
-        :arc="bloomArc"
-        :labels="bloomLabels"
-        @select="handleBloomSelect"
-        @close="closeBloom"
+      <AnnotationQuickPick
+        :open="quickPickOpen"
+        :x="quickPickX"
+        :y="quickPickY"
+        :labels="quickPickLabels"
+        :frame="quickPickSnapshot?.frame ?? 0"
+        :fps="quickPickSnapshot?.fps ?? 30"
+        @select="handleQuickPickSelect"
+        @close="closeQuickPick"
       />
 
       <!-- Sidebar with Calibration and Annotation Panel -->

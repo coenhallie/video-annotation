@@ -74,15 +74,15 @@ const emit = defineEmits([
   'annotation-click',
   'play',
   'pause',
-  'open-bloom',
+  'open-quick-pick',
 ]);
 
 const timelineRef = ref<HTMLElement | null>(null);
 const isDragging = ref(false);
 
 // A press that moves further than this is a scrub, not a click, and must not
-// pop the annotation bloom.
-const BLOOM_DRAG_THRESHOLD_PX = 5;
+// pop the annotation quick pick.
+const QUICK_PICK_DRAG_THRESHOLD_PX = 5;
 
 // Debouncing for smooth scrubbing
 let seekTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -154,7 +154,7 @@ const handleTimelineMouseDown = (event: MouseEvent): void => {
   const startX = event.clientX;
   const startY = event.clientY;
   // Annotation markers sit inside the timeline and have their own click
-  // handler; pressing one should seek to it, not open the bloom.
+  // handler; pressing one should seek to it, not open the quick pick.
   const onAnnotationMarker = !!(event.target as HTMLElement | null)?.closest(
     '[data-annotation-marker]'
   );
@@ -175,17 +175,17 @@ const handleTimelineMouseDown = (event: MouseEvent): void => {
       const time = timeAtPointer(e);
       if (
         !onAnnotationMarker &&
-        moved <= BLOOM_DRAG_THRESHOLD_PX &&
+        moved <= QUICK_PICK_DRAG_THRESHOLD_PX &&
         time !== null
       ) {
         // Hand over the time under the pointer rather than letting the editor
         // read the player's current frame: the seek above is asynchronous, so
         // reading the frame now would capture the position before the jump.
         //
-        // Anchor y to the top of the bar, not the pointer: the bloom opens
+        // Anchor y to the top of the bar, not the pointer: the panel opens
         // upward from whatever y it is given, so anchoring to the pointer
         // would leave it overlapping the half of the bar below the click.
-        emit('open-bloom', {
+        emit('open-quick-pick', {
           time,
           clientX: e.clientX,
           clientY: timelineRef.value?.getBoundingClientRect().top ?? e.clientY,

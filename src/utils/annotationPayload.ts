@@ -21,7 +21,7 @@ export interface BuildAnnotationPayloadInput {
 
 /**
  * The single place that turns a chosen label plus a frame into the payload the
- * annotation service expects. Shared by the sidebar form and the cursor bloom so
+ * annotation service expects. Shared by the sidebar form and the quick pick so
  * the two paths cannot drift apart.
  */
 export function buildAnnotationPayload(

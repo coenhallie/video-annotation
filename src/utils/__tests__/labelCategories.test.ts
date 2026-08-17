@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   CATEGORY_ORDER,
+  assignLabelShortcuts,
   categoryKeyForLabel,
   groupLabelsByCategory,
   labelShortName,
@@ -124,5 +125,74 @@ describe('groupLabelsByCategory', () => {
   it('returns an empty array when nothing is categorisable', () => {
     expect(groupLabelsByCategory([makeLabel('Custom thing')])).toEqual([]);
     expect(groupLabelsByCategory([])).toEqual([]);
+  });
+});
+
+describe('assignLabelShortcuts', () => {
+  const lettersFor = (names: string[]) => {
+    const labels = names.map((n) => makeLabel(n));
+    const map = assignLabelShortcuts(labels);
+    return labels.map((l) => map[l.id]);
+  };
+
+  it('gives each label the initial of its first word when they do not collide', () => {
+    expect(lettersFor(['PLR MISSED', 'PLR DUPLICATE', 'PLR TELEPORT'])).toEqual([
+      'M',
+      'D',
+      'T',
+    ]);
+  });
+
+  it('gives a contested initial to neither label, so the pair stays memorable', () => {
+    // BALL: both WRONG labels open with W, so W goes unused and they fall
+    // through to the initial of their second word.
+    expect(
+      lettersFor([
+        'BALL HIGH MISCLASS',
+        'BALL MISSED',
+        'BALL TRAJ IMPLAUSIBLE',
+        'BALL WRONG OWNER',
+        'BALL WRONG POS',
+      ])
+    ).toEqual(['H', 'M', 'T', 'O', 'P']);
+  });
+
+  it('resolves a three-way collision without reusing a letter', () => {
+    const letters = lettersFor(['EVT TIME ERROR', 'EVT TYPE WRONG', 'EVT TRACK LOST']);
+    expect(new Set(letters).size).toBe(3);
+    expect(letters).not.toContain('T');
+  });
+
+  it('always assigns a distinct letter to every label', () => {
+    const letters = lettersFor([
+      'PLR AS NPL',
+      'PLR DUPLICATE',
+      'PLR ID SWITCH',
+      'PLR KEEPER WRONG POS',
+      'PLR MISSED',
+      'PLR TELEPORT',
+      'PLR WRONG POS',
+    ]);
+    expect(letters).toHaveLength(7);
+    expect(letters.every((l) => typeof l === 'string' && l.length === 1)).toBe(true);
+    expect(new Set(letters).size).toBe(7);
+  });
+
+  it('falls back to a free letter when a name offers no untaken candidate', () => {
+    // Three identically named labels can only supply the letter A between them.
+    const labels = ['a', 'b', 'c'].map((id) => makeLabel('BALL AA', id));
+    const map = assignLabelShortcuts(labels);
+    const letters = labels.map((l) => map[l.id]);
+    expect(letters.every((l) => typeof l === 'string' && l.length === 1)).toBe(true);
+    expect(new Set(letters).size).toBe(3);
+  });
+
+  it('is deterministic for the same input', () => {
+    const names = ['BALL WRONG OWNER', 'BALL WRONG POS', 'BALL MISSED'];
+    expect(lettersFor(names)).toEqual(lettersFor(names));
+  });
+
+  it('returns an empty map for no labels', () => {
+    expect(assignLabelShortcuts([])).toEqual({});
   });
 });

@@ -196,7 +196,7 @@ const annotationLabels = computed({
 
 // Computed
 // A label is all that is required. Text and drawings are optional, so the
-// sidebar agrees with the cursor bloom on what a valid annotation is.
+// sidebar agrees with the quick pick on what a valid annotation is.
 const isSaveDisabled = computed(() => {
   if (!newAnnotation.value) return true;
   return newAnnotation.value.labels?.length !== 1;

@@ -11,7 +11,7 @@ interface CatalogEntry {
 
 /**
  * Label lists are shared per user and project so the annotation sidebar and the
- * cursor bloom read the same array. Without this they would each fetch and
+ * quick pick read the same array. Without this they would each fetch and
  * silently drift after a label is created or renamed.
  */
 const catalogs = new Map<string, CatalogEntry>();
