@@ -605,12 +605,16 @@ const handleQuickPickDrawing = async () => {
 
     // addAnnotation also bails without throwing when its context is
     // incomplete, so a falsy result is a failure too and must not take the
-    // strokes down with it.
+    // strokes down with it. Guarded by canAnnotate: handleAddAnnotation
+    // already raised its own toast for that refusal, and doing it again here
+    // would put two toasts on screen for one failure.
     if (!created) {
-      notifyError(
-        'Failed to add drawing',
-        'The drawing could not be saved. Please try again.'
-      );
+      if (canAnnotate.value) {
+        notifyError(
+          'Failed to add drawing',
+          'The drawing could not be saved. Please try again.'
+        );
+      }
       return;
     }
 
@@ -676,12 +680,16 @@ const handleQuickPickComment = async (text: string) => {
 
     // addAnnotation also bails without throwing when its context is
     // incomplete, so a falsy result is a failure too and must not close over
-    // text that was never saved.
+    // text that was never saved. Guarded by canAnnotate: handleAddAnnotation
+    // already raised its own toast for that refusal, and doing it again here
+    // would put two toasts on screen for one failure.
     if (!created) {
-      notifyError(
-        'Failed to add comment',
-        'The comment could not be saved. Please try again.'
-      );
+      if (canAnnotate.value) {
+        notifyError(
+          'Failed to add comment',
+          'The comment could not be saved. Please try again.'
+        );
+      }
       return;
     }
 
