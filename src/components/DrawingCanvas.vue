@@ -26,13 +26,6 @@
       </div>
     </div>
 
-    <!-- Debug overlay when drawing mode is active -->
-    <div
-      v-if="isDrawingMode"
-      class="absolute top-2 left-2 bg-blue-600 text-white px-2 py-1 rounded text-xs font-medium z-10"
-    >
-      Drawing Mode Active
-    </div>
   </div>
 </template>
 
@@ -659,23 +652,16 @@ defineExpose({
   pointer-events: none;
   z-index: 40;
 }
+
+/*
+  Drawing mode is announced by the quick pick's own toolbar, so the overlay only
+  has to say where the surface is: a hairline in the app's accent at the video's
+  edge, and the crosshair the canvas already sets.
+*/
 .canvas-container.drawing-mode {
   pointer-events: auto;
   z-index: 100;
-  border: 3px solid rgba(59, 130, 246, 0.8);
-  background-color: rgba(59, 130, 246, 0.1);
-  box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
-}
-
-/* Always show a subtle overlay when canvas exists, even if not in drawing mode */
-.canvas-container {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 40;
-  background-color: rgba(255, 255, 255, 0.02);
-  min-width: 800px;
-  min-height: 450px;
+  box-shadow: inset 0 0 0 1px rgba(249, 115, 22, 0.6);
 }
 
 .drawing-canvas {
@@ -683,11 +669,7 @@ defineExpose({
   top: 0;
   left: 0;
   width: 100%;
-  height: 700px;
-  transition: opacity 150ms ease-in-out;
-}
-
-.drawing-canvas.fade-transition {
+  height: 100%;
   transition: opacity 150ms ease-in-out;
 }
 
