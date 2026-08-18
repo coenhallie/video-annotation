@@ -39,7 +39,7 @@ import { useSharedContent } from '@/composables/useSharedContent';
 import { useVideoEventHandlers } from '@/composables/useVideoEventHandlers';
 import { useWatchProgress } from '@/composables/useWatchProgress';
 import { supabase } from '@/composables/useSupabase';
-import type { Video, Annotation, ComparisonVideo } from '@/types/database';
+import type { Video, Annotation, ComparisonVideo, DrawingData } from '@/types/database';
 import type {
   ProjectSelection,
   ComparisonCreatedEvent,
@@ -355,6 +355,7 @@ const closeQuickPick = () => {
   // settles would otherwise leave the guard set for the rest of the session,
   // and every later Enter would be dropped in silence.
   commentSaving.value = false;
+  drawingSaving.value = false;
 };
 
 const handleQuickPickSelect = async (label: Label) => {
@@ -412,6 +413,153 @@ const handleQuickPickCommentMode = (active: boolean) => {
   }
   if (commentModeWasPlaying.value) unifiedVideoPlayerRef.value?.play();
   commentModeWasPlaying.value = false;
+};
+
+// ── Quick pick drawing ───────────────────────────────────────────────────────
+
+/**
+ * The toolbar's own copy of the brush settings. It is pushed into the
+ * coordinator on the way into draw mode and on every change, so the swatch
+ * that looks selected is the colour the brush actually carries.
+ */
+const quickPickDrawColor = ref('#ef4444');
+const quickPickDrawWidth = ref(4);
+
+const drawModeWasPlaying = ref(false);
+/** Blocks a second Enter while the first insert is still in flight. */
+const drawingSaving = ref(false);
+
+/** The DrawingCanvas instances, exposed by UnifiedVideoPlayer. */
+const drawingCanvasRefs = () => ({
+  single: (unifiedVideoPlayerRef.value as any)?.singleDrawingCanvasRef ?? null,
+  a: (unifiedVideoPlayerRef.value as any)?.drawingCanvasARef ?? null,
+  b: (unifiedVideoPlayerRef.value as any)?.drawingCanvasBRef ?? null,
+});
+
+const handleQuickPickDrawMode = (active: boolean) => {
+  if (active) {
+    drawModeWasPlaying.value = isPlaybackRunning();
+    unifiedVideoPlayerRef.value?.pause();
+    drawingCoordinator.setCustomColor(quickPickDrawColor.value);
+    drawingCoordinator.setStrokeWidth(quickPickDrawWidth.value);
+    drawingCoordinator.enableDrawingMode();
+    return;
+  }
+
+  // Order matters: DrawingCanvas completes a session that still holds paths
+  // when drawing mode goes off, which would store what the user just
+  // cancelled. Discarding first leaves it nothing to complete. On the save
+  // path the session has already been read and retained, so this only clears
+  // the way.
+  drawingCoordinator.discardInProgressDrawing(drawingCanvasRefs());
+  drawingCoordinator.disableDrawingMode();
+  if (drawModeWasPlaying.value) unifiedVideoPlayerRef.value?.play();
+  drawModeWasPlaying.value = false;
+};
+
+const handleQuickPickDrawColor = (color: string) => {
+  quickPickDrawColor.value = color;
+  drawingCoordinator.setCustomColor(color);
+};
+
+const handleQuickPickDrawWidth = (width: number) => {
+  quickPickDrawWidth.value = width;
+  drawingCoordinator.setStrokeWidth(width);
+};
+
+const handleQuickPickDrawUndo = () => {
+  drawingCoordinator.undoLastStroke(drawingCanvasRefs());
+};
+
+/**
+ * The canvas stamps the player's frame; the annotation carries the frame the
+ * panel snapshotted before the seek, and an asynchronous seek can leave those
+ * one apart. They have to agree exactly: clicking the annotation drives the
+ * canvas from annotation.frame, and DrawingCanvas renders a drawing only where
+ * drawing.frame matches, so a frame's difference is an empty canvas.
+ */
+const stampSnapshotFrame = (
+  drawingData: DrawingData,
+  snapshot: { frame: number; dual: { videoAFrame: number; videoBFrame: number } | null }
+) => {
+  if (snapshot.dual) {
+    if (drawingData.drawingA) drawingData.drawingA.frame = snapshot.dual.videoAFrame;
+    if (drawingData.drawingB) drawingData.drawingB.frame = snapshot.dual.videoBFrame;
+    return;
+  }
+  drawingData.frame = snapshot.frame;
+};
+
+/**
+ * A drawing is an annotation with no labels and no text: the strokes are the
+ * content, and a real label can be attached later from the sidebar.
+ *
+ * Like the comment path and unlike the label path, the panel closes only once
+ * the annotation is stored. A failed label save costs one keystroke to redo; a
+ * failed drawing save would cost strokes, so on failure the toolbar stays open
+ * with the drawing on the canvas and the video still paused, which is the state
+ * to press Enter again from.
+ */
+const handleQuickPickDrawing = async () => {
+  if (drawingSaving.value) return;
+
+  const snapshot = quickPickSnapshot.value;
+  if (!snapshot) {
+    closeQuickPick();
+    return;
+  }
+
+  // Read without completing: completeDrawingSession emits drawing-created,
+  // which useVideoEventHandlers forwards into the sidebar form's draft.
+  const drawingData = drawingCoordinator.getInProgressDrawing(drawingCanvasRefs());
+  // Enter on an untouched canvas is a no-op, not a gray Untitled row.
+  if (!drawingData) return;
+
+  stampSnapshotFrame(drawingData, snapshot);
+
+  drawingSaving.value = true;
+  try {
+    const created = await handleAddAnnotation(
+      buildAnnotationPayload({
+        labels: quickPickLabels.value,
+        labelIds: [],
+        content: '',
+        frame: snapshot.frame,
+        fps: snapshot.fps,
+        dual: snapshot.dual,
+        drawingData,
+      })
+    );
+
+    // addAnnotation also bails without throwing when its context is
+    // incomplete, so a falsy result is a failure too and must not take the
+    // strokes down with it.
+    if (!created) {
+      notifyError(
+        'Failed to add drawing',
+        'The drawing could not be saved. Please try again.'
+      );
+      return;
+    }
+
+    // Keep the strokes on screen rather than blinking them out until the
+    // annotations watcher folds the new annotation back in.
+    drawingCoordinator.retainDrawing(drawingData);
+
+    // Closing resets the panel, which reports leaving draw mode and so turns
+    // the canvas off and resumes playback, exactly once.
+    closeQuickPick();
+  } catch (err) {
+    console.error('Failed to create drawing from quick pick:', err);
+    notifyError(
+      'Failed to add drawing',
+      err instanceof Error
+        ? err.message
+        : 'The drawing could not be saved. Please try again.'
+    );
+  } finally {
+    drawingSaving.value = false;
+  }
 };
 
 /** Blocks a second Enter while the first insert is still in flight. */
@@ -1435,9 +1583,16 @@ watch(
         :labels="quickPickLabels"
         :frame="quickPickSnapshot?.frame ?? 0"
         :fps="quickPickSnapshot?.fps ?? 30"
+        :draw-color="quickPickDrawColor"
+        :draw-width="quickPickDrawWidth"
         @select="handleQuickPickSelect"
         @comment="handleQuickPickComment"
         @comment-mode="handleQuickPickCommentMode"
+        @draw="handleQuickPickDrawing"
+        @draw-mode="handleQuickPickDrawMode"
+        @draw-undo="handleQuickPickDrawUndo"
+        @draw-color="handleQuickPickDrawColor"
+        @draw-width="handleQuickPickDrawWidth"
         @close="closeQuickPick"
       />
 
