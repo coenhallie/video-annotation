@@ -123,7 +123,7 @@ describe('useDrawingCoordinator getInProgressDrawing', () => {
     expect(drawing?.paths).toHaveLength(1);
   });
 
-  it('hands back a copy of each video s paths array in dual mode', () => {
+  it("hands back a copy of each video's paths array in dual mode", () => {
     const { coordinator } = setup('dual');
     const liveA = session(300);
     const a = fakeRef(liveA);

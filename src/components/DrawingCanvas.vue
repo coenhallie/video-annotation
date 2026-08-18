@@ -375,7 +375,10 @@ const loadDrawingsForFrame = async (skipTransition: boolean = false) => {
 
     canvas.value.renderAll(); // Force canvas to render immediately
 
-    // Fade in new drawings (a no-op when skipTransition already left opacity at 1)
+    // Restore full opacity. Needed unconditionally, not just after the fade-out
+    // above: a skipTransition call can follow one that was interrupted (the
+    // disposed check further up returns early before this line), leaving
+    // opacity at 0 with nothing else left to bring it back.
     canvasOpacity.value = 1;
   } catch (error) {
     console.warn('🎨 [DrawingCanvas] Error loading drawings for frame:', error);

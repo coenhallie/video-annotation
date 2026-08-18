@@ -440,10 +440,10 @@ onBeforeUnmount(() => {
     z-[110] has to clear DrawingCanvas's own z-index: 100 on
     .canvas-container.drawing-mode, or the toolbar sits underneath the drawing
     surface in the same stacking context and every click on it paints a dot on
-    the video instead of hitting a button. Nothing needs to sit between 50 and
-    110 while this panel is open: no modal can coexist with it, and the
-    canvas's own loading indicator is already scoped inside that z-100
-    container.
+    the video instead of hitting a button. Nothing this app renders over the
+    video itself sits between 50 and 110: the canvas's own loading indicator
+    is scoped inside that z-100 container, so it is the only other thing this
+    panel had to clear.
   -->
   <div
     v-if="open"

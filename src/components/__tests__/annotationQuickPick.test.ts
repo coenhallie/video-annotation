@@ -319,6 +319,23 @@ describe('AnnotationQuickPick comment mode', () => {
     panel.unmount();
   });
 
+  it('reports leaving comment mode when the panel unmounts while typing', async () => {
+    // Same stranding risk as draw mode: an error boundary elsewhere in the
+    // tree can unmount this panel directly while a comment is open, and
+    // without onBeforeUnmount reporting the mode change a paused video would
+    // never resume.
+    const panel = mountPanel();
+    await nextTick();
+    press('c');
+    await nextTick();
+
+    panel.unmount();
+
+    expect(
+      panel.events.filter(([name, value]) => name === 'comment-mode' && value === false)
+    ).toHaveLength(1);
+  });
+
   it('still offers the comment row when no label has a category', async () => {
     const panel = mountPanel([makeLabel('label-loose', 'Something uncategorised')]);
     await nextTick();
