@@ -472,6 +472,18 @@ const handleQuickPickDrawUndo = () => {
 };
 
 /**
+ * Draw mode is modal about the frame. The keyboard already refuses to move it,
+ * because a frame change makes DrawingCanvas clear its canvas and start a new
+ * session, and the timeline is the one door that was left open: a click here
+ * would leave the strokes attached to the frame the panel snapshotted while
+ * the user drew against a different one.
+ */
+const handleTimelineSeek = (time: number) => {
+  if (drawingCoordinator?.isDrawingMode?.value) return;
+  handleSeekToTime(time);
+};
+
+/**
  * The canvas stamps the player's frame; the annotation carries the frame the
  * panel snapshotted before the seek, and an asynchronous seek can leave those
  * one apart. They have to agree exactly: clicking the annotation drives the
@@ -1521,7 +1533,7 @@ watch(
             :selected-annotation="selectedAnnotation"
             :is-playing="isPlaying"
             :player-mode="playerMode"
-            @seek-to-time="handleSeekToTime"
+            @seek-to-time="handleTimelineSeek"
             @annotation-click="handleAnnotationClick"
             @play="handleTimelinePlay"
             @pause="handleTimelinePause"
