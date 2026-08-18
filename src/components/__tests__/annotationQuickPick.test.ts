@@ -537,4 +537,37 @@ describe('AnnotationQuickPick draw mode', () => {
     expect(toolbar(panel.root)).toBeNull();
     panel.unmount();
   });
+
+  it('backs out on Escape even with a modifier held', async () => {
+    // Cmd/Ctrl+Escape must not fall into the undo-chord branch and be
+    // swallowed as a no-op: Escape has to win regardless of what else is down.
+    const panel = mountPanel();
+    await nextTick();
+    press('d');
+    await nextTick();
+
+    press('Escape', { metaKey: true });
+    await nextTick();
+
+    expect(toolbar(panel.root)).toBeNull();
+    expect(panel.events).toContainEqual(['draw-mode', false]);
+    panel.unmount();
+  });
+
+  it('reports leaving draw mode when the panel unmounts while drawing', async () => {
+    // Every other exit routes through leaveDrawMode(), which emits
+    // draw-mode(false). An onErrorCaptured boundary elsewhere in the tree can
+    // unmount this panel directly, skipping that path entirely unless
+    // onBeforeUnmount also reports the mode change.
+    const panel = mountPanel();
+    await nextTick();
+    press('d');
+    await nextTick();
+
+    panel.unmount();
+
+    expect(
+      panel.events.filter(([name, value]) => name === 'draw-mode' && value === false)
+    ).toHaveLength(1);
+  });
 });

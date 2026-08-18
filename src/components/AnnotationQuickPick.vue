@@ -229,6 +229,15 @@ const handleDrawKeydown = (event: KeyboardEvent) => {
     return;
   }
 
+  // Checked before the modifier chord below, or Cmd/Ctrl+Escape - the
+  // platform's own "close this" chord - would fall into that branch, find
+  // nothing but z there, and get swallowed as a no-op instead of backing out.
+  if (key === 'Escape') {
+    stop();
+    back();
+    return;
+  }
+
   if (event.metaKey || event.ctrlKey) {
     // The one chord worth owning here. Everything else stays the browser's.
     if (event.key.toLowerCase() === 'z') {
@@ -239,11 +248,6 @@ const handleDrawKeydown = (event: KeyboardEvent) => {
   }
   if (event.altKey) return;
 
-  if (key === 'Escape') {
-    stop();
-    back();
-    return;
-  }
   if (key === 'Enter') {
     stop();
     emit('draw');
@@ -421,13 +425,29 @@ watch(
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKeydown, true);
+  // A parent's onBeforeUnmount runs before its children are torn down, so an
+  // error boundary elsewhere in the tree can unmount this panel directly,
+  // skipping every other exit path that would otherwise route through
+  // leaveDrawMode(). Without this, draw mode is left on in the coordinator
+  // forever: the two open handlers both bail while it is set, and there is no
+  // way back into the quick pick short of a reload.
+  resetToRoot();
 });
 </script>
 
 <template>
+  <!--
+    z-[110] has to clear DrawingCanvas's own z-index: 100 on
+    .canvas-container.drawing-mode, or the toolbar sits underneath the drawing
+    surface in the same stacking context and every click on it paints a dot on
+    the video instead of hitting a button. Nothing needs to sit between 50 and
+    110 while this panel is open: no modal can coexist with it, and the
+    canvas's own loading indicator is already scoped inside that z-100
+    container.
+  -->
   <div
     v-if="open"
-    class="fixed inset-0 z-50"
+    class="fixed inset-0 z-[110]"
     :class="{ 'pointer-events-none': mode === 'draw' }"
     @click="emit('close')"
     @contextmenu.prevent="emit('close')"
