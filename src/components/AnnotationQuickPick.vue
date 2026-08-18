@@ -482,14 +482,14 @@ onBeforeUnmount(() => {
         data-testid="quick-pick-draw"
         class="flex items-center gap-3 px-4 py-2.5"
       >
-        <div class="flex items-center gap-1.5">
+        <div class="flex shrink-0 items-center gap-1.5">
           <button
             v-for="(color, index) in DRAW_COLORS"
             :key="color"
             type="button"
             :data-testid="`quick-pick-draw-color-${index + 1}`"
             :title="`${index + 1}`"
-            class="h-6 w-6 rounded-full border transition-transform"
+            class="h-6 w-6 shrink-0 rounded-full border transition-transform"
             :class="
               color === drawColor
                 ? 'scale-110 border-gray-900 dark:border-gray-100'
@@ -502,13 +502,13 @@ onBeforeUnmount(() => {
 
         <span class="h-5 w-px shrink-0 bg-gray-200 dark:bg-gray-700" />
 
-        <div class="flex items-center gap-1.5">
+        <div class="flex shrink-0 items-center gap-1.5">
           <button
             v-for="width in DRAW_WIDTHS"
             :key="width"
             type="button"
             :data-testid="`quick-pick-draw-width-${width}`"
-            class="grid h-6 w-6 place-items-center rounded border transition-colors"
+            class="grid h-6 w-6 shrink-0 place-items-center rounded border transition-colors"
             :class="
               width === drawWidth
                 ? 'border-gray-900 bg-gray-100 dark:border-gray-100 dark:bg-gray-700'
@@ -528,33 +528,21 @@ onBeforeUnmount(() => {
         <button
           type="button"
           data-testid="quick-pick-draw-undo"
-          class="flex items-center gap-2 rounded px-1.5 py-1 transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/50"
+          title="Undo the last stroke"
+          class="grid h-6 w-6 shrink-0 place-items-center rounded border border-gray-300 bg-gray-50 font-mono text-[11px] font-semibold text-gray-600 transition-colors hover:bg-gray-100 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-700"
           @click="emit('draw-undo')"
         >
-          <span
-            class="grid h-6 w-6 shrink-0 place-items-center rounded border border-gray-300 bg-gray-50 font-mono text-[11px] font-semibold text-gray-600 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-300"
-          >
-            U
-          </span>
-          <span class="text-[11px] font-medium tracking-[0.1em] text-gray-600 dark:text-gray-400">
-            UNDO
-          </span>
+          U
         </button>
 
         <button
           type="button"
           data-testid="quick-pick-draw-save"
-          class="ml-auto flex items-center gap-2 rounded px-1.5 py-1 transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/50"
+          title="Save the drawing"
+          class="ml-auto grid h-6 w-6 shrink-0 place-items-center rounded border border-orange-500 bg-orange-50 font-mono text-[11px] font-semibold text-orange-600 transition-colors hover:bg-orange-100 dark:border-orange-500 dark:bg-orange-500/10 dark:text-orange-400 dark:hover:bg-orange-500/20"
           @click="emit('draw')"
         >
-          <span
-            class="grid h-6 w-6 shrink-0 place-items-center rounded border border-gray-300 bg-gray-50 font-mono text-[11px] font-semibold text-gray-600 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-300"
-          >
-            &crarr;
-          </span>
-          <span class="text-[11px] font-medium tracking-[0.1em] text-gray-800 dark:text-gray-200">
-            SAVE
-          </span>
+          &crarr;
         </button>
       </div>
 
