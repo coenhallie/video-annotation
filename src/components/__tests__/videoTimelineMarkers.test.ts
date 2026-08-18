@@ -217,6 +217,12 @@ describe('VideoTimeline marker click seeks to the exact timestamp', () => {
     dispatchMouse(document, 'mouseup', offCentreX);
     dispatchMouse(marker, 'click', offCentreX);
 
+    // The bar's own seek is debounced (SEEK_DEBOUNCE_MS = 16ms) on some
+    // paths, so a synchronous-only check could miss a pointer-derived seek
+    // that fires late instead of never. Wait past the debounce window before
+    // asserting "never", not just "not yet".
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
     expect(seeks).toEqual([DRAWING.timestamp]);
 
     t.unmount();
