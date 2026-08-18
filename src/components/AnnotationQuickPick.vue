@@ -17,12 +17,20 @@ const props = defineProps({
   /** Frame the annotation will land on, shown in the header. */
   frame: { type: Number, default: 0 },
   fps: { type: Number, default: 30 },
+  /** Brush colour, owned by the editor so the toolbar shows what the canvas uses. */
+  drawColor: { type: String, default: '#ef4444' },
+  drawWidth: { type: Number, default: 4 },
 });
 
 const emit = defineEmits<{
   (e: 'select', label: Label): void;
   (e: 'comment', text: string): void;
   (e: 'comment-mode', active: boolean): void;
+  (e: 'draw'): void;
+  (e: 'draw-mode', active: boolean): void;
+  (e: 'draw-undo'): void;
+  (e: 'draw-color', color: string): void;
+  (e: 'draw-width', width: number): void;
   (e: 'close'): void;
 }>();
 
@@ -34,7 +42,26 @@ const activeCategory = ref<LabelCategoryGroup | null>(null);
 /** Letter that opens the comment field. Free because no category claims it. */
 const COMMENT_LETTER = 'C';
 
-type QuickPickMode = 'pick' | 'comment';
+/** Letter that opens the drawing tools. Free for the same reason C is. */
+const DRAW_LETTER = 'D';
+
+/**
+ * Six colours, addressed by 1-6. A trimmed selection of useDrawingCanvas's
+ * palette: enough to separate two annotators and few enough to stay in a row
+ * and in the fingers.
+ */
+const DRAW_COLORS = [
+  '#ef4444',
+  '#f97316',
+  '#fbbf24',
+  '#22c55e',
+  '#3b82f6',
+  '#ffffff',
+];
+
+const DRAW_WIDTHS = [2, 4, 8];
+
+type QuickPickMode = 'pick' | 'comment' | 'draw';
 
 const mode = ref<QuickPickMode>('pick');
 const commentText = ref('');
@@ -113,9 +140,39 @@ const leaveCommentMode = () => {
   emit('comment-mode', false);
 };
 
+const enterDrawMode = () => {
+  if (mode.value === 'draw') return;
+  mode.value = 'draw';
+  emit('draw-mode', true);
+};
+
+/**
+ * Every exit from draw mode goes through here. A listener that paused playback
+ * and turned the canvas on must always be told on the way out: EditorView's two
+ * open handlers both bail while drawing mode is on, so a stranded flag locks
+ * the user out of the whole quick pick, not just out of playback.
+ */
+const leaveDrawMode = () => {
+  if (mode.value !== 'draw') return;
+  mode.value = 'pick';
+  emit('draw-mode', false);
+};
+
+/**
+ * The width steps by position rather than by value, so the ends of the range
+ * simply stop instead of wrapping round to the other extreme mid-stroke.
+ */
+const stepWidth = (direction: -1 | 1) => {
+  const current = DRAW_WIDTHS.indexOf(props.drawWidth);
+  const from = current === -1 ? 1 : current;
+  const next = Math.min(Math.max(from + direction, 0), DRAW_WIDTHS.length - 1);
+  if (DRAW_WIDTHS[next] !== props.drawWidth) emit('draw-width', DRAW_WIDTHS[next]!);
+};
+
 const resetToRoot = () => {
   activeCategory.value = null;
   leaveCommentMode();
+  leaveDrawMode();
 };
 
 /**
@@ -139,8 +196,71 @@ const back = () => {
     leaveCommentMode();
     return;
   }
+  if (mode.value === 'draw') {
+    leaveDrawMode();
+    return;
+  }
   if (activeCategory.value) activeCategory.value = null;
   else emit('close');
+};
+
+/**
+ * Draw mode is modal: the panel is a toolbar and the video below it is a
+ * canvas, so anything this branch does not own is still swallowed rather than
+ * handed to the player. Space and the arrows are why. They reach
+ * useVideoPlayer's document listener otherwise, and the frame change makes
+ * DrawingCanvas clear its canvas and start a fresh session, taking the strokes
+ * with it.
+ */
+const handleDrawKeydown = (event: KeyboardEvent) => {
+  const stop = () => {
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  if (event.metaKey || event.ctrlKey) {
+    // The one chord worth owning here. Everything else stays the browser's.
+    if (event.key.toLowerCase() === 'z') {
+      stop();
+      emit('draw-undo');
+    }
+    return;
+  }
+  if (event.altKey) return;
+
+  const key = event.key;
+
+  if (key === 'Escape') {
+    stop();
+    back();
+    return;
+  }
+  if (key === 'Enter') {
+    stop();
+    emit('draw');
+    return;
+  }
+  if (key === 'u' || key === 'U') {
+    stop();
+    emit('draw-undo');
+    return;
+  }
+  if (key === '[' || key === ']') {
+    stop();
+    stepWidth(key === '[' ? -1 : 1);
+    return;
+  }
+
+  const swatch = Number(key);
+  if (Number.isInteger(swatch) && swatch >= 1 && swatch <= DRAW_COLORS.length) {
+    stop();
+    emit('draw-color', DRAW_COLORS[swatch - 1]!);
+    return;
+  }
+
+  if (key === ' ' || key === 'ArrowLeft' || key === 'ArrowRight' || key.length === 1) {
+    stop();
+  }
 };
 
 /**
@@ -149,6 +269,11 @@ const back = () => {
  * WRONG POS. Escape or Backspace steps back out.
  */
 const handleKeydown = (event: KeyboardEvent) => {
+  // First, because draw mode owns a modifier chord of its own.
+  if (mode.value === 'draw') {
+    handleDrawKeydown(event);
+    return;
+  }
   if (event.metaKey || event.ctrlKey || event.altKey) return;
 
   // This listener is on window in capture phase and preventDefault()s every
@@ -198,6 +323,13 @@ const handleKeydown = (event: KeyboardEvent) => {
     event.preventDefault();
     event.stopPropagation();
     enterCommentMode();
+    return;
+  }
+
+  if (key === DRAW_LETTER) {
+    event.preventDefault();
+    event.stopPropagation();
+    enterDrawMode();
     return;
   }
 
@@ -287,6 +419,7 @@ onBeforeUnmount(() => {
   <div
     v-if="open"
     class="fixed inset-0 z-50"
+    :class="{ 'pointer-events-none': mode === 'draw' }"
     @click="emit('close')"
     @contextmenu.prevent="emit('close')"
   >
@@ -300,6 +433,7 @@ onBeforeUnmount(() => {
       ref="panelRef"
       tabindex="-1"
       class="absolute overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl outline-none dark:border-gray-700 dark:bg-gray-800"
+      :class="{ 'pointer-events-auto': mode === 'draw' }"
       :style="{ ...position, width: `${PANEL_W}px` }"
       @click.stop
       @keydown="handleKeydown"
@@ -339,6 +473,89 @@ onBeforeUnmount(() => {
           class="w-full rounded border border-gray-300 bg-white px-3 py-2 text-[12px] text-gray-900 outline-none placeholder:text-gray-400 focus:border-orange-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-500"
           @keydown.enter.prevent="commitComment"
         />
+      </div>
+
+      <!-- Draw screen: a toolbar, because the surface being annotated is the
+           video itself and the panel has to keep out of its way. -->
+      <div
+        v-else-if="mode === 'draw'"
+        data-testid="quick-pick-draw"
+        class="flex items-center gap-3 px-4 py-2.5"
+      >
+        <div class="flex items-center gap-1.5">
+          <button
+            v-for="(color, index) in DRAW_COLORS"
+            :key="color"
+            type="button"
+            :data-testid="`quick-pick-draw-color-${index + 1}`"
+            :title="`${index + 1}`"
+            class="h-6 w-6 rounded-full border transition-transform"
+            :class="
+              color === drawColor
+                ? 'scale-110 border-gray-900 dark:border-gray-100'
+                : 'border-gray-300 hover:scale-110 dark:border-gray-600'
+            "
+            :style="{ backgroundColor: color }"
+            @click="emit('draw-color', color)"
+          />
+        </div>
+
+        <span class="h-5 w-px shrink-0 bg-gray-200 dark:bg-gray-700" />
+
+        <div class="flex items-center gap-1.5">
+          <button
+            v-for="width in DRAW_WIDTHS"
+            :key="width"
+            type="button"
+            :data-testid="`quick-pick-draw-width-${width}`"
+            class="grid h-6 w-6 place-items-center rounded border transition-colors"
+            :class="
+              width === drawWidth
+                ? 'border-gray-900 bg-gray-100 dark:border-gray-100 dark:bg-gray-700'
+                : 'border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700/50'
+            "
+            @click="emit('draw-width', width)"
+          >
+            <span
+              class="rounded-full bg-gray-700 dark:bg-gray-200"
+              :style="{ width: `${width}px`, height: `${width}px` }"
+            />
+          </button>
+        </div>
+
+        <span class="h-5 w-px shrink-0 bg-gray-200 dark:bg-gray-700" />
+
+        <button
+          type="button"
+          data-testid="quick-pick-draw-undo"
+          class="flex items-center gap-2 rounded px-1.5 py-1 transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/50"
+          @click="emit('draw-undo')"
+        >
+          <span
+            class="grid h-6 w-6 shrink-0 place-items-center rounded border border-gray-300 bg-gray-50 font-mono text-[11px] font-semibold text-gray-600 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-300"
+          >
+            U
+          </span>
+          <span class="text-[11px] font-medium tracking-[0.1em] text-gray-600 dark:text-gray-400">
+            UNDO
+          </span>
+        </button>
+
+        <button
+          type="button"
+          data-testid="quick-pick-draw-save"
+          class="ml-auto flex items-center gap-2 rounded px-1.5 py-1 transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/50"
+          @click="emit('draw')"
+        >
+          <span
+            class="grid h-6 w-6 shrink-0 place-items-center rounded border border-gray-300 bg-gray-50 font-mono text-[11px] font-semibold text-gray-600 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-300"
+          >
+            &crarr;
+          </span>
+          <span class="text-[11px] font-medium tracking-[0.1em] text-gray-800 dark:text-gray-200">
+            SAVE
+          </span>
+        </button>
       </div>
 
       <!-- Pick screen -->
@@ -419,6 +636,23 @@ onBeforeUnmount(() => {
               COMMENT
             </span>
           </button>
+
+          <button
+            type="button"
+            class="flex w-full items-center gap-2.5 border-t border-gray-200 px-4 py-2 text-left transition-colors hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-700/50"
+            @click="enterDrawMode"
+          >
+            <span
+              class="grid h-6 w-6 shrink-0 place-items-center rounded border border-gray-300 bg-gray-50 font-mono text-[11px] font-semibold text-gray-600 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-300"
+            >
+              D
+            </span>
+            <span
+              class="flex-1 text-[11px] font-medium tracking-[0.1em] text-gray-600 dark:text-gray-400"
+            >
+              DRAWING
+            </span>
+          </button>
         </div>
 
         <!-- Labels of the active category -->
@@ -458,8 +692,9 @@ onBeforeUnmount(() => {
         class="border-t border-gray-200 px-4 py-2 text-[9px] tracking-[0.14em] text-gray-400 dark:border-gray-700 dark:text-gray-500"
       >
         <span v-if="mode === 'comment'">Enter to save &middot; Esc to go back</span>
+        <span v-else-if="mode === 'draw'">Enter to save &middot; U to undo &middot; Esc to cancel</span>
         <span v-else-if="activeCategory">Letter to label &middot; Esc to go back</span>
-        <span v-else>Letter to pick a category &middot; C to comment &middot; Esc to close</span>
+        <span v-else>Letter to pick a category &middot; C to comment &middot; D to draw &middot; Esc to close</span>
       </footer>
     </div>
   </div>

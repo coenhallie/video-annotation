@@ -26,6 +26,8 @@ interface Harness {
   open: Ref<boolean>;
   x: Ref<number>;
   y: Ref<number>;
+  drawColor: Ref<string>;
+  drawWidth: Ref<number>;
   unmount: () => void;
 }
 
@@ -34,6 +36,8 @@ function mountPanel(labels: Label[] = LABELS): Harness {
   const open = ref(true);
   const x = ref(400);
   const y = ref(400);
+  const drawColor = ref('#ef4444');
+  const drawWidth = ref(4);
 
   const root = document.createElement('div');
   document.body.appendChild(root);
@@ -49,10 +53,17 @@ function mountPanel(labels: Label[] = LABELS): Harness {
             labels,
             frame: 300,
             fps: 30,
+            drawColor: drawColor.value,
+            drawWidth: drawWidth.value,
             onSelect: (label: Label) => events.push(['select', label]),
             onComment: (text: string) => events.push(['comment', text]),
             onCommentMode: (active: boolean) =>
               events.push(['comment-mode', active]),
+            onDraw: () => events.push(['draw', null]),
+            onDrawMode: (active: boolean) => events.push(['draw-mode', active]),
+            onDrawUndo: () => events.push(['draw-undo', null]),
+            onDrawColor: (color: string) => events.push(['draw-color', color]),
+            onDrawWidth: (width: number) => events.push(['draw-width', width]),
             onClose: () => events.push(['close', null]),
           });
       },
@@ -66,6 +77,8 @@ function mountPanel(labels: Label[] = LABELS): Harness {
     open,
     x,
     y,
+    drawColor,
+    drawWidth,
     unmount: () => {
       app.unmount();
       root.remove();
@@ -314,6 +327,195 @@ describe('AnnotationQuickPick comment mode', () => {
     await nextTick();
 
     expect(commentInput(panel.root)).not.toBeNull();
+    panel.unmount();
+  });
+});
+
+const toolbar = (root: HTMLElement) =>
+  root.querySelector<HTMLElement>('[data-testid="quick-pick-draw"]');
+
+describe('AnnotationQuickPick draw mode', () => {
+  it('enters draw mode on D at the root screen', async () => {
+    const panel = mountPanel();
+    await nextTick();
+
+    press('d');
+    await nextTick();
+
+    expect(toolbar(panel.root)).not.toBeNull();
+    expect(panel.events).toContainEqual(['draw-mode', true]);
+    panel.unmount();
+  });
+
+  it('leaves D to a label inside a category', async () => {
+    // No label here holds D, so the test is that the panel does not fall back
+    // to the root meaning: a category screen answers to its own letters only.
+    const panel = mountPanel();
+    await nextTick();
+
+    press('b'); // BALL category
+    await nextTick();
+    press('d');
+    await nextTick();
+
+    expect(toolbar(panel.root)).toBeNull();
+    expect(panel.events.some(([name]) => name === 'draw-mode')).toBe(false);
+    panel.unmount();
+  });
+
+  it('lets clicks through to the canvas underneath', async () => {
+    // The backdrop is fixed inset-0, so unless it stops taking pointer events
+    // the user cannot touch the video at all.
+    const panel = mountPanel();
+    await nextTick();
+    const backdrop = panel.root.firstElementChild as HTMLElement;
+    expect(backdrop.className).not.toContain('pointer-events-none');
+
+    press('d');
+    await nextTick();
+
+    expect(backdrop.className).toContain('pointer-events-none');
+    panel.unmount();
+  });
+
+  it('swallows the transport keys that would clear the canvas', async () => {
+    // Space and the arrows reach useVideoPlayer's document listener otherwise.
+    // A frame change makes DrawingCanvas clear the canvas and start a fresh
+    // session, and the strokes are gone with no way back.
+    const panel = mountPanel();
+    await nextTick();
+    press('d');
+    await nextTick();
+
+    expect(press(' ').defaultPrevented).toBe(true);
+    expect(press('ArrowLeft').defaultPrevented).toBe(true);
+    expect(press('ArrowRight').defaultPrevented).toBe(true);
+    panel.unmount();
+  });
+
+  it('picks a colour with the number keys', async () => {
+    const panel = mountPanel();
+    await nextTick();
+    press('d');
+    await nextTick();
+
+    press('4');
+    await nextTick();
+
+    expect(panel.events).toContainEqual(['draw-color', '#22c55e']);
+    panel.unmount();
+  });
+
+  it('steps the stroke width with the bracket keys', async () => {
+    const panel = mountPanel();
+    await nextTick();
+    press('d');
+    await nextTick();
+
+    press(']');
+    await nextTick();
+    expect(panel.events).toContainEqual(['draw-width', 8]);
+
+    panel.drawWidth.value = 8;
+    await nextTick();
+    press('[');
+    await nextTick();
+    expect(panel.events).toContainEqual(['draw-width', 4]);
+    panel.unmount();
+  });
+
+  it('does not step past either end of the width range', async () => {
+    const panel = mountPanel();
+    panel.drawWidth.value = 8;
+    await nextTick();
+    press('d');
+    await nextTick();
+
+    press(']');
+    await nextTick();
+
+    expect(panel.events.some(([name]) => name === 'draw-width')).toBe(false);
+    panel.unmount();
+  });
+
+  it('undoes on U and on the platform undo chord', async () => {
+    const panel = mountPanel();
+    await nextTick();
+    press('d');
+    await nextTick();
+
+    press('u');
+    press('z', { metaKey: true });
+    await nextTick();
+
+    expect(
+      panel.events.filter(([name]) => name === 'draw-undo')
+    ).toHaveLength(2);
+    panel.unmount();
+  });
+
+  it('commits on Enter without leaving draw mode', async () => {
+    // Saving is asynchronous and can fail. The listener closes the panel only
+    // once the annotation is stored, so the strokes have to survive the emit.
+    const panel = mountPanel();
+    await nextTick();
+    press('d');
+    await nextTick();
+
+    press('Enter');
+    await nextTick();
+
+    expect(panel.events).toContainEqual(['draw', null]);
+    expect(toolbar(panel.root)).not.toBeNull();
+    expect(
+      panel.events.some(([name, value]) => name === 'draw-mode' && value === false)
+    ).toBe(false);
+    panel.unmount();
+  });
+
+  it('returns to the root on Escape and closes on a second one', async () => {
+    const panel = mountPanel();
+    await nextTick();
+    press('d');
+    await nextTick();
+
+    press('Escape');
+    await nextTick();
+    expect(toolbar(panel.root)).toBeNull();
+    expect(panel.events).toContainEqual(['draw-mode', false]);
+
+    press('Escape');
+    await nextTick();
+    expect(panel.events).toContainEqual(['close', null]);
+    panel.unmount();
+  });
+
+  it('reports leaving draw mode once when closed', async () => {
+    const panel = mountPanel();
+    await nextTick();
+    press('d');
+    await nextTick();
+
+    panel.open.value = false;
+    await nextTick();
+
+    expect(
+      panel.events.filter(([name, value]) => name === 'draw-mode' && value === false)
+    ).toHaveLength(1);
+    panel.unmount();
+  });
+
+  it('resets draw mode when reopened at a new position', async () => {
+    const panel = mountPanel();
+    await nextTick();
+    press('d');
+    await nextTick();
+
+    panel.x.value = 600;
+    panel.y.value = 200;
+    await nextTick();
+
+    expect(toolbar(panel.root)).toBeNull();
     panel.unmount();
   });
 });
