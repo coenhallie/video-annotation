@@ -2,7 +2,8 @@
 import { ref, computed } from 'vue';
 import { logger } from '../utils/logger';
 import { formatTime, formatFrame } from '@/utils/formatters';
-import { isCommentAnnotation } from '@/utils/annotationPayload';
+import { isCommentAnnotation, isDrawingAnnotation } from '@/utils/annotationPayload';
+import type { DrawingData } from '@/types/database';
 
 /* Narrow annotation typing for the template to satisfy TS plugin */
 interface TimelineAnnotation {
@@ -16,6 +17,9 @@ interface TimelineAnnotation {
    * thing. See isCommentAnnotation.
    */
   labels?: string[];
+  /** See isDrawingAnnotation: a comment-shaped annotation with strokes is a drawing. */
+  annotationType?: string | null;
+  drawingData?: DrawingData | null;
 }
 
 const __name = 'VideoTimelineComponent';
@@ -228,8 +232,37 @@ const getSeverityColor = (severity?: string) => {
   );
 };
 
+/**
+ * Precedence: a label says what an annotation is about whatever else it
+ * carries, so only a label-less annotation gets one of the outline treatments,
+ * and its own content decides which. See isCommentAnnotation.
+ */
+const isDrawing = (annotation: TimelineAnnotation) =>
+  isCommentAnnotation(annotation) && isDrawingAnnotation(annotation);
+
 const isComment = (annotation: TimelineAnnotation) =>
-  isCommentAnnotation(annotation);
+  isCommentAnnotation(annotation) && !isDrawingAnnotation(annotation);
+
+/**
+ * One place, so exactly one border colour class can ever come out of it.
+ * Drawings and comments share the outline; the shape is what separates them,
+ * which reads better than a fill difference at this size.
+ */
+const markerClasses = (annotation: TimelineAnnotation) => {
+  const shape = isDrawing(annotation) ? 'rounded-sm' : 'rounded-full';
+  if (isSelected(annotation)) {
+    return `${shape} border-yellow-400 shadow-yellow-400/50 opacity-100 scale-110`;
+  }
+  if (isDrawing(annotation) || isComment(annotation)) {
+    return `${shape} border-gray-300 bg-transparent`;
+  }
+  return `${shape} border-white`;
+};
+
+const markerStyle = (annotation: TimelineAnnotation) =>
+  isDrawing(annotation) || isComment(annotation)
+    ? undefined
+    : { backgroundColor: getSeverityColor((annotation as any)?.severity) };
 
 const isSelected = (annotation: TimelineAnnotation) =>
   (props.selectedAnnotation as any)?.id === (annotation as any)?.id;
@@ -360,23 +393,14 @@ const handlePlayPause = (): void => {
           "
         >
           <!--
-            Labels are filled dots; a comment is a hollow ring, so a note reads
-            differently from an event at a glance. Same size and hit area either way.
+            Labels are filled dots, a comment is a hollow ring, and a drawing is
+            a square, so a note and a sketch each read differently from an event
+            at a glance. Same size and hit area for all three.
           -->
           <div
-            class="w-4 h-4 rounded-full border-2 shadow-lg absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 opacity-90"
-            :class="
-              isSelected(annotation as TimelineAnnotation)
-                ? 'border-yellow-400 shadow-yellow-400/50 opacity-100 scale-110'
-                : isComment(annotation as TimelineAnnotation)
-                  ? 'border-gray-300 bg-transparent'
-                  : 'border-white'
-            "
-            :style="
-              isComment(annotation as TimelineAnnotation)
-                ? undefined
-                : { backgroundColor: getSeverityColor((annotation as any)?.severity) }
-            "
+            class="w-4 h-4 border-2 shadow-lg absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 opacity-90"
+            :class="markerClasses(annotation as TimelineAnnotation)"
+            :style="markerStyle(annotation as TimelineAnnotation)"
           />
         </div>
       </div>
@@ -450,6 +474,13 @@ const handlePlayPause = (): void => {
             style="border-color: #d1d5db"
           />
           <span>Comment</span>
+        </div>
+        <div class="flex items-center space-x-1.5 text-xs text-gray-400">
+          <div
+            class="w-2 h-2 rounded-sm border"
+            style="border-color: #d1d5db"
+          />
+          <span>Drawing</span>
         </div>
       </div>
     </div>

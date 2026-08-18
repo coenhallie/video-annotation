@@ -28,6 +28,40 @@ const UNHYDRATED = {
   severity: 'low',
 };
 
+const DRAWING = {
+  id: 'annotation-drawing',
+  title: 'Drawing',
+  timestamp: 40,
+  labels: [] as string[],
+  annotationType: 'drawing',
+  drawingData: {
+    frame: 1200,
+    canvasWidth: 800,
+    canvasHeight: 450,
+    paths: [
+      {
+        points: [
+          { x: 0.1, y: 0.1 },
+          { x: 0.2, y: 0.2 },
+        ],
+        strokeWidth: 4,
+        color: '#ef4444',
+        timestamp: 1,
+      },
+    ],
+  },
+};
+
+const LABELLED_DRAWING = {
+  id: 'annotation-labelled-drawing',
+  title: 'BALL MISSED',
+  timestamp: 50,
+  severity: 'low',
+  labels: ['label-ball-missed'],
+  annotationType: 'drawing',
+  drawingData: DRAWING.drawingData,
+};
+
 function mountTimeline(selectedAnnotation?: object) {
   const root = document.createElement('div');
   document.body.appendChild(root);
@@ -41,7 +75,7 @@ function mountTimeline(selectedAnnotation?: object) {
             currentFrame: 0,
             totalFrames: 1800,
             fps: 30,
-            annotations: [LABELLED, COMMENT, UNHYDRATED],
+            annotations: [LABELLED, COMMENT, UNHYDRATED, DRAWING, LABELLED_DRAWING],
             ...(selectedAnnotation ? { selectedAnnotation } : {}),
           });
       },
@@ -112,6 +146,58 @@ describe('VideoTimeline markers', () => {
     expect(dot).toBeDefined();
     expect(dot!.className).toContain('border-yellow-400');
     expect(dot!.className).not.toContain('border-white');
+    t.unmount();
+  });
+});
+
+describe('VideoTimeline drawing markers', () => {
+  it('squares off a drawing marker', async () => {
+    const t = mountTimeline();
+    await nextTick();
+
+    const marker = dotFor(t.root, 'annotation-drawing');
+    expect(marker!.className).toContain('rounded-sm');
+    expect(marker!.className).toContain('border-gray-300');
+    expect(marker!.style.backgroundColor).toBe('');
+    t.unmount();
+  });
+
+  it('leaves the comment marker round', async () => {
+    const t = mountTimeline();
+    await nextTick();
+
+    const marker = dotFor(t.root, 'annotation-comment');
+    expect(marker!.className).toContain('rounded-full');
+    expect(marker!.className).not.toContain('rounded-sm');
+    t.unmount();
+  });
+
+  it('lets the label win over the drawing', async () => {
+    // A label says what the annotation is about whatever else it carries, so
+    // an annotation with both is still drawn as its label.
+    const t = mountTimeline();
+    await nextTick();
+
+    const marker = dotFor(t.root, 'annotation-labelled-drawing');
+    expect(marker!.className).toContain('rounded-full');
+    expect(marker!.style.backgroundColor).toBe('rgb(52, 211, 153)'); // low => #34d399
+    t.unmount();
+  });
+
+  it('emits exactly one border colour per marker', async () => {
+    const t = mountTimeline();
+    await nextTick();
+
+    for (const id of [
+      'annotation-labelled',
+      'annotation-comment',
+      'annotation-unhydrated',
+      'annotation-drawing',
+      'annotation-labelled-drawing',
+    ]) {
+      const classes = dotFor(t.root, id)!.className.split(/\s+/);
+      expect(classes.filter((name) => name.startsWith('border-')).length).toBe(2);
+    }
     t.unmount();
   });
 });
