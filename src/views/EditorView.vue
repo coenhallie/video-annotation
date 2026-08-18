@@ -19,7 +19,7 @@ import UnifiedVideoPlayer from '@/components/UnifiedVideoPlayer.vue';
 import DashboardModals from '@/components/DashboardModals.vue';
 import AnnotationQuickPick from '@/components/AnnotationQuickPick.vue';
 import { useLabelCatalog } from '@/composables/useLabelCatalog';
-import { buildAnnotationPayload } from '@/utils/annotationPayload';
+import { buildAnnotationPayload, stampSnapshotFrame } from '@/utils/annotationPayload';
 import { canCreateAnnotations } from '@/utils/annotationPermissions';
 import { ShareService } from '@/services/shareService';
 import { VideoService } from '@/services/videoService';
@@ -39,7 +39,7 @@ import { useSharedContent } from '@/composables/useSharedContent';
 import { useVideoEventHandlers } from '@/composables/useVideoEventHandlers';
 import { useWatchProgress } from '@/composables/useWatchProgress';
 import { supabase } from '@/composables/useSupabase';
-import type { Video, Annotation, ComparisonVideo, DrawingData } from '@/types/database';
+import type { Video, Annotation, ComparisonVideo } from '@/types/database';
 import type {
   ProjectSelection,
   ComparisonCreatedEvent,
@@ -541,25 +541,6 @@ const handleDualTimelineSeekB = (time: number) => {
 const handleAnnotationSeek = async (annotation: Annotation) => {
   if (drawingCoordinator?.isDrawingMode?.value) return;
   await handleAnnotationClick(annotation);
-};
-
-/**
- * The canvas stamps the player's frame; the annotation carries the frame the
- * panel snapshotted before the seek, and an asynchronous seek can leave those
- * one apart. They have to agree exactly: clicking the annotation drives the
- * canvas from annotation.frame, and DrawingCanvas renders a drawing only where
- * drawing.frame matches, so a frame's difference is an empty canvas.
- */
-const stampSnapshotFrame = (
-  drawingData: DrawingData,
-  snapshot: { frame: number; dual: { videoAFrame: number; videoBFrame: number } | null }
-) => {
-  if (snapshot.dual) {
-    if (drawingData.drawingA) drawingData.drawingA.frame = snapshot.dual.videoAFrame;
-    if (drawingData.drawingB) drawingData.drawingB.frame = snapshot.dual.videoBFrame;
-    return;
-  }
-  drawingData.frame = snapshot.frame;
 };
 
 /**

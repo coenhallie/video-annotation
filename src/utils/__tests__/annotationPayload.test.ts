@@ -6,6 +6,7 @@ import {
   isSaveableAnnotation,
   hasDrawingStrokes,
   isDrawingAnnotation,
+  stampSnapshotFrame,
 } from '../annotationPayload';
 import type { Label } from '@/types/labels';
 import type { DrawingData } from '@/types/database';
@@ -308,5 +309,55 @@ describe('isDrawingAnnotation', () => {
 
   it('is false for a drawing type with no strokes left', () => {
     expect(isDrawingAnnotation({ annotationType: 'drawing' })).toBe(false);
+  });
+});
+
+describe('stampSnapshotFrame', () => {
+  it('stamps the single-mode top-level frame from the snapshot', () => {
+    const drawingData = { ...strokes, frame: 999 };
+
+    stampSnapshotFrame(drawingData, { frame: 300, dual: null });
+
+    expect(drawingData.frame).toBe(300);
+  });
+
+  it('stamps each video\'s own frame in dual mode and leaves the top level alone', () => {
+    const drawingData: DrawingData = {
+      paths: [],
+      canvasWidth: 800,
+      canvasHeight: 450,
+      frame: 999,
+      drawingA: { ...strokes, frame: 111 },
+      drawingB: { ...strokes, frame: 222 },
+    };
+
+    stampSnapshotFrame(drawingData, {
+      frame: 300,
+      dual: { videoAFrame: 10, videoBFrame: 20 },
+    });
+
+    expect(drawingData.drawingA?.frame).toBe(10);
+    expect(drawingData.drawingB?.frame).toBe(20);
+    // The top-level frame is single mode's field, unused once dual is set,
+    // and stamping it too would be a lie about which video it belongs to.
+    expect(drawingData.frame).toBe(999);
+  });
+
+  it('is a no-op on whichever side of a dual drawing is missing', () => {
+    const drawingData: DrawingData = {
+      paths: [],
+      canvasWidth: 800,
+      canvasHeight: 450,
+      frame: 999,
+      drawingA: { ...strokes, frame: 111 },
+    };
+
+    stampSnapshotFrame(drawingData, {
+      frame: 300,
+      dual: { videoAFrame: 10, videoBFrame: 20 },
+    });
+
+    expect(drawingData.drawingA?.frame).toBe(10);
+    expect(drawingData.drawingB).toBeUndefined();
   });
 });

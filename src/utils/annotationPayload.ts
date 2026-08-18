@@ -65,6 +65,28 @@ export function buildAnnotationPayload(
 }
 
 /**
+ * The canvas stamps the player's frame; the annotation carries the frame the
+ * panel snapshotted before the seek, and an asynchronous seek can leave those
+ * one apart. They have to agree exactly: clicking the annotation drives the
+ * canvas from annotation.frame, and DrawingCanvas renders a drawing only where
+ * drawing.frame matches, so a frame's difference is an empty canvas.
+ *
+ * Mutates drawingData in place, the way its one caller (the quick pick's
+ * drawing save) already expects.
+ */
+export function stampSnapshotFrame(
+  drawingData: DrawingData,
+  snapshot: { frame: number; dual: { videoAFrame: number; videoBFrame: number } | null }
+): void {
+  if (snapshot.dual) {
+    if (drawingData.drawingA) drawingData.drawingA.frame = snapshot.dual.videoAFrame;
+    if (drawingData.drawingB) drawingData.drawingB.frame = snapshot.dual.videoBFrame;
+    return;
+  }
+  drawingData.frame = snapshot.frame;
+}
+
+/**
  * True when a drawing actually carries strokes. Single mode keeps its paths at
  * the top level and dual mode nests one drawing per video, and both shapes have
  * an empty form that is not a drawing: `addDrawing` builds a dual wrapper whose
