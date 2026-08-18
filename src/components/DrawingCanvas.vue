@@ -7,7 +7,6 @@
     <canvas
       ref="fabricCanvas"
       class="drawing-canvas"
-      :class="{ 'fade-transition': isTransitioning }"
       :style="{ opacity: canvasOpacity }"
     />
 
@@ -75,8 +74,9 @@ const canvasHeight = ref(0);
 const isDrawing = ref(false);
 const resizeObserver = ref<ResizeObserver>();
 
-// Fade transition state
-const isTransitioning = ref(false);
+// Fade transition state. The fade itself is CSS: canvasOpacity drives the
+// `.drawing-canvas`'s own `transition: opacity`, so there is nothing here
+// left to gate a class on.
 const canvasOpacity = ref(1);
 
 // Drawing session state - removed as we now save each drawing immediately
@@ -303,9 +303,6 @@ const loadDrawingsForFrame = async (skipTransition: boolean = false) => {
 
   // Skip transition for immediate updates (like when clicking annotations)
   if (!skipTransition) {
-    // Start fade transition
-    isTransitioning.value = true;
-
     // Fade out current drawings
     canvasOpacity.value = 0;
 
@@ -314,7 +311,6 @@ const loadDrawingsForFrame = async (skipTransition: boolean = false) => {
 
     // Check again if canvas is still valid after the timeout
     if (!canvas.value || canvas.value.disposed) {
-      isTransitioning.value = false;
       return;
     }
   }
@@ -379,23 +375,11 @@ const loadDrawingsForFrame = async (skipTransition: boolean = false) => {
 
     canvas.value.renderAll(); // Force canvas to render immediately
 
-    if (!skipTransition) {
-      // Fade in new drawings
-      canvasOpacity.value = 1;
-
-      // Wait for fade in to complete, then end transition
-      setTimeout(() => {
-        isTransitioning.value = false;
-      }, 150);
-    } else {
-      // If skipping transition, ensure opacity is set
-      canvasOpacity.value = 1;
-      isTransitioning.value = false;
-    }
+    // Fade in new drawings (a no-op when skipTransition already left opacity at 1)
+    canvasOpacity.value = 1;
   } catch (error) {
     console.warn('🎨 [DrawingCanvas] Error loading drawings for frame:', error);
     canvasOpacity.value = 1;
-    isTransitioning.value = false;
   }
 };
 
