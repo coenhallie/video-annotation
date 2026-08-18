@@ -170,7 +170,16 @@ const handleTimelineMouseDown = (event: MouseEvent): void => {
     '[data-annotation-marker]'
   );
 
-  handleTimelineClick(event, true); // Immediate seek on initial click
+  // A press that started on a marker leaves seeking to the marker's own click
+  // handler, which seeks to the annotation's exact timestamp. This bar's
+  // pointer-derived seek lands a pixel's worth of time away from that, and a
+  // pixel's worth of time is enough to miss a drawing: a drawing only renders
+  // on its own exact frame. A drag that moves past the threshold is still a
+  // scrub, not a marker click, so handleMouseMove and handleMouseUp below
+  // keep seeking from the pointer once the press has actually moved.
+  if (!onAnnotationMarker) {
+    handleTimelineClick(event, true); // Immediate seek on initial click
+  }
 
   const handleMouseMove = (e: MouseEvent) => {
     if (isDragging.value) {
@@ -180,9 +189,20 @@ const handleTimelineMouseDown = (event: MouseEvent): void => {
 
   const handleMouseUp = (e: MouseEvent) => {
     if (isDragging.value) {
-      handleTimelineClick(e, true); // Immediate seek on release
-
       const moved = Math.hypot(e.clientX - startX, e.clientY - startY);
+      const pressStartedOnMarker = onAnnotationMarker && moved <= QUICK_PICK_DRAG_THRESHOLD_PX;
+
+      // Same reasoning as the mousedown skip above: a press that started on a
+      // marker and never moved is a marker click, and the marker's own click
+      // handler seeks to the annotation's exact timestamp. Seeking here too
+      // would win the race with a pointer-derived time and land a pixel's
+      // worth of time away from it, which is enough to miss a drawing. Once
+      // the press has moved past the threshold it is a real scrub, so it
+      // keeps seeking from the pointer as before.
+      if (!pressStartedOnMarker) {
+        handleTimelineClick(e, true); // Immediate seek on release
+      }
+
       const time = timeAtPointer(e);
       if (
         !onAnnotationMarker &&

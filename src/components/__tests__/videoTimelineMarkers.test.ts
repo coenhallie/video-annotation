@@ -62,7 +62,10 @@ const LABELLED_DRAWING = {
   drawingData: DRAWING.drawingData,
 };
 
-function mountTimeline(selectedAnnotation?: object) {
+function mountTimeline(
+  selectedAnnotation?: object,
+  extraProps: Record<string, unknown> = {}
+) {
   const root = document.createElement('div');
   document.body.appendChild(root);
   const app = createApp(
@@ -77,12 +80,49 @@ function mountTimeline(selectedAnnotation?: object) {
             fps: 30,
             annotations: [LABELLED, COMMENT, UNHYDRATED, DRAWING, LABELLED_DRAWING],
             ...(selectedAnnotation ? { selectedAnnotation } : {}),
+            ...extraProps,
           });
       },
     })
   );
   app.mount(root);
   return { root, unmount: () => { app.unmount(); root.remove(); } };
+}
+
+/**
+ * The bar element that both the click/mousedown handlers and the pointer-time
+ * math key off. jsdom never lays anything out, so getBoundingClientRect()
+ * reports a zero-size rect by default; stub it to a plausible pixel width so
+ * a clientX on a marker maps to a real, non-zero time under the pointer -
+ * that gap is exactly what the bug being tested here depends on.
+ */
+function stubBarRect(root: HTMLElement, width = 1008) {
+  const bar = root.querySelector('[data-annotation-marker]')
+    ?.parentElement as HTMLElement;
+  bar.getBoundingClientRect = () =>
+    ({
+      width,
+      height: 48,
+      top: 100,
+      left: 0,
+      right: width,
+      bottom: 148,
+      x: 0,
+      y: 100,
+      toJSON() {},
+    }) as DOMRect;
+  return bar;
+}
+
+function dispatchMouse(
+  target: EventTarget,
+  type: string,
+  clientX: number,
+  clientY = 124
+) {
+  target.dispatchEvent(
+    new MouseEvent(type, { clientX, clientY, bubbles: true, cancelable: true })
+  );
 }
 
 const dotFor = (root: HTMLElement, id: string) =>
@@ -146,6 +186,109 @@ describe('VideoTimeline markers', () => {
     expect(dot).toBeDefined();
     expect(dot!.className).toContain('border-yellow-400');
     expect(dot!.className).not.toContain('border-white');
+    t.unmount();
+  });
+});
+
+describe('VideoTimeline marker click seeks to the exact timestamp', () => {
+  it('emits seek-to-time only with the annotation timestamp, never a pointer-derived time', async () => {
+    const seeks: number[] = [];
+    const t = mountTimeline(undefined, {
+      onSeekToTime: (time: number) => seeks.push(time),
+    });
+    await nextTick();
+
+    stubBarRect(t.root);
+    const marker = t.root.querySelector(
+      '[data-annotation-marker][data-annotation-id="annotation-drawing"]'
+    ) as HTMLElement;
+    expect(marker).toBeTruthy();
+
+    // DRAWING sits at timestamp 40 of a 60s duration, so its exact centre is
+    // at x = 40/60 * 1008 = 672. Press a couple of pixels off centre, the
+    // same few-pixel miss the manual repro measured on the real timeline, to
+    // prove the marker's own timestamp wins over whatever the pointer is
+    // sitting on.
+    const offCentreX = 674;
+    const pointerDerivedTime = (offCentreX / 1008) * 60;
+    expect(pointerDerivedTime).not.toBeCloseTo(DRAWING.timestamp, 5);
+
+    dispatchMouse(marker, 'mousedown', offCentreX);
+    dispatchMouse(document, 'mouseup', offCentreX);
+    dispatchMouse(marker, 'click', offCentreX);
+
+    expect(seeks).toEqual([DRAWING.timestamp]);
+
+    t.unmount();
+  });
+});
+
+describe('VideoTimeline plain bar interaction is unaffected', () => {
+  it('seeks to the pointer time on a click away from any marker', async () => {
+    const seeks: number[] = [];
+    const t = mountTimeline(undefined, {
+      onSeekToTime: (time: number) => seeks.push(time),
+    });
+    await nextTick();
+
+    stubBarRect(t.root);
+    const bar = t.root.querySelector(
+      '[data-annotation-marker]'
+    )?.parentElement as HTMLElement;
+
+    // x = 300 of 1008 -> nowhere near any of the fixture markers (10..50s).
+    dispatchMouse(bar, 'mousedown', 300);
+    dispatchMouse(document, 'mouseup', 300);
+    dispatchMouse(bar, 'click', 300);
+
+    const expected = (300 / 1008) * 60;
+    expect(seeks.length).toBeGreaterThan(0);
+    for (const s of seeks) expect(s).toBeCloseTo(expected, 5);
+
+    t.unmount();
+  });
+
+  it('opens the quick pick on a plain click release, away from any marker', async () => {
+    const quickPicks: unknown[] = [];
+    const t = mountTimeline(undefined, {
+      onOpenQuickPick: (payload: unknown) => quickPicks.push(payload),
+    });
+    await nextTick();
+
+    stubBarRect(t.root);
+    const bar = t.root.querySelector(
+      '[data-annotation-marker]'
+    )?.parentElement as HTMLElement;
+
+    dispatchMouse(bar, 'mousedown', 300);
+    dispatchMouse(document, 'mouseup', 300);
+
+    expect(quickPicks.length).toBe(1);
+    t.unmount();
+  });
+
+  it('keeps seeking through a drag scrub that starts on a marker and moves past the threshold', async () => {
+    const seeks: number[] = [];
+    const t = mountTimeline(undefined, {
+      onSeekToTime: (time: number) => seeks.push(time),
+    });
+    await nextTick();
+
+    stubBarRect(t.root);
+    const marker = t.root.querySelector(
+      '[data-annotation-marker][data-annotation-id="annotation-drawing"]'
+    ) as HTMLElement;
+
+    const startX = 672; // DRAWING's own marker centre
+    const endX = 900; // a real drag, well past the quick-pick threshold
+    dispatchMouse(marker, 'mousedown', startX);
+    dispatchMouse(document, 'mousemove', endX);
+    dispatchMouse(document, 'mouseup', endX);
+
+    const expectedEnd = (endX / 1008) * 60;
+    expect(seeks.length).toBeGreaterThan(0);
+    expect(seeks[seeks.length - 1]).toBeCloseTo(expectedEnd, 5);
+
     t.unmount();
   });
 });
