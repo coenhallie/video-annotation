@@ -232,7 +232,24 @@ describe('hasDrawingStrokes', () => {
     expect(hasDrawingStrokes(strokes)).toBe(true);
   });
 
-  it('is true for a dual-mode drawing with paths on one video', () => {
+  it('is true for a dual-mode drawing with paths on video A', () => {
+    expect(
+      hasDrawingStrokes({
+        paths: [],
+        canvasWidth: 800,
+        canvasHeight: 450,
+        frame: 300,
+        drawingA: {
+          paths: strokes.paths,
+          canvasWidth: 800,
+          canvasHeight: 450,
+          frame: 300,
+        },
+      })
+    ).toBe(true);
+  });
+
+  it('is true for a dual-mode drawing with paths on video B', () => {
     expect(
       hasDrawingStrokes({
         paths: [],
