@@ -37,7 +37,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
+import { ref, onMounted, onUnmounted, watch, nextTick, markRaw } from 'vue';
 import * as fabric from 'fabric';
 import type { DrawingData, DrawingPath, SeverityLevel } from '@/types/database';
 
@@ -109,11 +109,13 @@ const initCanvas = () => {
     return;
   }
   try {
-    canvas.value = new fabric.Canvas(fabricCanvas.value, {
-      isDrawingMode: false,
-      selection: false,
-      preserveObjectStacking: true,
-    });
+    canvas.value = markRaw(
+      new fabric.Canvas(fabricCanvas.value, {
+        isDrawingMode: false,
+        selection: false,
+        preserveObjectStacking: true,
+      })
+    );
 
     // Configure drawing brush
     const brush = new fabric.PencilBrush(canvas.value);
@@ -149,6 +151,12 @@ const currentDrawingSession = ref<{
   frame: number;
 } | null>(null);
 
+// The fabric objects behind the current session's paths, in the same order.
+// Deliberately not reactive: fabric objects are large and self-referential,
+// and nothing here needs to react to them - undo only ever reads the array
+// to find what to remove, by identity, from the canvas.
+let sessionFabricObjects: fabric.FabricObject[] = [];
+
 // Handle path creation (when drawing is completed)
 const handlePathCreated = (event: { path: fabric.FabricObject }) => {
   const path = event.path as fabric.Path;
@@ -171,9 +179,11 @@ const handlePathCreated = (event: { path: fabric.FabricObject }) => {
       canvasHeight: canvasHeight.value,
       frame: props.currentFrame,
     };
+    sessionFabricObjects = [path];
   } else {
     // Add to existing drawing session
     currentDrawingSession.value.paths.push(drawingPath);
+    sessionFabricObjects.push(path);
   }
 
   // Emit stroke-added event for real-time visual feedback (but don't save to DB yet)
@@ -210,6 +220,7 @@ const completeDrawingSession = () => {
 
   // Clear the session
   currentDrawingSession.value = null;
+  sessionFabricObjects = [];
 };
 
 // Auto-complete drawing session when drawing mode is disabled
@@ -436,6 +447,7 @@ const clearDrawings = () => {
   }
   // Also clear the current drawing session
   currentDrawingSession.value = null;
+  sessionFabricObjects = [];
 };
 
 // Check if there are drawings on the current frame
@@ -583,33 +595,29 @@ onUnmounted(() => {
 });
 
 /**
- * Undo owns the strokes of the current session and nothing else. The canvas
- * also holds the drawings loaded for this frame, and they are below the
- * session's own objects in fabric's stack, so with no session path to pop there
- * is nothing here to remove: otherwise Undo would eat somebody else's saved
- * drawing off the screen.
- *
- * A session can also outlive the frame it started on - a timeline click can
- * seek while drawing mode is still open. When that happens the canvas has
- * already been cleared and re-rendered for the new frame, so the session's
- * own strokes are gone from it and the last object on the canvas belongs to
- * someone else's saved drawing. Undo declines rather than remove that.
+ * Undo owns the objects this session put on the canvas, tracked by identity
+ * rather than by position or by frame. The canvas gets cleared and rebuilt
+ * from persisted drawings any time it reloads - a seek, a resize, a realtime
+ * update to someone else's drawing - and none of those reloads tell the
+ * session about it. So once a reload has happened, the session's own objects
+ * are simply no longer on the canvas: undoLastStroke still pops the session's
+ * bookkeeping (so redrawing on this frame starts clean), but finds nothing of
+ * its own left to remove and leaves the canvas alone rather than reaching for
+ * whatever object now happens to be last.
  */
 const undoLastStroke = () => {
   const session = currentDrawingSession.value;
   if (!session || session.paths.length === 0) return;
-  if (session.frame !== props.currentFrame) return;
 
   session.paths.pop();
+  const object = sessionFabricObjects.pop();
   if (session.paths.length === 0) {
     currentDrawingSession.value = null;
   }
 
-  if (!canvas.value || canvas.value.disposed) return;
-  const objects = canvas.value.getObjects();
-  const last = objects[objects.length - 1];
-  if (!last) return;
-  canvas.value.remove(last);
+  if (!canvas.value || canvas.value.disposed || !object) return;
+  if (!canvas.value.getObjects().includes(object)) return;
+  canvas.value.remove(object);
   canvas.value.renderAll();
 };
 
@@ -624,6 +632,7 @@ const undoLastStroke = () => {
  */
 const discardCurrentSession = async () => {
   currentDrawingSession.value = null;
+  sessionFabricObjects = [];
   await loadDrawingsForFrame(true);
 };
 

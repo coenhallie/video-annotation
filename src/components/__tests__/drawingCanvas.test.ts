@@ -138,11 +138,14 @@ const ready = async () => {
 
 /**
  * Finish a stroke the way fabric does: the object lands on the canvas and the
- * path:created handler turns it into a session path.
+ * path:created handler turns it into a session path. Fabric hands the same
+ * object to both calls, and the component's undo now tracks that object by
+ * identity, so the fake must too.
  */
 const draw = async (harness: ReturnType<typeof mountCanvas>) => {
-  harness.canvas.add({});
-  harness.canvas.handlers['path:created']?.(fabricPathEvent() as never);
+  const event = fabricPathEvent();
+  harness.canvas.add(event.path);
+  harness.canvas.handlers['path:created']?.(event as never);
   await nextTick();
 };
 
@@ -186,11 +189,14 @@ describe('DrawingCanvas undoLastStroke', () => {
     harness.unmount();
   });
 
-  it('declines to touch another frame once a session has been left open across a seek', async () => {
+  it('declines to remove a reloaded object once a session has been left open across a seek', async () => {
     // A timeline click can seek while drawing mode is still open. The seek
     // clears the canvas and re-renders it for the new frame, so the
-    // session's own strokes are no longer on the canvas: the last object
-    // there belongs to someone else's drawing, not to this session.
+    // session's own stroke is no longer on the canvas by the time undo
+    // runs: the last object there belongs to whatever the reload put there,
+    // not to this session. Undo still consumes its own bookkeeping - that
+    // part does not depend on what is on the canvas - but declines to
+    // remove an object it never put there.
     const harness = mountCanvas();
     await ready();
     await draw(harness);
@@ -205,7 +211,31 @@ describe('DrawingCanvas undoLastStroke', () => {
     harness.component.undoLastStroke();
 
     expect(harness.canvas.getObjects()).toHaveLength(1);
-    expect(harness.component.getCurrentDrawingSession().paths).toHaveLength(1);
+    expect(harness.component.getCurrentDrawingSession()).toBeNull();
+    harness.unmount();
+  });
+
+  it('declines to remove a reloaded object after a round trip back to the drawn frame', async () => {
+    // The single-hop case above is not the whole story: seeking away and
+    // then back reloads the canvas a second time from persisted drawings,
+    // so by the time the frame number matches the session's again, the
+    // object sitting on the canvas is still not the session's own - a
+    // frame-equality check would wrongly let this one through.
+    const harness = mountCanvas();
+    await ready();
+    await draw(harness);
+
+    harness.setFrame(400);
+    await nextTick();
+    await nextTick();
+    harness.setFrame(300);
+    await nextTick();
+    await nextTick();
+    harness.canvas.add({ persisted: true });
+
+    harness.component.undoLastStroke();
+
+    expect(harness.canvas.getObjects()).toHaveLength(1);
     harness.unmount();
   });
 });
