@@ -301,9 +301,14 @@ const openQuickPick = (event: MouseEvent) => {
   if ((event.target as HTMLElement)?.closest?.('.video-controls')) return;
   if (quickPickReadOnly()) return;
   if (!user.value) return;
-  if (drawingCoordinator?.isDrawingMode?.value) return;
 
   event.preventDefault();
+
+  // The backdrop is pointer-events: none while drawing, so nothing else on
+  // screen would suppress this right-click either - without preventDefault
+  // above this bail, drawing mode got the native context menu instead of
+  // simply eating the click the way every other draw-mode key does.
+  if (drawingCoordinator?.isDrawingMode?.value) return;
 
   quickPickSnapshot.value = {
     frame: currentFrame.value ?? 0,
