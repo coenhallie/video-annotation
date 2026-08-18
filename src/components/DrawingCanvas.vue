@@ -641,6 +641,15 @@ defineExpose({
   Drawing mode is announced by the quick pick's own toolbar, so the overlay only
   has to say where the surface is: a hairline in the app's accent at the video's
   edge, and the crosshair the canvas already sets.
+
+  This also happens to be the only thing standing between draw mode and
+  VideoControls: play/pause and frame-step bypass every EditorView handler and
+  carry no drawing-mode guard of their own. They are unreachable during
+  drawing only because this element covers the whole video, control bar
+  included, at pointer-events: auto. If the control bar is ever carved out of
+  this overlay - the design doc already talks about excluding it - that guard
+  has to be added explicitly, or a frame change mid-stroke clears the canvas
+  out from under the user.
 */
 .canvas-container.drawing-mode {
   pointer-events: auto;
