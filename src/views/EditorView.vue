@@ -434,6 +434,16 @@ const drawModeWasPlaying = ref(false);
 /** Blocks a second Enter while the first insert is still in flight. */
 const drawingSaving = ref(false);
 
+/**
+ * The primary canvas's brush settings from just before the toolbar overwrote
+ * them, so a sidebar drawing started later in the same session gets its own
+ * severity colour and the 3px default back rather than whatever swatch was
+ * last picked on the timeline. Spread rather than kept by reference:
+ * currentTool is mutated in place by setCustomColor/setStrokeWidth, so a bare
+ * reference would already show the toolbar's values by the time it is read.
+ */
+let preDrawToolSnapshot: { strokeWidth: number; customColor?: string | undefined } | null = null;
+
 /** The DrawingCanvas instances, exposed by UnifiedVideoPlayer. */
 const drawingCanvasRefs = () => ({
   single: (unifiedVideoPlayerRef.value as any)?.singleDrawingCanvasRef ?? null,
@@ -445,6 +455,7 @@ const handleQuickPickDrawMode = (active: boolean) => {
   if (active) {
     drawModeWasPlaying.value = isPlaybackRunning();
     unifiedVideoPlayerRef.value?.pause();
+    preDrawToolSnapshot = { ...drawingCoordinator.primaryCanvas.value.currentTool.value };
     drawingCoordinator.setCustomColor(quickPickDrawColor.value);
     drawingCoordinator.setStrokeWidth(quickPickDrawWidth.value);
     drawingCoordinator.enableDrawingMode();
@@ -458,6 +469,21 @@ const handleQuickPickDrawMode = (active: boolean) => {
   // the way.
   drawingCoordinator.discardInProgressDrawing(drawingCanvasRefs());
   drawingCoordinator.disableDrawingMode();
+
+  // Undo the toolbar's push into shared brush state, or every later sidebar
+  // drawing this session inherits the last swatch instead of its own
+  // severity colour. A saved drawing is unaffected either way: colour and
+  // width are baked into each path at draw time, not read back from here.
+  if (preDrawToolSnapshot) {
+    if (preDrawToolSnapshot.customColor) {
+      drawingCoordinator.setCustomColor(preDrawToolSnapshot.customColor);
+    } else {
+      drawingCoordinator.clearCustomColor();
+    }
+    drawingCoordinator.setStrokeWidth(preDrawToolSnapshot.strokeWidth);
+    preDrawToolSnapshot = null;
+  }
+
   if (drawModeWasPlaying.value) unifiedVideoPlayerRef.value?.play();
   drawModeWasPlaying.value = false;
 };
