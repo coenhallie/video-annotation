@@ -218,6 +218,17 @@ const handleDrawKeydown = (event: KeyboardEvent) => {
     event.stopPropagation();
   };
 
+  const key = event.key;
+
+  // Space and the arrows move the frame whatever is held with them: the
+  // player's own listener switches on event.code and never looks at the
+  // modifiers. A frame change clears the canvas and starts a new session, so
+  // they are swallowed before any branch gets the chance to return early.
+  if (key === ' ' || key === 'ArrowLeft' || key === 'ArrowRight') {
+    stop();
+    return;
+  }
+
   if (event.metaKey || event.ctrlKey) {
     // The one chord worth owning here. Everything else stays the browser's.
     if (event.key.toLowerCase() === 'z') {
@@ -227,8 +238,6 @@ const handleDrawKeydown = (event: KeyboardEvent) => {
     return;
   }
   if (event.altKey) return;
-
-  const key = event.key;
 
   if (key === 'Escape') {
     stop();
@@ -258,7 +267,7 @@ const handleDrawKeydown = (event: KeyboardEvent) => {
     return;
   }
 
-  if (key === ' ' || key === 'ArrowLeft' || key === 'ArrowRight' || key.length === 1) {
+  if (key.length === 1) {
     stop();
   }
 };

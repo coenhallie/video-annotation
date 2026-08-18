@@ -365,16 +365,20 @@ describe('AnnotationQuickPick draw mode', () => {
 
   it('lets clicks through to the canvas underneath', async () => {
     // The backdrop is fixed inset-0, so unless it stops taking pointer events
-    // the user cannot touch the video at all.
+    // the user cannot touch the video at all. The panel has to take pointer
+    // events back for itself, or it would be click-through too.
     const panel = mountPanel();
     await nextTick();
     const backdrop = panel.root.firstElementChild as HTMLElement;
+    const panelEl = backdrop.firstElementChild as HTMLElement;
     expect(backdrop.className).not.toContain('pointer-events-none');
+    expect(panelEl.className).not.toContain('pointer-events-auto');
 
     press('d');
     await nextTick();
 
     expect(backdrop.className).toContain('pointer-events-none');
+    expect(panelEl.className).toContain('pointer-events-auto');
     panel.unmount();
   });
 
@@ -390,6 +394,21 @@ describe('AnnotationQuickPick draw mode', () => {
     expect(press(' ').defaultPrevented).toBe(true);
     expect(press('ArrowLeft').defaultPrevented).toBe(true);
     expect(press('ArrowRight').defaultPrevented).toBe(true);
+    panel.unmount();
+  });
+
+  it('swallows the transport keys even when a modifier is held', async () => {
+    // useVideoPlayer's handler switches on event.code and never looks at the
+    // modifiers, so a held Alt/Ctrl/Meta does not stop it from seeking or
+    // toggling play/pause underneath a modifier chord meant for drawing.
+    const panel = mountPanel();
+    await nextTick();
+    press('d');
+    await nextTick();
+
+    expect(press(' ', { altKey: true }).defaultPrevented).toBe(true);
+    expect(press('ArrowLeft', { ctrlKey: true }).defaultPrevented).toBe(true);
+    expect(press('ArrowRight', { metaKey: true }).defaultPrevented).toBe(true);
     panel.unmount();
   });
 
