@@ -484,6 +484,35 @@ const handleTimelineSeek = (time: number) => {
 };
 
 /**
+ * Same reasoning as handleTimelineSeek, for dual mode's own timeline: each
+ * video's bar seeks that video directly, on a path the single-mode guard
+ * above never sees.
+ */
+const handleDualTimelineSeekA = (time: number) => {
+  if (drawingCoordinator?.isDrawingMode?.value) return;
+  handleSeekVideoA(time);
+};
+
+const handleDualTimelineSeekB = (time: number) => {
+  if (drawingCoordinator?.isDrawingMode?.value) return;
+  handleSeekVideoB(time);
+};
+
+/**
+ * A marker click emits both seek-to-time (guarded above) and annotation-click,
+ * and it is annotation-click that actually moves the player: VideoTimeline and
+ * DualTimeline both forward it to this same handler, which seeks on its own
+ * rather than through either seek-to-time or seek-video-a/b. One guard here
+ * covers all three of its bindings - single timeline marker, dual timeline
+ * marker, and the sidebar annotation list's click-to-jump, which reaches this
+ * handler too and is not a timeline click at all.
+ */
+const handleAnnotationSeek = async (annotation: Annotation) => {
+  if (drawingCoordinator?.isDrawingMode?.value) return;
+  await handleAnnotationClick(annotation);
+};
+
+/**
  * The canvas stamps the player's frame; the annotation carries the frame the
  * panel snapshotted before the seek, and an asynchronous seek can leave those
  * one apart. They have to agree exactly: clicking the annotation drives the
@@ -1534,7 +1563,7 @@ watch(
             :is-playing="isPlaying"
             :player-mode="playerMode"
             @seek-to-time="handleTimelineSeek"
-            @annotation-click="handleAnnotationClick"
+            @annotation-click="handleAnnotationSeek"
             @play="handleTimelinePlay"
             @pause="handleTimelinePause"
             @open-quick-pick="openQuickPickAtTime"
@@ -1575,9 +1604,9 @@ watch(
             :selected-annotation="selectedAnnotation"
             :video-a-playing="dualVideoPlayer?.videoAIsPlaying?.value ?? false"
             :video-b-playing="dualVideoPlayer?.videoBIsPlaying?.value ?? false"
-            @seek-video-a="handleSeekVideoA"
-            @seek-video-b="handleSeekVideoB"
-            @annotation-click="handleAnnotationClick"
+            @seek-video-a="handleDualTimelineSeekA"
+            @seek-video-b="handleDualTimelineSeekB"
+            @annotation-click="handleAnnotationSeek"
             @play-video-a="handlePlayVideoA"
             @pause-video-a="handlePauseVideoA"
             @play-video-b="handlePlayVideoB"
@@ -1665,7 +1694,7 @@ watch(
             @add-annotation="handleAddAnnotation"
             @update-annotation="updateAnnotation"
             @delete-annotation="deleteAnnotation"
-            @select-annotation="handleAnnotationClick"
+            @select-annotation="handleAnnotationSeek"
             @annotation-edit="handleAnnotationEdit"
             @form-show="handleFormShow"
             @form-hide="handleFormHide"
