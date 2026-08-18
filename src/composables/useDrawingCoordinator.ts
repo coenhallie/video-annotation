@@ -5,12 +5,20 @@ import type {
   DrawingCanvasExpose,
   DrawingCreatedEvent,
 } from '@/types/component-interfaces';
+import { hasDrawingStrokes } from '@/utils/annotationPayload';
 
 export interface DrawingCoordinatorOptions {
   playerMode: Ref<'single' | 'dual'>;
   singleCanvas: UseDrawingCanvas;
   canvasA: UseDrawingCanvas;
   canvasB: UseDrawingCanvas;
+}
+
+/** The DrawingCanvas component instances, as EditorView holds them. */
+export interface DrawingCanvasRefs {
+  single?: DrawingCanvasExpose | null;
+  a?: DrawingCanvasExpose | null;
+  b?: DrawingCanvasExpose | null;
 }
 
 export function useDrawingCoordinator(options: DrawingCoordinatorOptions) {
@@ -274,6 +282,15 @@ export function useDrawingCoordinator(options: DrawingCoordinatorOptions) {
     }
   }
 
+  function setStrokeWidth(width: number) {
+    if (isDual()) {
+      canvasA.setStrokeWidth(width);
+      canvasB.setStrokeWidth(width);
+    } else {
+      singleCanvas.setStrokeWidth(width);
+    }
+  }
+
   // --------------------------------------------------------------------------
   // Load drawings from annotations (used by DashboardView watcher)
   // --------------------------------------------------------------------------
@@ -309,6 +326,86 @@ export function useDrawingCoordinator(options: DrawingCoordinatorOptions) {
   const primaryCanvas = computed(() => {
     return isDual() ? canvasA : singleCanvas;
   });
+
+  // --------------------------------------------------------------------------
+  // The in-progress drawing, for callers that own their own save
+  // --------------------------------------------------------------------------
+
+  /**
+   * Reads the strokes drawn so far without completing the session.
+   *
+   * Deliberately not getDrawingData: that one calls completeDrawingSession,
+   * which emits drawing-created, which useVideoEventHandlers forwards into the
+   * sidebar form's draft. A caller that stores the drawing itself would
+   * otherwise leave a copy attached to the sidebar's next new annotation.
+   */
+  function getInProgressDrawing(canvasRefs: DrawingCanvasRefs): DrawingData | null {
+    if (isDual()) {
+      const a = canvasRefs.a?.getCurrentDrawingSession?.() ?? null;
+      const b = canvasRefs.b?.getCurrentDrawingSession?.() ?? null;
+      if (!hasDrawingStrokes(a) && !hasDrawingStrokes(b)) return null;
+
+      // The wrapper's own measurements come from a video that actually drew,
+      // so a stale empty session on the other one cannot supply them.
+      const primary = (hasDrawingStrokes(a) ? a : b)!;
+      const data: DrawingData = {
+        paths: [],
+        canvasWidth: primary.canvasWidth,
+        canvasHeight: primary.canvasHeight,
+        frame: primary.frame,
+      };
+      if (hasDrawingStrokes(a)) data.drawingA = { ...a! };
+      if (hasDrawingStrokes(b)) data.drawingB = { ...b! };
+      return data;
+    }
+
+    const session = canvasRefs.single?.getCurrentDrawingSession?.() ?? null;
+    if (!hasDrawingStrokes(session)) return null;
+    return {
+      paths: session!.paths,
+      frame: session!.frame,
+      canvasWidth: session!.canvasWidth,
+      canvasHeight: session!.canvasHeight,
+    };
+  }
+
+  function undoLastStroke(canvasRefs: DrawingCanvasRefs) {
+    if (isDual()) {
+      canvasRefs.a?.undoLastStroke?.();
+      canvasRefs.b?.undoLastStroke?.();
+    } else {
+      canvasRefs.single?.undoLastStroke?.();
+    }
+  }
+
+  /**
+   * Throws away the strokes of the current session, leaving anything already
+   * saved on this frame untouched. Must run before drawing mode is disabled:
+   * DrawingCanvas completes a session that still has paths when the mode goes
+   * off, which would save what the user just cancelled.
+   */
+  function discardInProgressDrawing(canvasRefs: DrawingCanvasRefs) {
+    if (isDual()) {
+      canvasRefs.a?.discardCurrentSession?.();
+      canvasRefs.b?.discardCurrentSession?.();
+    } else {
+      canvasRefs.single?.discardCurrentSession?.();
+    }
+  }
+
+  /**
+   * Puts a drawing that has just been stored into canvas state, so the strokes
+   * stay on screen instead of blinking out until the annotations watcher folds
+   * the new annotation back in.
+   */
+  function retainDrawing(drawingData: DrawingData) {
+    if (isDual()) {
+      if (drawingData.drawingA) canvasA.addDrawing(drawingData.drawingA, 'A');
+      if (drawingData.drawingB) canvasB.addDrawing(drawingData.drawingB, 'B');
+    } else {
+      singleCanvas.addDrawing(drawingData);
+    }
+  }
 
   // --------------------------------------------------------------------------
   // Store drawing data into annotation draft (onDrawingCreated from panel)
@@ -360,6 +457,10 @@ export function useDrawingCoordinator(options: DrawingCoordinatorOptions) {
 
     // Data collection / loading
     getDrawingData,
+    getInProgressDrawing,
+    undoLastStroke,
+    discardInProgressDrawing,
+    retainDrawing,
     loadDrawingsForAnnotation,
     hasDrawingsOnCurrentFrame,
     loadDrawingsFromAnnotations,
@@ -368,6 +469,7 @@ export function useDrawingCoordinator(options: DrawingCoordinatorOptions) {
     // Color
     setCustomColor,
     clearCustomColor,
+    setStrokeWidth,
 
     // Lifecycle
     cleanup,
