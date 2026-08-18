@@ -354,15 +354,21 @@ export function useDrawingCoordinator(options: DrawingCoordinatorOptions) {
         canvasHeight: primary.canvasHeight,
         frame: primary.frame,
       };
-      if (hasDrawingStrokes(a)) data.drawingA = { ...a! };
-      if (hasDrawingStrokes(b)) data.drawingB = { ...b! };
+      // Copy the paths array too, not just the wrapper: a stroke drawn between
+      // this read and the panel closing would otherwise land inside the array
+      // already handed to the insert, since a spread of the session object is
+      // still a shared reference to the same live paths array.
+      if (hasDrawingStrokes(a)) data.drawingA = { ...a!, paths: [...a!.paths] };
+      if (hasDrawingStrokes(b)) data.drawingB = { ...b!, paths: [...b!.paths] };
       return data;
     }
 
     const session = canvasRefs.single?.getCurrentDrawingSession?.() ?? null;
     if (!hasDrawingStrokes(session)) return null;
+    // Copied for the same reason the dual branch copies its paths: DrawingCanvas
+    // keeps drawing into this same array while it stays the active session.
     return {
-      paths: session!.paths,
+      paths: [...session!.paths],
       frame: session!.frame,
       canvasWidth: session!.canvasWidth,
       canvasHeight: session!.canvasHeight,

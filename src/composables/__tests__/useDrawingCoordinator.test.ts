@@ -95,6 +95,45 @@ describe('useDrawingCoordinator getInProgressDrawing', () => {
     expect(drawing?.drawingA?.paths).toHaveLength(1);
     expect(drawing?.drawingB).toBeUndefined();
   });
+
+  it('never completes the session in dual mode either', () => {
+    // Same guarantee as the single-mode test above: completeDrawingSession
+    // would emit drawing-created into the sidebar form's draft, and a caller
+    // reading the in-progress drawing owns saving it itself.
+    const { coordinator } = setup('dual');
+    const a = fakeRef(session(300));
+    const b = fakeRef(session(300));
+
+    coordinator.getInProgressDrawing({ a, b });
+
+    expect(a.completeDrawingSession).not.toHaveBeenCalled();
+    expect(b.completeDrawingSession).not.toHaveBeenCalled();
+  });
+
+  it('hands back a copy of the paths array, not the live session array', () => {
+    // A stroke drawn between this read and the panel closing must not land in
+    // the object already handed to the insert.
+    const { coordinator } = setup('single');
+    const live = session(300);
+    const single = fakeRef(live);
+
+    const drawing = coordinator.getInProgressDrawing({ single });
+    live.paths.push({ ...live.paths[0]!, timestamp: 2 });
+
+    expect(drawing?.paths).toHaveLength(1);
+  });
+
+  it('hands back a copy of each video s paths array in dual mode', () => {
+    const { coordinator } = setup('dual');
+    const liveA = session(300);
+    const a = fakeRef(liveA);
+    const b = fakeRef(null);
+
+    const drawing = coordinator.getInProgressDrawing({ a, b });
+    liveA.paths.push({ ...liveA.paths[0]!, timestamp: 2 });
+
+    expect(drawing?.drawingA?.paths).toHaveLength(1);
+  });
 });
 
 describe('useDrawingCoordinator undo and discard', () => {
@@ -134,8 +173,12 @@ describe('useDrawingCoordinator retainDrawing', () => {
   });
 
   it('keeps a just-saved dual drawing under its own video', () => {
-    const { coordinator, canvasA } = setup('dual');
-    const drawing = session(300);
+    // Both videos present and distinguishable by frame, so routing drawingB's
+    // data onto canvasA (or vice versa) would fail this rather than merely
+    // producing the right count on the wrong canvas.
+    const { coordinator, canvasA, canvasB } = setup('dual');
+    const drawingA = session(300);
+    const drawingB = session(301);
 
     coordinator.retainDrawing({
       paths: [],
@@ -143,13 +186,22 @@ describe('useDrawingCoordinator retainDrawing', () => {
       canvasHeight: 450,
       frame: 300,
       drawingA: {
-        paths: drawing.paths,
+        paths: drawingA.paths,
         canvasWidth: 800,
         canvasHeight: 450,
         frame: 300,
       },
+      drawingB: {
+        paths: drawingB.paths,
+        canvasWidth: 800,
+        canvasHeight: 450,
+        frame: 301,
+      },
     });
 
     expect(canvasA.getDrawingsForFrame(300)).toHaveLength(1);
+    expect(canvasA.getDrawingsForFrame(301)).toHaveLength(0);
+    expect(canvasB.getDrawingsForFrame(301)).toHaveLength(1);
+    expect(canvasB.getDrawingsForFrame(300)).toHaveLength(0);
   });
 });
