@@ -14,11 +14,18 @@ vi.mock('@/services/awsStorageService', () => ({
 }));
 
 // Captures what findOrCreateOutputVideo reads and writes through supabase.
-const state: { existing: any; inserted: any; updated: any; deleted: any } = {
+const state: {
+  existing: any;
+  inserted: any;
+  updated: any;
+  deleted: any;
+  updateError: any;
+} = {
   existing: null,
   inserted: null,
   updated: null,
   deleted: null,
+  updateError: null,
 };
 
 vi.mock('@/composables/useSupabase', () => ({
@@ -43,8 +50,8 @@ vi.mock('@/composables/useSupabase', () => ({
           eq: () => ({
             select: () => ({
               single: async () => ({
-                data: { ...state.existing, ...row },
-                error: null,
+                data: state.updateError ? null : { ...state.existing, ...row },
+                error: state.updateError,
               }),
             }),
           }),
@@ -71,6 +78,7 @@ describe('findOrCreateOutputVideo thumbnails', () => {
     state.inserted = null;
     state.updated = null;
     state.deleted = null;
+    state.updateError = null;
     generateSmallThumbnail.mockReset();
     getVideoUrlForProject.mockResolvedValue('https://s3.example.com/presigned.mp4');
   });
@@ -153,6 +161,7 @@ describe('findOrCreateOutputVideo ordering', () => {
     state.inserted = null;
     state.updated = null;
     state.deleted = null;
+    state.updateError = null;
     generateSmallThumbnail.mockReset();
     getVideoUrlForProject.mockReset();
   });
@@ -187,5 +196,30 @@ describe('findOrCreateOutputVideo ordering', () => {
     await expect(callFindOrCreate()).rejects.toThrow('boom');
 
     expect(state.deleted).toBeNull();
+  });
+
+  it('deletes a freshly created row and rejects when the final update fails', async () => {
+    getVideoUrlForProject.mockResolvedValue('https://s3.example.com/presigned.mp4');
+    generateSmallThumbnail.mockResolvedValue(null);
+    state.updateError = new Error('update failed');
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await expect(callFindOrCreate()).rejects.toThrow('update failed');
+
+    expect(state.deleted).toBe('v1');
+    errorSpy.mockRestore();
+  });
+
+  it('does not delete a pre-existing row and returns it when the final update fails', async () => {
+    state.existing = { id: 'existing-1', thumbnailUrl: 'data:image/jpeg;base64,old' };
+    getVideoUrlForProject.mockResolvedValue('https://s3.example.com/presigned.mp4');
+    state.updateError = new Error('update failed');
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const result = await callFindOrCreate();
+
+    expect(state.deleted).toBeNull();
+    expect(result).toEqual(state.existing);
+    errorSpy.mockRestore();
   });
 });

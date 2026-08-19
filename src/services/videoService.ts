@@ -659,6 +659,14 @@ export class VideoService {
 
     if (error) {
       handleServiceError('VideoService.findOrCreateOutputVideo', error);
+      // A row we just created that never got its url filled in is the same
+      // orphan the fetch-failure cleanup above exists to prevent. A
+      // pre-existing row keeps whatever url it already had, so it is safe
+      // to return as-is.
+      if (createdHere) {
+        await supabase.from('videos').delete().eq('id', record.id);
+        throw error;
+      }
       return record;
     }
     return data;
