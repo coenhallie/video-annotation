@@ -88,16 +88,29 @@ guessing stop being expressible, for every caller, authenticated or not.
 
 ## 7. Function logic
 
-1. Require `outputVideoId`. Reject any value containing `/`, `..`, or `%`, or that is not a
-   plain identifier. `400` on failure.
-2. If an `Authorization: Bearer` header is present, treat the caller as signed in and allow.
-3. Otherwise, resolve visibility through PostgREST with plain `fetch`:
+1. Require `outputVideoId` and require it to match `^[A-Za-z0-9_-]+$`. That rejects `/`,
+   `..`, `%` and every other path-bearing character by construction rather than by blacklist.
+   `400` on failure.
+2. If an `Authorization: Bearer <token>` header is present, **verify it**:
+   `GET {SUPABASE_URL}/auth/v1/user` with `apikey: {SUPABASE_ANON_KEY}` and the caller's
+   `Authorization` header forwarded. HTTP 200 means the caller holds a valid Supabase
+   session; allow. Any non-200 means the token is absent, malformed, expired or forged, and
+   the caller is NOT treated as signed in: fall through to step 3.
+3. Unauthenticated path. Resolve visibility through PostgREST with plain `fetch`:
    `GET {SUPABASE_URL}/rest/v1/videos?select=id&videoId=eq.aws:{outputVideoId}`
    with `apikey` and `Authorization` both set to the anon key. RLS decides. A returned row
    means the video is public or inside a public comparison. Empty array → `403`.
 4. Build the path server-side and call the Lambda with the API key, exactly as today.
 
-Step 3 uses `fetch` rather than `@supabase/supabase-js`. The dependency exists in the app, but
+Step 2 must be a real verification, not a header-presence check. Trusting the presence of an
+`Authorization` header would reintroduce the exact hole this design exists to close: any
+caller could send `Authorization: Bearer anything` and be waved through.
+
+Falling through on an invalid token rather than returning `401` is deliberate. A share-link
+viewer whose session expired while the tab was open should still be able to play a public
+video, exactly as a signed-out visitor can.
+
+Steps 2 and 3 use `fetch` rather than `@supabase/supabase-js`. The dependency exists in the app, but
 this function is a 52-line `.cjs` with no imports, and a single REST call keeps it that way.
 
 Requires two new Netlify environment variables: `SUPABASE_URL` and `SUPABASE_ANON_KEY`
@@ -116,7 +129,8 @@ Requires two new Netlify environment variables: `SUPABASE_URL` and `SUPABASE_ANO
 ## 9. Error handling
 
 - `400` malformed or missing `outputVideoId`
-- `403` anonymous caller whose `outputVideoId` resolves to no visible video
+- `403` unauthenticated caller (no token, or an invalid one) whose `outputVideoId` resolves
+  to no visible video
 - `500` / `502` unchanged (missing configuration, upstream failure)
 
 Accepted behaviour, not introduced here: `refreshAwsVideoUrl` writes the refreshed URL back
@@ -127,7 +141,10 @@ no-ops silently today. Playback still works because the function returns the URL
 
 Unit tests for the handler, mocking `fetch`:
 
-- signed-in caller (bearer header present) is allowed without a visibility query
+- caller with a VALID bearer token is allowed without a visibility query
+- caller with a forged or expired bearer token is NOT treated as signed in: it falls through
+  to the visibility check and is denied for a non-visible video. This is the regression guard
+  for the header-presence mistake and must exist.
 - anonymous caller whose video is visible is allowed
 - anonymous caller whose video is not visible gets `403`
 - missing `outputVideoId` gets `400`
