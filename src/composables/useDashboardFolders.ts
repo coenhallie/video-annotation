@@ -20,7 +20,7 @@ export function useDashboardFolders(getUserId: () => string | undefined) {
     const uid = getUserId();
     if (!uid) return;
     try {
-      folders.value = await FolderService.getUserFolders(uid);
+      folders.value = await FolderService.getAllFolders();
       folderTree.value = FolderService.buildFolderTree(folders.value);
     } catch (err) {
       // Missing folders table etc. — degrade to no folders, never hard-fail.
