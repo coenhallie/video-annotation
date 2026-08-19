@@ -130,11 +130,16 @@ exports.handler = async function (event) {
     return json(502, { error: 'Authorization check failed: ' + err.message });
   }
 
-  if (visibility === 'error') {
-    return json(502, { error: 'Authorization check failed' });
-  }
-  if (visibility === 'deny') {
-    return json(403, { error: 'Not authorized for this video' });
+  // Fail closed by construction: only an explicit 'allow' reaches the Lambda.
+  // Any future return value, early return, or refactor slip lands on deny
+  // rather than silently falling through to an allow.
+  if (visibility !== 'allow') {
+    return json(visibility === 'error' ? 502 : 403, {
+      error:
+        visibility === 'error'
+          ? 'Authorization check failed'
+          : 'Not authorized for this video',
+    });
   }
 
   // Built here from a validated id. Never taken from the caller.

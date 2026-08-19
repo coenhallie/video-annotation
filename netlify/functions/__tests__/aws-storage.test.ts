@@ -256,6 +256,7 @@ describe('aws-storage: authorization', () => {
     const res = await handler(event({ outputVideoId: VALID_ID }));
 
     expect(res.statusCode).toBe(502);
+    expect(lambdaCall(fetchMock)).toBeUndefined();
   });
 
   it('returns 500 when Supabase is not configured', async () => {
