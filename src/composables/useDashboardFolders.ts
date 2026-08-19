@@ -22,11 +22,29 @@ export function useDashboardFolders(getUserId: () => string | undefined) {
     try {
       folders.value = await FolderService.getAllFolders();
       folderTree.value = FolderService.buildFolderTree(folders.value);
+      reconcileSelection();
     } catch (err) {
-      // Missing folders table etc. — degrade to no folders, never hard-fail.
+      // Missing folders table etc. - degrade to no folders, never hard-fail.
       console.warn('[useDashboardFolders] loadFolders failed', err);
       folders.value = [];
       folderTree.value = [];
+    }
+  }
+
+  // A folder id restored from localStorage can name a folder that no longer
+  // exists; in a shared workspace another user deleting it is routine. Left
+  // alone it filters the grid down to nothing with no folder highlighted, which
+  // reads as a broken dashboard. Falling back to "All Projects" is enough on its
+  // own: DashboardView watches currentFolderId and reloads on the change.
+  //
+  // Only called after a successful load. Reconciling against the empty list left
+  // behind by a failed one would discard the selection on any transient blip.
+  function reconcileSelection() {
+    const id = currentFolderId.value;
+    if (id === null) return;
+    if (!folders.value.some((f) => f.id === id)) {
+      currentFolderId.value = null;
+      persist();
     }
   }
 
