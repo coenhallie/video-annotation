@@ -1,3 +1,5 @@
+import { getOptimizedSession } from '@/composables/useSupabase';
+
 export class AwsStorageService {
   /**
    * Build the S3 filepath for a given pipeline project ID.
@@ -50,7 +52,15 @@ export class AwsStorageService {
   static async getVideoUrlForProject(outputVideoId: string): Promise<string> {
     const url = `/.netlify/functions/aws-storage?outputVideoId=${encodeURIComponent(outputVideoId)}`;
 
-    const res = await fetch(url, { cache: 'no-store' });
+    // Anonymous share-link viewers have no session; the function falls back to
+    // an RLS visibility check for them, so sending no header is a valid case.
+    const session = await getOptimizedSession();
+    const headers: Record<string, string> = {};
+    if (session?.access_token) {
+      headers.Authorization = `Bearer ${session.access_token}`;
+    }
+
+    const res = await fetch(url, { cache: 'no-store', headers });
 
     if (!res.ok) {
       const body = await res.text().catch(() => '');

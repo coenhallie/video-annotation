@@ -125,3 +125,93 @@ describe('aws-storage: the caller cannot name a path', () => {
     expect(lambdaCall(fetchMock)).toBeUndefined();
   });
 });
+
+describe('aws-storage: authorization', () => {
+  it('allows a caller whose bearer token verifies, without a visibility query', async () => {
+    const fetchMock = routedFetch({ tokenValid: true });
+    vi.stubGlobal('fetch', fetchMock);
+    const handler = await loadHandler();
+
+    const res = await handler(
+      event({ outputVideoId: VALID_ID }, { authorization: 'Bearer good-token' })
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(lambdaCall(fetchMock)).toBeDefined();
+    expect(videosCall(fetchMock)).toBeUndefined();
+  });
+
+  // The regression guard for the mistake this design was corrected for: header
+  // presence is not a session. Do not delete this test.
+  it('does not trust a forged bearer token, and denies a non-visible video', async () => {
+    const fetchMock = routedFetch({ tokenValid: false, videoVisible: false });
+    vi.stubGlobal('fetch', fetchMock);
+    const handler = await loadHandler();
+
+    const res = await handler(
+      event({ outputVideoId: VALID_ID }, { authorization: 'Bearer forged' })
+    );
+
+    expect(res.statusCode).toBe(403);
+    expect(lambdaCall(fetchMock)).toBeUndefined();
+  });
+
+  it('falls back to the visibility check for an expired token on a public video', async () => {
+    const fetchMock = routedFetch({ tokenValid: false, videoVisible: true });
+    vi.stubGlobal('fetch', fetchMock);
+    const handler = await loadHandler();
+
+    const res = await handler(
+      event({ outputVideoId: VALID_ID }, { authorization: 'Bearer expired' })
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(lambdaCall(fetchMock)).toBeDefined();
+  });
+
+  it('allows an anonymous caller when the video is visible', async () => {
+    const fetchMock = routedFetch({ videoVisible: true });
+    vi.stubGlobal('fetch', fetchMock);
+    const handler = await loadHandler();
+
+    const res = await handler(event({ outputVideoId: VALID_ID }));
+
+    expect(res.statusCode).toBe(200);
+    expect(lambdaCall(fetchMock)).toBeDefined();
+  });
+
+  it('denies an anonymous caller when the video is not visible', async () => {
+    const fetchMock = routedFetch({ videoVisible: false });
+    vi.stubGlobal('fetch', fetchMock);
+    const handler = await loadHandler();
+
+    const res = await handler(event({ outputVideoId: VALID_ID }));
+
+    expect(res.statusCode).toBe(403);
+    expect(lambdaCall(fetchMock)).toBeUndefined();
+  });
+
+  it('queries the video by its aws-prefixed videoId', async () => {
+    const fetchMock = routedFetch({ videoVisible: true });
+    vi.stubGlobal('fetch', fetchMock);
+    const handler = await loadHandler();
+
+    await handler(event({ outputVideoId: VALID_ID }));
+
+    expect(String(videosCall(fetchMock)?.[0])).toContain(
+      `videoId=eq.aws:${VALID_ID}`
+    );
+  });
+
+  it('returns 500 when Supabase is not configured', async () => {
+    delete process.env.SUPABASE_URL;
+    const fetchMock = routedFetch({ videoVisible: true });
+    vi.stubGlobal('fetch', fetchMock);
+    const handler = await loadHandler();
+
+    const res = await handler(event({ outputVideoId: VALID_ID }));
+
+    expect(res.statusCode).toBe(500);
+    expect(lambdaCall(fetchMock)).toBeUndefined();
+  });
+});
