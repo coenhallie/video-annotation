@@ -63,8 +63,12 @@ becomes correct semantics rather than a cross-user clobber. No change is needed 
   `if (!uid) return` guard: a session is still required, because reads become
   `authenticated`-only.
 - `createFolder` keeps passing uid as `owner_id`.
-- Delete the unreachable `row-level security` branch of `DashboardView.folderErrorMessage()`.
-  It can only fire on a 42501, which the new flat policies never produce.
+- Fix, do not delete, the `row-level security` branch of `DashboardView.folderErrorMessage()`.
+  It is unreachable today (RLS is off, so no write returns 42501) but becomes reachable once
+  the migration lands, whenever a session has expired. Its main sentence is then correct. Its
+  parenthetical is not: it claims the local dev bypass cannot write to folders, but
+  `applyDevAuthBypass` signs in with real credentials (`useAuth.ts:39`), so it can. Drop the
+  parenthetical, keep the branch.
 
 Nothing else needs touching. `loadData` already switches to `scope: 'all'` when a folder is
 selected, `VideoService.getAllVideos()` has no owner filter, and
