@@ -536,7 +536,7 @@ const folder = (id: string) => ({
   updatedAt: '2026-08-19T00:00:00Z',
 });
 
-describe('useDashboardFolders.loadFolders — stale selection', () => {
+describe('useDashboardFolders.loadFolders - stale selection', () => {
   beforeEach(() => {
     localStorage.clear();
     getAllFolders.mockReset();
@@ -663,7 +663,7 @@ folders", which is the one failure mode this change is capable of introducing.
 Append to `src/composables/__tests__/useDashboardFolders.test.ts`:
 
 ```ts
-describe('useDashboardFolders.loadFolders — error reporting', () => {
+describe('useDashboardFolders.loadFolders - error reporting', () => {
   beforeEach(() => {
     localStorage.clear();
     getAllFolders.mockReset();
