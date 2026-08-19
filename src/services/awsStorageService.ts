@@ -41,11 +41,14 @@ export class AwsStorageService {
   }
 
   /**
-   * Fetch a presigned URL for an AWS storage file.
-   * Calls a Netlify Function that proxies to the Lambda API (avoids CORS, keeps API key server-side).
+   * Get a presigned video URL for a pipeline project.
+   *
+   * Sends the project id, not a path: the Netlify Function builds the storage
+   * path itself so no caller can name an arbitrary object. See
+   * docs/superpowers/specs/2026-08-19-aws-proxy-auth-design.md.
    */
-  static async getPresignedUrl(filepath: string): Promise<string> {
-    const url = `/.netlify/functions/aws-storage?filepath=${encodeURIComponent(filepath)}`;
+  static async getVideoUrlForProject(outputVideoId: string): Promise<string> {
+    const url = `/.netlify/functions/aws-storage?outputVideoId=${encodeURIComponent(outputVideoId)}`;
 
     const res = await fetch(url, { cache: 'no-store' });
 
@@ -63,13 +66,5 @@ export class AwsStorageService {
 
     const text = await res.text();
     return this.extractUrl(text);
-  }
-
-  /**
-   * Get a presigned video URL for a pipeline project.
-   */
-  static async getVideoUrlForProject(outputVideoId: string): Promise<string> {
-    const filepath = this.buildFilepath(outputVideoId);
-    return this.getPresignedUrl(filepath);
   }
 }
