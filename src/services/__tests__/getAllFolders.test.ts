@@ -12,14 +12,19 @@ const row = (id: string, ownerId: string) => ({
   updated_at: '2026-08-19T00:00:00Z',
 });
 
-const foldersChain: Record<string, ReturnType<typeof vi.fn>> = {
+interface FoldersChain {
+  select: ReturnType<typeof vi.fn>;
+  eq: ReturnType<typeof vi.fn>;
+  order: ReturnType<typeof vi.fn>;
+}
+const foldersChain: FoldersChain = {
   select: vi.fn(() => foldersChain),
   eq: vi.fn(() => foldersChain),
   order: vi.fn(() =>
     Promise.resolve({ data: [row('f1', 'u1'), row('f2', 'u2')], error: null })
   ),
 };
-const fromMock = vi.fn(() => foldersChain);
+const fromMock = vi.fn((_table: string) => foldersChain);
 vi.mock('@/composables/useSupabase', () => ({
   supabase: { from: (t: string) => fromMock(t) },
 }));

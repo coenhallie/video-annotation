@@ -384,12 +384,18 @@ export class FolderService {
         .eq('project_id', projectId);
 
       if (deleteError) {
-        // Only log warning if it's not a "table doesn't exist" error
-        if (deleteError.code !== '42P01') {
+        if (deleteError.code === '42P01') {
+          // Table doesn't exist in this environment; tolerate and move on.
           console.warn(
             '⚠️ [FolderService] Error removing project from folders:',
             deleteError
           );
+        } else {
+          // Any other failure (e.g. RLS denies the delete) must surface. When
+          // toFolderId is null this delete is the only operation this call
+          // makes, so swallowing it here would silently no-op an "unfile"
+          // drag with no error shown to the user.
+          throw deleteError;
         }
       }
 

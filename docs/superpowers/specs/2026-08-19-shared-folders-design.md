@@ -105,17 +105,39 @@ Restricting SELECT to `authenticated` closes the anon read hole. Verified safe: 
 to either table is `folderService.ts` -> `useDashboardFolders` -> `DashboardView`, which
 requires a session. No anonymous share-link path resolves folder membership.
 
-Rollback: `DISABLE ROW LEVEL SECURITY` on both tables plus the eight `CREATE POLICY`
-statements reconstructed verbatim from the captured `pg_policies` output.
+Rollback: `DISABLE ROW LEVEL SECURITY` on `project_folders` only (`folders` stays
+RLS-enabled, since its four restored policies are `auth.uid() = owner_id` and already deny
+an anonymous caller) plus the eight `CREATE POLICY` statements, reconstructed by hand from
+the captured `pg_policies` output rather than machine-verified against the live schema.
 
 ## 7. Deploy sequencing
 
 **The migration goes first, then the client. They are not atomic; deploys here are manual.**
 
-The new flat policies are strictly more permissive than what the unmodified client asks for,
-so the current app keeps working the moment the migration lands. Shipping the client first
-would put the old owner-scoped policies in force while the client requests everyone's
-folders.
+No deploy ordering actually breaks the app, because RLS is disabled today (see section 3),
+which makes all eight old owner-scoped policies inert regardless of which side ships first:
+
+- Old client + migration not applied: today's behaviour, owner-scoped in the client only.
+- Old client + migration applied: the client still asks for its own folders, so it sees only
+  its own, because its `owner_id` filter is a subset of the new `SELECT true` policy.
+- New client + migration not applied: shared folders work, because RLS is off and nothing
+  scopes the read.
+- New client + migration applied: shared folders work as designed.
+
+The reason to still put the migration first is not safety, it is observability. The old
+client's own behaviour will not tell you anything either way, since its `owner_id` filter
+keeps it looking owner-scoped regardless of what the policies say (see the bullet above). The
+check that does work is independent of the client: probe `GET /rest/v1/folders` with the anon
+key, the same method section 3 used to discover the hole. Run it before and after the
+migration lands, with the old client still deployed. Before, it returns every row. After, it
+returns nothing, because SELECT is now `authenticated`-only. That is a clean, client-independent
+confirmation that the migration changed something.
+
+Ship the new client first instead and that check stops meaning anything: once the new client is
+live, "shared folders work" is true whether or not the migration ran, per the table above, so
+there is no user-visible moment left to distinguish "the policies are correctly granting
+access" from "RLS is still off and gating nothing." Section 10's end-to-end list carries the
+same anon probe as a release check for exactly this reason.
 
 ## 8. Bundled fixes
 

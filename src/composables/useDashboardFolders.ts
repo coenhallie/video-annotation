@@ -28,10 +28,14 @@ export function useDashboardFolders(getUserId: () => string | undefined) {
       foldersError.value = null;
       reconcileSelection();
     } catch (err) {
+      // Missing folders table etc. - degrade to no folders, never hard-fail.
       console.warn('[useDashboardFolders] loadFolders failed', err);
       folders.value = [];
       folderTree.value = [];
-      foldersError.value = err instanceof Error ? err.message : String(err);
+      foldersError.value =
+        err instanceof Error
+          ? err.message || 'Failed to load folders'
+          : String(err);
     }
   }
 

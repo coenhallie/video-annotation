@@ -15,10 +15,12 @@
 -- file any video into any of them. `owner_id` is retained as attribution and is
 -- filtered on nowhere.
 --
--- Scoping every policy TO authenticated (the old ones were TO public, which
--- includes anon) is what closes the anonymous hole. Verified safe: the only path
--- to either table is FolderService -> useDashboardFolders -> DashboardView, which
--- requires a session. No anonymous share-link path resolves folder membership.
+-- Enabling RLS is what closes the anonymous hole. Scoping every policy TO
+-- authenticated (the old ones were TO public, which includes anon) is what keeps
+-- it closed under the new flat `true` predicates below, which would otherwise
+-- grant anon the same blanket access. Verified safe: the only path to either
+-- table is FolderService -> useDashboardFolders -> DashboardView, which requires
+-- a session. No anonymous share-link path resolves folder membership.
 --
 -- The replacement policies are flat `true` and reference no other table. That is
 -- deliberate, not laziness: RLS applies to tables named inside a policy
@@ -26,6 +28,11 @@
 -- `videos` with EXISTS subqueries. These do not, so the hazard disappears.
 --
 -- Design: docs/superpowers/specs/2026-08-19-shared-folders-design.md
+
+-- RLS is enabled before any replacement policy exists, so a partial run left
+-- uncommitted (chunked execution, or a CREATE POLICY failing midway) must not
+-- persist: that state shows an empty folder tree to everyone.
+BEGIN;
 
 ALTER TABLE public.folders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.project_folders ENABLE ROW LEVEL SECURITY;
@@ -92,8 +99,14 @@ CREATE POLICY "Signed-in users can unfile any video" ON public.project_folders
   FOR DELETE TO authenticated
   USING (true);
 
--- Rollback. Restores the exact pre-change state: RLS off, plus the eight policies
--- captured verbatim from pg_policies on 2026-08-19 before the drop.
+COMMIT;
+
+-- Rollback. Restores the eight pre-change policies, plus RLS off on
+-- project_folders only (see the asymmetry note above its ALTER TABLE line).
+--
+-- The eight policies were reconstructed by hand from a pg_policies dump
+-- captured on 2026-08-19, not machine-verified against the live schema. Take a
+-- fresh capture before relying on this rollback rather than trusting it as-is.
 --
 -- DROP POLICY IF EXISTS "Signed-in users can view all folders" ON public.folders;
 -- DROP POLICY IF EXISTS "Signed-in users can create folders" ON public.folders;
@@ -104,7 +117,13 @@ CREATE POLICY "Signed-in users can unfile any video" ON public.project_folders
 -- DROP POLICY IF EXISTS "Signed-in users can update any folder filing" ON public.project_folders;
 -- DROP POLICY IF EXISTS "Signed-in users can unfile any video" ON public.project_folders;
 --
--- ALTER TABLE public.folders DISABLE ROW LEVEL SECURITY;
+-- folders is deliberately NOT disabled here. Its four restored policies below
+-- are all `auth.uid() = owner_id`, which already denies an anonymous caller,
+-- so leaving RLS enabled restores per-user privacy on this table and keeps the
+-- anonymous hole shut. Only project_folders needs RLS off: its restored
+-- policies reach into `videos` via EXISTS, and RLS applies to tables named
+-- inside a policy expression, so enabling it here would reintroduce the
+-- cross-table hazard documented in migrations/20260817_open_annotations_to_all_users.sql.
 -- ALTER TABLE public.project_folders DISABLE ROW LEVEL SECURITY;
 --
 -- CREATE POLICY "Users can view their own folders" ON public.folders

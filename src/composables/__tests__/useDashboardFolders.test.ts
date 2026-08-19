@@ -3,9 +3,14 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Folder, FolderTreeNode } from '@/types/folder';
 
-const getAllFolders = vi.fn();
-const buildFolderTree = vi.fn(() => []);
+const getAllFolders = vi.fn((..._args: unknown[]) =>
+  Promise.resolve([] as Folder[])
+);
+const buildFolderTree = vi.fn(
+  (..._args: unknown[]) => [] as FolderTreeNode[]
+);
 vi.mock('@/services/folderService', () => ({
   FolderService: {
     getAllFolders: (...args: unknown[]) => getAllFolders(...args),
