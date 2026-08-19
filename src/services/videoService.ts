@@ -587,10 +587,13 @@ export class VideoService {
     // authorizes by asking whether the caller can see this video, and a row that
     // does not exist yet is visible to nobody, so fetching first would 403 the
     // first ingest of every project. Created with an empty url, filled in below.
-    let record = await this.findVideoByOutputVideoId(outputVideoId);
-    const createdHere = !record;
+    const existing = await this.findVideoByOutputVideoId(outputVideoId);
+    const createdHere = !existing;
 
-    if (!record) {
+    let record: Video;
+    if (existing) {
+      record = existing;
+    } else {
       const { data, error } = await supabase
         .from('videos')
         .insert({
@@ -607,9 +610,9 @@ export class VideoService {
         .select()
         .single();
 
-      if (error) {
+      if (error || !data) {
         handleServiceError('VideoService.findOrCreateOutputVideo', error);
-        throw error;
+        throw error ?? new Error('Insert returned no row');
       }
       record = data;
     }
