@@ -21,43 +21,64 @@ function json(statusCode, body) {
 }
 
 /**
- * Decide whether this caller may fetch the given project's video.
- *
- * A verified Supabase session is allowed outright: every signed-in user can
- * already see every video, and the ingest path fetches the presigned URL before
- * the `videos` row exists, so a lookup-for-everyone rule would break it.
- *
- * Everyone else must resolve to a `videos` row that RLS lets the anon role read,
- * which is exactly "public, or inside a public comparison". Delegating to the
- * policy means this cannot drift from the rest of the app.
+ * Netlify lowercases event headers, but nothing in the contract guarantees it,
+ * and here a missed header degrades a signed-in caller to anonymous.
  */
-async function isAuthorized(event, outputVideoId, supabaseUrl, anonKey) {
-  const headers = event.headers || {};
-  const authHeader = headers.authorization || headers.Authorization || '';
-
-  // The header must be VERIFIED, not merely present. Trusting its presence would
-  // let any caller send `Authorization: Bearer anything` and be waved through,
-  // which is the hole this function exists to close.
-  if (authHeader.startsWith('Bearer ')) {
-    const verified = await fetch(supabaseUrl + '/auth/v1/user', {
-      headers: { apikey: anonKey, authorization: authHeader },
-    });
-    if (verified.ok) return true;
-    // Absent, malformed, expired or forged: fall through to the anonymous check
-    // rather than returning 401, so a share-link viewer whose session lapsed can
-    // still play a public video.
+function headerValue(headers, name) {
+  const target = name.toLowerCase();
+  for (const key of Object.keys(headers || {})) {
+    if (key.toLowerCase() === target) return headers[key];
   }
+  return undefined;
+}
 
-  const lookup = await fetch(
-    supabaseUrl +
-      '/rest/v1/videos?select=id&videoId=eq.aws:' +
-      outputVideoId,
-    { headers: { apikey: anonKey, authorization: 'Bearer ' + anonKey } }
-  );
-  if (!lookup.ok) return false;
+/**
+ * A JWT is three base64url segments. Only the payload's `role` claim is read,
+ * and only as a configuration sanity check, so no signature verification is
+ * needed or attempted here.
+ */
+function keyRole(key) {
+  try {
+    const payload = JSON.parse(
+      Buffer.from(String(key).split('.')[1], 'base64url').toString('utf8')
+    );
+    return payload.role;
+  } catch (err) {
+    return null;
+  }
+}
 
-  const rows = await lookup.json();
-  return Array.isArray(rows) && rows.length > 0;
+/**
+ * Ask the database one question: can this caller see this video?
+ *
+ * The caller's own credentials are forwarded, so PostgREST verifies the JWT and
+ * applies the `videos` SELECT policy. The answer is by construction the same one
+ * the app would get, which is why this cannot drift from the rest of the product.
+ *
+ * There is no signed-in shortcut. `findOrCreateOutputVideo` creates the row
+ * before requesting the URL precisely so this check works on first ingest.
+ *
+ * Returns 'allow', 'deny' or 'error'. Throws only on a network or parse failure,
+ * which the caller turns into 502.
+ */
+async function checkVisibility(outputVideoId, supabaseUrl, anonKey, authHeader) {
+  const url =
+    supabaseUrl + '/rest/v1/videos?select=id&videoId=eq.aws:' + outputVideoId;
+  const ask = (auth) =>
+    fetch(url, { headers: { apikey: anonKey, authorization: auth } });
+
+  let res = await ask(authHeader || 'Bearer ' + anonKey);
+
+  // A forged, malformed or expired token makes PostgREST answer 401. Retry as
+  // anonymous rather than rejecting, so a share-link viewer whose session lapsed
+  // can still play a public video.
+  if (!res.ok && authHeader) {
+    res = await ask('Bearer ' + anonKey);
+  }
+  if (!res.ok) return 'error';
+
+  const rows = await res.json();
+  return Array.isArray(rows) && rows.length > 0 ? 'allow' : 'deny';
 }
 
 exports.handler = async function (event) {
@@ -70,8 +91,6 @@ exports.handler = async function (event) {
 
   const apiKey = process.env.AWS_STORAGE_API_KEY;
   const lambdaBaseUrl = process.env.AWS_STORAGE_API_URL;
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const anonKey = process.env.SUPABASE_ANON_KEY;
 
   if (!apiKey || !lambdaBaseUrl) {
     return json(500, {
@@ -80,6 +99,9 @@ exports.handler = async function (event) {
     });
   }
 
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const anonKey = process.env.SUPABASE_ANON_KEY;
+
   if (!supabaseUrl || !anonKey) {
     return json(500, {
       error:
@@ -87,7 +109,31 @@ exports.handler = async function (event) {
     });
   }
 
-  if (!(await isAuthorized(event, outputVideoId, supabaseUrl, anonKey))) {
+  // A service_role key here would bypass RLS and quietly authorize every
+  // request. The two keys sit in the same dashboard panel, both labelled "key".
+  if (keyRole(anonKey) !== 'anon') {
+    return json(500, {
+      error:
+        'SUPABASE_ANON_KEY is not an anon key. A service_role key here would bypass RLS.',
+    });
+  }
+
+  let visibility;
+  try {
+    visibility = await checkVisibility(
+      outputVideoId,
+      supabaseUrl,
+      anonKey,
+      headerValue(event.headers, 'authorization')
+    );
+  } catch (err) {
+    return json(502, { error: 'Authorization check failed: ' + err.message });
+  }
+
+  if (visibility === 'error') {
+    return json(502, { error: 'Authorization check failed' });
+  }
+  if (visibility === 'deny') {
     return json(403, { error: 'Not authorized for this video' });
   }
 
