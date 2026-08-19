@@ -30,14 +30,16 @@ Probed live on 2026-08-19 with the anon key.
   rollback block). The `folders` SELECT policy is `auth.uid() = owner_id`, which returns zero
   rows for an anonymous caller.
 
-Those two facts are only consistent with **RLS being disabled on both tables**, leaving all
-eight policies inert. RLS is per-table rather than per-command, so writes are open too, but
-that follows from the inference rather than from direct observation: the write probe was
-blocked by tooling. **Open item: confirm `pg_tables.rowsecurity` is `false` for both tables
-before applying the migration.**
+**RLS is disabled on both tables**, leaving all eight policies inert. Confirmed in the
+Supabase dashboard (Authentication -> Policies), which labels both tables `RLS Disabled` and
+warns: "This table can be accessed by anyone via the Data API as RLS is disabled." Every
+other table in the schema has RLS enabled.
 
-Consequence either way: this change is a security improvement, not a relaxation. Today the
-anon key, which ships in the client bundle, reads every folder in the deployment.
+RLS is per-table rather than per-command, so writes are ungated as well as reads. Anyone
+holding the anon key, which ships in the client bundle, can create, rename or delete any
+folder and any `project_folders` row, with or without a session.
+
+This change is therefore a security improvement, not a relaxation.
 
 ## 4. Data model
 
@@ -157,3 +159,9 @@ Reported and deliberately not fixed here:
   test and so reads as live.
 - `2026-07-03-dashboard-folders-design.md` §6 promises a per-card "Add to folder" menu that
   was never built. Only drag-drop exists.
+
+Outside the folder feature entirely, found while confirming the RLS state: the
+`video_watch_progress` table has RLS disabled **and no policies at all**. It carries the same
+open-to-anyone exposure as the two tables fixed here, but it cannot be closed the same way.
+Enabling RLS on a table with no policies denies every request, so policies have to be written
+first. Needs its own change.
