@@ -15,6 +15,9 @@ export function useDashboardFolders(getUserId: () => string | undefined) {
   const dragOverFolderId: Ref<string | null> = ref(null);
   // null = no folder filter; a Set = restrict to these project ids.
   const folderProjectIds: Ref<Set<string> | null> = ref(null);
+  // Non-null when the last folder load failed. Rendered in the sidebar so an RLS
+  // or network failure cannot masquerade as "you have no folders".
+  const foldersError: Ref<string | null> = ref(null);
 
   async function loadFolders() {
     const uid = getUserId();
@@ -22,12 +25,13 @@ export function useDashboardFolders(getUserId: () => string | undefined) {
     try {
       folders.value = await FolderService.getAllFolders();
       folderTree.value = FolderService.buildFolderTree(folders.value);
+      foldersError.value = null;
       reconcileSelection();
     } catch (err) {
-      // Missing folders table etc. - degrade to no folders, never hard-fail.
       console.warn('[useDashboardFolders] loadFolders failed', err);
       folders.value = [];
       folderTree.value = [];
+      foldersError.value = err instanceof Error ? err.message : String(err);
     }
   }
 
@@ -104,6 +108,7 @@ export function useDashboardFolders(getUserId: () => string | undefined) {
 
   return {
     folders,
+    foldersError,
     folderTree,
     currentFolderId,
     dragOverFolderId,

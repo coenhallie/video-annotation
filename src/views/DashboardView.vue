@@ -369,6 +369,12 @@ watch(user, (u) => {
             @dragover="onFolderDragOver"
             @dragleave="onFolderDragLeave"
           />
+          <p
+            v-if="dashFolders.foldersError.value"
+            class="mt-3 text-[11px] leading-relaxed text-red-600 dark:text-red-400"
+          >
+            Could not load folders: {{ dashFolders.foldersError.value }}
+          </p>
         </aside>
 
         <div class="flex-1 min-w-0">
