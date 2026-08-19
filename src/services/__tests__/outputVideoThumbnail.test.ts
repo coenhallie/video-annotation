@@ -14,10 +14,11 @@ vi.mock('@/services/awsStorageService', () => ({
 }));
 
 // Captures what findOrCreateOutputVideo reads and writes through supabase.
-const state: { existing: any; inserted: any; updated: any } = {
+const state: { existing: any; inserted: any; updated: any; deleted: any } = {
   existing: null,
   inserted: null,
   updated: null,
+  deleted: null,
 };
 
 vi.mock('@/composables/useSupabase', () => ({
@@ -49,6 +50,12 @@ vi.mock('@/composables/useSupabase', () => ({
           }),
         };
       },
+      delete: () => ({
+        eq: (_col: string, id: string) => {
+          state.deleted = id;
+          return Promise.resolve({ error: null });
+        },
+      }),
     }),
   },
 }));
@@ -63,7 +70,9 @@ describe('findOrCreateOutputVideo thumbnails', () => {
     state.existing = null;
     state.inserted = null;
     state.updated = null;
+    state.deleted = null;
     generateSmallThumbnail.mockReset();
+    getVideoUrlForProject.mockResolvedValue('https://s3.example.com/presigned.mp4');
   });
 
   it('includes a generated thumbnail when creating a new record', async () => {
@@ -74,7 +83,7 @@ describe('findOrCreateOutputVideo thumbnails', () => {
     expect(generateSmallThumbnail).toHaveBeenCalledWith(
       'https://s3.example.com/presigned.mp4'
     );
-    expect(state.inserted.thumbnailUrl).toBe('data:image/jpeg;base64,abc');
+    expect(state.updated.thumbnailUrl).toBe('data:image/jpeg;base64,abc');
   });
 
   it('creates the record without a thumbnail when generation returns null', async () => {
@@ -83,7 +92,7 @@ describe('findOrCreateOutputVideo thumbnails', () => {
     await callFindOrCreate();
 
     expect(state.inserted).not.toBeNull();
-    expect('thumbnailUrl' in state.inserted).toBe(false);
+    expect(state.updated.thumbnailUrl).toBeUndefined();
   });
 
   it('creates the record without a thumbnail when generation throws', async () => {
@@ -135,5 +144,48 @@ describe('findOrCreateOutputVideo thumbnails', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('findOrCreateOutputVideo ordering', () => {
+  beforeEach(() => {
+    state.existing = null;
+    state.inserted = null;
+    state.updated = null;
+    state.deleted = null;
+    generateSmallThumbnail.mockReset();
+    getVideoUrlForProject.mockReset();
+  });
+
+  it('inserts the row before requesting the presigned URL', async () => {
+    // The proxy authorizes on visibility, so the row has to exist first.
+    getVideoUrlForProject.mockImplementation(async () => {
+      expect(state.inserted).not.toBeNull();
+      return 'https://s3.example.com/presigned.mp4';
+    });
+    generateSmallThumbnail.mockResolvedValue(null);
+
+    await callFindOrCreate();
+
+    expect(state.inserted).not.toBeNull();
+    expect(state.inserted.url).toBe('');
+    expect(state.updated.url).toBe('https://s3.example.com/presigned.mp4');
+  });
+
+  it('deletes a row it just created when the presigned URL fetch fails', async () => {
+    getVideoUrlForProject.mockRejectedValue(new Error('403 Not authorized for this video'));
+
+    await expect(callFindOrCreate()).rejects.toThrow('Not authorized');
+
+    expect(state.deleted).toBe('v1');
+  });
+
+  it('does not delete a pre-existing row when the fetch fails', async () => {
+    state.existing = { id: 'existing-1', thumbnailUrl: 'data:image/jpeg;base64,old' };
+    getVideoUrlForProject.mockRejectedValue(new Error('boom'));
+
+    await expect(callFindOrCreate()).rejects.toThrow('boom');
+
+    expect(state.deleted).toBeNull();
   });
 });

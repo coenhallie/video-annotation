@@ -583,18 +583,54 @@ export class VideoService {
    * Returns the video record with a fresh presigned URL.
    */
   static async findOrCreateOutputVideo(outputVideoId: string, ownerId: string): Promise<Video> {
-    // Always fetch a fresh presigned URL
-    const presignedUrl = await AwsStorageService.getVideoUrlForProject(outputVideoId);
-    const filepath = AwsStorageService.buildFilepath(outputVideoId);
+    // The row must exist before the presigned URL is requested. The storage proxy
+    // authorizes by asking whether the caller can see this video, and a row that
+    // does not exist yet is visible to nobody, so fetching first would 403 the
+    // first ingest of every project. Created with an empty url, filled in below.
+    let record = await this.findVideoByOutputVideoId(outputVideoId);
+    const createdHere = !record;
 
-    // Check for existing record
-    const existing = await this.findVideoByOutputVideoId(outputVideoId);
+    if (!record) {
+      const { data, error } = await supabase
+        .from('videos')
+        .insert({
+          ownerId,
+          url: '',
+          title: `Pipeline Output - ${outputVideoId.substring(0, 8)}`,
+          videoType: 'url',
+          videoId: `aws:${outputVideoId}`,
+          isPublic: false,
+          fps: 30,
+          duration: 1,
+          totalFrames: 30,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        handleServiceError('VideoService.findOrCreateOutputVideo', error);
+        throw error;
+      }
+      record = data;
+    }
+
+    let presignedUrl: string;
+    try {
+      presignedUrl = await AwsStorageService.getVideoUrlForProject(outputVideoId);
+    } catch (error) {
+      // A row we just created and cannot fill in is a permanently blank video in
+      // the library. A pre-existing row keeps whatever url it already had.
+      if (createdHere) {
+        await supabase.from('videos').delete().eq('id', record.id);
+      }
+      throw error;
+    }
 
     // Generate a thumbnail whenever the record has none yet: new records, plus
     // backfill for AWS videos created before thumbnails existed. Requires CORS
     // on the S3 bucket; failure is non-fatal and leaves the video without one.
     let thumbnailUrl: string | null = null;
-    if (!existing?.thumbnailUrl) {
+    if (!record.thumbnailUrl) {
       try {
         // Race against a timeout: generateSmallThumbnail can stall forever on a
         // hung media load (no error event fires), and this await sits on the
@@ -611,48 +647,20 @@ export class VideoService {
       }
     }
 
-    if (existing) {
-      // Update the URL with the fresh presigned URL (and backfilled thumbnail, if any)
-      const { data, error } = await supabase
-        .from('videos')
-        .update({
-          url: presignedUrl,
-          ...(thumbnailUrl ? { thumbnailUrl } : {}),
-        })
-        .eq('id', existing.id)
-        .select()
-        .single();
-
-      if (error) {
-        handleServiceError('VideoService.findOrCreateOutputVideo', error);
-        return existing;
-      }
-      return data;
-    }
-
-    // Create new video record
     const { data, error } = await supabase
       .from('videos')
-      .insert({
-        ownerId,
+      .update({
         url: presignedUrl,
-        title: `Pipeline Output - ${outputVideoId.substring(0, 8)}`,
-        videoType: 'url',
-        videoId: `aws:${outputVideoId}`,
-        isPublic: false,
-        fps: 30,
-        duration: 1,
-        totalFrames: 30,
         ...(thumbnailUrl ? { thumbnailUrl } : {}),
       })
+      .eq('id', record.id)
       .select()
       .single();
 
     if (error) {
       handleServiceError('VideoService.findOrCreateOutputVideo', error);
-      throw error;
+      return record;
     }
-
     return data;
   }
 
