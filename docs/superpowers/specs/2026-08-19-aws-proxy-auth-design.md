@@ -116,6 +116,15 @@ this function is a 52-line `.cjs` with no imports, and a single REST call keeps 
 Requires two new Netlify environment variables: `SUPABASE_URL` and `SUPABASE_ANON_KEY`
 (non-`VITE_` copies of values that already exist).
 
+Both details in step 1 and step 3 were checked against the live database on 2026-08-19:
+
+- Every `videos.videoId` of the form `aws:*` carries a UUID, which satisfies
+  `^[A-Za-z0-9_-]+$`. The regex will not reject a valid id. It is deliberately looser than a
+  strict UUID pattern in case the pipeline ever emits a non-UUID id; it only needs to exclude
+  path characters.
+- `GET /rest/v1/videos?select=id&videoId=eq.aws:<uuid>` returns the row with the colon
+  unquoted. PostgREST splits on the first `.` only, so no extra quoting is needed.
+
 ## 8. Client changes
 
 - `AwsStorageService.getPresignedUrl(filepath)` becomes
