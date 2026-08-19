@@ -3,8 +3,10 @@
     <!-- Root folder -->
     <div
       :class="[
-        'folder-item px-2 py-1.5 rounded-md cursor-pointer flex items-center gap-2 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors',
-        selectedFolderId === null && 'bg-blue-50 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300',
+        'folder-item flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 transition-colors',
+        selectedFolderId === null
+          ? 'bg-gray-100 text-gray-900 dark:bg-white/[0.06] dark:text-white'
+          : 'text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-white/[0.03]',
       ]"
       @click="$emit('select', null)"
       @dragover.prevent="handleRootDragOver"
@@ -12,15 +14,15 @@
       @dragleave="handleRootDragLeave"
     >
       <svg
-        class="w-4 h-4 flex-shrink-0"
-        fill="currentColor"
-        viewBox="0 0 20 20"
+        class="h-3.5 w-3.5 flex-shrink-0 text-gray-400 dark:text-gray-500"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
       >
-        <path
-          d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"
-        />
+        <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
       </svg>
-      <span class="text-sm font-medium">All Projects</span>
+      <span class="text-[13px] font-medium tracking-tight">All Projects</span>
     </div>
 
     <!-- Folder tree items -->

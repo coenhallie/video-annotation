@@ -333,26 +333,26 @@ watch(user, (u) => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50 dark:bg-gray-900">
+  <div class="min-h-screen bg-white dark:bg-gray-900">
     <AppHeader
       @open-changelog="showChangelog = true"
       @sign-out="signOut"
     >
-      <div class="flex items-center gap-2">
-        <button
-          class="px-3 py-1.5 border rounded-md text-sm border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-          @click="showComparisonModal = true"
-        >
-          Create comparison
-        </button>
-      </div>
+      <button
+        type="button"
+        class="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
+        @click="showComparisonModal = true"
+      >
+        Create comparison
+      </button>
     </AppHeader>
 
     <main class="max-w-7xl mx-auto p-6">
       <div class="flex gap-6">
         <aside class="w-60 shrink-0">
           <button
-            class="w-full mb-3 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            type="button"
+            class="mb-3 w-full rounded px-2 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-300"
             @click="openNewFolder(null)"
           >
             + New folder
@@ -373,67 +373,72 @@ watch(user, (u) => {
 
         <div class="flex-1 min-w-0">
           <div class="flex flex-wrap items-center gap-3 mb-4">
-            <div
-              class="inline-flex rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden"
-            >
+            <!-- Same pill shape as the annotation panel's category filter -
+                 both are "narrow this list to one facet". -->
+            <div class="flex shrink-0 items-center gap-1">
               <button
-                class="px-3 py-1.5 text-sm transition-colors"
+                type="button"
+                class="rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] transition-colors"
                 :class="
                   scope === 'all'
-                    ? 'bg-blue-600 text-white'
-                    : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
+                    ? 'bg-gray-900 text-white dark:bg-gray-700 dark:text-white'
+                    : 'text-gray-500 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-300'
                 "
                 @click="scope = 'all'"
               >
-                All Videos
+                All
               </button>
               <button
-                class="px-3 py-1.5 text-sm transition-colors"
+                type="button"
+                class="rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] transition-colors"
                 :class="
                   scope === 'mine'
-                    ? 'bg-blue-600 text-white'
-                    : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
+                    ? 'bg-gray-900 text-white dark:bg-gray-700 dark:text-white'
+                    : 'text-gray-500 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-300'
                 "
                 @click="scope = 'mine'"
               >
-                My Videos
+                Mine
               </button>
             </div>
 
             <input
               v-model="searchQuery"
               placeholder="Search videos or owners…"
-              class="flex-1 min-w-[12rem] px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+              class="min-w-[12rem] flex-1 rounded border border-gray-200 bg-transparent px-2.5 py-1.5 text-[12px] leading-snug text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-400 dark:border-white/10 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-white/25"
             >
 
             <!-- Label filter -->
             <div class="relative">
+              <!-- Active count as a mono token, not a badge: the darkened
+                   label is already saying the filter is on. -->
               <button
-                class="inline-flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-sm transition-colors"
+                type="button"
+                class="flex items-center gap-1.5 rounded px-1 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] transition-colors"
                 :class="
-                  activeLabelIds.size > 0
-                    ? 'border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/20'
-                    : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
+                  activeLabelIds.size > 0 || showLabelFilter
+                    ? 'text-gray-900 dark:text-gray-200'
+                    : 'text-gray-500 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-300'
                 "
                 @click="showLabelFilter = !showLabelFilter"
               >
                 <svg
-                  class="w-4 h-4"
+                  class="h-3.5 w-3.5"
+                  viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
-                  viewBox="0 0 24 24"
+                  stroke-width="2"
                 >
                   <path
                     stroke-linecap="round"
                     stroke-linejoin="round"
-                    stroke-width="2"
                     d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
                   />
                 </svg>
                 Filter
                 <span
                   v-if="activeLabelIds.size > 0"
-                  class="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full bg-blue-600 text-white text-xs"
+                  class="font-mono text-[10px] tracking-wider"
                 >
                   {{ activeLabelIds.size }}
                 </span>
@@ -444,21 +449,23 @@ watch(user, (u) => {
                 class="fixed inset-0 z-40"
                 @click="showLabelFilter = false"
               />
+              <!-- Same card as the annotation form's label picker. -->
               <div
                 v-if="showLabelFilter"
-                class="absolute right-0 mt-2 w-72 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg"
+                class="absolute right-0 z-50 mt-2 w-64 rounded border border-gray-200 bg-white shadow-lg dark:border-white/10 dark:bg-gray-900"
               >
                 <div
-                  class="flex items-center justify-between px-3 py-2 border-b border-gray-200 dark:border-gray-700"
+                  class="flex items-center justify-between border-b border-gray-200 px-3 py-2 dark:border-white/10"
                 >
                   <span
-                    class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide"
+                    class="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-500"
                   >
                     Filter by label
                   </span>
                   <button
                     v-if="activeLabelIds.size > 0"
-                    class="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                    type="button"
+                    class="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-300"
                     @click="clearLabelFilter"
                   >
                     Clear
@@ -466,7 +473,7 @@ watch(user, (u) => {
                 </div>
                 <div
                   v-if="availableLabels.length === 0"
-                  class="px-3 py-6 text-center text-sm text-gray-500 dark:text-gray-400"
+                  class="px-3 py-6 text-center text-[12px] text-gray-600 dark:text-gray-400"
                 >
                   No labels in use yet.
                 </div>
@@ -477,24 +484,34 @@ watch(user, (u) => {
                   <button
                     v-for="label in availableLabels"
                     :key="label.id"
-                    class="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-left text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700"
+                    type="button"
+                    class="flex w-full items-center gap-2.5 px-3 py-1.5 text-left transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]"
                     @click="toggleLabelFilter(label.id)"
                   >
                     <span
-                      class="w-3 h-3 rounded-full border border-gray-300 dark:border-gray-500 shrink-0"
+                      class="h-2 w-2 shrink-0 rounded-full"
                       :style="{ backgroundColor: label.color }"
                     />
-                    <span class="flex-1 truncate">{{ label.name }}</span>
+                    <span
+                      class="flex-1 truncate text-[12px]"
+                      :class="
+                        activeLabelIds.has(label.id)
+                          ? 'text-gray-900 dark:text-white'
+                          : 'text-gray-700 dark:text-gray-200'
+                      "
+                    >{{ label.name }}</span>
                     <svg
                       v-if="activeLabelIds.has(label.id)"
-                      class="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0"
-                      fill="currentColor"
-                      viewBox="0 0 20 20"
+                      class="h-3.5 w-3.5 shrink-0 text-gray-900 dark:text-white"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
                     >
                       <path
-                        fill-rule="evenodd"
-                        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                        clip-rule="evenodd"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="m5 13 4 4L19 7"
                       />
                     </svg>
                   </button>
@@ -505,20 +522,20 @@ watch(user, (u) => {
 
           <div
             v-if="isLoading"
-            class="text-center text-gray-500 py-12"
+            class="px-4 py-12 text-center text-[12px] text-gray-600 dark:text-gray-400"
           >
             Loading…
           </div>
           <div
             v-else-if="paginatedProjects.length === 0"
-            class="text-center text-gray-500 py-12"
+            class="px-4 py-12 text-center text-[12px] text-gray-600 dark:text-gray-400"
           >
             No videos found.
           </div>
 
           <div
             v-else
-            class="flex flex-col gap-2"
+            class="-mx-3 flex flex-col"
           >
             <ProjectListItem
               v-for="project in paginatedProjects"
@@ -537,21 +554,23 @@ watch(user, (u) => {
 
           <div
             v-if="totalPages > 1"
-            class="flex justify-center items-center gap-2 mt-6"
+            class="mt-6 flex items-center justify-center gap-4"
           >
             <button
+              type="button"
               :disabled="currentPage === 1"
-              class="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-700 dark:text-gray-200 disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              class="rounded px-1 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 transition-colors hover:text-gray-900 disabled:pointer-events-none disabled:opacity-30 dark:text-gray-500 dark:hover:text-gray-300"
               @click="currentPage--"
             >
               Prev
             </button>
-            <span class="px-2 py-1 text-sm text-gray-600 dark:text-gray-300">
+            <span class="font-mono text-[11px] tracking-wider text-gray-500 dark:text-gray-400">
               {{ currentPage }} / {{ totalPages }}
             </span>
             <button
+              type="button"
               :disabled="currentPage === totalPages"
-              class="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-700 dark:text-gray-200 disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              class="rounded px-1 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 transition-colors hover:text-gray-900 disabled:pointer-events-none disabled:opacity-30 dark:text-gray-500 dark:hover:text-gray-300"
               @click="currentPage++"
             >
               Next
@@ -615,7 +634,7 @@ watch(user, (u) => {
               :project="selectedProject"
               :annotations="videoDetails.annotations.value"
               :loading="videoDetails.loading.value"
-                :label-map="labelMap"
+              :label-map="labelMap"
               :annotation-count="annotationCounts[selectedProject.id] ?? 0"
               :comment-count="commentCounts[selectedProject.id] ?? 0"
               @close="closeDetails"

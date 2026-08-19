@@ -461,14 +461,14 @@ onBeforeUnmount(() => {
     <div
       ref="panelRef"
       tabindex="-1"
-      class="absolute overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl outline-none dark:border-gray-700 dark:bg-gray-800"
+      class="absolute overflow-hidden rounded border border-gray-200 bg-white shadow-xl outline-none dark:border-white/10 dark:bg-gray-900"
       :class="{ 'pointer-events-auto': mode === 'draw' }"
       :style="{ ...position, width: `${PANEL_W}px` }"
       @click.stop
       @keydown="handleKeydown"
     >
       <header
-        class="flex items-center justify-between border-b border-gray-200 px-4 py-2.5 dark:border-gray-700"
+        class="flex items-center justify-between border-b border-gray-200 px-4 py-2.5 dark:border-white/10"
       >
         <div class="flex items-center gap-2.5">
           <span class="h-1.5 w-1.5 rounded-full bg-orange-500" />
@@ -499,7 +499,7 @@ onBeforeUnmount(() => {
           type="text"
           autocomplete="off"
           placeholder="What happened on this frame?"
-          class="w-full rounded border border-gray-300 bg-white px-3 py-2 text-[12px] text-gray-900 outline-none placeholder:text-gray-400 focus:border-orange-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-500"
+          class="w-full rounded border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-900 outline-none placeholder:text-gray-400 focus:border-orange-500 dark:border-white/10 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-500"
           @keydown.enter.prevent="commitComment"
         />
       </div>
@@ -522,14 +522,14 @@ onBeforeUnmount(() => {
             :class="
               color === drawColor
                 ? 'scale-110 border-gray-900 dark:border-gray-100'
-                : 'border-gray-300 hover:scale-110 dark:border-gray-600'
+                : 'border-gray-200 hover:scale-110 dark:border-white/10'
             "
             :style="{ backgroundColor: color }"
             @click="emit('draw-color', color)"
           />
         </div>
 
-        <span class="h-5 w-px shrink-0 bg-gray-200 dark:bg-gray-700" />
+        <span class="h-5 w-px shrink-0 bg-gray-200 dark:bg-white/10" />
 
         <div class="flex shrink-0 items-center gap-1.5">
           <button
@@ -540,8 +540,8 @@ onBeforeUnmount(() => {
             class="grid h-6 w-6 shrink-0 place-items-center rounded border transition-colors"
             :class="
               width === drawWidth
-                ? 'border-gray-900 bg-gray-100 dark:border-gray-100 dark:bg-gray-700'
-                : 'border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700/50'
+                ? 'border-gray-900 bg-gray-100 dark:border-gray-100 dark:bg-white/[0.06]'
+                : 'border-gray-200 hover:bg-gray-50 dark:border-white/10 dark:hover:bg-white/[0.03]'
             "
             @click="emit('draw-width', width)"
           >
@@ -552,13 +552,13 @@ onBeforeUnmount(() => {
           </button>
         </div>
 
-        <span class="h-5 w-px shrink-0 bg-gray-200 dark:bg-gray-700" />
+        <span class="h-5 w-px shrink-0 bg-gray-200 dark:bg-white/10" />
 
         <button
           type="button"
           data-testid="quick-pick-draw-undo"
           title="Undo the last stroke"
-          class="grid h-6 w-6 shrink-0 place-items-center rounded border border-gray-300 bg-gray-50 font-mono text-[11px] font-semibold text-gray-600 transition-colors hover:bg-gray-100 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-700"
+          class="grid h-6 w-6 shrink-0 place-items-center rounded border border-gray-200 bg-gray-50 font-mono text-[11px] font-semibold text-gray-600 transition-colors hover:bg-gray-100 dark:border-white/10 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-white/[0.06]"
           @click="emit('draw-undo')"
         >
           U
@@ -578,7 +578,7 @@ onBeforeUnmount(() => {
       <!-- Pick screen -->
       <div v-else class="flex min-h-[220px]">
         <div
-          class="flex w-[46%] shrink-0 flex-col border-r border-gray-200 dark:border-gray-700"
+          class="flex w-[46%] shrink-0 flex-col border-r border-gray-200 dark:border-white/10"
         >
           <!-- Categories -->
           <ul v-if="categories.length" class="flex-1 py-1.5">
@@ -588,8 +588,8 @@ onBeforeUnmount(() => {
               class="relative flex cursor-pointer items-center gap-2.5 px-4 py-1.5 transition-colors"
               :class="
                 activeCategory?.key === group.key
-                  ? 'bg-gray-100 dark:bg-gray-700'
-                  : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                  ? 'bg-gray-100 dark:bg-white/[0.06]'
+                  : 'hover:bg-gray-50 dark:hover:bg-white/[0.03]'
               "
               @mouseenter="selectCategory(group)"
               @click="selectCategory(group)"
@@ -604,7 +604,7 @@ onBeforeUnmount(() => {
                 :class="
                   activeCategory?.key === group.key
                     ? 'border-transparent text-white'
-                    : 'border-gray-300 bg-gray-50 text-gray-600 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-300'
+                    : 'border-gray-200 bg-gray-50 text-gray-600 dark:border-white/10 dark:bg-gray-900 dark:text-gray-300'
                 "
                 :style="
                   activeCategory?.key === group.key
@@ -639,11 +639,11 @@ onBeforeUnmount(() => {
           <!-- Comment, always available: it needs no labels at all -->
           <button
             type="button"
-            class="flex w-full items-center gap-2.5 border-t border-gray-200 px-4 py-2 text-left transition-colors hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-700/50"
+            class="flex w-full items-center gap-2.5 border-t border-gray-200 px-4 py-2 text-left transition-colors hover:bg-gray-50 dark:border-white/10 dark:hover:bg-white/[0.03]"
             @click="enterCommentMode"
           >
             <span
-              class="grid h-6 w-6 shrink-0 place-items-center rounded border border-gray-300 bg-gray-50 font-mono text-[11px] font-semibold text-gray-600 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-300"
+              class="grid h-6 w-6 shrink-0 place-items-center rounded border border-gray-200 bg-gray-50 font-mono text-[11px] font-semibold text-gray-600 dark:border-white/10 dark:bg-gray-900 dark:text-gray-300"
             >
               C
             </span>
@@ -656,11 +656,11 @@ onBeforeUnmount(() => {
 
           <button
             type="button"
-            class="flex w-full items-center gap-2.5 border-t border-gray-200 px-4 py-2 text-left transition-colors hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-700/50"
+            class="flex w-full items-center gap-2.5 border-t border-gray-200 px-4 py-2 text-left transition-colors hover:bg-gray-50 dark:border-white/10 dark:hover:bg-white/[0.03]"
             @click="enterDrawMode"
           >
             <span
-              class="grid h-6 w-6 shrink-0 place-items-center rounded border border-gray-300 bg-gray-50 font-mono text-[11px] font-semibold text-gray-600 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-300"
+              class="grid h-6 w-6 shrink-0 place-items-center rounded border border-gray-200 bg-gray-50 font-mono text-[11px] font-semibold text-gray-600 dark:border-white/10 dark:bg-gray-900 dark:text-gray-300"
             >
               D
             </span>
@@ -677,12 +677,12 @@ onBeforeUnmount(() => {
           <li
             v-for="row in labelRows"
             :key="row.label.id"
-            class="flex cursor-pointer items-center gap-2.5 px-4 py-1.5 transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/50"
+            class="flex cursor-pointer items-center gap-2.5 px-4 py-1.5 transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]"
             :title="row.label.description || row.label.name"
             @click="commit(row.label)"
           >
             <span
-              class="grid h-6 w-6 shrink-0 place-items-center rounded border border-gray-300 bg-gray-50 font-mono text-[11px] font-semibold text-gray-600 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-300"
+              class="grid h-6 w-6 shrink-0 place-items-center rounded border border-gray-200 bg-gray-50 font-mono text-[11px] font-semibold text-gray-600 dark:border-white/10 dark:bg-gray-900 dark:text-gray-300"
             >
               {{ row.letter }}
             </span>
@@ -706,7 +706,7 @@ onBeforeUnmount(() => {
       </div>
 
       <footer
-        class="border-t border-gray-200 px-4 py-2 text-[9px] tracking-[0.14em] text-gray-400 dark:border-gray-700 dark:text-gray-500"
+        class="border-t border-gray-200 px-4 py-2 text-[9px] tracking-[0.14em] text-gray-400 dark:border-white/10 dark:text-gray-500"
       >
         <span v-if="mode === 'comment'">Enter to save &middot; Esc to go back</span>
         <span v-else-if="mode === 'draw'">Enter to save &middot; U to undo &middot; Esc to cancel</span>

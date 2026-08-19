@@ -6,670 +6,297 @@
         class="fixed inset-0 z-50 overflow-hidden"
         @keydown.esc="handleEscape"
       >
-        <!-- Backdrop with blur -->
+        <!-- Backdrop -->
         <div
-          class="absolute inset-0 bg-black/60 backdrop-blur-md transition-opacity"
+          class="absolute inset-0 bg-black/50"
           @click="closeModal"
         />
 
         <!-- Modal Container -->
         <div class="absolute inset-0 flex items-center justify-center p-4">
           <div
-            class="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col"
+            class="relative flex max-h-[85vh] w-full max-w-2xl flex-col rounded border border-gray-200 bg-white shadow-xl dark:border-white/10 dark:bg-gray-900"
             @click.stop
           >
-            <!-- Header with Progress -->
-            <div class="relative">
-              <!-- Progress Bar -->
-              <div class="absolute top-0 left-0 right-0 h-1 bg-gray-100 dark:bg-gray-700">
-                <div
-                  class="h-full bg-gradient-to-r from-purple-500 to-blue-500 transition-all duration-500"
-                  :style="{ width: progressPercentage + '%' }"
-                />
-              </div>
-
-              <!-- Header Content -->
-              <div class="px-8 py-6 border-b border-gray-100 dark:border-gray-700">
-                <div class="flex items-center justify-between">
-                  <div>
-                    <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
-                      Create Video Comparison
-                    </h2>
-                    <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                      {{ stepDescription }}
-                    </p>
-                  </div>
-                  <button
-                    class="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-all"
-                    @click="closeModal"
+            <!-- Header. The step is a mono token ("2 / 3") instead of a
+                 gradient progress bar plus a row of numbered circles. -->
+            <div
+              class="flex shrink-0 items-start justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-white/10"
+            >
+              <div class="min-w-0">
+                <div class="flex items-baseline gap-2">
+                  <h2 class="text-[13px] font-semibold tracking-tight text-gray-900 dark:text-white">
+                    New comparison
+                  </h2>
+                  <span
+                    v-if="currentStep !== 'creating'"
+                    class="font-mono text-[10px] tracking-wider text-gray-500 dark:text-gray-500"
                   >
-                    <svg
-                      class="w-6 h-6"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M6 18L18 6M6 6l12 12"
-                      />
-                    </svg>
-                  </button>
+                    {{ currentStepIndex + 1 }} / {{ steps.length }}
+                  </span>
                 </div>
-
-                <!-- Step Indicators -->
-                <div class="flex items-center mt-6 space-x-4">
-                  <div
-                    v-for="(step, index) in steps"
-                    :key="step.id"
-                    class="flex items-center"
-                  >
-                    <div
-                      :class="[
-                        'flex items-center justify-center w-10 h-10 rounded-full transition-all',
-                        currentStepIndex === index
-                          ? 'bg-gradient-to-r from-purple-500 to-blue-500 text-white shadow-lg scale-110'
-                          : currentStepIndex > index
-                            ? 'bg-green-500 text-white'
-                            : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400',
-                      ]"
-                    >
-                      <svg
-                        v-if="currentStepIndex > index"
-                        class="w-5 h-5"
-                        fill="currentColor"
-                        viewBox="0 0 20 20"
-                      >
-                        <path
-                          fill-rule="evenodd"
-                          d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                          clip-rule="evenodd"
-                        />
-                      </svg>
-                      <span
-                        v-else
-                        class="font-semibold"
-                      >{{ index + 1 }}</span>
-                    </div>
-                    <div
-                      v-if="index < steps.length - 1"
-                      :class="[
-                        'w-24 h-0.5 ml-4 transition-all',
-                        currentStepIndex > index
-                          ? 'bg-green-500'
-                          : 'bg-gray-200',
-                      ]"
-                    />
-                  </div>
-                </div>
+                <p class="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                  {{ stepDescription }}
+                </p>
               </div>
+              <button
+                type="button"
+                class="shrink-0 rounded p-1 text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
+                @click="closeModal"
+              >
+                <svg
+                  class="h-3.5 w-3.5"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M18 6 6 18M6 6l12 12"
+                  />
+                </svg>
+              </button>
             </div>
 
             <!-- Content Area -->
-            <div class="flex-1 p-8 overflow-y-auto min-h-0">
+            <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4">
               <!-- Loading State -->
-              <div
+              <p
                 v-if="isLoading"
-                class="flex flex-col items-center justify-center py-16"
+                class="py-10 text-center text-[12px] text-gray-600 dark:text-gray-400"
               >
-                <div class="relative">
-                  <div
-                    class="animate-spin rounded-full h-16 w-16 border-4 border-purple-200"
-                  />
-                  <div
-                    class="absolute top-0 animate-spin rounded-full h-16 w-16 border-4 border-transparent border-t-purple-500"
-                  />
-                </div>
-                <p class="mt-4 text-gray-600">
-                  Loading your videos...
-                </p>
-              </div>
+                Loading your videos…
+              </p>
 
               <!-- Error State -->
               <div
                 v-else-if="error"
-                class="flex flex-col items-center justify-center py-16"
+                class="py-10 text-center"
               >
-                <div class="text-red-500 mb-4">
-                  <svg
-                    class="w-16 h-16"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 3 1.732 3z"
-                    />
-                  </svg>
-                </div>
-                <p class="text-gray-900 dark:text-white font-medium">
+                <p class="text-[12px] text-red-600 dark:text-red-400">
                   {{ error }}
                 </p>
                 <button
-                  class="mt-4 px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                  type="button"
+                  class="mt-4 rounded bg-gray-900 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white transition-colors hover:bg-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600"
                   @click="loadVideos"
                 >
-                  Try Again
+                  Try again
                 </button>
               </div>
 
               <!-- Empty State -->
               <div
                 v-else-if="availableVideos.length === 0"
-                class="flex flex-col items-center justify-center py-16"
+                class="py-10 text-center"
               >
-                <div class="text-gray-300 mb-4">
-                  <svg
-                    class="w-20 h-20"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="1.5"
-                      d="M7 4v16M17 4v16M3 8h4m10 0h4M3 16h4m10 0h4"
-                    />
-                  </svg>
-                </div>
-                <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                <p class="text-[12px] text-gray-600 dark:text-gray-400">
                   No videos available
-                </h3>
-                <p class="text-gray-600 dark:text-gray-400 text-center max-w-md">
-                  You need at least two videos to create a comparison. Videos
-                  appear here once they have been processed by the pipeline.
+                </p>
+                <p class="mx-auto mt-1.5 max-w-xs text-[11px] text-gray-500 dark:text-gray-500">
+                  You need at least two videos to create a comparison. Videos appear
+                  here once they have been processed by the pipeline.
                 </p>
               </div>
 
               <!-- Step 1: Select Video A -->
               <div v-else-if="currentStep === 'select-video-a'">
-                <div class="mb-6">
-                  <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                    Select the first video
-                  </h3>
-                  <p class="text-gray-600 dark:text-gray-400">
-                    Choose the video you want to display on the left side of the
-                    comparison
-                  </p>
-                </div>
+                <input
+                  v-model="searchQuery"
+                  type="text"
+                  placeholder="Search videos…"
+                  class="mb-2 w-full rounded border border-gray-200 bg-transparent px-2.5 py-1.5 text-[12px] leading-snug text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-400 dark:border-white/10 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-white/25"
+                >
 
-                <!-- Search Bar -->
-                <div class="mb-6">
-                  <div class="relative">
-                    <input
-                      v-model="searchQuery"
-                      type="text"
-                      placeholder="Search videos..."
-                      class="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all"
+                <!-- Same row shape as the dashboard's video list. -->
+                <button
+                  v-for="video in filteredVideosForA"
+                  :key="video.id"
+                  type="button"
+                  class="flex w-full items-center gap-3 rounded px-2 py-2 text-left transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]"
+                  @click="selectVideoA(video)"
+                >
+                  <span class="h-9 w-16 shrink-0 overflow-hidden rounded bg-gray-100 dark:bg-white/5">
+                    <img
+                      v-if="video.thumbnailUrl"
+                      :src="video.thumbnailUrl"
+                      :alt="video.title"
+                      class="h-full w-full object-cover"
                     >
-                    <svg
-                      class="absolute left-4 top-3.5 w-5 h-5 text-gray-400"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
+                  </span>
+                  <span class="min-w-0 flex-1">
+                    <span
+                      class="block truncate text-[13px] font-medium tracking-tight text-gray-900 dark:text-white"
+                    >{{ video.title }}</span>
+                    <span
+                      class="mt-1 block font-mono text-[10px] tracking-wider text-gray-500 dark:text-gray-400"
                     >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                      />
-                    </svg>
-                  </div>
-                </div>
-
-                <!-- Video Grid -->
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div
-                    v-for="video in filteredVideosForA"
-                    :key="video.id"
-                    class="group relative bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden hover:border-purple-400 dark:hover:border-purple-400 hover:shadow-xl transition-all cursor-pointer"
-                    @click="selectVideoA(video)"
-                  >
-                    <!-- Thumbnail -->
-                    <div
-                      class="aspect-video bg-gray-100 relative overflow-hidden"
-                    >
-                      <img
-                        v-if="video.thumbnailUrl"
-                        :src="video.thumbnailUrl"
-                        :alt="video.title"
-                        class="w-full h-full object-cover"
-                      >
-                      <div
-                        v-else
-                        class="w-full h-full flex items-center justify-center"
-                      >
-                        <svg
-                          class="w-16 h-16 text-gray-300"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2"
-                            d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-                          />
-                        </svg>
-                      </div>
-                      <!-- Overlay on hover -->
-                      <div
-                        class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end"
-                      >
-                        <div class="p-4 text-white">
-                          <p class="text-sm font-medium">
-                            Click to select
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                    <!-- Video Info -->
-                    <div class="p-4">
-                      <h4 class="font-semibold text-gray-900 truncate">
-                        {{ video.title }}
-                      </h4>
-                      <div
-                        class="flex items-center gap-4 mt-2 text-sm text-gray-500"
-                      >
-                        <span class="flex items-center gap-1">
-                          <svg
-                            class="w-4 h-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              stroke-linecap="round"
-                              stroke-linejoin="round"
-                              stroke-width="2"
-                              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                            />
-                          </svg>
-                          {{ formatDuration(video.duration) }}
-                        </span>
-                        <span class="flex items-center gap-1">
-                          <svg
-                            class="w-4 h-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              stroke-linecap="round"
-                              stroke-linejoin="round"
-                              stroke-width="2"
-                              d="M13 10V3L4 14h7v7l9-11h-7z"
-                            />
-                          </svg>
-                          {{ video.fps || '—' }} FPS
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                      {{ formatDuration(video.duration) }} {{ video.fps || '—' }}FPS
+                    </span>
+                  </span>
+                </button>
               </div>
 
               <!-- Step 2: Select Video B -->
               <div v-else-if="currentStep === 'select-video-b'">
                 <!-- Selected Video A Preview -->
                 <div
-                  class="mb-6 p-4 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 border border-purple-200 dark:border-purple-800 rounded-xl"
+                  class="mb-3 flex items-center gap-2 border-b border-gray-200 pb-3 dark:border-white/10"
                 >
-                  <div class="flex items-center gap-4">
-                    <div class="flex-shrink-0">
-                      <div
-                        class="w-20 h-14 bg-white dark:bg-gray-800 rounded-lg overflow-hidden shadow-md"
-                      >
-                        <img
-                          v-if="selectedVideoA?.thumbnailUrl"
-                          :src="selectedVideoA.thumbnailUrl"
-                          :alt="selectedVideoA.title"
-                          class="w-full h-full object-cover"
-                        >
-                        <div
-                          v-else
-                          class="w-full h-full flex items-center justify-center bg-gray-100 dark:bg-gray-900"
-                        >
-                          <svg
-                            class="w-8 h-8 text-gray-400"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              stroke-linecap="round"
-                              stroke-linejoin="round"
-                              stroke-width="2"
-                              d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-                            />
-                          </svg>
-                        </div>
-                      </div>
-                    </div>
-                    <div class="flex-1">
-                      <p class="text-sm font-medium text-purple-900 dark:text-purple-300">
-                        Video A (Left)
-                      </p>
-                      <p class="text-purple-700 dark:text-purple-400 font-semibold">
-                        {{ selectedVideoA?.title }}
-                      </p>
-                    </div>
-                  </div>
+                  <span
+                    class="font-mono text-[10px] tracking-wider text-gray-500 dark:text-gray-500"
+                  >A</span>
+                  <span class="truncate text-[12px] text-gray-700 dark:text-gray-200">
+                    {{ selectedVideoA?.title }}
+                  </span>
                 </div>
 
-                <div class="mb-6">
-                  <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                    Select the second video
-                  </h3>
-                  <p class="text-gray-600 dark:text-gray-400">
-                    Choose the video you want to display on the right side of
-                    the comparison
-                  </p>
-                </div>
+                <input
+                  v-model="searchQuery"
+                  type="text"
+                  placeholder="Search videos…"
+                  class="mb-2 w-full rounded border border-gray-200 bg-transparent px-2.5 py-1.5 text-[12px] leading-snug text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-400 dark:border-white/10 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-white/25"
+                >
 
-                <!-- Search Bar -->
-                <div class="mb-6">
-                  <div class="relative">
-                    <input
-                      v-model="searchQuery"
-                      type="text"
-                      placeholder="Search videos..."
-                      class="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all"
+                <button
+                  v-for="video in filteredVideosForB"
+                  :key="video.id"
+                  type="button"
+                  class="flex w-full items-center gap-3 rounded px-2 py-2 text-left transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]"
+                  @click="selectVideoB(video)"
+                >
+                  <span class="h-9 w-16 shrink-0 overflow-hidden rounded bg-gray-100 dark:bg-white/5">
+                    <img
+                      v-if="video.thumbnailUrl"
+                      :src="video.thumbnailUrl"
+                      :alt="video.title"
+                      class="h-full w-full object-cover"
                     >
-                    <svg
-                      class="absolute left-4 top-3.5 w-5 h-5 text-gray-400"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
+                  </span>
+                  <span class="min-w-0 flex-1">
+                    <span
+                      class="block truncate text-[13px] font-medium tracking-tight text-gray-900 dark:text-white"
+                    >{{ video.title }}</span>
+                    <span
+                      class="mt-1 block font-mono text-[10px] tracking-wider text-gray-500 dark:text-gray-400"
                     >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                      />
-                    </svg>
-                  </div>
-                </div>
-
-                <!-- Video Grid -->
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div
-                    v-for="video in filteredVideosForB"
-                    :key="video.id"
-                    class="group relative bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden hover:border-purple-400 dark:hover:border-purple-400 hover:shadow-xl transition-all cursor-pointer"
-                    @click="selectVideoB(video)"
-                  >
-                    <!-- Thumbnail -->
-                    <div
-                      class="aspect-video bg-gray-100 relative overflow-hidden"
-                    >
-                      <img
-                        v-if="video.thumbnailUrl"
-                        :src="video.thumbnailUrl"
-                        :alt="video.title"
-                        class="w-full h-full object-cover"
-                      >
-                      <div
-                        v-else
-                        class="w-full h-full flex items-center justify-center"
-                      >
-                        <svg
-                          class="w-16 h-16 text-gray-300"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2"
-                            d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-                          />
-                        </svg>
-                      </div>
-                      <!-- Overlay on hover -->
-                      <div
-                        class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end"
-                      >
-                        <div class="p-4 text-white">
-                          <p class="text-sm font-medium">
-                            Click to select
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                    <!-- Video Info -->
-                    <div class="p-4">
-                      <h4 class="font-semibold text-gray-900 truncate">
-                        {{ video.title }}
-                      </h4>
-                      <div
-                        class="flex items-center gap-4 mt-2 text-sm text-gray-500"
-                      >
-                        <span class="flex items-center gap-1">
-                          <svg
-                            class="w-4 h-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              stroke-linecap="round"
-                              stroke-linejoin="round"
-                              stroke-width="2"
-                              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                            />
-                          </svg>
-                          {{ formatDuration(video.duration) }}
-                        </span>
-                        <span class="flex items-center gap-1">
-                          <svg
-                            class="w-4 h-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              stroke-linecap="round"
-                              stroke-linejoin="round"
-                              stroke-width="2"
-                              d="M13 10V3L4 14h7v7l9-11h-7z"
-                            />
-                          </svg>
-                          {{ video.fps || '—' }} FPS
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                      {{ formatDuration(video.duration) }} {{ video.fps || '—' }}FPS
+                    </span>
+                  </span>
+                </button>
               </div>
 
               <!-- Step 3: Details -->
               <div v-else-if="currentStep === 'details'">
                 <!-- Selected Videos Preview -->
-                <div class="grid grid-cols-2 gap-4 mb-8">
+                <div class="grid grid-cols-2 gap-3">
                   <div
-                    class="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 border border-purple-200 dark:border-purple-800 rounded-xl p-4"
+                    v-for="side in [
+                      { key: 'A', video: selectedVideoA },
+                      { key: 'B', video: selectedVideoB },
+                    ]"
+                    :key="side.key"
                   >
-                    <p class="text-sm font-medium text-purple-900 dark:text-purple-300 mb-2">
-                      Video A (Left)
+                    <p
+                      class="mb-1.5 font-mono text-[10px] tracking-wider text-gray-500 dark:text-gray-500"
+                    >
+                      {{ side.key }}
                     </p>
-                    <div class="bg-white dark:bg-gray-800 rounded-lg overflow-hidden shadow-md">
-                      <div class="aspect-video bg-gray-100 dark:bg-gray-900">
-                        <img
-                          v-if="selectedVideoA?.thumbnailUrl"
-                          :src="selectedVideoA.thumbnailUrl"
-                          :alt="selectedVideoA.title"
-                          class="w-full h-full object-cover"
-                        >
-                      </div>
-                      <div class="p-3">
-                        <p class="font-semibold text-gray-900 dark:text-white text-sm truncate">
-                          {{ selectedVideoA?.title }}
-                        </p>
-                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                          {{ formatDuration(selectedVideoA?.duration || 0) }} •
-                          {{ selectedVideoA?.fps || '—' }} FPS
-                        </p>
-                      </div>
+                    <div class="aspect-video overflow-hidden rounded bg-gray-100 dark:bg-white/5">
+                      <img
+                        v-if="side.video?.thumbnailUrl"
+                        :src="side.video.thumbnailUrl"
+                        :alt="side.video.title"
+                        class="h-full w-full object-cover"
+                      >
                     </div>
-                  </div>
-
-                  <div
-                    class="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4"
-                  >
-                    <p class="text-sm font-medium text-blue-900 dark:text-blue-300 mb-2">
-                      Video B (Right)
+                    <p
+                      class="mt-1.5 truncate text-[12px] font-medium tracking-tight text-gray-900 dark:text-white"
+                    >
+                      {{ side.video?.title }}
                     </p>
-                    <div class="bg-white dark:bg-gray-800 rounded-lg overflow-hidden shadow-md">
-                      <div class="aspect-video bg-gray-100 dark:bg-gray-900">
-                        <img
-                          v-if="selectedVideoB?.thumbnailUrl"
-                          :src="selectedVideoB.thumbnailUrl"
-                          :alt="selectedVideoB.title"
-                          class="w-full h-full object-cover"
-                        >
-                      </div>
-                      <div class="p-3">
-                        <p class="font-semibold text-gray-900 dark:text-white text-sm truncate">
-                          {{ selectedVideoB?.title }}
-                        </p>
-                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                          {{ formatDuration(selectedVideoB?.duration || 0) }} •
-                          {{ selectedVideoB?.fps || '—' }} FPS
-                        </p>
-                      </div>
-                    </div>
+                    <p class="mt-1 font-mono text-[10px] tracking-wider text-gray-500 dark:text-gray-400">
+                      {{ formatDuration(side.video?.duration || 0) }}
+                      {{ side.video?.fps || '—' }}FPS
+                    </p>
                   </div>
                 </div>
 
                 <!-- Form -->
-                <div class="space-y-6">
+                <div class="mt-5 space-y-4">
                   <div>
-                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Comparison Title *
+                    <label
+                      class="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-500"
+                    >
+                      Title *
                     </label>
                     <input
                       v-model="comparisonTitle"
                       type="text"
-                      placeholder="Enter a descriptive title for this comparison"
-                      class="w-full px-4 py-3 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all placeholder-gray-500 dark:placeholder-gray-400"
+                      placeholder="Describe this comparison"
+                      class="w-full rounded border border-gray-200 bg-transparent px-2.5 py-1.5 text-[12px] leading-snug text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-400 dark:border-white/10 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-white/25"
                       @keydown.enter="createComparison"
                     >
                   </div>
 
                   <div>
-                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Description (Optional)
+                    <label
+                      class="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-500"
+                    >
+                      Description
                     </label>
                     <textarea
                       v-model="comparisonDescription"
                       rows="3"
-                      placeholder="Add notes about what you're comparing..."
-                      class="w-full px-4 py-3 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all resize-none placeholder-gray-500 dark:placeholder-gray-400"
+                      placeholder="Optional"
+                      class="w-full resize-y rounded border border-gray-200 bg-transparent px-2.5 py-1.5 text-[12px] leading-snug text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-400 dark:border-white/10 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-white/25"
                     />
                   </div>
                 </div>
               </div>
 
               <!-- Creating State -->
-              <div v-else-if="currentStep === 'creating'">
-                <div class="flex flex-col items-center justify-center py-16">
-                  <div class="relative mb-8">
-                    <div class="animate-pulse">
-                      <svg
-                        class="w-24 h-24 text-purple-500"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                          stroke-width="2"
-                          d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                        />
-                      </svg>
-                    </div>
-                  </div>
-                  <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                    Creating your comparison...
-                  </h3>
-                  <p class="text-gray-600 dark:text-gray-400">
-                    This will just take a moment
-                  </p>
-                </div>
-              </div>
+              <p
+                v-else-if="currentStep === 'creating'"
+                class="py-10 text-center text-[12px] text-gray-600 dark:text-gray-400"
+              >
+                Creating your comparison…
+              </p>
             </div>
 
             <!-- Footer Actions -->
             <div
-              class="flex-shrink-0 px-8 py-4 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 rounded-b-2xl"
+              class="flex shrink-0 items-center justify-between border-t border-gray-200 px-4 py-3 dark:border-white/10"
             >
-              <div class="flex items-center justify-between">
-                <button
-                  v-if="
-                    currentStep !== 'select-video-a' &&
-                      currentStep !== 'creating'
-                  "
-                  class="px-6 py-2.5 text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                  @click="goBack"
-                >
-                  ← Back
-                </button>
-                <div v-else />
+              <button
+                v-if="currentStep !== 'select-video-a' && currentStep !== 'creating'"
+                type="button"
+                class="rounded px-1 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-300"
+                @click="goBack"
+              >
+                Back
+              </button>
+              <div v-else />
 
-                <div class="flex items-center gap-3">
-                  <button
-                    class="px-6 py-2.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
-                    @click="closeModal"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    v-if="currentStep === 'details'"
-                    :disabled="!comparisonTitle.trim() || isCreating"
-                    class="px-8 py-2.5 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:shadow-lg transform hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-                    @click="createComparison"
-                  >
-                    <span v-if="!isCreating">Create Comparison</span>
-                    <span
-                      v-else
-                      class="flex items-center gap-2"
-                    >
-                      <svg
-                        class="animate-spin h-4 w-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                      >
-                        <circle
-                          class="opacity-25"
-                          cx="12"
-                          cy="12"
-                          r="10"
-                          stroke="currentColor"
-                          stroke-width="4"
-                        />
-                        <path
-                          class="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                        />
-                      </svg>
-                      Creating...
-                    </span>
-                  </button>
-                </div>
+              <div class="flex items-center gap-3">
+                <button
+                  type="button"
+                  class="rounded px-1 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-300"
+                  @click="closeModal"
+                >
+                  Cancel
+                </button>
+                <button
+                  v-if="currentStep === 'details'"
+                  type="button"
+                  :disabled="!comparisonTitle.trim() || isCreating"
+                  class="rounded bg-gray-900 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white transition-colors hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-gray-700 dark:hover:bg-gray-600"
+                  @click="createComparison"
+                >
+                  {{ isCreating ? 'Creating…' : 'Create' }}
+                </button>
               </div>
             </div>
           </div>
@@ -723,11 +350,6 @@ const steps = [
 // Computed
 const currentStepIndex = computed(() => {
   return steps.findIndex((step) => step.id === currentStep.value);
-});
-
-const progressPercentage = computed(() => {
-  if (currentStep.value === 'creating') return 100;
-  return ((currentStepIndex.value + 1) / steps.length) * 100;
 });
 
 const stepDescription = computed(() => {

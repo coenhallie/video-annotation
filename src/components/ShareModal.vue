@@ -1,278 +1,187 @@
 <template>
   <div
     v-if="isVisible"
-    class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
     @click="closeModal"
   >
     <div
-      class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4"
+      class="w-full max-w-sm rounded border border-gray-200 bg-white shadow-xl dark:border-white/10 dark:bg-gray-900"
       @click.stop
     >
       <!-- Modal Header -->
       <div
-        class="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700"
+        class="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-white/10"
       >
-        <h2 class="text-xl font-semibold text-gray-900 dark:text-white">
+        <h2 class="text-[13px] font-semibold tracking-tight text-gray-900 dark:text-white">
           {{ modalTitle }}
         </h2>
         <button
-          class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+          type="button"
+          class="rounded p-1 text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
           @click="closeModal"
         >
           <svg
-            class="w-6 h-6"
+            class="h-3.5 w-3.5"
+            viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            viewBox="0 0 24 24"
+            stroke-width="2"
           >
             <path
               stroke-linecap="round"
               stroke-linejoin="round"
-              stroke-width="2"
-              d="M6 18L18 6M6 6l12 12"
+              d="M18 6 6 18M6 6l12 12"
             />
           </svg>
         </button>
       </div>
 
-      <!-- Modal Content -->
-      <div class="p-6">
+      <!-- Modal Content. The four states used to be announced by a big
+           coloured glyph each; the words already say which one you are in. -->
+      <div class="px-4 py-4">
         <!-- Loading State -->
-        <div
+        <p
           v-if="isGenerating"
-          class="text-center py-8"
+          class="py-6 text-center text-[12px] text-gray-600 dark:text-gray-400"
         >
-          <div
-            class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"
-          />
-          <p class="text-gray-600 dark:text-gray-400">
-            Generating shareable link...
-          </p>
-        </div>
+          Generating shareable link…
+        </p>
 
         <!-- Error State -->
-        <div
-          v-else-if="error"
-          class="text-center py-8"
-        >
-          <div class="text-red-600 dark:text-red-400 mb-4">
-            <svg
-              class="w-12 h-12 mx-auto"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"
-              />
-            </svg>
-          </div>
-          <p class="text-gray-600 dark:text-gray-400 mb-4">
+        <div v-else-if="error">
+          <p class="text-[12px] leading-relaxed text-red-600 dark:text-red-400">
             {{ error }}
           </p>
           <button
-            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            type="button"
+            class="mt-4 rounded bg-gray-900 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white transition-colors hover:bg-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600"
             @click="generateShareLink"
           >
-            Try Again
+            Try again
           </button>
         </div>
 
         <!-- Success State -->
-        <div
-          v-else-if="shareUrl"
-          class="space-y-4"
-        >
-          <div class="text-center mb-4">
-            <div class="text-green-600 dark:text-green-400 mb-2">
-              <svg
-                class="w-12 h-12 mx-auto"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-            </div>
-            <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">
-              Share Link Generated!
-            </h3>
-            <p class="text-sm text-gray-600 dark:text-gray-400">
-              {{ shareDescription }}
-            </p>
-          </div>
+        <div v-else-if="shareUrl">
+          <p class="text-[12px] leading-relaxed text-gray-600 dark:text-gray-400">
+            {{ shareDescription }}
+          </p>
 
           <!-- Share URL Display -->
-          <div class="bg-gray-50 dark:bg-gray-900 rounded-lg p-4">
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Shareable Link
-            </label>
-            <div class="flex items-center space-x-2">
-              <input
-                ref="shareUrlInput"
-                :value="shareUrl"
-                readonly
-                class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                @focus="logger.debug('[ShareModal] input focus')"
-              >
-              <button
-                class="px-3 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors flex items-center space-x-1"
-                :class="{ 'bg-green-600 hover:bg-green-700': copied }"
-                @click="copyShareUrl"
-              >
-                <svg
-                  v-if="!copied"
-                  class="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                  />
-                </svg>
-                <svg
-                  v-else
-                  class="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-                <span>{{ copied ? 'Copied!' : 'Copy' }}</span>
-              </button>
-            </div>
+          <label
+            class="mb-1.5 mt-4 block text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-500"
+          >
+            Shareable link
+          </label>
+          <div class="flex items-center gap-2">
+            <input
+              ref="shareUrlInput"
+              :value="shareUrl"
+              readonly
+              class="min-w-0 flex-1 rounded border border-gray-200 bg-transparent px-2.5 py-1.5 font-mono text-[11px] tracking-wider text-gray-900 outline-none transition-colors focus:border-gray-400 dark:border-white/10 dark:text-gray-100 dark:focus:border-white/25"
+              @focus="logger.debug('[ShareModal] input focus')"
+            >
+            <button
+              type="button"
+              class="shrink-0 rounded px-2 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] transition-colors"
+              :class="
+                copied
+                  ? 'text-gray-900 dark:text-white'
+                  : 'text-gray-500 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-300'
+              "
+              @click="copyShareUrl"
+            >
+              {{ copied ? 'Copied' : 'Copy' }}
+            </button>
           </div>
         </div>
 
         <!-- Initial State -->
-        <div
-          v-else
-          class="space-y-6"
-        >
-          <div class="text-center">
-            <div class="text-blue-600 dark:text-blue-400 mb-4">
-              <svg
-                class="w-16 h-16 mx-auto"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z"
-                />
-              </svg>
-            </div>
-            <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">
-              {{ modalTitle }}
-            </h3>
-            <p class="text-gray-600 dark:text-gray-400 mb-6">
-              Configure sharing permissions for your {{ shareType === 'comparison' ? 'comparison video' : 'video' }}
-            </p>
-          </div>
+        <div v-else>
+          <p class="text-[12px] leading-relaxed text-gray-600 dark:text-gray-400">
+            Configure sharing permissions for your
+            {{ shareType === 'comparison' ? 'comparison video' : 'video' }}.
+          </p>
 
           <!-- Annotation Permission Options -->
-          <div class="bg-gray-50 dark:bg-gray-900 rounded-lg p-4">
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-              Annotation Permissions
+          <p
+            class="mb-2 mt-5 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-500"
+          >
+            Annotation permissions
+          </p>
+          <div class="space-y-1">
+            <!-- View-only option -->
+            <label
+              class="flex cursor-pointer items-start gap-2.5 rounded px-2 py-2 transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]"
+            >
+              <input
+                v-model="allowAnnotations"
+                type="radio"
+                :value="false"
+                class="mt-0.5 h-3.5 w-3.5 shrink-0 accent-gray-900 dark:accent-gray-400"
+              >
+              <span class="min-w-0 flex-1">
+                <span class="flex items-baseline gap-2">
+                  <span class="text-[12px] font-medium text-gray-900 dark:text-white">
+                    View-only access
+                  </span>
+                  <span
+                    class="font-mono text-[10px] tracking-wider text-gray-500 dark:text-gray-500"
+                  >DEFAULT</span>
+                </span>
+                <span class="mt-1 block text-[11px] text-gray-500 dark:text-gray-400">
+                  Anyone with the link can view without signing in. No annotation
+                  capabilities.
+                </span>
+              </span>
             </label>
-            <div class="space-y-3">
-              <!-- View-only option -->
-              <label class="flex items-start cursor-pointer group">
-                <input
-                  v-model="allowAnnotations"
-                  type="radio"
-                  :value="false"
-                  class="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600 dark:bg-gray-700"
-                >
-                <div class="ml-3 flex-1">
-                  <div class="flex items-center">
-                    <span class="text-sm font-medium text-gray-900 dark:text-white group-hover:text-blue-700 dark:group-hover:text-blue-400">
-                      View-only access
-                    </span>
-                    <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200">
-                      Default
-                    </span>
-                  </div>
-                  <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    Anyone with the link can view without signing in. No annotation capabilities.
-                  </p>
-                </div>
-              </label>
 
-              <!-- Annotation-enabled option -->
-              <label class="flex items-start cursor-pointer group">
-                <input
-                  v-model="allowAnnotations"
-                  type="radio"
-                  :value="true"
-                  class="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600 dark:bg-gray-700"
-                >
-                <div class="ml-3 flex-1">
-                  <div class="flex items-center">
-                    <span class="text-sm font-medium text-gray-900 dark:text-white group-hover:text-blue-700 dark:group-hover:text-blue-400">
-                      Allow annotations
-                    </span>
-                    <svg
-                      class="ml-1.5 w-4 h-4 text-amber-600"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-                      />
-                    </svg>
-                  </div>
-                  <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    Recipients must sign in to view and can add annotations.
-                  </p>
-                </div>
-              </label>
-            </div>
+            <!-- Annotation-enabled option -->
+            <label
+              class="flex cursor-pointer items-start gap-2.5 rounded px-2 py-2 transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]"
+            >
+              <input
+                v-model="allowAnnotations"
+                type="radio"
+                :value="true"
+                class="mt-0.5 h-3.5 w-3.5 shrink-0 accent-gray-900 dark:accent-gray-400"
+              >
+              <span class="min-w-0 flex-1">
+                <span class="flex items-baseline gap-2">
+                  <span class="text-[12px] font-medium text-gray-900 dark:text-white">
+                    Allow annotations
+                  </span>
+                  <!-- The sign-in requirement is the consequence people miss,
+                       so it stays a token rather than a padlock glyph. -->
+                  <span
+                    class="font-mono text-[10px] tracking-wider text-gray-500 dark:text-gray-500"
+                  >SIGN-IN</span>
+                </span>
+                <span class="mt-1 block text-[11px] text-gray-500 dark:text-gray-400">
+                  Recipients must sign in to view and can add annotations.
+                </span>
+              </span>
+            </label>
           </div>
 
           <!-- Generate Button -->
-          <div class="text-center">
-            <button
-              class="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
-              @click="generateShareLink"
-            >
-              Generate Share Link
-            </button>
-          </div>
+          <button
+            type="button"
+            class="mt-5 w-full rounded bg-gray-900 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-white transition-colors hover:bg-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600"
+            @click="generateShareLink"
+          >
+            Generate share link
+          </button>
         </div>
       </div>
 
       <!-- Modal Footer -->
       <div
-        class="flex items-center justify-end space-x-3 p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900"
+        class="flex items-center justify-end border-t border-gray-200 px-4 py-3 dark:border-white/10"
       >
         <button
-          class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+          type="button"
+          class="rounded px-1 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-300"
           @click="closeModal"
         >
           Close

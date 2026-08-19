@@ -69,13 +69,9 @@ const needsDisplayName = computed(() => {
   return props.isAnonymous && !props.anonymousSession;
 });
 
-const formTitle = computed(() => {
-  return !!props.editingComment ? 'Edit Comment' : 'Add Comment';
-});
-
 const submitButtonText = computed(() => {
-  if (isSubmitting.value) return 'Submitting...';
-  return !!props.editingComment ? 'Update Comment' : 'Post Comment';
+  if (isSubmitting.value) return 'Posting';
+  return props.editingComment ? 'Update' : 'Post';
 });
 
 // Methods
@@ -146,6 +142,13 @@ const handleSubmit = async () => {
 };
 
 const handleCancel = () => {
+  // The composer is always on screen now, so cancelling has to clear the draft
+  // itself; there is no unmount to do it. When editing, the parent clears
+  // `editingComment` and the watcher below resets the field a second time,
+  // which is harmless.
+  content.value = '';
+  error.value = null;
+  emit('stop-typing');
   emit('cancel');
 };
 
@@ -182,228 +185,68 @@ initializeForm();
 </script>
 
 <template>
-  <div class="comment-form p-4 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-    <!-- Form Header -->
-    <div class="flex justify-between items-center mb-3">
-      <h5 class="text-sm font-medium text-gray-900 dark:text-gray-100">
-        {{ formTitle }}
-      </h5>
-      <button
-        class="btn-ghost p-1 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
-        :disabled="isSubmitting"
-        title="Cancel"
-        @click="handleCancel"
-      >
-        <svg
-          class="icon icon-sm"
-          viewBox="0 0 24 24"
-        >
-          <line
-            x1="18"
-            y1="6"
-            x2="6"
-            y2="18"
-          />
-          <line
-            x1="6"
-            y1="6"
-            x2="18"
-            y2="18"
-          />
-        </svg>
-      </button>
-    </div>
-
-    <!-- Error Message -->
-    <div
+  <div>
+    <p
       v-if="error"
-      class="mb-3 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md"
+      class="mb-1.5 text-[11px] text-red-600 dark:text-red-400"
     >
-      <div class="flex items-center">
-        <svg
-          class="icon icon-sm text-red-400 dark:text-red-500 mr-2"
-          viewBox="0 0 24 24"
-        >
-          <circle
-            cx="12"
-            cy="12"
-            r="10"
-          />
-          <line
-            x1="15"
-            y1="9"
-            x2="9"
-            y2="15"
-          />
-          <line
-            x1="9"
-            y1="9"
-            x2="15"
-            y2="15"
-          />
-        </svg>
-        <p class="text-sm text-red-700 dark:text-red-300">
-          {{ error }}
-        </p>
-      </div>
-    </div>
+      {{ error }}
+    </p>
 
-    <!-- Display Name Input (for anonymous users without session) -->
-    <div
+    <input
       v-if="needsDisplayName"
-      class="mb-3"
+      id="display-name"
+      ref="displayNameRef"
+      v-model="displayName"
+      type="text"
+      placeholder="Your name"
+      maxlength="50"
+      :disabled="isSubmitting"
+      class="mb-1.5 w-full rounded border border-gray-200 bg-transparent px-2.5 py-1.5 text-[12px] text-gray-800 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-400 disabled:opacity-50 dark:border-white/10 dark:text-gray-200 dark:placeholder:text-gray-500 dark:focus:border-white/25"
     >
-      <label
-        for="display-name"
-        class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-      >
-        Display Name
-      </label>
-      <input
-        id="display-name"
-        ref="displayNameRef"
-        v-model="displayName"
-        type="text"
-        class="form-input bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100"
-        placeholder="Enter your display name"
-        maxlength="50"
-        :disabled="isSubmitting"
-      >
-      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-        This name will be shown with your comment
-      </p>
-    </div>
 
-    <!-- Content Textarea -->
-    <div class="mb-3">
-      <label
-        for="comment-content"
-        class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-      >
-        Comment
-      </label>
-      <textarea
-        id="comment-content"
-        ref="textareaRef"
-        v-model="content"
-        class="form-textarea bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100"
-        rows="3"
-        placeholder="Write your comment..."
-        :maxlength="MAX_CONTENT_LENGTH"
-        :disabled="isSubmitting"
-        @input="handleTyping"
-        @blur="handleStopTyping"
-      />
+    <textarea
+      id="comment-content"
+      ref="textareaRef"
+      v-model="content"
+      rows="2"
+      :placeholder="editingComment ? 'Edit your comment' : 'Write a comment\u2026'"
+      :maxlength="MAX_CONTENT_LENGTH"
+      :disabled="isSubmitting"
+      class="w-full resize-none rounded border border-gray-200 bg-transparent px-2.5 py-1.5 text-[12px] leading-snug text-gray-800 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-400 disabled:opacity-50 dark:border-white/10 dark:text-gray-200 dark:placeholder:text-gray-500 dark:focus:border-white/25"
+      @input="handleTyping"
+      @blur="handleStopTyping"
+      @keydown.enter.exact.prevent="handleSubmit"
+    />
 
-      <!-- Character Count -->
-      <div class="flex justify-end items-center mt-1">
-        <span :class="['text-xs', characterCountClass]">
-          {{ characterCount }}/{{ MAX_CONTENT_LENGTH }}
-        </span>
-      </div>
-    </div>
-
-    <!-- Form Actions -->
-    <div class="flex justify-end space-x-2">
+    <!-- The actions stay out of the way until there is something to do with
+         them: an empty composer is one field and nothing else. -->
+    <div
+      v-if="content.length > 0 || editingComment"
+      class="mt-1.5 flex items-center gap-3"
+    >
       <button
-        class="btn btn-secondary dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 dark:border-gray-600"
+        type="button"
+        class="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-900 transition-opacity hover:opacity-70 disabled:opacity-40 dark:text-white"
+        :disabled="!canSubmit"
+        @click="handleSubmit"
+      >
+        {{ submitButtonText }}
+      </button>
+      <button
+        type="button"
+        class="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-300"
         :disabled="isSubmitting"
         @click="handleCancel"
       >
         Cancel
       </button>
-
-      <button
-        class="btn btn-primary"
-        :disabled="!canSubmit"
-        @click="handleSubmit"
+      <span
+        v-if="characterCount > MAX_CONTENT_LENGTH * 0.9"
+        :class="['ml-auto font-mono text-[10px] tracking-wider', characterCountClass]"
       >
-        <svg
-          v-if="isSubmitting"
-          class="animate-spin icon icon-xs mr-1"
-          viewBox="0 0 24 24"
-        >
-          <circle
-            cx="12"
-            cy="12"
-            r="10"
-            stroke="currentColor"
-            stroke-width="4"
-            fill="none"
-            opacity="0.25"
-          />
-          <path
-            fill="currentColor"
-            opacity="0.75"
-            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-          />
-        </svg>
-        {{ submitButtonText }}
-      </button>
+        {{ characterCount }}/{{ MAX_CONTENT_LENGTH }}
+      </span>
     </div>
   </div>
 </template>
-
-<style scoped>
-@import 'tailwindcss' reference;
-
-.comment-form {
-  @apply relative;
-}
-
-.form-input {
-  @apply w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-gray-500 transition-colors;
-}
-
-.form-input:disabled {
-  @apply bg-gray-100 dark:bg-gray-800 cursor-not-allowed opacity-60;
-}
-
-.form-textarea {
-  @apply w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-gray-500 transition-colors resize-none;
-}
-
-.form-textarea:disabled {
-  @apply bg-gray-100 dark:bg-gray-800 cursor-not-allowed opacity-60;
-}
-
-.btn:disabled {
-  @apply opacity-50 cursor-not-allowed;
-}
-
-.btn-primary:disabled {
-  @apply bg-gray-400 hover:bg-gray-400;
-}
-
-.icon-xs {
-  @apply w-3 h-3;
-}
-
-/* Focus styles for better accessibility */
-.form-input:focus,
-.form-textarea:focus {
-  @apply ring-2 ring-blue-500 border-blue-500;
-}
-
-/* Validation styles */
-.form-input:invalid,
-.form-textarea:invalid {
-  @apply border-red-300 focus:border-red-500 focus:ring-red-500;
-}
-
-/* Animation for form appearance */
-.comment-form {
-  animation: slideDown 0.2s ease-out;
-}
-
-@keyframes slideDown {
-  from {
-    opacity: 0;
-    transform: translateY(-8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-</style>

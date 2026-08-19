@@ -1,23 +1,21 @@
 <script lang="ts">
-// Re-export types so existing consumers (e.g. useLabelFiltering) keep working
-// without needing to change their imports immediately.
+// Re-export types so existing consumers keep working without needing to change
+// their imports immediately.
 export type { PanelAnnotation, NewAnnotationDraft } from '../types/component-interfaces';
 </script>
 
 <script setup lang="ts">
 import { logger } from '../utils/logger';
-import { formatTime, formatFrame, timeToFrame as _timeToFrame } from '@/utils/formatters';
 import { ref, computed, onMounted, watch, onUnmounted, type PropType } from 'vue';
 import AnnotationForm from './AnnotationForm.vue';
 import AnnotationCard from './AnnotationCard.vue';
 import AnnotationSkeleton from './AnnotationSkeleton.vue';
 import LabelManagement from './LabelManagement.vue';
-import LabelFilter from './LabelFilter.vue';
 import { useAuth } from '../composables/useAuth';
 import { useGlobalComments } from '../composables/useGlobalComments';
 import { useAnnotationFiltering } from '../composables/useAnnotationFiltering';
 import { useLabelCatalog } from '../composables/useLabelCatalog';
-import type { DrawingData, Comment } from '../types/database';
+import type { Comment } from '../types/database';
 import type { UseDrawingCanvas } from '../composables/useDrawingCanvas';
 import type { UseDrawingCoordinator } from '../composables/useDrawingCoordinator';
 import type { DualVideoPlayer } from '../composables/useDualVideoPlayer';
@@ -129,17 +127,12 @@ const props = defineProps({
 });
 
 const emit = defineEmits([
-  'add-annotation',
   'update-annotation',
   'delete-annotation',
   'select-annotation',
   'form-show',
   'form-hide',
   'pause',
-  'drawing-created',
-  'seek-to-frame',
-  'video-context-changed',
-  'annotation-edit',
   'comment-added',
   'comment-updated',
   'comment-deleted',
@@ -160,22 +153,8 @@ const {
   onNewComment,
 } = useGlobalComments();
 
-// Annotation filtering composable
-const annotationsRef = computed(() => props.annotations);
-const {
-  filterState,
-  hasActiveFilters,
-  getActiveFilterCount,
-  sortedAnnotations,
-  annotationsListStyle,
-  updateLabelFilter,
-  clearAllFilters,
-} = useAnnotationFiltering({
-  annotations: annotationsRef,
-  projectId: props.projectId,
-});
-
-// Label state
+// Label state. Loaded before filtering, which reads label names to work out
+// which category each annotation belongs to.
 const {
   labels: availableLabels,
   labelsById: labelColors,
@@ -186,13 +165,24 @@ const {
   () => props.projectId ?? undefined
 );
 const showLabelManagement = ref(false);
-const showFilterDropdown = ref(false);
+
+// Annotation filtering composable
+const annotationsRef = computed(() => props.annotations);
+const { sortedAnnotations, availableCategories, activeCategory } = useAnnotationFiltering({
+  annotations: annotationsRef,
+  labelsById: labelColors,
+});
+
+/**
+ * Shown in place of the label editor when this viewer cannot annotate, so the
+ * missing affordances read as a permission rather than as a bug.
+ */
+const accessLabel = computed(() =>
+  !props.readOnly && !isAuthenticated.value ? 'Comments only' : 'View only'
+);
 
 // Comment state
 const expandedComments = ref(new Set<string>());
-
-// Form ref
-const annotationFormRef = ref<InstanceType<typeof AnnotationForm> | null>(null);
 
 // Annotation being edited (passed to the form)
 const editAnnotationData = ref<PanelAnnotation | null>(null);
@@ -208,8 +198,6 @@ if (import.meta.env.DEV) {
   logger.debug('[AnnotationPanel] setup');
 }
 
-const timeToFrame = (timeInSeconds: number) => _timeToFrame(timeInSeconds, props.fps);
-
 onMounted(() => {
   if (import.meta.env.DEV) {
     logger.debug('[AnnotationPanel] mounted');
@@ -218,30 +206,24 @@ onMounted(() => {
 });
 
 // --- Form orchestration ---
-
-const startAddAnnotation = () => {
-  editAnnotationData.value = null;
-  // Use nextTick-like approach: the form ref should already exist; call its method
-  annotationFormRef.value?.startAddAnnotation();
-};
+// The panel edits but never adds: new annotations are created from the
+// timeline's quick pick, which is why the header has no add button.
 
 const startEditAnnotation = (annotation: PanelAnnotation) => {
   emit('pause');
-  const targetFrame =
-    annotation.frame || Math.round(annotation.timestamp * props.fps);
-  emit('seek-to-frame', targetFrame);
-  emit('annotation-edit', annotation);
+  // Editing an annotation moves the video to it and selects it, so the frame
+  // the form names is the frame on screen - and any drawing it carries is
+  // rendered, since the canvas only draws strokes stamped with its own frame.
+  // Selecting is what seeks: `seek-to-frame` had no listener at all.
+  emit('select-annotation', annotation);
 
   editAnnotationData.value = annotation;
   // The form watches editAnnotation prop and will start editing
 };
 
+// Always an update: the form only ever edits an annotation that exists.
 const handleFormSave = (annotationData: Record<string, unknown>) => {
-  if (annotationData.id) {
-    emit('update-annotation', annotationData);
-  } else {
-    emit('add-annotation', annotationData);
-  }
+  emit('update-annotation', annotationData);
 };
 
 const handleFormShow = () => {
@@ -308,10 +290,6 @@ const closeLabelManagement = () => {
   reloadLabels();
 };
 
-const handleCreateLabel = (_labelName: string) => {
-  openLabelManagement();
-};
-
 // --- Global comment subscription ---
 
 onMounted(async () => {
@@ -359,215 +337,91 @@ watch(
   { deep: true }
 );
 
-// Drawing data forwarding — the parent still calls onDrawingCreated on us
-const onDrawingCreated = (drawingData: DrawingData, videoContext: string | null = null) => {
-  annotationFormRef.value?.onDrawingCreated(drawingData, videoContext);
-};
-
-// Expose methods for parent component access
-defineExpose({
-  onDrawingCreated,
-});
+// Nothing to expose: the panel now only edits annotations, and a drawing made
+// on the video belongs to whatever created it - the quick pick stores its own.
 </script>
 
 <template>
-  <div class="h-full w-full bg-white dark:bg-gray-900 overflow-y-auto overflow-x-hidden">
+  <div class="flex h-full w-full flex-col overflow-hidden bg-white dark:bg-gray-900">
     <!-- Header -->
-    <div
-      class="sticky top-0 z-10 flex justify-between items-center p-2 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
-    >
-      <!-- canAnnotate leads: a view-only share still denies commenting, but no
-           longer denies annotating, so readOnly must not decide this. -->
-      <div
+    <header class="flex shrink-0 items-baseline gap-2.5 px-4 pb-3 pt-4">
+      <h2 class="text-[13px] font-semibold tracking-tight text-gray-900 dark:text-white">
+        Annotations
+      </h2>
+      <span class="font-mono text-[11px] text-gray-500 dark:text-gray-500">
+        {{ sortedAnnotations.length }}
+      </span>
+
+      <!-- The only route to the label editor now that the panel has no add
+           button, and the quick pick can only offer labels that already exist. -->
+      <button
         v-if="canAnnotate"
-        class="flex-1 flex items-center"
+        type="button"
+        class="ml-auto text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-300"
+        @click="openLabelManagement"
       >
-        <!-- Active filter indicator -->
-        <div
-          v-if="hasActiveFilters"
-          class="flex items-center text-xs text-blue-600 dark:text-blue-400 ml-2"
-        >
-          <svg
-            class="w-4 h-4 mr-1"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.207A1 1 0 013 6.5V4z"
-            />
-          </svg>
-          <span>{{ getActiveFilterCount }} filter{{
-            getActiveFilterCount !== 1 ? 's' : ''
-          }}
-            active</span>
-        </div>
-      </div>
-      <h3
-        v-else-if="!readOnly && !isAuthenticated"
-        class="text-sm font-medium text-gray-600 dark:text-gray-300"
-      >
-        Annotations (Comments Enabled)
-      </h3>
-      <h3
+        Labels
+      </button>
+      <span
         v-else
-        class="text-sm font-medium text-gray-600 dark:text-gray-300"
+        class="ml-auto text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-500"
       >
-        Annotations (View Only)
-      </h3>
+        {{ accessLabel }}
+      </span>
+    </header>
 
-      <div class="relative flex items-center space-x-2">
-        <!-- Filter button -->
-        <div>
-          <button
-            :class="[
-              'btn flex items-center space-x-1 relative',
-              hasActiveFilters ? 'btn-secondary' : 'btn-ghost',
-            ]"
-            title="Filter annotations"
-            @click="showFilterDropdown = !showFilterDropdown"
-          >
-            <svg
-              class="icon icon-lg"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.207A1 1 0 013 6.5V4z"
-              />
-            </svg>
-            <!-- Badge for active filter count -->
-            <span
-              v-if="hasActiveFilters"
-              class="absolute -top-1 -right-1 inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-bold leading-none text-white bg-blue-600 rounded-full"
-            >
-              {{ getActiveFilterCount }}
-            </span>
-          </button>
-
-          <!-- Filter dropdown -->
-          <div
-            v-if="showFilterDropdown"
-            class="absolute top-full right-0 mt-2 w-80 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-50"
-            @click.stop
-          >
-            <div class="p-4">
-              <div class="flex items-center justify-between mb-3">
-                <h3 class="text-sm font-medium text-gray-900 dark:text-gray-100">
-                  Filter Annotations
-                </h3>
-                <button
-                  class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                  @click="showFilterDropdown = false"
-                >
-                  <svg
-                    class="w-4 h-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                </button>
-              </div>
-
-              <LabelFilter
-                v-model="filterState.labelFilter"
-                :project-id="projectId"
-                @filter-changed="(newFilter) => updateLabelFilter(newFilter)"
-              />
-
-              <div
-                v-if="hasActiveFilters"
-                class="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700"
-              >
-                <button
-                  class="w-full btn btn-ghost text-sm"
-                  @click="clearAllFilters"
-                >
-                  Clear All Filters
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Add button -->
-        <button
-          v-if="canAnnotate"
-          class="btn btn-primary flex items-center space-x-1"
-          title="Add new annotation"
-          @click="startAddAnnotation"
-        >
-          <svg
-            class="icon icon-sm"
-            viewBox="0 0 24 24"
-          >
-            <line
-              x1="12"
-              y1="5"
-              x2="12"
-              y2="19"
-            />
-            <line
-              x1="5"
-              y1="12"
-              x2="19"
-              y2="12"
-            />
-          </svg>
-          <span>Add</span>
-        </button>
-      </div>
+    <!-- Category filter. Hidden until the video has categorised annotations,
+         so a lone "All" pill never sits over an empty list. -->
+    <div
+      v-if="availableCategories.length > 0"
+      class="flex shrink-0 flex-wrap items-center gap-1 px-3 pb-3"
+    >
+      <button
+        type="button"
+        class="rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] transition-colors"
+        :class="
+          activeCategory === null
+            ? 'bg-gray-900 text-white dark:bg-gray-700 dark:text-white'
+            : 'text-gray-500 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-300'
+        "
+        @click="activeCategory = null"
+      >
+        All
+      </button>
+      <button
+        v-for="category in availableCategories"
+        :key="category"
+        type="button"
+        class="rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] transition-colors"
+        :class="
+          activeCategory === category
+            ? 'bg-gray-900 text-white dark:bg-gray-700 dark:text-white'
+            : 'text-gray-500 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-300'
+        "
+        @click="activeCategory = category"
+      >
+        {{ category }}
+      </button>
     </div>
 
-    <!-- Add/Edit Form -->
+    <!-- Edit Form -->
     <AnnotationForm
       v-if="canAnnotate"
-      ref="annotationFormRef"
-      :current-frame="currentFrame"
-      :current-time="currentTime"
       :fps="fps"
       :is-dual-mode="isDualMode"
-      :drawing-canvas="drawingCanvas"
-      :drawing-canvas-a="drawingCanvasA"
-      :drawing-canvas-b="drawingCanvasB"
       :drawing-canvas-ref="drawingCanvasRef"
       :drawing-canvas-a-ref="drawingCanvasARef"
       :drawing-canvas-b-ref="drawingCanvasBRef"
       :drawing-coordinator="drawingCoordinator"
-      :video-a-current-frame="videoACurrentFrame"
-      :video-b-current-frame="videoBCurrentFrame"
-      :video-a-fps="videoAFps"
-      :video-b-fps="videoBFps"
-      :project-id="projectId"
       :available-labels="availableLabels"
       :edit-annotation="editAnnotationData"
       @save="handleFormSave"
-      @cancel="handleFormHide"
       @form-show="handleFormShow"
       @form-hide="handleFormHide"
-      @manage-labels="openLabelManagement"
-      @create-label="handleCreateLabel"
     />
 
     <!-- Annotations List -->
-    <div
-      class="p-2"
-      :style="annotationsListStyle"
-    >
+    <div class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-1 pb-4">
       <!-- Loading Skeleton -->
       <AnnotationSkeleton
         v-if="shouldShowSkeleton"
@@ -577,48 +431,24 @@ defineExpose({
       <!-- Empty State -->
       <div
         v-else-if="sortedAnnotations.length === 0"
-        class="text-center py-8 px-3 text-gray-500 dark:text-gray-400"
+        class="px-4 py-10 text-center"
       >
-        <svg
-          class="w-10 h-10 mx-auto mb-3 text-gray-400 dark:text-gray-500"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-        >
-          <path
-            d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
-          />
-          <polyline points="14,2 14,8 20,8" />
-          <line
-            x1="16"
-            y1="13"
-            x2="8"
-            y2="13"
-          />
-          <line
-            x1="16"
-            y1="17"
-            x2="8"
-            y2="17"
-          />
-          <polyline points="10,9 9,9 8,9" />
-        </svg>
-        <p class="text-sm mb-1">
-          No annotations yet
+        <p class="text-[12px] text-gray-600 dark:text-gray-400">
+          {{ activeCategory ? 'Nothing in this category' : 'No annotations yet' }}
         </p>
         <p
-          v-if="canAnnotate"
-          class="text-xs text-gray-400 dark:text-gray-500"
+          v-if="canAnnotate && !activeCategory"
+          class="mt-1.5 text-[11px] text-gray-500 dark:text-gray-500"
         >
-          Click "Add" to create your first annotation
+          Click the timeline, or right-click the video, to annotate a frame.
         </p>
         <!-- No third branch: canAnnotate is briefly false while the video
              loads, and a signed-in user should not see a sign-in prompt flash. -->
         <p
           v-else-if="!isAuthenticated"
-          class="text-xs text-gray-400 dark:text-gray-500"
+          class="mt-1.5 text-[11px] text-gray-500 dark:text-gray-500"
         >
-          Sign in to add annotations
+          Sign in to add annotations.
         </p>
       </div>
 
@@ -630,7 +460,6 @@ defineExpose({
         :annotation="annotation"
         :is-selected="selectedAnnotation?.id === annotation.id"
         :read-only="readOnly"
-        :is-authenticated="isAuthenticated"
         :label-colors="labelColors"
         :comment-count="getCommentCount(annotation)"
         :has-new-comments="hasNewComments(annotation.id)"
@@ -650,133 +479,44 @@ defineExpose({
       />
     </div>
 
-    <!-- Panel Footer -->
-    <div class="p-2 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
-      <div class="flex justify-between text-xs text-gray-500 dark:text-gray-400 font-mono">
-        <span> {{ annotations.length }} annotations </span>
-
-        <!-- Single Video Mode -->
-        <div
-          v-if="!isDualMode"
-          class="flex flex-col items-end"
-        >
-          <span>{{ formatTime(currentTime) }}</span>
-          <span class="opacity-75">{{ formatFrame(currentFrame) }}</span>
-        </div>
-
-        <!-- Dual Video Mode -->
-        <div
-          v-else
-          class="flex flex-col items-end space-y-1"
-        >
-          <div class="flex space-x-3">
-            <div class="text-right">
-              <div class="text-blue-600">
-                Video A
-              </div>
-              <div class="opacity-75">
-                {{ formatFrame(videoACurrentFrame) }}
-              </div>
-            </div>
-            <div class="text-right">
-              <div class="text-green-600">
-                Video B
-              </div>
-              <div class="opacity-75">
-                {{ formatFrame(videoBCurrentFrame) }}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <!-- Label Management Modal -->
     <div
       v-if="showLabelManagement"
-      class="fixed inset-0 z-50 overflow-y-auto"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
       aria-labelledby="modal-title"
       role="dialog"
       aria-modal="true"
+      @click="closeLabelManagement"
     >
+      <!-- Modal panel -->
       <div
-        class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0"
+        class="relative flex max-h-[85vh] w-full max-w-2xl flex-col rounded border border-gray-200 bg-white shadow-xl dark:border-white/10 dark:bg-gray-900"
+        @click.stop
       >
-        <!-- Background overlay -->
-        <div
-          class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
-          aria-hidden="true"
+        <button
+          type="button"
+          class="absolute right-3 top-3 z-10 rounded p-1 text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
           @click="closeLabelManagement"
-        />
-
-        <!-- Modal panel -->
-        <div
-          class="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-5xl sm:w-full"
         >
-          <div class="bg-white dark:bg-gray-800 relative">
-            <button
-              type="button"
-              class="absolute top-4 right-4 z-10 bg-white dark:bg-gray-800 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-              @click="closeLabelManagement"
-            >
-              <span class="sr-only">Close</span>
-              <svg
-                class="h-6 w-6"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
-            <div class="p-6">
-              <LabelManagement :project-id="projectId" />
-            </div>
-          </div>
+          <span class="sr-only">Close</span>
+          <svg
+            class="h-3.5 w-3.5"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M18 6 6 18M6 6l12 12"
+            />
+          </svg>
+        </button>
+        <div class="min-h-0 flex-1 overflow-y-auto p-4">
+          <LabelManagement :project-id="projectId" />
         </div>
       </div>
     </div>
   </div>
 </template>
-
-<style scoped>
-@import 'tailwindcss' reference;
-
-/* Custom styles for comment integration */
-.comment-section {
-  max-height: 300px;
-  overflow-y: auto;
-}
-
-/* Comment toggle button styling handled via utility classes in template */
-
-/* Smooth transitions for comment sections */
-.comment-section-enter-active,
-.comment-section-leave-active {
-  transition: all 0.3s ease;
-}
-
-.comment-section-enter-from,
-.comment-section-leave-to {
-  opacity: 0;
-  transform: translateY(-10px);
-}
-
-/* Ensure proper spacing for comment sections */
-.comment-section :deep(.comment-section) {
-  border-radius: 0.5rem;
-  overflow: hidden;
-}
-
-/* Responsive design for comment sections */
-@media (max-width: 640px) {
-  .comment-section {
-    max-height: 250px;
-  }
-}
-</style>

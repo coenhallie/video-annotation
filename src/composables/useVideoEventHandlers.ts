@@ -31,7 +31,6 @@ export interface VideoEventHandlers {
   handleFrameStepVideoA: (direction: string) => void;
   handleFrameStepVideoB: (direction: string) => void;
   handleAnnotationClick: (annotation: Annotation) => Promise<void>;
-  handleAnnotationEdit: () => void;
 }
 
 export function useVideoEventHandlers(deps: {
@@ -94,12 +93,6 @@ export function useVideoEventHandlers(deps: {
     performVideoFadeTransition?: (fn: () => void) => Promise<void>;
   } | null>;
 
-  /** Ref to the AnnotationPanel component. */
-  annotationPanelRef: Ref<{
-    onDrawingCreated?: (drawing: DrawingCreatedEvent, context?: string) => void;
-    isEditing?: boolean;
-  } | null>;
-
   /** Annotation composable methods. */
   initializeVideo: (data: any) => Promise<void>;
   loadAnnotations: () => Promise<void>;
@@ -125,7 +118,6 @@ export function useVideoEventHandlers(deps: {
     dualVideoPlayerRef,
     comparisonWorkflow,
     unifiedVideoPlayerRef,
-    annotationPanelRef,
     initializeVideo,
     loadAnnotations,
   } = deps;
@@ -310,14 +302,6 @@ export function useVideoEventHandlers(deps: {
     if (playerMode.value === 'dual') {
       (dualVideoPlayer as any).addDrawing?.(drawing, videoContext || 'A');
     }
-
-    // Forward to annotation panel
-    if (annotationPanelRef.value?.onDrawingCreated) {
-      annotationPanelRef.value.onDrawingCreated(
-        drawing,
-        playerMode.value === 'dual' ? (videoContext || 'A') : undefined,
-      );
-    }
   };
 
   const handleDrawingUpdated = (
@@ -428,11 +412,6 @@ export function useVideoEventHandlers(deps: {
     }
   };
 
-  const handleAnnotationEdit = () => {
-    if (!annotationPanelRef.value) return;
-    (annotationPanelRef.value as any).isEditing = true;
-  };
-
   return {
     handleTimeUpdate,
     handleFrameUpdate,
@@ -457,6 +436,5 @@ export function useVideoEventHandlers(deps: {
     handleFrameStepVideoA,
     handleFrameStepVideoB,
     handleAnnotationClick,
-    handleAnnotationEdit,
   };
 }

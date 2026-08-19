@@ -18,6 +18,11 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  /** Arrived over realtime since this thread was last viewed. */
+  isNew: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 const emit = defineEmits(['edit', 'delete', 'moderate']);
@@ -117,282 +122,124 @@ const closeActions = (event) => {
 </script>
 
 <template>
-  <div class="comment-item p-3">
-    <div class="flex space-x-3">
-      <!-- Avatar -->
-      <div class="flex-shrink-0">
-        <div
-          v-if="comment.user?.avatarUrl && !comment.isAnonymous"
-          class="avatar"
+  <div class="comment-item group/comment relative flex gap-2.5">
+    <img
+      v-if="comment.user?.avatarUrl && !comment.isAnonymous"
+      :src="comment.user.avatarUrl"
+      :alt="authorName"
+      class="mt-0.5 h-5 w-5 shrink-0 rounded-full object-cover"
+    >
+    <span
+      v-else
+      class="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-gray-200 text-[9px] font-semibold text-gray-600 dark:bg-white/10 dark:text-gray-300"
+    >
+      {{ authorInitials }}
+    </span>
+
+    <div class="min-w-0 flex-1">
+      <div class="flex items-baseline gap-2">
+        <!-- Unread marks itself the way the annotation row does: a dot, not a
+             tinted background and a coloured edge. -->
+        <span
+          v-if="isNew"
+          class="h-1.5 w-1.5 shrink-0 self-center rounded-full bg-red-500"
+          title="New comment"
+        />
+        <span class="truncate text-[12px] font-medium text-gray-800 dark:text-gray-200">
+          {{ authorName }}
+        </span>
+        <span
+          v-if="comment.isAnonymous"
+          class="shrink-0 text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-500 dark:text-gray-500"
         >
-          <img
-            :src="comment.user.avatarUrl"
-            :alt="authorName"
-            class="w-8 h-8 rounded-full object-cover"
+          Guest
+        </span>
+
+        <time
+          class="ml-auto shrink-0 font-mono text-[10px] tracking-wider text-gray-500 dark:text-gray-500"
+          :title="new Date(comment.createdAt).toLocaleString()"
+        >
+          {{ formattedDate }}<span
+            v-if="isEdited"
+            title="This comment has been edited"
+          >&nbsp;&middot; edited</span>
+        </time>
+
+        <div
+          v-if="hasActions"
+          class="relative shrink-0 self-center"
+        >
+          <button
+            type="button"
+            class="grid h-4 w-4 place-items-center rounded text-gray-500 opacity-0 transition-opacity hover:text-gray-900 focus-visible:opacity-100 group-hover/comment:opacity-100 dark:hover:text-gray-200"
+            :class="{ 'opacity-100': showActions }"
+            :aria-expanded="showActions"
+            aria-label="Comment actions"
+            @click.stop="toggleActions"
           >
-        </div>
-        <div
-          v-else
-          class="avatar-placeholder dark:bg-gray-700"
-        >
-          <span class="text-xs font-medium text-gray-600 dark:text-gray-300">{{
-            authorInitials
-          }}</span>
+            <svg
+              class="h-3.5 w-3.5"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              stroke="none"
+            >
+              <circle
+                cx="12"
+                cy="12"
+                r="1.4"
+              />
+              <circle
+                cx="19"
+                cy="12"
+                r="1.4"
+              />
+              <circle
+                cx="5"
+                cy="12"
+                r="1.4"
+              />
+            </svg>
+          </button>
+
+          <div
+            v-show="showActions"
+            class="absolute right-0 top-full z-50 mt-1 w-28 overflow-hidden rounded border border-gray-200 bg-white py-1 shadow-lg dark:border-white/10 dark:bg-gray-900"
+            tabindex="-1"
+            @focusout="closeActions"
+          >
+            <button
+              v-if="canEdit"
+              type="button"
+              class="w-full px-3 py-1.5 text-left text-[11px] text-gray-700 transition-colors hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-700/50"
+              @click.stop="handleEdit"
+            >
+              Edit
+            </button>
+            <button
+              v-if="canEdit"
+              type="button"
+              class="w-full px-3 py-1.5 text-left text-[11px] text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+              @click.stop="handleDelete"
+            >
+              Delete
+            </button>
+            <button
+              v-if="canModerate && !canEdit"
+              type="button"
+              class="w-full px-3 py-1.5 text-left text-[11px] text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+              @click.stop="handleModerate"
+            >
+              Remove
+            </button>
+          </div>
         </div>
       </div>
 
-      <!-- Comment Content -->
-      <div class="flex-1 min-w-0">
-        <!-- Header -->
-        <div class="flex items-center justify-between">
-          <div class="flex items-center space-x-2">
-            <h5 class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-              {{ authorName }}
-            </h5>
-            <span
-              v-if="comment.isAnonymous"
-              class="anonymous-badge"
-            >
-              Anonymous
-            </span>
-          </div>
-
-          <div class="flex items-center space-x-2">
-            <time
-              class="text-xs text-gray-500 dark:text-gray-400"
-              :title="new Date(comment.createdAt).toLocaleString()"
-            >
-              {{ formattedDate }}
-              <span
-                v-if="isEdited"
-                class="edited-indicator"
-                title="This comment has been edited"
-              >
-                (edited)
-              </span>
-            </time>
-
-            <!-- Actions Menu -->
-            <div
-              v-if="hasActions"
-              class="relative"
-            >
-              <button
-                class="action-menu-trigger"
-                :aria-expanded="showActions"
-                aria-label="Comment actions"
-                @click.stop="toggleActions"
-              >
-                <svg
-                  class="icon icon-xs"
-                  viewBox="0 0 24 24"
-                >
-                  <circle
-                    cx="12"
-                    cy="12"
-                    r="1"
-                  />
-                  <circle
-                    cx="19"
-                    cy="12"
-                    r="1"
-                  />
-                  <circle
-                    cx="5"
-                    cy="12"
-                    r="1"
-                  />
-                </svg>
-              </button>
-
-              <div
-                v-show="showActions"
-                class="action-menu dark:bg-gray-800 dark:border-gray-700"
-                tabindex="-1"
-                @focusout="closeActions"
-              >
-                <button
-                  v-if="canEdit"
-                  class="action-menu-item"
-                  @click.stop="handleEdit"
-                >
-                  <svg
-                    class="icon icon-xs"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"
-                    />
-                    <path
-                      d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
-                    />
-                  </svg>
-                  Edit
-                </button>
-
-                <button
-                  v-if="canEdit"
-                  class="action-menu-item text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
-                  @click.stop="handleDelete"
-                >
-                  <svg
-                    class="icon icon-xs"
-                    viewBox="0 0 24 24"
-                  >
-                    <polyline points="3,6 5,6 21,6" />
-                    <path
-                      d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
-                    />
-                  </svg>
-                  Delete
-                </button>
-
-                <button
-                  v-if="canModerate && !canEdit"
-                  class="action-menu-item text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
-                  @click.stop="handleModerate"
-                >
-                  <svg
-                    class="icon icon-xs"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      cx="12"
-                      cy="12"
-                      r="10"
-                    />
-                    <line
-                      x1="15"
-                      y1="9"
-                      x2="9"
-                      y2="15"
-                    />
-                    <line
-                      x1="9"
-                      y1="9"
-                      x2="15"
-                      y2="15"
-                    />
-                  </svg>
-                  Remove
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Comment Text -->
-        <div class="mt-1">
-          <p class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words">
-            {{ comment.content }}
-          </p>
-        </div>
-      </div>
+      <p
+        class="mt-0.5 whitespace-pre-wrap break-words text-[12px] leading-relaxed text-gray-600 dark:text-gray-300"
+      >
+        {{ comment.content }}
+      </p>
     </div>
   </div>
 </template>
-
-<style scoped>
-@import 'tailwindcss' reference;
-
-.comment-item {
-  @apply relative;
-}
-
-.avatar-placeholder {
-  @apply w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center;
-}
-
-.anonymous-badge {
-  @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200;
-}
-
-.edited-indicator {
-  @apply text-gray-400 italic;
-}
-
-.action-menu-trigger {
-  @apply p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 dark:focus:ring-offset-gray-800 transition-colors duration-150;
-}
-
-.action-menu {
-  @apply absolute right-0 top-full mt-1 w-32 bg-white rounded-md shadow-lg border border-gray-200 py-1 z-50;
-  /* Chrome-specific fixes */
-  position: absolute !important;
-  pointer-events: auto;
-}
-
-.action-menu-item {
-  @apply w-full px-3 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50 flex items-center space-x-2 transition-colors duration-150;
-}
-
-.action-menu-item:focus {
-  @apply outline-none bg-gray-50 dark:bg-gray-700/50;
-}
-
-.icon {
-  @apply stroke-current fill-none;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.icon-xs {
-  @apply w-3 h-3;
-}
-
-/* Ensure long content doesn't break layout */
-.comment-item {
-  word-wrap: break-word;
-  overflow-wrap: break-word;
-}
-
-/* Hover effects */
-.comment-item:hover .action-menu-trigger {
-  @apply opacity-100;
-}
-
-.action-menu-trigger {
-  @apply opacity-60 transition-opacity duration-150;
-}
-
-.comment-item:hover .action-menu-trigger,
-.action-menu-trigger:focus,
-.action-menu-trigger:active {
-  @apply opacity-100;
-}
-
-/* Chrome-specific fix: ensure action menu trigger is always visible when user can edit */
-.comment-item .action-menu-trigger {
-  @apply opacity-60;
-}
-
-/* Better visibility for touch devices and Chrome */
-@media (hover: none) {
-  .action-menu-trigger {
-    @apply opacity-100;
-  }
-}
-
-/* Focus management for accessibility */
-.action-menu-trigger:focus + .action-menu,
-.action-menu:focus-within {
-  @apply block;
-}
-
-/* Animation for action menu */
-.action-menu {
-  animation: slideDown 0.15s ease-out;
-}
-
-@keyframes slideDown {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-</style>

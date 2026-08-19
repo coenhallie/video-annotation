@@ -694,7 +694,6 @@ const handleQuickPickComment = async (text: string) => {
 
 // Component Refs
 const unifiedVideoPlayerRef = ref<UnifiedVideoPlayerInstance | null>(null);
-const annotationPanelRef = ref<InstanceType<typeof AnnotationPanel> | null>(null);
 // Deep-link seek target from `?t=` (set by annotation-panel navigation); consumed
 // once the video finishes loading (see watch(videoLoaded, ...) below).
 const pendingSeekTime = ref<number | null>(null);
@@ -926,7 +925,6 @@ const {
   handleFrameStepVideoA,
   handleFrameStepVideoB,
   handleAnnotationClick,
-  handleAnnotationEdit,
 } = useVideoEventHandlers({
   videoStore,
   duration,
@@ -949,7 +947,6 @@ const {
   dualVideoPlayerRef,
   comparisonWorkflow,
   unifiedVideoPlayerRef,
-  annotationPanelRef,
   initializeVideo,
   loadAnnotations,
 });
@@ -1425,47 +1422,34 @@ watch(
   <!-- Error state -->
   <div
     v-if="hasError"
-    class="min-h-screen bg-red-50 dark:bg-red-900 flex items-center justify-center p-4"
+    class="flex min-h-screen items-center justify-center bg-white px-6 dark:bg-gray-900"
   >
-    <div class="max-w-md w-full bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
-      <div class="flex items-center mb-4">
-        <svg
-          class="w-8 h-8 text-red-500 mr-3"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.314 16.5c-.77.833.192 2.5 1.732 2.5z"
-          />
-        </svg>
-        <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
-          Something went wrong
-        </h2>
-      </div>
+    <div class="w-full max-w-xs">
+      <h2 class="text-[13px] font-semibold tracking-tight text-red-600 dark:text-red-400">
+        Something went wrong
+      </h2>
 
-      <p class="text-gray-600 dark:text-gray-300 mb-4">
+      <p class="mt-2 text-[12px] leading-relaxed text-gray-600 dark:text-gray-400">
         {{ errorMessage }}
       </p>
 
-      <div class="flex space-x-3">
+      <div class="mt-6 flex items-center gap-3">
         <button
-          class="flex-1 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors"
+          type="button"
+          class="flex-1 rounded bg-gray-900 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-white transition-colors hover:bg-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600"
           @click="
             hasError = false;
             errorMessage = '';
           "
         >
-          Try Again
+          Try again
         </button>
         <button
-          class="flex-1 bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700 transition-colors"
+          type="button"
+          class="rounded px-1 py-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-300"
           @click="reloadPage"
         >
-          Reload Page
+          Reload
         </button>
       </div>
     </div>
@@ -1659,7 +1643,7 @@ watch(
 
       <!-- Sidebar with Calibration and Annotation Panel -->
       <aside
-        class="w-96 min-w-96 max-w-96 flex-shrink-0 bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden"
+        class="w-96 min-w-96 max-w-96 flex-shrink-0 bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-white/10 flex flex-col overflow-hidden"
       >
         <!-- Own watch-coverage hint (informational, never blocks annotating) -->
         <div
@@ -1674,7 +1658,6 @@ watch(
         <div class="flex-1 overflow-hidden">
           <AnnotationPanel
             v-if="drawingCanvas"
-            ref="annotationPanelRef"
             :annotations="annotations || []"
             :selected-annotation="selectedAnnotation"
             :current-time="currentTime || 0"
@@ -1711,15 +1694,12 @@ watch(
             "
             :video-a-fps="dualVideoPlayer?.videoAState?.fps || 30"
             :video-b-fps="dualVideoPlayer?.videoBState?.fps || 30"
-            @add-annotation="handleAddAnnotation"
             @update-annotation="updateAnnotation"
             @delete-annotation="deleteAnnotation"
             @select-annotation="handleAnnotationSeek"
-            @annotation-edit="handleAnnotationEdit"
             @form-show="handleFormShow"
             @form-hide="handleFormHide"
             @pause="handleTimelinePause"
-            @drawing-created="handleDrawingCreated"
             @create-anonymous-session="handleCreateAnonymousSession"
           />
           <div
@@ -1740,8 +1720,8 @@ watch(
                   d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4"
                 />
               </svg>
-              <p class="text-sm">
-                Initializing annotation panel...
+              <p class="text-[12px]">
+                Initializing annotation panel…
               </p>
             </div>
           </div>

@@ -7,53 +7,40 @@ const { signInWithSSO } = useAuth();
 const handleLogin = async () => {
   try {
     await signInWithSSO();
-  } catch (_error) {
+  } catch {
     // Error notifications are handled in useAuth
   }
 };
 </script>
 
 <template>
+  <!-- No card, no gradient: the sign-in screen is the first thing the app
+       says, and the rest of the app is a plain white / gray-900 sheet. It also
+       had no dark mode at all before. -->
   <div
-    class="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100"
+    class="flex min-h-screen items-center justify-center bg-white px-6 dark:bg-gray-900"
   >
-    <div class="w-full max-w-md p-8 bg-white rounded-2xl shadow-xl">
-      <div class="text-center space-y-4 mb-8">
-        <h1 class="text-3xl font-bold text-gray-800">
-          Perspecto
-        </h1>
-        <p class="text-gray-600">
-          Collaborative video analysis platform
-        </p>
-      </div>
+    <div class="w-full max-w-xs">
+      <h1
+        class="text-[13px] font-semibold uppercase tracking-[0.18em] text-gray-900 dark:text-white"
+      >
+        Perspecto
+      </h1>
+      <p class="mt-2 text-[12px] text-gray-600 dark:text-gray-400">
+        Collaborative video analysis platform
+      </p>
 
-      <div class="space-y-6">
-        <button
-          class="w-full flex items-center justify-center px-4 py-4 font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transform hover:scale-[1.02] transition-all duration-200 shadow-lg hover:shadow-xl group"
-          @click="handleLogin"
-        >
-          <svg
-            class="w-5 h-5 mr-3 transition-transform group-hover:translate-x-1"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"
-            />
-          </svg>
-          Log In
-        </button>
+      <button
+        type="button"
+        class="mt-8 w-full rounded bg-gray-900 px-3 py-2.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white transition-colors hover:bg-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600"
+        @click="handleLogin"
+      >
+        Log in
+      </button>
 
-        <div class="text-center">
-          <p class="text-xs text-gray-500">
-            Authenticated via Keycloak securely
-          </p>
-        </div>
-      </div>
+      <p class="mt-3 font-mono text-[10px] tracking-wider text-gray-500 dark:text-gray-500">
+        AUTHENTICATED VIA KEYCLOAK
+      </p>
     </div>
   </div>
 </template>

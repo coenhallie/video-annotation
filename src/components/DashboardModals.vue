@@ -67,42 +67,45 @@ const emit = defineEmits<{
       >
         <!-- Backdrop -->
         <div
-          class="absolute inset-0 bg-black/50 backdrop-blur-sm"
+          class="absolute inset-0 bg-black/50"
           @click="emit('close-shared-links')"
         />
 
         <!-- Modal Content -->
         <div
-          class="relative bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-7xl mx-4 max-h-[90vh] overflow-hidden flex flex-col"
+          class="relative mx-4 flex max-h-[85vh] w-full max-w-3xl flex-col rounded border border-gray-200 bg-white shadow-xl dark:border-white/10 dark:bg-gray-900"
           @click.stop
         >
           <!-- Header -->
-          <div class="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
-            <h2 class="text-2xl font-semibold text-gray-900 dark:text-white">
-              Manage Shared Links
+          <div
+            class="flex shrink-0 items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-white/10"
+          >
+            <h2 class="text-[13px] font-semibold tracking-tight text-gray-900 dark:text-white">
+              Shared links
             </h2>
             <button
-              class="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              type="button"
+              class="rounded p-1 text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
               @click="emit('close-shared-links')"
             >
               <svg
-                class="w-6 h-6"
+                class="h-3.5 w-3.5"
+                viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
-                viewBox="0 0 24 24"
+                stroke-width="2"
               >
                 <path
                   stroke-linecap="round"
                   stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M6 18L18 6M6 6l12 12"
+                  d="M18 6 6 18M6 6l12 12"
                 />
               </svg>
             </button>
           </div>
 
           <!-- Component Container -->
-          <div class="flex-1 overflow-auto">
+          <div class="min-h-0 flex-1 overflow-auto px-4 py-4">
             <SharedLinksManagement />
           </div>
         </div>

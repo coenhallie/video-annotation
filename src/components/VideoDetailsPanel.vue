@@ -1,90 +1,110 @@
 <template>
   <div
-    class="flex flex-col h-full bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700"
+    class="flex h-full flex-col border-l border-gray-200 bg-white dark:border-white/10 dark:bg-gray-900"
   >
     <!-- Header -->
-    <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+    <div class="border-b border-gray-200 p-4 dark:border-white/10">
       <div class="flex items-start justify-between gap-2">
-        <h2 class="font-semibold text-gray-900 dark:text-white truncate">
+        <h2 class="truncate text-[13px] font-semibold tracking-tight text-gray-900 dark:text-white">
           {{ project.title }}
         </h2>
         <button
-          class="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 shrink-0"
+          type="button"
+          class="shrink-0 rounded p-1 text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
           title="Close"
           @click="emit('close')"
         >
-          ✕
+          <svg
+            class="h-3.5 w-3.5"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M18 6 6 18M6 6l12 12" />
+          </svg>
         </button>
       </div>
 
-      <div class="mt-3 aspect-video bg-gray-100 dark:bg-gray-900 rounded-md overflow-hidden">
+      <div class="mt-3 aspect-video overflow-hidden rounded bg-gray-100 dark:bg-white/5">
         <img
           v-if="project.thumbnailUrl"
           :src="project.thumbnailUrl"
           :alt="project.title"
-          class="w-full h-full object-cover"
+          class="h-full w-full object-cover"
         >
       </div>
 
-      <div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
-        <span
-          class="inline-flex items-center px-2 py-0.5 rounded-full font-medium"
-          :class="project.projectType === 'dual'
-            ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-300'
-            : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'"
-        >
-          {{ project.projectType === 'dual' ? 'Dual' : 'Single' }}
-        </span>
-        <span v-if="project.owner">{{ project.owner.name }}</span>
-        <span>{{ formatDate(project.createdAt) }}</span>
+      <!-- One mono meta line instead of a pill plus four sizes of grey. -->
+      <div
+        class="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[10px] tracking-wider text-gray-500 dark:text-gray-400"
+      >
+        <span>{{ project.projectType === 'dual' ? 'DUAL' : 'SINGLE' }}</span>
+        <span>·</span>
         <span>{{ formatDuration(getDuration()) }}</span>
+        <span>·</span>
+        <span>{{ formatDate(project.createdAt) }}</span>
+        <template v-if="project.owner">
+          <span>·</span>
+          <span class="truncate">{{ project.owner.name }}</span>
+        </template>
       </div>
     </div>
 
     <!-- Stat row -->
-    <div class="grid grid-cols-2 divide-x divide-gray-200 dark:divide-gray-700 border-b border-gray-200 dark:border-gray-700">
-      <div class="p-3 text-center">
-        <div class="text-lg font-semibold text-gray-900 dark:text-white">{{ annotationCount }}</div>
-        <div class="text-xs text-gray-500 dark:text-gray-400">Annotations</div>
+    <div class="flex items-baseline gap-6 border-b border-gray-200 px-4 py-3 dark:border-white/10">
+      <div class="flex items-baseline gap-2">
+        <span class="font-mono text-[13px] text-gray-900 dark:text-white">{{ annotationCount }}</span>
+        <span class="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">
+          Annotations
+        </span>
       </div>
-      <div class="p-3 text-center">
-        <div class="text-lg font-semibold text-gray-900 dark:text-white">{{ commentCount }}</div>
-        <div class="text-xs text-gray-500 dark:text-gray-400">Comments</div>
+      <div class="flex items-baseline gap-2">
+        <span class="font-mono text-[13px] text-gray-900 dark:text-white">{{ commentCount }}</span>
+        <span class="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">
+          Comments
+        </span>
       </div>
     </div>
 
-    <!-- Team watch coverage (union of all users' ranges; hover for breakdown) -->
+    <!-- Team watch coverage (union of all users' ranges; hover for breakdown).
+         The bar is the only graphic here, so it stays thin and monochrome:
+         the number carries the reading, the bar just shapes it. -->
     <div
       v-if="watchProgress.length > 0"
-      class="p-4 border-b border-gray-200 dark:border-gray-700"
+      class="border-b border-gray-200 px-4 py-3 dark:border-white/10"
     >
-      <h3 class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
-        Watched
-      </h3>
-      <div class="group relative flex items-center gap-2">
-        <div
-          class="flex-1 h-1.5 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden"
-        >
+      <div class="group relative">
+        <div class="flex items-baseline gap-2">
+          <h3 class="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">
+            Watched
+          </h3>
+          <span class="ml-auto font-mono text-[11px] tracking-wider text-gray-500 dark:text-gray-400">
+            {{ Math.round(coveragePercent) }}%
+          </span>
+        </div>
+
+        <div class="mt-2 h-0.5 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-white/10">
           <div
-            class="h-full rounded-full bg-blue-500"
+            class="h-full rounded-full bg-gray-900 dark:bg-gray-300"
             :style="{ width: `${coveragePercent}%` }"
           />
         </div>
-        <span
-          class="text-xs text-gray-500 dark:text-gray-400 shrink-0"
-        >
-          {{ Math.round(coveragePercent) }}%
-        </span>
+
+        <!-- Per-user breakdown, unchanged in behaviour: hover only, and it
+             never eats the pointer. -->
         <div
-          class="absolute bottom-full left-0 mb-2 hidden group-hover:block z-10 rounded-md bg-gray-900 dark:bg-gray-700 text-white text-xs px-3 py-2 shadow-lg space-y-1 pointer-events-none"
+          class="pointer-events-none absolute bottom-full left-0 z-10 mb-2 hidden min-w-48 space-y-1 rounded border border-gray-200 bg-white px-3 py-2 shadow-lg group-hover:block dark:border-white/10 dark:bg-gray-900"
         >
           <div
             v-for="w in watchProgress"
             :key="w.userId"
             class="flex items-center justify-between gap-4 whitespace-nowrap"
           >
-            <span class="truncate max-w-40">{{ w.user.name }}</span>
-            <span class="text-gray-300">
+            <span class="max-w-40 truncate text-[11px] text-gray-700 dark:text-gray-200">
+              {{ w.user.name }}
+            </span>
+            <span class="font-mono text-[10px] tracking-wider text-gray-500 dark:text-gray-400">
               {{ Math.round(w.percentWatched) }}% · {{ formatDuration(watchedSeconds(w)) }}
             </span>
           </div>
@@ -94,55 +114,73 @@
 
     <!-- Annotations list -->
     <div class="flex-1 overflow-y-auto min-h-0">
-      <div v-if="loading" class="p-4 space-y-2">
+      <div
+        v-if="loading"
+        class="space-y-2 p-4"
+      >
         <div
           v-for="n in 4"
           :key="n"
-          class="h-12 rounded bg-gray-100 dark:bg-gray-700 animate-pulse"
+          class="h-10 animate-pulse rounded bg-gray-100 dark:bg-white/5"
         />
       </div>
       <div
         v-else-if="annotations.length === 0"
-        class="p-6 text-center text-sm text-gray-500 dark:text-gray-400"
+        class="px-4 py-10 text-center text-[12px] text-gray-600 dark:text-gray-400"
       >
         No annotations yet.
       </div>
-      <ul v-else class="divide-y divide-gray-100 dark:divide-gray-700">
+      <!-- Same row shape as AnnotationCard: colour dot, uppercase identity
+           line, mono timecode. No rules between rows - the hover tint separates
+           them. -->
+      <ul
+        v-else
+        class="px-1 py-1"
+      >
         <li
           v-for="a in annotations"
           :key="String(a.id)"
-          class="p-3 flex gap-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50"
+          class="flex cursor-pointer items-start gap-3 rounded px-3 py-2.5 transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]"
           @click="emit('annotation-click', project, a)"
         >
           <span
-            class="mt-1 w-2.5 h-2.5 rounded-full shrink-0"
-            :style="{ backgroundColor: a.color || '#9ca3af' }"
+            class="mt-[7px] h-2 w-2 shrink-0 rounded-full"
+            :style="{ backgroundColor: a.color || '#6b7280' }"
           />
           <div class="min-w-0 flex-1">
-            <div class="flex items-center justify-between gap-2">
-              <span class="text-sm font-medium text-gray-900 dark:text-white truncate">
+            <div class="flex items-baseline justify-between gap-2">
+              <span
+                class="truncate text-[13px] font-medium uppercase tracking-[0.06em] text-gray-700 dark:text-gray-200"
+              >
                 {{ a.title || 'Untitled' }}
               </span>
-              <span class="text-xs text-gray-500 dark:text-gray-400 shrink-0">
+              <span
+                class="shrink-0 font-mono text-[11px] tracking-wider text-gray-500 dark:text-gray-400"
+              >
                 {{ formatTimestamp(a.timestamp) }}
               </span>
             </div>
             <p
-              v-if="a.content"
-              class="text-xs text-gray-500 dark:text-gray-400 truncate"
+              v-if="note(a)"
+              class="mt-1 truncate text-[11px] text-gray-500 dark:text-gray-400"
             >
-              {{ a.content }}
+              {{ note(a) }}
             </p>
+            <!-- Labels read as dots plus names, not filled chips: the colour is
+                 the only thing that has to be the label's own. -->
             <div
-              v-if="a.labels && a.labels.length > 0"
-              class="mt-1 flex flex-wrap gap-1"
+              v-if="extraLabels(a).length > 0"
+              class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1"
             >
               <span
-                v-for="label in resolveLabels(a.labels)"
+                v-for="label in extraLabels(a)"
                 :key="label.id"
-                class="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded-full font-medium text-white"
-                :style="{ backgroundColor: label.color }"
+                class="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400"
               >
+                <span
+                  class="h-1.5 w-1.5 rounded-full"
+                  :style="{ backgroundColor: label.color }"
+                />
                 {{ label.name }}
               </span>
             </div>
@@ -152,15 +190,17 @@
     </div>
 
     <!-- Actions -->
-    <div class="p-4 border-t border-gray-200 dark:border-gray-700 flex items-center gap-2">
+    <div class="flex items-center gap-2 border-t border-gray-200 p-4 dark:border-white/10">
       <button
-        class="flex-1 px-3 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+        type="button"
+        class="flex-1 rounded bg-gray-900 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-white transition-colors hover:bg-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600"
         @click="emit('open', project)"
       >
         Open editor
       </button>
       <button
-        class="px-3 py-2 rounded-lg text-sm border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+        type="button"
+        class="rounded px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
         @click="emit('share', project)"
       >
         Share
@@ -293,5 +333,28 @@ function resolveLabels(ids: string[]): Label[] {
     if (label) result.push(label);
   }
   return result;
+}
+
+/**
+ * The row's second line, or '' when it would only repeat the title. Many
+ * annotations carry their label name as the title and the same words as the
+ * content, and printing both says nothing twice.
+ */
+function note(a: PanelAnnotation): string {
+  const content = (a.content || '').trim();
+  const title = (a.title || '').trim();
+  return content.toLowerCase() === title.toLowerCase() ? '' : content;
+}
+
+/**
+ * Labels worth printing under the row. An annotation's title is usually its
+ * first label's name, so listing that label again just says the same thing
+ * twice - the dot beside the title already carries its colour.
+ */
+function extraLabels(a: PanelAnnotation): Label[] {
+  const title = (a.title || '').trim().toLowerCase();
+  return resolveLabels(a.labels ?? []).filter(
+    (label) => label.name.trim().toLowerCase() !== title
+  );
 }
 </script>

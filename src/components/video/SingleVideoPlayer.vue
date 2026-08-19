@@ -397,11 +397,28 @@ watch(isPlaying, (playing) => {
   z-index: 10;
 }
 
+/* Sits over the video, so it stays light-on-dark in both themes - but it is
+   an outline eyebrow now, not a blue fill. */
 .retry-button {
-  margin-top: 10px;
-  padding: 8px 16px;
-  background: #3b82f6;
+  margin-top: 12px;
+  padding: 6px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 4px;
+  background: transparent;
   color: white;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  transition: border-color 0.15s ease;
+}
+
+.retry-button:hover {
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+.error-message,
+.loading-text {
+  font-size: 12px;
 }
 </style>

@@ -1,60 +1,65 @@
 <template>
   <div
     v-if="isVisible"
-    class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
     @click="closeModal"
   >
     <div
-      class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full mx-4 flex flex-col max-h-[85vh]"
+      class="flex max-h-[85vh] w-full max-w-lg flex-col rounded border border-gray-200 bg-white shadow-xl dark:border-white/10 dark:bg-gray-900"
       @click.stop
     >
       <!-- Modal Header -->
       <div
-        class="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700"
+        class="flex shrink-0 items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-white/10"
       >
-        <h2 class="text-xl font-semibold text-gray-900 dark:text-white">
+        <h2 class="text-[13px] font-semibold tracking-tight text-gray-900 dark:text-white">
           Changelog
         </h2>
         <button
-          class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+          type="button"
+          class="rounded p-1 text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
           @click="closeModal"
         >
           <svg
-            class="w-6 h-6"
+            class="h-3.5 w-3.5"
+            viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            viewBox="0 0 24 24"
+            stroke-width="2"
           >
             <path
               stroke-linecap="round"
               stroke-linejoin="round"
-              stroke-width="2"
-              d="M6 18L18 6M6 6l12 12"
+              d="M18 6 6 18M6 6l12 12"
             />
           </svg>
         </button>
       </div>
 
-      <!-- Modal Content (Scrollable) -->
-      <div class="p-6 overflow-y-auto flex-1">
-        <div class="space-y-8">
+      <!-- Modal Content (Scrollable). Versions read as a list of releases, not
+           as blue-ruled blocks: the mono version token carries the heading. -->
+      <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+        <div class="space-y-6">
           <div
             v-for="(entry, index) in changelogEntries"
             :key="index"
-            class="border-l-4 border-blue-500 pl-4 py-1"
           >
-            <div class="flex items-baseline justify-between mb-2">
-              <h3 class="text-lg font-bold text-gray-900 dark:text-white">
+            <div class="flex items-baseline gap-2">
+              <h3 class="font-mono text-[11px] tracking-wider text-gray-900 dark:text-white">
                 {{ entry.version }}
               </h3>
-              <span class="text-sm text-gray-500 dark:text-gray-400">{{ entry.date }}</span>
+              <span class="font-mono text-[10px] tracking-wider text-gray-500 dark:text-gray-500">
+                {{ entry.date }}
+              </span>
             </div>
-            <ul class="list-disc list-inside space-y-1 text-gray-700 dark:text-gray-300">
+            <ul class="mt-2 space-y-1">
               <li
                 v-for="(change, cIndex) in entry.changes"
                 :key="cIndex"
+                class="flex gap-2 text-[12px] leading-relaxed text-gray-700 dark:text-gray-300"
               >
-                {{ change }}
+                <span class="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-gray-400 dark:bg-gray-600" />
+                <span>{{ change }}</span>
               </li>
             </ul>
           </div>
@@ -63,10 +68,11 @@
 
       <!-- Modal Footer -->
       <div
-        class="flex items-center justify-end space-x-3 p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 rounded-b-lg"
+        class="flex shrink-0 items-center justify-end border-t border-gray-200 px-4 py-3 dark:border-white/10"
       >
         <button
-          class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+          type="button"
+          class="rounded px-1 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-300"
           @click="closeModal"
         >
           Close

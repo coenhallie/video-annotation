@@ -38,3 +38,14 @@ export function frameToTime(frameNumber: number, fps: number): number {
   const validFps = fps > 0 ? fps : 30;
   return frameNumber / validFps;
 }
+
+/**
+ * Compact frame token for dense lists, e.g. `F05503`. Zero-padded so a column
+ * of them stays aligned. Unlike formatFrame, frame 0 is a real frame here and
+ * renders as `F00000`.
+ */
+export function formatFrameCompact(frameNumber: number): string {
+  if (!Number.isFinite(frameNumber)) return 'F00000';
+  const frame = Math.max(0, Math.round(frameNumber));
+  return `F${String(frame).padStart(5, '0')}`;
+}

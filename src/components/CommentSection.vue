@@ -55,7 +55,6 @@ const {
 const comments = ref([]);
 const isLoading = ref(false);
 const error = ref(null);
-const showCommentForm = ref(false);
 const editingComment = ref(null);
 const anonymousSession = ref(null);
 const permissions = ref({
@@ -100,7 +99,14 @@ const allComments = computed(() => {
       });
     }
 
-    return Array.from(commentMap.values());
+    // Optimistic and realtime copies of a comment carry no joined `user` row -
+    // only the reload does. Without this, a comment you just posted shows up as
+    // "User" with a placeholder avatar until the page is reloaded.
+    return Array.from(commentMap.values()).map((comment) =>
+      !comment.user && !comment.isAnonymous && comment.userId === currentUserId.value
+        ? { ...comment, user: currentUserProfile.value }
+        : comment
+    );
   } catch (error) {
     console.error('Error in allComments computed:', error);
     return [];
@@ -118,13 +124,17 @@ const sortedComments = computed(() => {
   }
 });
 
-const commentCount = computed(() => {
-  try {
-    return allComments.value.length;
-  } catch (error) {
-    console.error('Error in commentCount computed:', error);
-    return 0;
-  }
+/** Shaped like the `users` row CommentService joins, so CommentItem reads it
+ *  the same way whether the comment came from the server or from this tab. */
+const currentUserProfile = computed(() => {
+  const authUser = user.value;
+  const meta = authUser?.user_metadata ?? {};
+  return {
+    id: currentUserId.value,
+    email: props.currentUser?.email || authUser?.email || null,
+    fullName: meta.full_name || meta.name || null,
+    avatarUrl: meta.avatar_url || null,
+  };
 });
 
 const currentUserId = computed(() => {
@@ -143,6 +153,27 @@ const isAnonymous = computed(() => {
     console.error('Error in isAnonymous computed:', error);
     return true;
   }
+});
+
+/**
+ * Whether to render the composer. Narrower than `canComment` alone: a
+ * view-only share denies commenting outright even for the video's owner.
+ */
+const canCompose = computed(
+  () => permissions.value.canComment && !props.readOnly
+);
+
+/**
+ * What stands in for the composer when there isn't one. Exactly one line: an
+ * empty thread is already visibly empty, so saying why you cannot write in it
+ * is the only thing left worth saying.
+ */
+const composerNote = computed(() => {
+  if (canCompose.value) return '';
+  if (!permissions.value.canComment) {
+    return permissions.value.reason || 'You cannot comment on this annotation';
+  }
+  return 'Comments are view-only on this share';
 });
 
 // Methods
@@ -226,22 +257,13 @@ const createAnonymousSession = async (displayName, videoId) => {
   }
 };
 
-const startAddComment = () => {
-  if (props.readOnly || !permissions.value.canComment) return;
-
-  showCommentForm.value = true;
-  editingComment.value = null;
-};
-
 const startEditComment = (comment) => {
   if (props.readOnly) return;
 
   editingComment.value = comment;
-  showCommentForm.value = true;
 };
 
 const cancelCommentForm = () => {
-  showCommentForm.value = false;
   editingComment.value = null;
 };
 
@@ -673,120 +695,75 @@ onUnmounted(() => {
 // Expose methods for parent components
 defineExpose({
   loadComments,
-  startAddComment,
 });
 </script>
 
 <template>
-  <div class="comment-section">
-    <!-- Header -->
-    <div
-      class="flex justify-between items-center p-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800"
-    >
-      <div class="flex items-center space-x-2">
-        <h4 class="text-sm font-medium text-gray-900 dark:text-gray-100">
-          Comments
-          <span
-            v-if="commentCount > 0"
-            class="text-gray-500 dark:text-gray-400 font-normal"
-          >
-            ({{ commentCount }})
-          </span>
-        </h4>
-      </div>
-
-      <button
-        v-if="permissions.canComment && !readOnly"
-        class="btn btn-primary btn-sm flex items-center space-x-1"
-        :disabled="isLoading"
-        title="Add comment"
-        @click="startAddComment"
-      >
-        <svg
-          class="icon icon-xs"
-          viewBox="0 0 24 24"
-        >
-          <path
-            d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
-          />
-        </svg>
-        <span>Add Comment</span>
-      </button>
-    </div>
-
-    <!-- Error Message -->
-    <div
+  <!--
+    No card, no panel: the thread is a continuation of the annotation row above
+    it, indented under the row's dot by AnnotationCard. The only chrome is the
+    hairline rule that carries the eye down from the row.
+  -->
+  <div class="pt-1">
+    <p
       v-if="error"
-      class="p-3 bg-red-50 dark:bg-red-900/20 border-l-4 border-red-400 dark:border-red-600"
+      class="pb-2 text-[11px] text-red-600 dark:text-red-400"
     >
-      <div class="flex">
-        <svg
-          class="icon icon-sm text-red-400 dark:text-red-500"
-          viewBox="0 0 24 24"
-        >
-          <circle
-            cx="12"
-            cy="12"
-            r="10"
-          />
-          <line
-            x1="15"
-            y1="9"
-            x2="9"
-            y2="15"
-          />
-          <line
-            x1="9"
-            y1="9"
-            x2="15"
-            y2="15"
-          />
-        </svg>
-        <div class="ml-2">
-          <p class="text-sm text-red-700 dark:text-red-300">
-            {{ error }}
-          </p>
-        </div>
-      </div>
-    </div>
+      {{ error }}
+    </p>
 
-    <!-- Loading State -->
-    <div
+    <p
       v-if="isLoading"
-      class="p-4 text-center"
+      class="py-1 font-mono text-[10px] tracking-wider text-gray-500 dark:text-gray-500"
     >
-      <div class="inline-flex items-center space-x-2 text-gray-500 dark:text-gray-400">
-        <svg
-          class="animate-spin icon icon-sm"
-          viewBox="0 0 24 24"
-        >
-          <circle
-            cx="12"
-            cy="12"
-            r="10"
-            stroke="currentColor"
-            stroke-width="4"
-            fill="none"
-            opacity="0.25"
-          />
-          <path
-            fill="currentColor"
-            opacity="0.75"
-            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-          />
-        </svg>
-        <span class="text-sm">Loading comments...</span>
-      </div>
-    </div>
+      LOADING&hellip;
+    </p>
 
-    <!-- Comment Form -->
-    <div
-      v-if="showCommentForm"
-      class="border-b border-gray-200 dark:border-gray-700"
-    >
+    <template v-else>
+      <div
+        v-if="sortedComments.length > 0"
+        class="space-y-3"
+      >
+        <template
+          v-for="comment in sortedComments"
+          :key="comment.id"
+        >
+          <!-- Editing happens where the comment sits, not in a form that
+               appears somewhere else on screen. -->
+          <CommentForm
+            v-if="editingComment && editingComment.id === comment.id"
+            :annotation-id="props.annotationId"
+            :editing-comment="editingComment"
+            :is-anonymous="isAnonymous"
+            :anonymous-session="anonymousSession"
+            @submit="handleCommentSubmit"
+            @cancel="cancelCommentForm"
+            @typing="handleFormTyping"
+            @stop-typing="handleFormStopTyping"
+          />
+          <CommentItem
+            v-else
+            :comment="comment"
+            :can-edit="canEditComment(comment)"
+            :can-moderate="canModerateComment(comment)"
+            :read-only="readOnly"
+            :is-new="newCommentIndicators.has(comment.id)"
+            :class="{ 'opacity-60': String(comment.id).startsWith('temp_') }"
+            @edit="handleCommentEdit"
+            @delete="handleCommentDelete"
+            @moderate="handleCommentModerate"
+          />
+        </template>
+      </div>
+
+      <!-- An empty thread needs no prompt of its own: the composer's
+           placeholder is the invitation, and where there is no composer the
+           note below says why. -->
       <CommentForm
+        v-if="canCompose && !editingComment"
+        :class="{ 'mt-3': sortedComments.length > 0 }"
         :annotation-id="props.annotationId"
-        :editing-comment="editingComment"
+        :editing-comment="null"
         :is-anonymous="isAnonymous"
         :anonymous-session="anonymousSession"
         @submit="handleCommentSubmit"
@@ -794,106 +771,13 @@ defineExpose({
         @typing="handleFormTyping"
         @stop-typing="handleFormStopTyping"
       />
-    </div>
 
-    <!-- Comments List -->
-    <div class="comment-list">
-      <div
-        v-if="!isLoading && sortedComments.length === 0"
-        class="p-4 text-center text-gray-500 dark:text-gray-400"
+      <p
+        v-else-if="composerNote"
+        class="py-1 text-[11px] text-gray-500 dark:text-gray-500"
       >
-        <svg
-          class="icon icon-lg mx-auto mb-2 text-gray-300 dark:text-gray-600"
-          viewBox="0 0 24 24"
-        >
-          <path
-            d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
-          />
-        </svg>
-        <p class="text-sm">
-          No comments yet
-        </p>
-        <p
-          v-if="permissions.canComment"
-          class="text-xs text-gray-400 dark:text-gray-500 mt-1"
-        >
-          Be the first to add a comment
-        </p>
-      </div>
-
-      <div
-        v-else
-        class="divide-y divide-gray-100 dark:divide-gray-700"
-      >
-        <CommentItem
-          v-for="comment in sortedComments"
-          :key="comment.id"
-          :comment="comment"
-          :can-edit="canEditComment(comment)"
-          :can-moderate="canModerateComment(comment)"
-          :read-only="readOnly"
-          :class="{
-            'bg-blue-50 dark:bg-blue-900/20 border-l-4 border-l-blue-400 dark:border-l-blue-600': newCommentIndicators.has(
-              comment.id
-            ),
-            'animate-pulse': comment.id.toString().startsWith('temp_'),
-          }"
-          @edit="handleCommentEdit"
-          @delete="handleCommentDelete"
-          @moderate="handleCommentModerate"
-        />
-      </div>
-    </div>
-
-    <!-- Read-only Notice (removed - comments always allowed) -->
-    <div
-      v-if="false"
-      class="p-3 bg-gray-50 border-t border-gray-200"
-    >
-      <p class="text-xs text-gray-500 text-center">
-        Comments are view-only in this mode
+        {{ composerNote }}
       </p>
-    </div>
-
-    <!-- Permission Notice -->
-    <div
-      v-else-if="!permissions.canComment"
-      class="p-3 bg-yellow-50 dark:bg-yellow-900/20 border-t border-yellow-200 dark:border-yellow-700"
-    >
-      <p class="text-xs text-yellow-700 dark:text-yellow-400 text-center">
-        {{
-          permissions.reason ||
-            'You do not have permission to comment on this annotation'
-        }}
-      </p>
-    </div>
+    </template>
   </div>
 </template>
-
-<style scoped>
-@import 'tailwindcss' reference;
-
-.comment-section {
-  @apply bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm overflow-hidden;
-}
-
-.comment-list {
-  @apply max-h-96 overflow-y-auto;
-}
-
-.btn-sm {
-  @apply px-2 py-1 text-xs;
-}
-
-.btn:disabled {
-  @apply opacity-50 cursor-not-allowed;
-}
-
-.icon-xs {
-  @apply w-3 h-3;
-}
-
-.icon-lg {
-  @apply w-8 h-8;
-}
-</style>

@@ -25,22 +25,25 @@ const reloadPage = () => window.location.reload();
 </script>
 
 <template>
+  <!-- The error boundary had no dark mode at all, so a crash flipped the whole
+       app to a light-red page. -->
   <div
     v-if="hasError"
-    class="min-h-screen bg-red-50 flex items-center justify-center p-4"
+    class="flex min-h-screen items-center justify-center bg-white px-6 dark:bg-gray-900"
   >
-    <div class="max-w-md w-full bg-white rounded-lg shadow-lg p-6">
-      <h2 class="text-lg font-semibold text-red-600 mb-2">
-        Application Error
+    <div class="w-full max-w-xs">
+      <h2 class="text-[13px] font-semibold tracking-tight text-red-600 dark:text-red-400">
+        Application error
       </h2>
-      <p class="text-gray-600 mb-4">
+      <p class="mt-2 text-[12px] leading-relaxed text-gray-600 dark:text-gray-400">
         {{ errorMessage }}
       </p>
-      <button 
-        class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+      <button
+        type="button"
+        class="mt-6 w-full rounded bg-gray-900 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-white transition-colors hover:bg-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600"
         @click="reloadPage"
       >
-        Reload Page
+        Reload page
       </button>
     </div>
   </div>

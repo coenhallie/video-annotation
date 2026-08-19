@@ -1,10 +1,10 @@
 <template>
   <div
     :class="[
-      'project-list-item group flex items-center gap-4 p-3 bg-white dark:bg-gray-800 border rounded-lg cursor-pointer transition-all',
+      'group flex cursor-pointer items-center gap-3 rounded px-3 py-2.5 transition-colors',
       isSelected || isInspected
-        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700',
+        ? 'bg-gray-100 dark:bg-white/[0.06]'
+        : 'hover:bg-gray-50 dark:hover:bg-white/[0.03]',
       isDragging && 'opacity-50',
     ]"
     draggable="true"
@@ -14,109 +14,81 @@
   >
     <!-- Thumbnail -->
     <div
-      class="w-20 h-12 bg-gray-100 dark:bg-gray-900 rounded overflow-hidden flex-shrink-0"
+      class="h-11 w-[4.5rem] shrink-0 overflow-hidden rounded bg-gray-100 dark:bg-white/5"
     >
       <img
         v-if="project.thumbnailUrl"
         :src="project.thumbnailUrl"
         :alt="project.title"
-        class="w-full h-full object-cover"
+        class="h-full w-full object-cover"
       >
       <div
         v-else
-        class="w-full h-full flex items-center justify-center"
+        class="flex h-full w-full items-center justify-center"
       >
         <svg
-          class="w-6 h-6 text-gray-400"
+          class="h-4 w-4 text-gray-400 dark:text-gray-500"
+          viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
-          viewBox="0 0 24 24"
+          stroke-width="2"
         >
           <path
             stroke-linecap="round"
             stroke-linejoin="round"
-            stroke-width="2"
             d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
           />
         </svg>
       </div>
     </div>
 
-    <!-- Project Info -->
-    <div class="flex-1 min-w-0">
-      <div class="flex items-center gap-2 mb-1">
-        <h3 class="font-medium text-gray-900 dark:text-white truncate">
-          {{ project.title }}
-        </h3>
-        <!-- Project Type Badge -->
-        <span
-          v-if="project.projectType === 'dual'"
-          class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-300"
-        >
-          Dual
+    <!-- Project Info. Everything below the title is one mono meta line - the
+         same token style the annotation rows use - so the row has a single
+         reading order instead of pills competing along both edges. -->
+    <div class="min-w-0 flex-1">
+      <h3 class="truncate text-[13px] font-medium tracking-tight text-gray-900 dark:text-white">
+        {{ project.title }}
+      </h3>
+      <div
+        class="mt-1 flex items-center gap-2 font-mono text-[10px] tracking-wider text-gray-500 dark:text-gray-400"
+      >
+        <span v-if="project.projectType === 'dual'">DUAL</span>
+        <span>{{ formatDuration(getDuration()) }}</span>
+        <span v-if="project.projectType === 'single' && project.video.fps">
+          {{ project.video.fps }}FPS
         </span>
-        <!-- Team watch coverage -->
-        <span
-          v-if="watchPercent !== undefined"
-          class="ml-auto shrink-0 text-xs text-gray-500 dark:text-gray-400"
-          title="Watched"
-        >
-          {{ Math.round(watchPercent) }}%
-        </span>
-      </div>
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
-          <span>{{ formatDuration(getDuration()) }}</span>
-          <span v-if="project.projectType === 'single' && project.video.fps">
-            {{ project.video.fps }} FPS
-          </span>
-          <span>{{ formatDate(project.createdAt) }}</span>
-        </div>
-        <div class="flex items-center gap-1">
-          <!-- Annotation count pill -->
-          <span
-            v-if="annotationCount && annotationCount > 0"
-            class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300"
-          >
-            <svg
-              class="w-3 h-3"
-              fill="currentColor"
-              viewBox="0 0 20 20"
-            >
-              <path
-                fill-rule="evenodd"
-                d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"
-                clip-rule="evenodd"
-              />
-            </svg>
-            {{ annotationCount }}
-          </span>
+        <span>{{ formatDate(project.createdAt) }}</span>
 
-          <!-- Comment count pill -->
-          <span
-            v-if="commentCount && commentCount > 0"
-            class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300"
-          >
-            <svg
-              class="w-3 h-3"
-              fill="currentColor"
-              viewBox="0 0 20 20"
-            >
-              <path
-                fill-rule="evenodd"
-                d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z"
-                clip-rule="evenodd"
-              />
-            </svg>
-            {{ commentCount }}
-          </span>
-        </div>
+        <span
+          v-if="annotationCount && annotationCount > 0"
+          :title="`${annotationCount} annotation${annotationCount !== 1 ? 's' : ''}`"
+        >
+          {{ annotationCount }}A
+        </span>
+        <span
+          v-if="commentCount && commentCount > 0"
+          :title="`${commentCount} comment${commentCount !== 1 ? 's' : ''}`"
+        >
+          {{ commentCount }}C
+        </span>
       </div>
     </div>
+
+    <!-- Team watch coverage. Suppressed at 0: DashboardView passes `?? 0` while
+         coverage is still loading, so an always-on chip would print "0%" on
+         every row - and an unwatched video is better said by no mark at all. -->
+    <span
+      v-if="watchedPercentLabel !== null"
+      class="shrink-0 font-mono text-[11px] tracking-wider text-gray-500 dark:text-gray-400"
+      title="Watched by the team"
+    >
+      {{ watchedPercentLabel }}%
+    </span>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import type { Project } from '../types/project';
 
 // Props
@@ -137,6 +109,17 @@ const emit = defineEmits<{
   dragstart: [project: Project, event: DragEvent];
   dragend: [event: DragEvent];
 }>();
+
+/**
+ * Rounded coverage, or null when there is nothing to say. A video nobody has
+ * watched and a video whose coverage has not loaded yet both arrive here as 0,
+ * and neither earns a token in the row.
+ */
+const watchedPercentLabel = computed((): number | null => {
+  if (props.watchPercent === undefined) return null;
+  const rounded = Math.round(props.watchPercent);
+  return rounded > 0 ? rounded : null;
+});
 
 // Methods
 const handleClick = (event: MouseEvent) => {
@@ -198,9 +181,3 @@ const formatDate = (dateString: string): string => {
   }
 };
 </script>
-
-<style scoped>
-.project-list-item {
-  transition: all 0.2s ease;
-}
-</style>

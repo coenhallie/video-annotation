@@ -16,15 +16,11 @@
       class="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
     >
       <div
-        class="bg-white dark:bg-gray-800 rounded-lg px-4 py-3 flex items-center space-x-3 shadow-lg"
+        class="rounded border border-gray-200 bg-white px-3 py-2 shadow-lg dark:border-white/10 dark:bg-gray-900"
       >
-        <div
-          class="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"
-        />
-        <span class="text-gray-700 dark:text-gray-200 font-medium">Loading drawings...</span>
+        <span class="text-[12px] text-gray-700 dark:text-gray-200">Loading drawings…</span>
       </div>
     </div>
-
   </div>
 </template>
 

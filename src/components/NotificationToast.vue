@@ -3,37 +3,28 @@ import { useNotifications } from '../composables/useNotifications.ts';
 
 const { notifications, removeNotification } = useNotifications();
 
-const getIconForType = (type) => {
+/**
+ * The dot is the only colour on the toast, so it has to carry the status on
+ * its own - the same job the label dot does on an annotation row. Flattening
+ * these to grey would delete the one thing the toast is there to say.
+ */
+const getDotClass = (type) => {
   switch (type) {
     case 'success':
-      return '✓';
+      return 'bg-green-500';
     case 'error':
-      return '✕';
+      return 'bg-red-500';
     case 'warning':
-      return '⚠';
+      return 'bg-amber-500';
     case 'info':
     default:
-      return 'ℹ';
-  }
-};
-
-const getColorClasses = (type) => {
-  switch (type) {
-    case 'success':
-      return 'bg-green-50 dark:bg-green-900/30 border-green-200 dark:border-green-800 text-green-800 dark:text-green-200';
-    case 'error':
-      return 'bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-800 text-red-800 dark:text-red-200';
-    case 'warning':
-      return 'bg-yellow-50 dark:bg-yellow-900/30 border-yellow-200 dark:border-yellow-800 text-yellow-800 dark:text-yellow-200';
-    case 'info':
-    default:
-      return 'bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200';
+      return 'bg-gray-400 dark:bg-gray-500';
   }
 };
 </script>
 
 <template>
-  <div class="fixed top-4 right-4 z-50 space-y-2">
+  <div class="fixed right-4 top-4 z-50 space-y-2">
     <TransitionGroup
       name="notification"
       tag="div"
@@ -42,49 +33,45 @@ const getColorClasses = (type) => {
       <div
         v-for="notification in notifications"
         :key="notification.id"
-        :class="[
-          'max-w-sm w-full shadow-lg rounded-lg border p-4 flex items-start space-x-3',
-          'transform transition-all duration-300 ease-in-out',
-          getColorClasses(notification.type),
-        ]"
+        class="flex w-full max-w-sm items-start gap-3 rounded border border-gray-200 bg-white px-3 py-2.5 shadow-lg transition-all duration-300 ease-in-out dark:border-white/10 dark:bg-gray-900"
       >
-        <div class="flex-shrink-0">
-          <span class="text-lg font-semibold">
-            {{ getIconForType(notification.type) }}
-          </span>
-        </div>
-        <div class="flex-1 min-w-0">
-          <p class="text-sm font-medium">
+        <span
+          class="mt-[7px] h-2 w-2 shrink-0 rounded-full"
+          :class="getDotClass(notification.type)"
+        />
+
+        <div class="min-w-0 flex-1">
+          <p class="text-[12px] font-medium text-gray-900 dark:text-white">
             {{ notification.title }}
           </p>
           <p
             v-if="notification.message"
-            class="text-sm mt-1 opacity-90"
+            class="mt-1 text-[11px] text-gray-500 dark:text-gray-400"
           >
             {{ notification.message }}
           </p>
         </div>
-        <div class="flex-shrink-0">
-          <button
-            class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
-            @click="removeNotification(notification.id)"
+
+        <button
+          type="button"
+          class="-my-0.5 shrink-0 rounded p-1 text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
+          @click="removeNotification(notification.id)"
+        >
+          <span class="sr-only">Close</span>
+          <svg
+            class="h-3.5 w-3.5"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
           >
-            <span class="sr-only">Close</span>
-            <svg
-              class="h-4 w-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </button>
-        </div>
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M18 6 6 18M6 6l12 12"
+            />
+          </svg>
+        </button>
       </div>
     </TransitionGroup>
   </div>

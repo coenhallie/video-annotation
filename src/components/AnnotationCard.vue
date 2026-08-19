@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { type PropType } from 'vue';
-import { formatFrame } from '@/utils/formatters';
+import { computed, type PropType } from 'vue';
+import { formatFrameCompact, formatTime } from '@/utils/formatters';
 import CommentSection from './CommentSection.vue';
 import type { Comment } from '../types/database';
 import type { Label } from '../types/labels';
@@ -16,10 +16,6 @@ const props = defineProps({
     default: false,
   },
   readOnly: {
-    type: Boolean,
-    default: false,
-  },
-  isAuthenticated: {
     type: Boolean,
     default: false,
   },
@@ -71,267 +67,226 @@ const emit = defineEmits<{
   (e: 'comment-deleted', comment: Comment): void;
 }>();
 
-// Get labels for the annotation
-const getAnnotationLabels = (): Label[] => {
-  if (!props.annotation.labels || props.annotation.labels.length === 0) return [];
-  return props.annotation.labels
-    .map((labelId: string) => props.labelColors[labelId])
-    .filter((l): l is Label => l != null);
-};
+/** Labels the viewer can resolve. Unreadable ids are dropped, not guessed at. */
+const labels = computed((): Label[] =>
+  (props.annotation.labels ?? [])
+    .map((labelId) => props.labelColors[labelId])
+    .filter((label): label is Label => label != null)
+);
 
-// Default color for annotations without specific labels
-const defaultAnnotationColor = '#6b7280'; // gray-500
+/** The dot is the only colour in the row, so it carries the label identity. */
+const dotColor = computed(() => labels.value[0]?.color ?? '#6b7280');
 
-// Get primary label color for annotation display
-const getPrimaryLabelColor = (): string => {
-  const labels = getAnnotationLabels();
-  const first = labels[0] as Label | undefined;
-  return first ? first.color : defaultAnnotationColor;
-};
+/**
+ * The row's identity line. A label name when there is one; otherwise the note
+ * itself, because for an unlabelled annotation that text is the only thing
+ * identifying it - and many older annotations are exactly that. `note` stands
+ * down in that case so the row never prints the same sentence twice.
+ */
+const title = computed(() => {
+  const labelName = labels.value[0]?.name?.trim();
+  if (labelName) return labelName;
+  return props.annotation.content?.trim() || 'Annotation';
+});
 
-// Helper to compute frame from timestamp
-const timeToFrame = (timeInSeconds: number): number => {
+const frame = computed(() => {
+  if (typeof props.annotation.frame === 'number') return props.annotation.frame;
   const validFps = props.fps > 0 ? props.fps : 30;
-  return Math.max(0, Math.round(timeInSeconds * validFps));
-};
+  return Math.max(0, Math.round(props.annotation.timestamp * validFps));
+});
+
+/**
+ * Dual mode annotates two videos at once, so one frame token cannot stand for
+ * both. Fall back to A's frame and let the timecode carry the position.
+ */
+const frameLabel = computed(() => {
+  if (props.isDualMode && typeof props.annotation.videoAFrame === 'number') {
+    return formatFrameCompact(props.annotation.videoAFrame);
+  }
+  return formatFrameCompact(frame.value);
+});
+
+const timecode = computed(() => formatTime(props.annotation.timestamp));
+
+const hasDrawing = computed(
+  () => props.annotation.annotationType === 'drawing' || Boolean(props.annotation.drawingData)
+);
+
+/** The label already names the annotation, so only add a note that says more. */
+const note = computed(() => {
+  const content = props.annotation.content?.trim() ?? '';
+  return content && content !== title.value ? content : '';
+});
+
+const select = () => emit('select');
 </script>
 
 <template>
-  <div
-    class="card mb-2 p-2 transition-all duration-200 relative group"
-    :class="{
-      'bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-700 shadow-md ring-2 ring-blue-200 dark:ring-blue-800 cursor-default':
-        isSelected,
-      'bg-white dark:bg-gray-800 cursor-pointer card-hover':
-        !isSelected,
-    }"
-    :style="{
-      borderLeft: `4px solid ${getPrimaryLabelColor()}`,
-    }"
-    @click="emit('select')"
-  >
-    <div class="flex justify-between items-center mb-1">
-      <div class="flex items-center space-x-1.5 text-xs text-gray-600 dark:text-gray-300">
-        <!-- Show primary label or annotation type -->
-        <div class="flex items-center space-x-1">
-          <div
-            class="w-3 h-3 rounded-full border border-gray-300 dark:border-gray-600"
-            :style="{ backgroundColor: getPrimaryLabelColor() }"
-          />
+  <div class="group">
+    <div
+      class="relative flex w-full cursor-pointer items-start gap-3 rounded px-3 py-2.5 transition-colors"
+      :class="
+        isSelected
+          ? 'bg-gray-100 dark:bg-white/[0.06]'
+          : 'hover:bg-gray-50 dark:hover:bg-white/[0.03]'
+      "
+      role="button"
+      tabindex="0"
+      @click="select"
+      @keydown.enter.prevent="select"
+      @keydown.space.prevent="select"
+    >
+      <span
+        class="mt-[7px] h-2 w-2 shrink-0 rounded-full"
+        :style="{ backgroundColor: dotColor }"
+      />
+
+      <div class="min-w-0 flex-1">
+        <p
+          class="truncate text-[13px] font-medium uppercase tracking-[0.06em]"
+          :class="
+            isSelected
+              ? 'text-gray-900 dark:text-white'
+              : 'text-gray-700 dark:text-gray-200'
+          "
+        >
+          {{ title }}
+        </p>
+
+        <div
+          class="mt-1 flex items-center gap-2 font-mono text-[10px] tracking-wider text-gray-500 dark:text-gray-500"
+        >
+          <span>{{ frameLabel }}</span>
+
           <span
-            :class="{
-              'text-blue-700 dark:text-blue-300 font-medium':
-                isSelected,
-            }"
+            v-if="hasDrawing"
+            title="Has a drawing"
+          >DRAW</span>
+
+          <!-- Comments open from the count itself: an always-present toggle on
+               every row is the clutter this panel is shedding. -->
+          <button
+            v-if="commentCount > 0"
+            type="button"
+            class="relative -my-0.5 rounded px-1 py-0.5 transition-colors hover:text-gray-900 dark:hover:text-gray-300"
+            :class="{ 'text-gray-900 dark:text-gray-300': isCommentsExpanded }"
+            :title="`${commentCount} comment${commentCount !== 1 ? 's' : ''}`"
+            @click.stop="emit('toggle-comments')"
           >
-            {{
-              getAnnotationLabels().length > 0
-                ? (getAnnotationLabels()[0] as Label).name
-                : 'Annotation'
-            }}
-          </span>
+            {{ commentCount }}C
+            <span
+              v-if="hasNewComments"
+              class="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-red-500"
+              :title="`${newCommentCount} new comment${newCommentCount !== 1 ? 's' : ''}`"
+            />
+          </button>
         </div>
 
-        <!-- Comment count indicator -->
-        <div class="flex items-center space-x-1 ml-2 relative">
-          <span
-            class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
-            :title="`${commentCount} comment${
-              commentCount !== 1 ? 's' : ''
-            }`"
+        <p
+          v-if="note"
+          class="mt-1 truncate text-[11px] text-gray-500 dark:text-gray-400"
+        >
+          {{ note }}
+        </p>
+      </div>
+
+      <!-- Fixed-width slot so the actions can take the timecode's place on
+           hover without shifting the row or covering a long label. The swap is
+           keyed to this slot, not to the row: the row itself is focusable, and
+           selecting one must not strip its timecode for as long as it holds
+           focus. Keyboard users still reach the buttons, which reveal
+           themselves once one of them takes focus. -->
+      <div class="group/actions relative mt-0.5 h-5 w-20 shrink-0">
+        <span
+          class="absolute inset-0 flex items-center justify-end font-mono text-[11px] tracking-wider text-gray-500 transition-opacity dark:text-gray-500"
+          :class="{
+            'group-hover:opacity-0 group-has-[:focus-visible]/actions:opacity-0': !readOnly,
+          }"
+        >
+          {{ timecode }}
+        </span>
+
+        <div
+          v-if="!readOnly"
+          class="absolute inset-0 flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-has-[:focus-visible]/actions:opacity-100"
+        >
+          <!-- Only where the meta row has no count to click: a row with
+               comments already carries its own way in. -->
+          <button
+            v-if="commentCount === 0"
+            type="button"
+            class="rounded p-1 text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
+            title="Add a comment"
+            @click.stop="emit('toggle-comments')"
           >
             <svg
-              class="w-3 h-3 mr-1"
-              fill="currentColor"
-              viewBox="0 0 20 20"
+              class="h-3.5 w-3.5"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
             >
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            class="rounded p-1 text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
+            title="Edit annotation"
+            @click.stop="emit('edit')"
+          >
+            <svg
+              class="h-3.5 w-3.5"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            class="rounded p-1 text-gray-500 transition-colors hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400"
+            title="Delete annotation"
+            @click.stop="emit('delete')"
+          >
+            <svg
+              class="h-3.5 w-3.5"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <polyline points="3 6 5 6 21 6" />
               <path
-                fill-rule="evenodd"
-                d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z"
-                clip-rule="evenodd"
+                d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
               />
             </svg>
-            {{ commentCount || 0 }}
-          </span>
-
-          <!-- New comments indicator (always visible when there are new comments) -->
-          <div
-            v-if="hasNewComments"
-            class="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse"
-            :title="`${newCommentCount} new comment${
-              newCommentCount > 1 ? 's' : ''
-            }`"
-          />
-
-          <!-- Real-time activity indicator (when comments are expanded and no new comments) -->
-          <div
-            v-if="
-              !hasNewComments &&
-                isCommentsExpanded
-            "
-            class="absolute -top-1 -right-1 w-2 h-2 bg-green-400 rounded-full animate-pulse"
-            title="Real-time comments active"
-          />
+          </button>
         </div>
-      </div>
-      <div
-        class="font-mono text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded flex flex-col items-center"
-      >
-        <!-- Dual video mode: Show both video frame numbers if available -->
-        <div
-          v-if="
-            isDualMode &&
-              (annotation.videoAFrame !== undefined ||
-                annotation.videoBFrame !== undefined)
-          "
-          class="text-xs opacity-75 space-y-0.5"
-        >
-          <div
-            v-if="annotation.videoAFrame !== undefined"
-            class="text-blue-600"
-          >
-            A: {{ formatFrame(annotation.videoAFrame) }}
-          </div>
-          <div
-            v-if="annotation.videoBFrame !== undefined"
-            class="text-green-600"
-          >
-            B: {{ formatFrame(annotation.videoBFrame) }}
-          </div>
-        </div>
-
-        <!-- Single video mode or fallback: Show single frame -->
-        <span
-          v-else
-          class="text-xs opacity-75"
-        >{{
-          annotation.frame !== undefined
-            ? formatFrame(annotation.frame)
-            : formatFrame(timeToFrame(annotation.timestamp))
-        }}</span>
       </div>
     </div>
 
+    <!-- v-if, not v-show: CommentSection fetches on mount, so keeping every
+         row's section alive would query comments for the whole video at once.
+         The rule sits at 16px, under the centre of the row's dot, and the inner
+         padding puts the thread text on the same line as the row's title. -->
     <div
-      v-if="
-        annotation.annotationType === 'drawing' ||
-          annotation.drawingData ||
-          (annotation.content && annotation.content.length)
-      "
+      v-if="isCommentsExpanded"
+      class="ml-4 border-l border-gray-200 pb-3 pl-4 pr-3 dark:border-white/10"
+      @click.stop
     >
-      <div class="flex items-center space-x-1 mb-0.5">
-        <!-- Drawing indicator -->
-        <div
-          v-if="
-            annotation.annotationType === 'drawing' ||
-              annotation.drawingData
-          "
-          class="flex items-center space-x-1 px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded text-xs"
-        >
-          <svg
-            class="w-3 h-3"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-          </svg>
-          <span>Drawing</span>
-        </div>
-      </div>
-      <p
-        v-if="annotation.content && annotation.content.length"
-        class="text-sm text-gray-600 dark:text-gray-300 mb-1 leading-snug"
-      >
-        {{ annotation.content }}
-      </p>
-    </div>
-
-    <!-- Action buttons and comment toggle -->
-    <div class="flex justify-between items-center mt-1">
-      <!-- Comment toggle button (always visible) -->
-      <button
-        class="btn btn-ghost p-1 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30"
-        :title="
-          isCommentsExpanded
-            ? 'Hide comments'
-            : 'Show comments'
-        "
-        @click.stop="emit('toggle-comments')"
-      >
-        <svg
-          class="icon icon-sm"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-        >
-          <path
-            d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
-          />
-        </svg>
-        <span class="text-xs ml-1">
-          {{ isCommentsExpanded ? 'Hide' : 'Comments' }}
-        </span>
-      </button>
-
-      <!-- Edit/Delete buttons (only visible on hover and when not read-only) -->
-      <div
-        v-if="!readOnly"
-        class="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-      >
-        <button
-          class="btn btn-ghost p-1 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-          title="Edit annotation"
-          @click.stop="emit('edit')"
-        >
-          <svg
-            class="icon icon-sm"
-            viewBox="0 0 24 24"
-          >
-            <path
-              d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"
-            />
-            <path
-              d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
-            />
-          </svg>
-        </button>
-        <button
-          class="btn btn-ghost p-1 text-red-600 hover:text-red-700"
-          title="Delete annotation"
-          @click.stop="emit('delete')"
-        >
-          <svg
-            class="icon icon-sm"
-            viewBox="0 0 24 24"
-          >
-            <polyline points="3 6 5 6 21 6" />
-            <path
-              d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
-            />
-          </svg>
-        </button>
-      </div>
-    </div>
-
-    <!-- Expandable Comment Section -->
-    <div
-      v-show="isCommentsExpanded"
-      class="mt-2 border-t border-gray-200 pt-2"
-    >
-      <div @click.stop>
-        <CommentSection
-          :annotation-id="annotation.id"
-          :current-user="currentUser"
-          :video-id="videoId"
-          :read-only="readOnly"
-          @comment-added="(c: Comment) => emit('comment-added', c)"
-          @comment-updated="(c: Comment) => emit('comment-updated', c)"
-          @comment-deleted="(c: Comment) => emit('comment-deleted', c)"
-        />
-      </div>
+      <CommentSection
+        :annotation-id="annotation.id"
+        :current-user="currentUser"
+        :video-id="videoId"
+        :read-only="readOnly"
+        @comment-added="(c: Comment) => emit('comment-added', c)"
+        @comment-updated="(c: Comment) => emit('comment-updated', c)"
+        @comment-deleted="(c: Comment) => emit('comment-deleted', c)"
+      />
     </div>
   </div>
 </template>

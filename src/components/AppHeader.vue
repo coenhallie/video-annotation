@@ -16,31 +16,38 @@ defineEmits<{
 </script>
 
 <template>
+  <!-- Same surface as the pages below it (editor and annotation panel are both
+       white / gray-900), so the nav reads as the top of one sheet rather than a
+       separate bar stacked on the app. -->
   <header
-    class="flex items-center justify-between px-6 py-3 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700"
+    class="flex h-12 shrink-0 items-center gap-3 border-b border-gray-200 bg-white px-6 dark:border-white/10 dark:bg-gray-900"
   >
-    <div class="flex items-center space-x-3">
-      <router-link
-        to="/"
-        class="text-xl font-medium text-gray-900 dark:text-white hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-        title="Back to library"
-      >
-        <h1>Perspecto</h1>
-      </router-link>
-      <span
-        class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200 border border-orange-200 dark:border-orange-800 cursor-pointer hover:bg-orange-200 dark:hover:bg-orange-800 transition-colors"
-        @click="$emit('open-changelog')"
-      >
-        BETA v3.9
-      </span>
-    </div>
+    <router-link
+      to="/"
+      class="text-[13px] font-semibold uppercase tracking-[0.18em] text-gray-900 transition-colors hover:text-gray-600 dark:text-white dark:hover:text-gray-300"
+      title="Back to library"
+    >
+      <h1>Perspecto</h1>
+    </router-link>
 
-    <div class="flex items-center gap-3">
+    <!-- The version is meta, not a badge: it sits in the same mono token style
+         the annotation rows use for their frame and timecode. -->
+    <button
+      type="button"
+      class="font-mono text-[10px] tracking-wider text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
+      title="What's new"
+      @click="$emit('open-changelog')"
+    >
+      BETA v3.9
+    </button>
+
+    <div class="ml-auto flex items-center gap-4">
       <slot />
       <template v-if="showUserControls">
         <ThemeToggle />
         <button
-          class="px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+          type="button"
+          class="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
           @click="$emit('sign-out')"
         >
           Sign out

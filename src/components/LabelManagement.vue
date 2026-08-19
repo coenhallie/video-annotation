@@ -1,300 +1,156 @@
 <template>
   <div class="label-management w-full bg-white dark:bg-gray-900">
     <!-- Loading State -->
-    <div
+    <p
       v-if="loading"
-      class="flex items-center justify-center py-12"
+      class="px-4 py-12 text-center text-[12px] text-gray-600 dark:text-gray-400"
     >
-      <div class="text-center">
-        <div
-          class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100"
-        />
-        <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-          Loading labels...
-        </p>
-      </div>
-    </div>
+      Loading labels…
+    </p>
 
     <!-- Content -->
     <div v-else>
-      <!-- Header -->
-      <div class="flex items-center justify-between mb-6">
-        <div>
-          <h2 class="text-xl font-semibold text-gray-900 dark:text-gray-100">
-            Label Management
-          </h2>
-          <p class="text-sm text-gray-600 mt-1">
-            Create and manage custom labels for your annotations
-          </p>
-        </div>
+      <!-- Header. The three icon-and-number stat cards said less than one mono
+           line: two of the three counts are derivable from the list itself. -->
+      <div class="mb-5 flex items-baseline gap-2.5">
+        <h2 class="text-[13px] font-semibold tracking-tight text-gray-900 dark:text-white">
+          Labels
+        </h2>
+        <span class="font-mono text-[11px] tracking-wider text-gray-500 dark:text-gray-500">
+          {{ labels.length }}
+        </span>
+        <span
+          class="font-mono text-[10px] tracking-wider text-gray-500 dark:text-gray-500"
+        >
+          {{ customLabels.length }} CUSTOM
+        </span>
+        <span
+          v-if="mostUsedLabel"
+          class="truncate font-mono text-[10px] tracking-wider text-gray-500 dark:text-gray-500"
+        >
+          · MOST USED {{ mostUsedLabel.name }}
+        </span>
         <button
-          class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          type="button"
+          class="ml-auto rounded px-1 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-300"
           @click="showCreateForm = true"
         >
-          <svg
-            class="w-4 h-4 mr-2"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M12 4v16m8-8H4"
-            />
-          </svg>
-          Create Label
+          + New label
         </button>
       </div>
 
-      <!-- Statistics -->
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div class="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-          <div class="flex items-center">
-            <div class="flex-shrink-0">
-              <div
-                class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center"
-              >
-                <svg
-                  class="w-4 h-4 text-blue-600"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"
-                  />
-                </svg>
-              </div>
-            </div>
-            <div class="ml-4">
-              <p class="text-sm font-medium text-gray-500">
-                Total Labels
-              </p>
-              <p class="text-2xl font-semibold text-gray-900 dark:text-gray-100">
-                {{ labels.length }}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div class="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-          <div class="flex items-center">
-            <div class="flex-shrink-0">
-              <div
-                class="w-8 h-8 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center"
-              >
-                <svg
-                  class="w-4 h-4 text-green-600 dark:text-green-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-              </div>
-            </div>
-            <div class="ml-4">
-              <p class="text-sm font-medium text-gray-500 dark:text-gray-400">
-                Custom Labels
-              </p>
-              <p class="text-2xl font-semibold text-gray-900 dark:text-gray-100">
-                {{ customLabels.length }}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div class="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-          <div class="flex items-center">
-            <div class="flex-shrink-0">
-              <div
-                class="w-8 h-8 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center"
-              >
-                <svg
-                  class="w-4 h-4 text-purple-600 dark:text-purple-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M13 10V3L4 14h7v7l9-11h-7z"
-                  />
-                </svg>
-              </div>
-            </div>
-            <div class="ml-4">
-              <p class="text-sm font-medium text-gray-500 dark:text-gray-400">
-                Most Used
-              </p>
-              <p class="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                {{ mostUsedLabel?.name || 'None' }}
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <!-- Search and Filter -->
-      <div class="mb-6">
-        <div class="flex flex-col sm:flex-row gap-4">
-          <div class="flex-1">
-            <label
-              for="search"
-              class="sr-only"
-            >Search labels</label>
-            <div class="relative">
-              <div
-                class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"
-              >
-                <svg
-                  class="h-5 w-5 text-gray-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                  />
-                </svg>
-              </div>
-              <input
-                id="search"
-                v-model="searchQuery"
-                type="text"
-                placeholder="Search labels..."
-                class="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md leading-5 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              >
-            </div>
-          </div>
-          <div class="flex gap-2">
-            <select
-              v-model="filterType"
-              class="block w-full pl-3 pr-10 py-2 text-base border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-blue-500 focus:border-blue-500 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 sm:text-sm"
-            >
-              <option value="all">
-                All Labels
-              </option>
-              <option value="default">
-                Default Labels
-              </option>
-              <option value="custom">
-                Custom Labels
-              </option>
-            </select>
-          </div>
+      <div class="mb-4 flex flex-wrap items-center gap-2">
+        <label
+          for="search"
+          class="sr-only"
+        >Search labels</label>
+        <input
+          id="search"
+          v-model="searchQuery"
+          type="text"
+          placeholder="Search labels…"
+          class="min-w-[10rem] flex-1 rounded border border-gray-200 bg-transparent px-2.5 py-1.5 text-[12px] leading-snug text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-400 dark:border-white/10 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-white/25"
+        >
+        <!-- Scope pills instead of a select: three options that all fit. -->
+        <div class="flex shrink-0 items-center gap-1">
+          <button
+            v-for="option in FILTER_OPTIONS"
+            :key="option.value"
+            type="button"
+            class="rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] transition-colors"
+            :class="
+              filterType === option.value
+                ? 'bg-gray-900 text-white dark:bg-gray-700 dark:text-white'
+                : 'text-gray-500 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-300'
+            "
+            @click="filterType = option.value"
+          >
+            {{ option.label }}
+          </button>
         </div>
       </div>
 
       <!-- Labels List -->
-      <div class="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-md">
-        <ul class="divide-y divide-gray-200 dark:divide-gray-700">
+      <div>
+        <ul>
           <li
             v-for="label in filteredLabels"
             :key="label.id"
-            class="px-6 py-4"
+            class="group flex items-start gap-3 rounded px-3 py-2.5 transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]"
           >
-            <div class="flex items-center justify-between">
-              <div class="flex items-center">
-                <div
-                  class="w-4 h-4 rounded-full mr-3 border border-gray-300"
-                  :style="{ backgroundColor: label.color }"
-                />
-                <div class="flex-1">
-                  <div class="flex items-center">
-                    <p class="text-sm font-medium text-gray-900">
-                      {{ label.name }}
-                    </p>
-                    <LabelInfoTooltip
-                      v-if="label.description"
-                      :description="label.description"
-                      class="ml-1.5"
-                    />
-                    <span
-                      v-if="label.isDefault"
-                      class="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
-                    >
-                      Default
-                    </span>
-                  </div>
-                  <div class="flex items-center mt-2 text-xs text-gray-400">
-                    <span>Created {{ formatDate(label.createdAt) }}</span>
-                    <span
-                      v-if="labelStats[label.id]"
-                      class="ml-4"
-                    >
-                      Used {{ labelStats[label.id]?.usageCount || 0 }} times
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div class="flex items-center space-x-2">
-                <button
-                  v-if="!label.isDefault"
-                  class="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 text-sm font-medium"
-                  @click="editLabel(label)"
-                >
-                  Edit
-                </button>
-                <button
-                  v-if="!label.isDefault"
-                  class="text-red-600 hover:text-red-900 text-sm font-medium"
-                  @click="confirmDeleteLabel(label)"
-                >
-                  Delete
-                </button>
-                <button
-                  :class="[
-                    'text-sm font-medium',
+            <span
+              class="mt-[7px] h-2 w-2 shrink-0 rounded-full"
+              :style="{ backgroundColor: label.color }"
+            />
+
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-1.5">
+                <p
+                  class="truncate text-[13px] font-medium uppercase tracking-[0.06em]"
+                  :class="
                     label.isActive
-                      ? 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
-                      : 'text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300',
-                  ]"
-                  @click="toggleLabelActive(label)"
+                      ? 'text-gray-700 dark:text-gray-200'
+                      : 'text-gray-400 line-through dark:text-gray-600'
+                  "
                 >
-                  {{ label.isActive ? 'Deactivate' : 'Activate' }}
-                </button>
+                  {{ label.name }}
+                </p>
+                <LabelInfoTooltip
+                  v-if="label.description"
+                  :description="label.description"
+                />
               </div>
+              <div
+                class="mt-1 flex items-center gap-2 font-mono text-[10px] tracking-wider text-gray-500 dark:text-gray-500"
+              >
+                <span v-if="label.isDefault">DEFAULT</span>
+                <span>{{ formatDate(label.createdAt) }}</span>
+                <span v-if="labelStats[label.id]">
+                  {{ labelStats[label.id]?.usageCount || 0 }}×
+                </span>
+              </div>
+            </div>
+
+            <!-- Row actions reveal on hover, as they do on an annotation row. -->
+            <div
+              class="flex shrink-0 items-center gap-3 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+            >
+              <button
+                type="button"
+                class="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-300"
+                @click="toggleLabelActive(label)"
+              >
+                {{ label.isActive ? 'Deactivate' : 'Activate' }}
+              </button>
+              <button
+                v-if="!label.isDefault"
+                type="button"
+                class="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-300"
+                @click="editLabel(label)"
+              >
+                Edit
+              </button>
+              <button
+                v-if="!label.isDefault"
+                type="button"
+                class="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 transition-colors hover:text-red-600 dark:text-gray-500 dark:hover:text-red-400"
+                @click="confirmDeleteLabel(label)"
+              >
+                Delete
+              </button>
             </div>
           </li>
         </ul>
 
         <div
           v-if="filteredLabels.length === 0"
-          class="px-6 py-12 text-center"
+          class="px-4 py-10 text-center"
         >
-          <svg
-            class="mx-auto h-12 w-12 text-gray-400"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"
-            />
-          </svg>
-          <h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">
+          <p class="text-[12px] text-gray-600 dark:text-gray-400">
             No labels found
-          </h3>
-          <p class="mt-1 text-sm text-gray-500">
+          </p>
+          <p class="mt-1.5 text-[11px] text-gray-500 dark:text-gray-500">
             {{
               searchQuery
                 ? 'Try adjusting your search terms.'
@@ -307,26 +163,25 @@
       <!-- Create/Edit Label Modal -->
       <div
         v-if="showCreateForm || editingLabel"
-        class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
         @click="closeForm"
       >
         <div
-          class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white dark:bg-gray-800 dark:border-gray-700"
+          class="w-full max-w-sm rounded border border-gray-200 bg-white shadow-xl dark:border-white/10 dark:bg-gray-900"
           @click.stop
         >
-          <div class="mt-3">
-            <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
-              {{ editingLabel ? 'Edit Label' : 'Create New Label' }}
+          <div class="border-b border-gray-200 px-4 py-3 dark:border-white/10">
+            <h3 class="text-[13px] font-semibold tracking-tight text-gray-900 dark:text-white">
+              {{ editingLabel ? 'Edit label' : 'New label' }}
             </h3>
+          </div>
 
-            <form
-              class="space-y-4"
-              @submit.prevent="saveLabel"
-            >
+          <form @submit.prevent="saveLabel">
+            <div class="space-y-4 px-4 py-4">
               <div>
                 <label
                   for="labelName"
-                  class="block text-sm font-medium text-gray-700 dark:text-gray-300"
+                  class="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-500"
                 >
                   Name *
                 </label>
@@ -336,15 +191,15 @@
                   type="text"
                   required
                   maxlength="50"
-                  class="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
-                  placeholder="Enter label name"
+                  class="block w-full rounded border border-gray-200 bg-transparent px-2.5 py-1.5 text-[12px] leading-snug text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-400 dark:border-white/10 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-white/25"
+                  placeholder="Label name"
                 >
               </div>
 
               <div>
                 <label
                   for="labelDescription"
-                  class="block text-sm font-medium text-gray-700 dark:text-gray-300"
+                  class="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-500"
                 >
                   Description
                 </label>
@@ -353,111 +208,102 @@
                   v-model="labelForm.description"
                   rows="3"
                   maxlength="200"
-                  class="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
-                  placeholder="Optional description"
+                  class="block w-full resize-y rounded border border-gray-200 bg-transparent px-2.5 py-1.5 text-[12px] leading-snug text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-400 dark:border-white/10 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-white/25"
+                  placeholder="Optional"
                 />
               </div>
 
               <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Color *
+                <label
+                  class="mb-2 block text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-500"
+                >
+                  Colour
                 </label>
-                <div class="grid grid-cols-6 gap-2">
+                <div class="flex flex-wrap gap-2">
                   <button
                     v-for="color in LABEL_COLORS"
                     :key="color"
                     type="button"
-                    :class="[
-                      'w-8 h-8 rounded-full border-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500',
+                    class="h-5 w-5 rounded-full transition-transform"
+                    :class="
                       labelForm.color === color
-                        ? 'border-gray-900'
-                        : 'border-gray-300',
-                    ]"
+                        ? 'ring-2 ring-gray-900 ring-offset-2 ring-offset-white dark:ring-white dark:ring-offset-gray-900'
+                        : 'hover:scale-110'
+                    "
                     :style="{ backgroundColor: color }"
                     @click="labelForm.color = color"
                   />
                 </div>
               </div>
+            </div>
 
-              <div class="flex justify-end space-x-3 pt-4">
-                <button
-                  type="button"
-                  class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                  @click="closeForm"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  :disabled="!labelForm.name.trim() || saving"
-                  class="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {{
-                    saving ? 'Saving...' : editingLabel ? 'Update' : 'Create'
-                  }}
-                </button>
-              </div>
-            </form>
-          </div>
+            <div
+              class="flex items-center justify-end gap-3 border-t border-gray-200 px-4 py-3 dark:border-white/10"
+            >
+              <button
+                type="button"
+                class="rounded px-1 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-300"
+                @click="closeForm"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                :disabled="!labelForm.name.trim() || saving"
+                class="rounded bg-gray-900 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white transition-colors hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-gray-700 dark:hover:bg-gray-600"
+              >
+                {{ saving ? 'Saving…' : editingLabel ? 'Update' : 'Create' }}
+              </button>
+            </div>
+          </form>
         </div>
       </div>
 
       <!-- Delete Confirmation Modal -->
       <div
         v-if="labelToDelete"
-        class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
         @click="labelToDelete = null"
       >
         <div
-          class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white dark:bg-gray-800 dark:border-gray-700"
+          class="w-full max-w-sm rounded border border-gray-200 bg-white shadow-xl dark:border-white/10 dark:bg-gray-900"
           @click.stop
         >
-          <div class="mt-3 text-center">
-            <div
-              class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 dark:bg-red-900/30"
-            >
-              <svg
-                class="h-6 w-6 text-red-600 dark:text-red-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"
-                />
-              </svg>
-            </div>
-            <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100 mt-2">
-              Delete Label
+          <div class="border-b border-gray-200 px-4 py-3 dark:border-white/10">
+            <h3 class="text-[13px] font-semibold tracking-tight text-gray-900 dark:text-white">
+              Delete label
             </h3>
-            <div class="mt-2 px-7 py-3">
-              <p class="text-sm text-gray-500 dark:text-gray-400">
-                Are you sure you want to delete "{{ labelToDelete.name }}"?
-                {{
-                  (labelStats[labelToDelete.id]?.usageCount || 0) > 0
-                    ? 'This label is currently used in annotations and will be deactivated instead of deleted.'
-                    : 'This action cannot be undone.'
-                }}
-              </p>
-            </div>
-            <div class="flex justify-center space-x-3 px-4 py-3">
-              <button
-                class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                @click="labelToDelete = null"
-              >
-                Cancel
-              </button>
-              <button
-                :disabled="deleting"
-                class="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                @click="deleteLabel"
-              >
-                {{ deleting ? 'Deleting...' : 'Delete' }}
-              </button>
-            </div>
+          </div>
+
+          <div class="px-4 py-4">
+            <p class="text-[12px] leading-relaxed text-gray-600 dark:text-gray-400">
+              Are you sure you want to delete "{{ labelToDelete.name }}"?
+              {{
+                (labelStats[labelToDelete.id]?.usageCount || 0) > 0
+                  ? 'This label is currently used in annotations and will be deactivated instead of deleted.'
+                  : 'This action cannot be undone.'
+              }}
+            </p>
+          </div>
+
+          <div
+            class="flex items-center justify-end gap-3 border-t border-gray-200 px-4 py-3 dark:border-white/10"
+          >
+            <button
+              type="button"
+              class="rounded px-1 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-300"
+              @click="labelToDelete = null"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              :disabled="deleting"
+              class="rounded bg-red-600 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-40"
+              @click="deleteLabel"
+            >
+              {{ deleting ? 'Deleting…' : 'Delete' }}
+            </button>
           </div>
         </div>
       </div>
@@ -501,6 +347,13 @@ const labelToDelete = ref<Label | null>(null);
 // Search and filter
 const searchQuery = ref('');
 const filterType = ref('all');
+
+/** The three scopes the list can be narrowed to, as pills rather than a select. */
+const FILTER_OPTIONS = [
+  { value: 'all', label: 'All' },
+  { value: 'default', label: 'Default' },
+  { value: 'custom', label: 'Custom' },
+] as const;
 
 // Form data
 const labelForm = ref({

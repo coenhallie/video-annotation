@@ -2,9 +2,12 @@
   <div class="folder-tree-item">
     <div
       :class="[
-        'folder-item group px-2 py-1.5 rounded-md cursor-pointer flex items-center gap-1 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors',
-        selectedFolderId === folder.id && 'bg-blue-50 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300',
-        dragOverFolderId === folder.id && 'bg-blue-100 dark:bg-blue-500/30 ring-2 ring-blue-400',
+        'folder-item group flex cursor-pointer items-center gap-1 rounded px-2 py-1.5 transition-colors',
+        selectedFolderId === folder.id
+          ? 'bg-gray-100 text-gray-900 dark:bg-white/[0.06] dark:text-white'
+          : 'text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-white/[0.03]',
+        dragOverFolderId === folder.id &&
+          'bg-gray-100 ring-1 ring-gray-400 dark:bg-white/[0.08] dark:ring-white/30',
       ]"
       :style="{ paddingLeft: `${level * 20 + 8}px` }"
       @click="handleClick"
@@ -15,18 +18,21 @@
       <!-- Expand/Collapse Arrow -->
       <button
         v-if="folder.children.length > 0"
-        class="p-0.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
+        type="button"
+        class="rounded p-0.5 text-gray-400 transition-colors hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-200"
         @click.stop="toggleExpanded"
       >
         <svg
-          :class="['w-3 h-3 transition-transform', isExpanded && 'rotate-90']"
-          fill="currentColor"
-          viewBox="0 0 20 20"
+          :class="['h-3 w-3 transition-transform', isExpanded && 'rotate-90']"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
         >
           <path
-            fill-rule="evenodd"
-            d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
-            clip-rule="evenodd"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="m9 18 6-6-6-6"
           />
         </svg>
       </button>
@@ -36,28 +42,24 @@
       />
 
       <!-- Folder Icon -->
+      <!-- Dropped the old `text-${folder.color}-500` binding: Tailwind's
+           scanner cannot see an interpolated class name, so it only ever
+           coloured folders whose colour happened to match a class compiled
+           somewhere else in the app - red and purple, and nothing else. -->
       <svg
-        class="w-4 h-4 flex-shrink-0"
-        :class="folder.color && `text-${folder.color}-500`"
-        fill="currentColor"
-        viewBox="0 0 20 20"
+        class="h-3.5 w-3.5 flex-shrink-0 text-gray-400 dark:text-gray-500"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
       >
-        <path
-          v-if="isExpanded && folder.children.length > 0"
-          d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"
-        />
-        <path
-          v-else
-          fill-rule="evenodd"
-          d="M4 4a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V8a2 2 0 00-2-2h-5L9 4H4z"
-          clip-rule="evenodd"
-        />
+        <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
       </svg>
 
       <!-- Folder Name -->
       <span
         v-if="!isRenaming"
-        class="text-sm font-medium flex-1 truncate"
+        class="flex-1 truncate text-[13px] font-medium tracking-tight"
       >
         {{ folder.name }}
       </span>
@@ -66,7 +68,7 @@
         ref="renameInput"
         v-model="newName"
         type="text"
-        class="text-sm font-medium flex-1 px-1 py-0 border border-blue-400 rounded outline-none focus:ring-1 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+        class="flex-1 rounded border border-gray-200 bg-transparent px-1 py-0 text-[13px] font-medium tracking-tight text-gray-900 outline-none transition-colors focus:border-gray-400 dark:border-white/10 dark:text-gray-100 dark:focus:border-white/40"
         @click.stop
         @keydown.enter="confirmRename"
         @keydown.esc="cancelRename"
@@ -76,7 +78,7 @@
       <!-- Project Count Badge -->
       <span
         v-if="folder.totalProjectCount > 0"
-        class="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded-full"
+        class="font-mono text-[10px] tracking-wider text-gray-500 dark:text-gray-500"
       >
         {{ folder.totalProjectCount }}
       </span>
@@ -86,58 +88,62 @@
         class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
       >
         <button
-          class="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
+          type="button"
+          class="rounded p-1 text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
           title="New subfolder"
           @click.stop="createSubfolder"
         >
           <svg
-            class="w-3 h-3"
+            class="h-3 w-3"
+            viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            viewBox="0 0 24 24"
+            stroke-width="2"
           >
             <path
               stroke-linecap="round"
               stroke-linejoin="round"
-              stroke-width="2"
               d="M12 4v16m8-8H4"
             />
           </svg>
         </button>
         <button
-          class="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
+          type="button"
+          class="rounded p-1 text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
           title="Rename"
           @click.stop="startRename"
         >
           <svg
-            class="w-3 h-3"
+            class="h-3 w-3"
+            viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            viewBox="0 0 24 24"
+            stroke-width="2"
           >
             <path
               stroke-linecap="round"
               stroke-linejoin="round"
-              stroke-width="2"
               d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
             />
           </svg>
         </button>
+        <!-- Red only on hover, the one place colour still carries meaning. -->
         <button
-          class="p-1 hover:bg-red-100 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 rounded"
+          type="button"
+          class="rounded p-1 text-gray-500 transition-colors hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400"
           title="Delete"
           @click.stop="deleteFolder"
         >
           <svg
-            class="w-3 h-3"
+            class="h-3 w-3"
+            viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            viewBox="0 0 24 24"
+            stroke-width="2"
           >
             <path
               stroke-linecap="round"
               stroke-linejoin="round"
-              stroke-width="2"
               d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v3M4 7h16"
             />
           </svg>

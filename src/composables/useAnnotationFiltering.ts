@@ -1,29 +1,28 @@
-import { ref, computed, watch, type Ref, type ComputedRef } from 'vue';
-import { useLabelFiltering } from './useLabelFiltering';
-import type { PanelAnnotation } from '@/types/component-interfaces';
+import { computed, ref, watch, type ComputedRef, type Ref } from 'vue';
+import {
+  CATEGORY_ORDER,
+  categoryKeyForLabel,
+  type LabelCategoryKey,
+} from '@/utils/labelCategories';
+import type { LabelColorMap, PanelAnnotation } from '@/types/component-interfaces';
 
 export interface UseAnnotationFilteringOptions {
   /** Reactive list of annotations from the parent. */
   annotations: Ref<PanelAnnotation[]> | ComputedRef<PanelAnnotation[]>;
-  /** Project ID used by the label filtering service. */
-  projectId?: string;
+  /**
+   * The label catalog, keyed by id. Annotations store label ids, and a label's
+   * category lives in its name, so categorising a row needs the catalog. Labels
+   * the viewer cannot read are simply absent, and their annotations then carry
+   * no category - they stay visible under "All" and never under a pill.
+   */
+  labelsById: Ref<LabelColorMap> | ComputedRef<LabelColorMap>;
 }
 
 export function useAnnotationFiltering(options: UseAnnotationFilteringOptions) {
-  const { annotations, projectId } = options;
+  const { annotations, labelsById } = options;
 
   // Default color for annotations without specific labels
   const defaultAnnotationColor = '#6b7280'; // gray-500
-
-  // Initialize label filtering composable
-  const {
-    filterState,
-    hasActiveFilters,
-    getActiveFilterCount,
-    filterAnnotations,
-    updateLabelFilter,
-    clearAllFilters,
-  } = useLabelFiltering(projectId);
 
   // Normalize raw annotations into a consistent shape
   const normalizedAnnotations = computed((): PanelAnnotation[] => {
@@ -53,62 +52,59 @@ export function useAnnotationFiltering(options: UseAnnotationFilteringOptions) {
     });
   });
 
-  // Filtered annotations based on label filters
-  const filteredAnnotations = ref<PanelAnnotation[]>([]);
+  /** Every category an annotation belongs to, via the labels attached to it. */
+  const categoriesOf = (annotation: PanelAnnotation): LabelCategoryKey[] => {
+    const keys: LabelCategoryKey[] = [];
+    for (const labelId of annotation.labels ?? []) {
+      const label = labelsById.value[labelId];
+      if (!label) continue;
+      const key = categoryKeyForLabel(label);
+      if (key && !keys.includes(key)) keys.push(key);
+    }
+    return keys;
+  };
 
-  // Watch for annotation or filter changes and apply filtering
-  watch(
-    [normalizedAnnotations, filterState],
-    async () => {
-      if (hasActiveFilters.value) {
-        filteredAnnotations.value = await filterAnnotations(
-          normalizedAnnotations.value
-        );
-      } else {
-        filteredAnnotations.value = normalizedAnnotations.value;
-      }
-    },
-    { immediate: true, deep: true }
-  );
+  /**
+   * Categories actually represented in this video, in the catalog's own order.
+   * Offering the full list would put pills on screen that can only ever empty
+   * the list.
+   */
+  const availableCategories = computed((): LabelCategoryKey[] => {
+    const present = new Set<LabelCategoryKey>();
+    for (const annotation of normalizedAnnotations.value) {
+      for (const key of categoriesOf(annotation)) present.add(key);
+    }
+    return CATEGORY_ORDER.filter((key) => present.has(key));
+  });
 
-  // Sort by timestamp ascending
-  const sortedAnnotations = computed(() => {
-    return filteredAnnotations.value.slice().sort((a, b) => {
+  /** null means "All": no category filter. */
+  const activeCategory = ref<LabelCategoryKey | null>(null);
+
+  // Deleting the last annotation in a category retires its pill. Without this
+  // the filter would stay on and leave an empty list with no way back.
+  watch(availableCategories, (categories) => {
+    if (activeCategory.value && !categories.includes(activeCategory.value)) {
+      activeCategory.value = null;
+    }
+  });
+
+  /** Filtered by the active category, then ordered by time. */
+  const sortedAnnotations = computed((): PanelAnnotation[] => {
+    const key = activeCategory.value;
+    const list = key
+      ? normalizedAnnotations.value.filter((a) => categoriesOf(a).includes(key))
+      : normalizedAnnotations.value;
+    return list.slice().sort((a, b) => {
       const ta = a && typeof a.timestamp === 'number' ? a.timestamp : 0;
       const tb = b && typeof b.timestamp === 'number' ? b.timestamp : 0;
       return ta - tb;
     });
   });
 
-  // Computed style for annotations list — scrollable after 7 annotations
-  const annotationsListStyle = computed(() => {
-    const annotationCardHeight = 120; // pixels
-    const maxAnnotations = 7;
-    const maxHeight = annotationCardHeight * maxAnnotations;
-
-    if (sortedAnnotations.value.length > maxAnnotations) {
-      return {
-        maxHeight: `${maxHeight}px`,
-        overflowY: 'auto' as const,
-        overflowX: 'hidden' as const,
-      };
-    }
-    return {};
-  });
-
   return {
-    // State
-    filterState,
-    hasActiveFilters,
-    getActiveFilterCount,
     normalizedAnnotations,
-    filteredAnnotations,
     sortedAnnotations,
-    annotationsListStyle,
-
-    // Methods
-    filterAnnotations,
-    updateLabelFilter,
-    clearAllFilters,
+    availableCategories,
+    activeCategory,
   };
 }

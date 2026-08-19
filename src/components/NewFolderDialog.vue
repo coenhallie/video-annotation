@@ -3,73 +3,55 @@
     <div class="fixed inset-0 z-[70] overflow-y-auto">
       <!-- Background overlay -->
       <div
-        class="fixed inset-0 transition-opacity bg-black/50 backdrop-blur-sm"
+        class="fixed inset-0 bg-black/50 transition-opacity"
         @click="$emit('close')"
       />
 
       <!-- Center container -->
-      <div
-        class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center"
-      >
-        <!-- Modal panel -->
+      <div class="flex min-h-screen items-center justify-center px-4 py-10">
+        <!-- Modal panel. Same floating surface as the annotation form's label
+             picker and the dashboard's filter card. -->
         <div
-          class="relative inline-block align-bottom bg-white dark:bg-gray-800 rounded-xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
+          class="relative w-full max-w-sm rounded border border-gray-200 bg-white shadow-xl dark:border-white/10 dark:bg-gray-900"
           @click.stop
         >
-          <div class="bg-white dark:bg-gray-800 px-6 pt-6 pb-4">
-            <div class="flex items-start gap-4">
-              <div
-                class="flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-blue-50"
-              >
-                <svg
-                  class="h-6 w-6 text-blue-600"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"
-                  />
-                </svg>
-              </div>
-              <div class="flex-1">
-                <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                  Create New Folder
-                </h3>
-                <div>
-                  <label
-                    for="folder-name"
-                    class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
-                  >
-                    Folder Name
-                  </label>
-                  <input
-                    id="folder-name"
-                    ref="nameInput"
-                    v-model="folderName"
-                    type="text"
-                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors placeholder-gray-500 dark:placeholder-gray-400"
-                    placeholder="Enter folder name"
-                    @keydown.enter="createFolder"
-                    @keydown.esc="$emit('close')"
-                  >
-                  <p
-                    v-if="parentFolder"
-                    class="mt-2 text-sm text-gray-500 dark:text-gray-400"
-                  >
-                    This folder will be created inside "{{ parentFolder.name }}"
-                  </p>
-                </div>
-              </div>
-            </div>
+          <div class="border-b border-gray-200 px-4 py-3 dark:border-white/10">
+            <h3 class="text-[13px] font-semibold tracking-tight text-gray-900 dark:text-white">
+              New folder
+            </h3>
           </div>
-          <div class="bg-gray-50 dark:bg-gray-700/50 px-6 py-4 flex justify-end gap-3">
+
+          <div class="px-4 py-4">
+            <label
+              for="folder-name"
+              class="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-500"
+            >
+              Folder name
+            </label>
+            <input
+              id="folder-name"
+              ref="nameInput"
+              v-model="folderName"
+              type="text"
+              class="w-full rounded border border-gray-200 bg-transparent px-2.5 py-1.5 text-[12px] leading-snug text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-400 dark:border-white/10 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-white/25"
+              placeholder="Untitled folder"
+              @keydown.enter="createFolder"
+              @keydown.esc="$emit('close')"
+            >
+            <p
+              v-if="parentFolder"
+              class="mt-2 text-[11px] text-gray-500 dark:text-gray-400"
+            >
+              Created inside "{{ parentFolder.name }}"
+            </p>
+          </div>
+
+          <div
+            class="flex items-center justify-end gap-3 border-t border-gray-200 px-4 py-3 dark:border-white/10"
+          >
             <button
               type="button"
-              class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+              class="rounded px-1 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-300"
               @click="$emit('close')"
             >
               Cancel
@@ -77,7 +59,7 @@
             <button
               type="button"
               :disabled="!folderName.trim()"
-              class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              class="rounded bg-gray-900 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white transition-colors hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-gray-700 dark:hover:bg-gray-600"
               @click="createFolder"
             >
               Create

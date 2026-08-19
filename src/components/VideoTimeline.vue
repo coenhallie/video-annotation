@@ -347,7 +347,7 @@ const handlePlayPause = (): void => {
       class="flex items-center justify-center mb-4"
     >
       <button
-        class="flex items-center justify-center w-12 h-12 bg-gray-800 hover:bg-gray-700 border border-gray-600 rounded-full transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-lg"
+        class="flex items-center justify-center w-12 h-12 bg-gray-800 hover:bg-gray-700 border border-gray-600 rounded-full transition-colors focus:outline-none focus:ring-1 focus:ring-white/40 shadow-lg"
         :title="isPlaying ? 'Pause' : 'Play'"
         @click="handlePlayPause"
       >
@@ -430,7 +430,7 @@ const handlePlayPause = (): void => {
     <div
       class="flex justify-between items-center md:flex-row flex-col md:gap-0 gap-2"
     >
-      <div class="flex items-center space-x-4 font-mono text-sm text-gray-400">
+      <div class="flex items-center space-x-4 font-mono text-[11px] tracking-wider text-gray-400">
         <div class="flex items-center space-x-2">
           <span>{{ formatTime(currentTime) }}</span>
           <span class="opacity-50">/</span>

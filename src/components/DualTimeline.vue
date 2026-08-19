@@ -211,7 +211,7 @@ const timelineBClasses = computed(() => ({
     >
       <div class="px-6 py-2">
         <div class="flex items-center justify-between mb-2">
-          <h3 class="text-sm font-medium text-white">
+          <h3 class="text-[10px] font-semibold uppercase tracking-[0.18em] text-white">
             Video A Timeline
             <span
               v-if="selectedTimeline === 'A'"
@@ -224,7 +224,7 @@ const timelineBClasses = computed(() => ({
             </div>
             <!-- Individual Play/Pause Button for Video A -->
             <button
-              class="flex items-center justify-center w-8 h-8 bg-gray-700 hover:bg-gray-600 border border-gray-500 rounded-full transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-lg"
+              class="flex items-center justify-center w-8 h-8 bg-gray-700 hover:bg-gray-600 border border-gray-500 rounded-full transition-colors focus:outline-none focus:ring-1 focus:ring-white/40 shadow-lg"
               :title="videoAPlaying ? 'Pause Video A' : 'Play Video A'"
               @click.stop="
                 videoAPlaying ? handlePauseVideoA() : handlePlayVideoA()
@@ -282,7 +282,7 @@ const timelineBClasses = computed(() => ({
     >
       <div class="px-6 py-2">
         <div class="flex items-center justify-between mb-2">
-          <h3 class="text-sm font-medium text-white">
+          <h3 class="text-[10px] font-semibold uppercase tracking-[0.18em] text-white">
             Video B Timeline
             <span
               v-if="selectedTimeline === 'B'"
@@ -295,7 +295,7 @@ const timelineBClasses = computed(() => ({
             </div>
             <!-- Individual Play/Pause Button for Video B -->
             <button
-              class="flex items-center justify-center w-8 h-8 bg-gray-700 hover:bg-gray-600 border border-gray-500 rounded-full transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-lg"
+              class="flex items-center justify-center w-8 h-8 bg-gray-700 hover:bg-gray-600 border border-gray-500 rounded-full transition-colors focus:outline-none focus:ring-1 focus:ring-white/40 shadow-lg"
               :title="videoBPlaying ? 'Pause Video B' : 'Play Video B'"
               @click.stop="
                 videoBPlaying ? handlePauseVideoB() : handlePlayVideoB()
