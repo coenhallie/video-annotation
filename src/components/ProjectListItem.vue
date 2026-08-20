@@ -108,7 +108,7 @@ const props = defineProps<{
   commentCount?: number;
   annotationCount?: number;
   watchPercent?: number;
-  openedAt?: string | undefined;
+  openedAt?: string;
 }>();
 
 // Emits
