@@ -564,6 +564,7 @@ watch(user, (u) => {
               :annotation-count="annotationCounts[project.id] ?? 0"
               :comment-count="commentCounts[project.id] ?? 0"
               :watch-percent="watchCoverage[project.id] ?? 0"
+              :opened-at="recentOpens[project.id]"
               @inspect="inspectProject"
               @dragstart="onCardDragStart"
             />

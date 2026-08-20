@@ -59,6 +59,13 @@
         </span>
         <span>{{ formatDate(project.createdAt) }}</span>
 
+        <!-- Per-user: this is when YOU opened it, not the team. It also
+             explains why the row sits where it does in the list. -->
+        <span
+          v-if="openedLabel"
+          title="You last opened this"
+        >OPENED {{ openedLabel }}</span>
+
         <span
           v-if="annotationCount && annotationCount > 0"
           :title="`${annotationCount} annotation${annotationCount !== 1 ? 's' : ''}`"
@@ -90,6 +97,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { Project } from '../types/project';
+import { formatRelativeTime } from '@/utils/relativeTime';
 
 // Props
 const props = defineProps<{
@@ -100,6 +108,7 @@ const props = defineProps<{
   commentCount?: number;
   annotationCount?: number;
   watchPercent?: number;
+  openedAt?: string | undefined;
 }>();
 
 // Emits
@@ -120,6 +129,15 @@ const watchedPercentLabel = computed((): number | null => {
   const rounded = Math.round(props.watchPercent);
   return rounded > 0 ? rounded : null;
 });
+
+/**
+ * "5M AGO" for a project this user has opened, empty otherwise. Empty covers
+ * both never-opened and an unparseable timestamp, and the template renders no
+ * token in either case - same suppression rule the coverage chip uses.
+ */
+const openedLabel = computed(() =>
+  props.openedAt ? formatRelativeTime(props.openedAt) : ''
+);
 
 // Methods
 const handleClick = (event: MouseEvent) => {
