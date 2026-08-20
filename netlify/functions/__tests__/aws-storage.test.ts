@@ -268,6 +268,34 @@ describe('aws-storage: authorization', () => {
     expect(body.error).not.toContain('something-sensitive.internal');
   });
 
+  // Same leak, different catch block: the call to the Lambda itself can throw
+  // (DNS, TLS, connection refused), and that error's message must not reach the
+  // response body either, for the identical reason as the authorization-check
+  // case above - awsStorageService parses `error` out of the body and it ends
+  // up in a user-facing notifyError toast.
+  it('returns 502 with a generic message when the Lambda call throws, never the raw error', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.startsWith(VIDEOS)) {
+        return { ok: true, status: 200, json: async () => [{ id: 'v1' }] };
+      }
+      if (url.startsWith(LAMBDA)) {
+        throw new Error('ETIMEDOUT something-sensitive.internal');
+      }
+      throw new Error('unexpected fetch: ' + url);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const handler = await loadHandler();
+
+    const res = await handler(event({ outputVideoId: VALID_ID }));
+
+    expect(res.statusCode).toBe(502);
+    const body = JSON.parse(res.body);
+    expect(body.error).toBe('Storage request failed');
+    expect(body.error).not.toContain('ETIMEDOUT');
+    expect(body.error).not.toContain('something-sensitive.internal');
+    expect(body.error).not.toContain('Proxy error');
+  });
+
   // Regression guard: retrying as anonymous on any non-ok status, rather than
   // specifically 401, would turn a transient PostgREST 5xx during a legitimate
   // first ingest into a false 403 for the video's own owner (the client then

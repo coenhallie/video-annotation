@@ -187,6 +187,13 @@ exports.handler = async function (event) {
       body: body,
     };
   } catch (err) {
-    return json(502, { error: 'Proxy error: ' + err.message });
+    // Same reasoning as the authorization-check catch above: the detail (a DNS
+    // or TLS failure message, for example) is not for the end user. It is
+    // parsed out by awsStorageService, rethrown, and rendered in a notifyError
+    // toast by EditorView. Log it server-side and return a generic message
+    // instead. 'Storage request failed' rather than 'Proxy error' so the
+    // message does not even reveal that a proxy is involved.
+    console.error('Storage request failed:', err);
+    return json(502, { error: 'Storage request failed' });
   }
 };
