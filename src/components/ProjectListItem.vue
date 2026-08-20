@@ -50,7 +50,7 @@
         {{ project.title }}
       </h3>
       <div
-        class="mt-1 flex items-center gap-2 font-mono text-[10px] tracking-wider text-gray-500 dark:text-gray-400"
+        class="mt-1 flex flex-wrap items-center gap-2 font-mono text-[10px] tracking-wider text-gray-500 dark:text-gray-400"
       >
         <span v-if="project.projectType === 'dual'">DUAL</span>
         <span>{{ formatDuration(getDuration()) }}</span>

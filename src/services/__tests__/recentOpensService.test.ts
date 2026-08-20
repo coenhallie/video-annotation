@@ -101,6 +101,7 @@ describe('getRecentOpens', () => {
     expect(fromMock).toHaveBeenCalledWith('project_opens');
     expect(chain.eq).toHaveBeenCalledWith('userId', 'u1');
     expect(chain.order).toHaveBeenCalledWith('openedAt', { ascending: false });
+    expect(chain.limit).toHaveBeenCalledWith(500);
   });
 
   it('returns {} on error', async () => {
