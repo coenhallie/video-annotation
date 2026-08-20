@@ -752,7 +752,11 @@ function harness(initial?: {
   const currentVideoId = ref<string | null>(initial?.videoId ?? null);
   const currentComparisonId = ref<string | null>(initial?.comparisonId ?? null);
   const isAppLoading = ref(true);
-  const userId = ref<string | null>(initial?.userId ?? 'u1');
+  // Not `?? 'u1'`: that collapses an explicitly-passed null back to a signed-in
+  // user and makes the anonymous-viewer test assert nothing.
+  const userId = ref<string | null>(
+    initial?.userId === undefined ? 'u1' : initial.userId
+  );
   return { currentVideoId, currentComparisonId, isAppLoading, userId };
 }
 
@@ -906,8 +910,8 @@ export function useRecordProjectOpen(options: {
     [currentVideoId, currentComparisonId, isAppLoading, userId],
     ([videoId, comparisonId, loading, uid]) => {
       if (loading) return;
-      // Anonymous share-link visitor, or the local dev auth bypass, which
-      // cannot satisfy an auth.uid() policy.
+      // No signed-in user: an anonymous share-link visitor. Nothing to
+      // attribute an open to, so nothing is written.
       if (!uid) return;
 
       const projectId = videoId ?? comparisonId;
@@ -1191,7 +1195,7 @@ Expected: no output.
 
 - [ ] **Step 4: Runtime verification**
 
-Confirm the migration from Task 3 is applied to the database this build points at. Then use the `verify` skill (or `npm run dev`) to drive the real app, signed in as a real user - not the dev auth bypass, which cannot write through an `auth.uid()` policy:
+Confirm the migration from Task 3 is applied to the database this build points at. Then use the `verify` skill (or `npm run dev`) to drive the real app while signed in. The local dev auth bypass is fine here: `useAuth.applyDevAuthBypass` signs in with real credentials via `signInWithPassword`, so `auth.uid()` is a real user id and the RLS policies accept the write.
 
 1. Load the dashboard. Note the current top three rows.
 2. Open a project that is **not** first in the list, then go back to the dashboard.

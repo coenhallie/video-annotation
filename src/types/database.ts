@@ -164,6 +164,14 @@ export interface DatabaseAnonymousSession {
   comparisonVideoId?: string | null;
 }
 
+export interface DatabaseProjectOpen {
+  id: string;
+  userId: string;
+  videoId: string | null;
+  comparisonVideoId: string | null;
+  openedAt: string;
+}
+
 // Application-specific interfaces (for Vue components)
 export interface Annotation {
   id: string | number; // Support both UUID and legacy timestamp IDs
@@ -343,6 +351,11 @@ export interface Database {
         Row: DatabaseAnnotationLabel;
         Insert: Omit<DatabaseAnnotationLabel, 'id' | 'createdAt'>;
         Update: Partial<Omit<DatabaseAnnotationLabel, 'id' | 'createdAt'>>;
+      };
+      project_opens: {
+        Row: DatabaseProjectOpen;
+        Insert: Omit<DatabaseProjectOpen, 'id'>;
+        Update: Partial<Omit<DatabaseProjectOpen, 'id'>>;
       };
     };
     Functions: {
