@@ -13,7 +13,7 @@ for (const m of ['select', 'eq', 'order', 'limit', 'upsert']) {
 chain.then = (onFulfilled: any, onRejected: any) =>
   settle().then(onFulfilled, onRejected);
 
-const fromMock = vi.fn(() => chain);
+const fromMock = vi.fn((_table: string) => chain);
 
 vi.mock('@/composables/useSupabase', () => ({
   supabase: { from: (table: string) => fromMock(table) },
