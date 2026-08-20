@@ -38,6 +38,7 @@ import { useDashboardKeyboard } from '@/composables/useDashboardKeyboard';
 import { useSharedContent } from '@/composables/useSharedContent';
 import { useVideoEventHandlers } from '@/composables/useVideoEventHandlers';
 import { useWatchProgress } from '@/composables/useWatchProgress';
+import { useRecordProjectOpen } from '@/composables/useRecordProjectOpen';
 import { supabase } from '@/composables/useSupabase';
 import type { Video, Annotation, ComparisonVideo } from '@/types/database';
 import type {
@@ -143,6 +144,15 @@ const { user, initAuth, signOut, isLoading: authLoading } = useAuth();
 // Password reset flow
 
 const isAppLoading = ref(true); // Separate loading state for the app
+
+// Per-user "last opened" record, which drives the dashboard's recency
+// ordering. One watcher covers every entry path; see the composable.
+useRecordProjectOpen({
+  currentVideoId,
+  currentComparisonId,
+  isAppLoading,
+  userId: computed(() => user.value?.id ?? null),
+});
 
 // Computed property to determine overall loading state
 const isLoading = computed(() => {
