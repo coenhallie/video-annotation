@@ -81,7 +81,25 @@ therefore have granted more than the app itself does. Section 5 below is the cor
 
 **Every caller is checked the same way: can you see this video?** There is no signed-in
 shortcut. The proxy forwards the caller's own credentials to PostgREST and lets the `videos`
-SELECT policy answer, so the proxy's rule is exactly the app's rule and cannot drift from it.
+SELECT policy answer.
+
+That is a weaker guarantee than "the proxy's rule is exactly the app's rule and cannot drift
+from it," which an earlier draft of this section claimed. The visibility predicate the proxy
+checks is itself satisfiable by the caller: creating the row it checks for is a client
+operation. `VideoService.findOrCreateOutputVideo` inserts
+`{ ownerId: self, videoId: 'aws:' + outputVideoId }` from the browser, and `outputVideoId` comes
+straight off the `?outputVideo=` deep link. So the effective rule this endpoint enforces is not
+"you may see this video" - it is **"you have a Supabase session and you know the
+`outputVideoId`."** Any signed-in caller who learns an id, by any means, can mint the row that
+makes the check pass for that id.
+
+The reason this is still worth having: before this change, the endpoint required neither a
+session nor knowledge of the id - it took an arbitrary caller-supplied path with no
+authentication at all. Requiring a session plus an unguessable id is a large improvement on
+that, even though it falls short of "authorized" in the sense of verifying legitimate ownership.
+Neither the client nor this function can verify legitimate ownership of an AWS pipeline output;
+only the pipeline itself knows that. See section 11 for the mitigation this residual risk
+received and its own tradeoff.
 
 The reason an asymmetry was ever considered: `findOrCreateOutputVideo` fetched the presigned URL
 **before** the `videos` row existed, so on first ingest there was nothing to be visible. With
@@ -90,7 +108,9 @@ may not see" - both return `[]`.
 
 That is resolved in the client rather than in the policy: **the `videos` row is created before
 the presigned URL is fetched.** See section 8. Once the row exists, the owner can see it, the
-uniform check passes, and the asymmetry disappears.
+uniform check passes, and the asymmetry disappears. That same reorder is also the mechanism
+that makes the predicate mintable: it is what lets any signed-in caller create the row the
+check answers against, for any id they know, not only their own.
 
 ## 6. Interface
 
@@ -113,12 +133,16 @@ guessing stop being expressible, for every caller, authenticated or not.
    with `apikey: {SUPABASE_ANON_KEY}` and `Authorization` set to the caller's own header when
    one is present, or to the anon key when it is not. PostgREST validates the JWT and applies
    RLS. A returned row means the caller may see this video.
-3. If that request comes back non-ok (a forged, malformed or expired token makes PostgREST
-   answer `401`), retry once with the anon key in place of the caller's header. This is what
-   lets a share-link viewer whose session lapsed keep playing a public video, instead of being
-   rejected outright.
-4. Empty array, or a non-array body, means `403`. Any network or parse failure in steps 2 and 3
-   means `502`, never a silent allow.
+3. If that request comes back specifically `401` (a forged, malformed or expired token makes
+   PostgREST answer `401`), retry once with the anon key in place of the caller's header. This
+   is what lets a share-link viewer whose session lapsed keep playing a public video, instead of
+   being rejected outright. The retry is deliberately narrow to `401` and not any non-ok status:
+   retrying a transient `5xx` as anonymous would turn a temporary PostgREST outage during a
+   legitimate first ingest into an incorrect `403` for the video's actual owner, since the
+   client's cleanup then deletes the row it just created. Any other non-ok status is treated as
+   a genuine failure (see step 4), not a reason to retry.
+4. Empty array, or a non-array body, means `403`. Any network or parse failure in steps 2 and 3,
+   and any non-ok, non-`401` response, means `502`, never a silent allow.
 5. Build the path server-side and call the Lambda with the API key, exactly as today.
 
 No separate `GET /auth/v1/user` call is needed. PostgREST verifies the token itself as part of
@@ -170,6 +194,12 @@ the proxy now authorizes on visibility:
 This collapses the previous insert-or-update fork into a single update, since step 2 guarantees
 a row exists.
 
+This reorder is a deliberate tradeoff, not a free fix: making the row exist before the URL is
+fetched is exactly what makes the visibility predicate caller-mintable (section 5). It has to
+happen this way because the alternative - checking visibility before the row exists - would
+403 every first ingest, which is worse. The reorder is the mechanism; section 5 describes the
+resulting rule and section 11 records the mitigation.
+
 Also delete the dead local at `videoService.ts:588`: it assigns
 `AwsStorageService.buildFilepath(outputVideoId)` to a variable that is never read, and the
 inserted row is never given a `filePath` at all. Leave `buildFilepath` itself in place; it then
@@ -214,6 +244,28 @@ Manual: open a shared AWS video while signed out and confirm playback; run the A
 ingest while signed in and confirm the video still loads and is not left blank.
 
 ## 11. Non-goals, logged
+
+- **Residual risk: the visibility predicate is caller-mintable, not just caller-checked.**
+  Do not describe this endpoint as "authorized" without that qualifier - it authenticates a
+  session and requires knowledge of the `outputVideoId`, but it does not verify legitimate
+  ownership of the AWS pipeline output. As detailed in section 5: any signed-in caller who
+  learns an `outputVideoId` can insert the `videos` row the proxy's visibility check answers
+  against, because that row is created client-side (`VideoService.findOrCreateOutputVideo`)
+  from a value that arrives on the URL (`?outputVideo=`). Neither this proxy nor the client
+  can verify who legitimately owns a given pipeline output; only the pipeline itself knows
+  that, and it is not consulted here.
+
+  Mitigation taken: `migrations/20260820_unique_aws_video_id.sql` adds a partial unique index
+  on `videos."videoId"` for `aws:%` ids, so a given id can be claimed by only one row,
+  database-wide, regardless of RLS. This closes the worse half of the problem - a second user
+  silently minting their own visible copy of an already-claimed id and being authorized for
+  it - at the cost of opening a narrower availability hole: whoever claims an id first (by
+  guessing or observing it) permanently blocks the legitimate owner's own insert, because RLS
+  hides the attacker's row from the owner and the owner's insert then violates the unique
+  constraint. That trade was made deliberately because a confidentiality break (seeing a video
+  that was never yours) is worse than an availability break (being denied a video that is
+  yours, recoverably, since the pipeline can produce a new id). The migration is not applied
+  automatically; it is applied by hand by whoever owns the database.
 
 - The `videos` storage bucket is `public = true`, so anyone holding a URL can fetch the file
   regardless of this change. Separate work.

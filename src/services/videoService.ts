@@ -578,8 +578,12 @@ export class VideoService {
 
   /**
    * Find or create a video record for an AWS pipeline project.
-   * - If a record already exists (by filePath), refresh its presigned URL.
-   * - If not, create a new record.
+   * - Looks up an existing record by videoId (`aws:{outputVideoId}`).
+   * - If none exists, inserts one with an empty url before fetching the
+   *   presigned URL, because the storage proxy authorizes by checking whether
+   *   the caller can see this row, and a row that does not exist yet is
+   *   visible to nobody.
+   * - Either way, fetches a fresh presigned URL and updates the row with it.
    * Returns the video record with a fresh presigned URL.
    */
   static async findOrCreateOutputVideo(outputVideoId: string, ownerId: string): Promise<Video> {
@@ -624,7 +628,21 @@ export class VideoService {
       // A row we just created and cannot fill in is a permanently blank video in
       // the library. A pre-existing row keeps whatever url it already had.
       if (createdHere) {
-        await supabase.from('videos').delete().eq('id', record.id);
+        // RLS matters here: a delete that matches no row still returns 2xx with
+        // zero rows affected, so a silent no-op would leave the blank url: ''
+        // row behind - exactly the orphan this cleanup exists to prevent. Report
+        // that, but the original fetch error is still what the caller sees:
+        // it is the actual cause and must keep propagating unchanged.
+        const { error: deleteError } = await supabase
+          .from('videos')
+          .delete()
+          .eq('id', record.id);
+        if (deleteError) {
+          handleServiceError(
+            'VideoService.findOrCreateOutputVideo (orphan cleanup: delete failed after presigned URL fetch failure)',
+            deleteError
+          );
+        }
       }
       throw error;
     }
@@ -667,10 +685,27 @@ export class VideoService {
       // pre-existing row keeps whatever url it already had, so it is safe
       // to return as-is.
       if (createdHere) {
-        await supabase.from('videos').delete().eq('id', record.id);
+        // Same RLS caveat as the cleanup above: a no-op delete returns 2xx
+        // with zero rows affected, so check the error rather than assuming
+        // success. The original update error is still what propagates.
+        const { error: deleteError } = await supabase
+          .from('videos')
+          .delete()
+          .eq('id', record.id);
+        if (deleteError) {
+          handleServiceError(
+            'VideoService.findOrCreateOutputVideo (orphan cleanup: delete failed after final update failure)',
+            deleteError
+          );
+        }
         throw error;
       }
-      return record;
+      // Reachable without any infrastructure failure: an authenticated
+      // non-owner opening a shared AWS video hits this owner-gated update,
+      // which no-ops under RLS, so .select().single() returns PGRST116 here.
+      // `record` is the stale pre-update row; the fresh presignedUrl already
+      // fetched above is what the caller actually needs to play the video.
+      return { ...record, url: presignedUrl };
     }
     return data;
   }

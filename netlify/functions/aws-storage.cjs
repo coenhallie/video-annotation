@@ -52,11 +52,17 @@ function keyRole(key) {
  * Ask the database one question: can this caller see this video?
  *
  * The caller's own credentials are forwarded, so PostgREST verifies the JWT and
- * applies the `videos` SELECT policy. The answer is by construction the same one
- * the app would get, which is why this cannot drift from the rest of the product.
+ * applies the `videos` SELECT policy. For a row that exists, the answer this
+ * produces matches the app's own rule and cannot drift from it.
  *
- * There is no signed-in shortcut. `findOrCreateOutputVideo` creates the row
- * before requesting the URL precisely so this check works on first ingest.
+ * That is weaker than "authorized" sounds, though: the row itself is
+ * caller-creatable. `findOrCreateOutputVideo` creates it before requesting the
+ * URL, precisely so this check passes on first ingest - but that means any
+ * signed-in caller who knows an outputVideoId can create the row this function
+ * then finds visible. There is no signed-in shortcut in this function, but the
+ * effective rule enforced end-to-end is "a session plus knowledge of the id",
+ * not verified ownership. See
+ * docs/superpowers/specs/2026-08-19-aws-proxy-auth-design.md sections 5 and 11.
  *
  * Returns 'allow', 'deny' or 'error'. Throws only on a network or parse failure,
  * which the caller turns into 502.
@@ -72,7 +78,13 @@ async function checkVisibility(outputVideoId, supabaseUrl, anonKey, authHeader) 
   // A forged, malformed or expired token makes PostgREST answer 401. Retry as
   // anonymous rather than rejecting, so a share-link viewer whose session lapsed
   // can still play a public video.
-  if (!res.ok && authHeader) {
+  //
+  // Deliberately narrow to 401, not any non-ok status: a transient 5xx during a
+  // legitimate first ingest would otherwise retry as anonymous, get an empty
+  // result, and 403 the video's own owner - who the client then reacts to by
+  // deleting the row it just created. Any other non-ok falls through to 'error'
+  // below, which is the truthful answer for a real failure.
+  if (res.status === 401 && authHeader) {
     res = await ask('Bearer ' + anonKey);
   }
   if (!res.ok) return 'error';
@@ -111,10 +123,17 @@ exports.handler = async function (event) {
 
   // A service_role key here would bypass RLS and quietly authorize every
   // request. The two keys sit in the same dashboard panel, both labelled "key".
+  //
+  // keyRole only understands the legacy JWT-format key (three base64url segments
+  // with a `role` claim). Supabase's newer sb_publishable_*/sb_secret_* keys are
+  // not JWTs, so a correctly configured publishable key also returns null here.
+  // The message below says so explicitly rather than only naming the
+  // service_role case, so whoever hits this is not sent looking for the wrong
+  // problem.
   if (keyRole(anonKey) !== 'anon') {
     return json(500, {
       error:
-        'SUPABASE_ANON_KEY is not an anon key. A service_role key here would bypass RLS.',
+        'SUPABASE_ANON_KEY must be a JWT-format anon key (a sb_publishable_* key is not a JWT and will fail this check). A service_role key here would bypass RLS and must not be used either.',
     });
   }
 
@@ -127,7 +146,12 @@ exports.handler = async function (event) {
       headerValue(event.headers, 'authorization')
     );
   } catch (err) {
-    return json(502, { error: 'Authorization check failed: ' + err.message });
+    // The detail (a DNS or TLS failure message, for example) is not for the end
+    // user: it is parsed out by awsStorageService, rethrown, and rendered in a
+    // notifyError toast by EditorView. Log it server-side and return a generic
+    // message instead.
+    console.error('Authorization check failed:', err);
+    return json(502, { error: 'Authorization check failed' });
   }
 
   // Fail closed by construction: only an explicit 'allow' reaches the Lambda.

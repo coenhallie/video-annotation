@@ -59,8 +59,9 @@ function routedFetch(
   });
 }
 
-// Find calls by target rather than by index: Task 2 adds earlier calls, so
-// mock.calls[0] is not stably the Lambda.
+// Find calls by target rather than by index: the authorization check makes a
+// `videos` call before the Lambda is ever reached, so mock.calls[0] is not
+// stably the Lambda.
 const lambdaCall = (m: ReturnType<typeof vi.fn>) =>
   m.mock.calls.find((c) => String(c[0]).startsWith(LAMBDA));
 const videosCall = (m: ReturnType<typeof vi.fn>) =>
@@ -245,9 +246,13 @@ describe('aws-storage: authorization', () => {
     expect(lambdaCall(fetchMock)).toBeUndefined();
   });
 
-  it('returns 502 when the visibility lookup throws', async () => {
+  // The thrown error's message (e.g. a DNS or TLS failure string) must never
+  // reach the response body: it is parsed out by awsStorageService, rethrown by
+  // findOrCreateOutputVideo, and rendered in a user-facing notifyError toast by
+  // EditorView. Pin the generic message so that detail cannot leak back in.
+  it('returns 502 with a generic message when the visibility lookup throws, never the raw error', async () => {
     const fetchMock = vi.fn(async (url: string) => {
-      if (url.startsWith(VIDEOS)) throw new Error('ECONNREFUSED');
+      if (url.startsWith(VIDEOS)) throw new Error('ECONNREFUSED something-sensitive.internal');
       throw new Error('unexpected fetch: ' + url);
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -257,6 +262,37 @@ describe('aws-storage: authorization', () => {
 
     expect(res.statusCode).toBe(502);
     expect(lambdaCall(fetchMock)).toBeUndefined();
+    const body = JSON.parse(res.body);
+    expect(body.error).toBe('Authorization check failed');
+    expect(body.error).not.toContain('ECONNREFUSED');
+    expect(body.error).not.toContain('something-sensitive.internal');
+  });
+
+  // Regression guard: retrying as anonymous on any non-ok status, rather than
+  // specifically 401, would turn a transient PostgREST 5xx during a legitimate
+  // first ingest into a false 403 for the video's own owner (the client then
+  // deletes the row it just created reacting to that 403). Only a real 401 -
+  // what a forged, malformed or expired token produces - should trigger a retry.
+  it('does not retry on a non-401 non-ok response, and returns 502 without calling the Lambda', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.startsWith(VIDEOS)) {
+        return { ok: false, status: 503, json: async () => ({}) };
+      }
+      throw new Error('unexpected fetch: ' + url);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const handler = await loadHandler();
+
+    const res = await handler(
+      event({ outputVideoId: VALID_ID }, { authorization: 'Bearer caller-token' })
+    );
+
+    expect(res.statusCode).toBe(502);
+    expect(lambdaCall(fetchMock)).toBeUndefined();
+    const videosCalls = fetchMock.mock.calls.filter((c) =>
+      String(c[0]).startsWith(VIDEOS)
+    );
+    expect(videosCalls).toHaveLength(1);
   });
 
   it('returns 500 when Supabase is not configured', async () => {
@@ -283,5 +319,23 @@ describe('aws-storage: authorization', () => {
 
     expect(res.statusCode).toBe(500);
     expect(lambdaCall(fetchMock)).toBeUndefined();
+  });
+
+  // A correctly configured sb_publishable_* key is not a JWT, so it fails the
+  // same check as a service_role key. The message must say a JWT-format anon
+  // key is expected, not just warn about service_role, or whoever hits this
+  // with a valid publishable key goes hunting for the wrong problem.
+  it('returns 500 with a JWT-format hint when the anon key is a non-JWT publishable key', async () => {
+    process.env.SUPABASE_ANON_KEY = 'sb_publishable_abc123';
+    const fetchMock = routedFetch({ videoVisible: true });
+    vi.stubGlobal('fetch', fetchMock);
+    const handler = await loadHandler();
+
+    const res = await handler(event({ outputVideoId: VALID_ID }));
+
+    expect(res.statusCode).toBe(500);
+    expect(lambdaCall(fetchMock)).toBeUndefined();
+    const body = JSON.parse(res.body);
+    expect(body.error).toContain('JWT');
   });
 });

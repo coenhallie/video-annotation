@@ -34,7 +34,10 @@ argument and is the only caller of `getPresignedUrl`. So:
 
 - `getVideoUrlForProject(outputVideoId)` keeps its name and signature; only its body changes.
 - The private `getPresignedUrl(filepath)` is deleted.
-- `buildFilepath` stays: `videoService.ts:588` still uses it to write `filePath` onto the row.
+- `buildFilepath` stays, but not because anything in `videoService.ts` writes `filePath` onto
+  the row from it: no call site ever did that. It stays because it is mocked by
+  `outputVideoThumbnail.test.ts`, and removing it would churn a test this task has no other
+  reason to touch.
 - **`videoService.ts` is not modified at all**, and `outputVideoThumbnail.test.ts`'s existing
   mock of `AwsStorageService` keeps working untouched.
 

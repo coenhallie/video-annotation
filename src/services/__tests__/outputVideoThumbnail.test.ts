@@ -20,12 +20,14 @@ const state: {
   updated: any;
   deleted: any;
   updateError: any;
+  deleteError: any;
 } = {
   existing: null,
   inserted: null,
   updated: null,
   deleted: null,
   updateError: null,
+  deleteError: null,
 };
 
 vi.mock('@/composables/useSupabase', () => ({
@@ -60,7 +62,7 @@ vi.mock('@/composables/useSupabase', () => ({
       delete: () => ({
         eq: (_col: string, id: string) => {
           state.deleted = id;
-          return Promise.resolve({ error: null });
+          return Promise.resolve({ error: state.deleteError });
         },
       }),
     }),
@@ -79,6 +81,7 @@ describe('findOrCreateOutputVideo thumbnails', () => {
     state.updated = null;
     state.deleted = null;
     state.updateError = null;
+    state.deleteError = null;
     generateSmallThumbnail.mockReset();
     getVideoUrlForProject.mockResolvedValue('https://s3.example.com/presigned.mp4');
   });
@@ -162,6 +165,7 @@ describe('findOrCreateOutputVideo ordering', () => {
     state.updated = null;
     state.deleted = null;
     state.updateError = null;
+    state.deleteError = null;
     generateSmallThumbnail.mockReset();
     getVideoUrlForProject.mockReset();
   });
@@ -210,7 +214,7 @@ describe('findOrCreateOutputVideo ordering', () => {
     errorSpy.mockRestore();
   });
 
-  it('does not delete a pre-existing row and returns it when the final update fails', async () => {
+  it('does not delete a pre-existing row when the final update fails, and returns it with the fresh url', async () => {
     state.existing = { id: 'existing-1', thumbnailUrl: 'data:image/jpeg;base64,old' };
     getVideoUrlForProject.mockResolvedValue('https://s3.example.com/presigned.mp4');
     state.updateError = new Error('update failed');
@@ -219,7 +223,53 @@ describe('findOrCreateOutputVideo ordering', () => {
     const result = await callFindOrCreate();
 
     expect(state.deleted).toBeNull();
-    expect(result).toEqual(state.existing);
+    // The update itself no-ops under RLS (e.g. a non-owner viewing a shared AWS
+    // video), so `record` on its own carries the OLD, expired url. The freshly
+    // fetched presignedUrl must still make it back to the caller.
+    expect(result).toEqual({ ...state.existing, url: 'https://s3.example.com/presigned.mp4' });
+    errorSpy.mockRestore();
+  });
+
+  it('reports it but still throws the original error when the post-fetch-failure delete itself fails', async () => {
+    getVideoUrlForProject.mockRejectedValue(new Error('403 Not authorized for this video'));
+    state.deleteError = new Error('delete blocked by RLS');
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    // The original fetch-failure error must still be what the caller sees, not
+    // the delete's own error.
+    await expect(callFindOrCreate()).rejects.toThrow('Not authorized');
+
+    // Discriminate on the context string, not just "was console.error called":
+    // handleServiceError logs `[${context}] ${message}` as the first arg, and
+    // the orphan-cleanup contexts both contain "orphan cleanup". Asserting mere
+    // call-count would pass even if the `if (deleteError)` check were removed,
+    // since nothing else logs on this path in this test - but the sibling test
+    // below does have an unconditional log on the same path, so this
+    // discrimination is what actually pins the delete-error being reported.
+    expect(
+      errorSpy.mock.calls.some((c) => String(c[0]).includes('orphan cleanup'))
+    ).toBe(true);
+    errorSpy.mockRestore();
+  });
+
+  it('reports it but still throws the original error when the post-update-failure delete itself fails', async () => {
+    getVideoUrlForProject.mockResolvedValue('https://s3.example.com/presigned.mp4');
+    generateSmallThumbnail.mockResolvedValue(null);
+    state.updateError = new Error('update failed');
+    state.deleteError = new Error('delete blocked by RLS');
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    // The original update-failure error must still be what the caller sees, not
+    // the delete's own error.
+    await expect(callFindOrCreate()).rejects.toThrow('update failed');
+
+    // handleServiceError also fires unconditionally for the update error itself
+    // on this path, so a bare "was console.error called" assertion would pass
+    // even without the delete-error check this test exists to pin. Require the
+    // orphan-cleanup-specific log instead.
+    expect(
+      errorSpy.mock.calls.some((c) => String(c[0]).includes('orphan cleanup'))
+    ).toBe(true);
     errorSpy.mockRestore();
   });
 });
