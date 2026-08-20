@@ -752,7 +752,11 @@ function harness(initial?: {
   const currentVideoId = ref<string | null>(initial?.videoId ?? null);
   const currentComparisonId = ref<string | null>(initial?.comparisonId ?? null);
   const isAppLoading = ref(true);
-  const userId = ref<string | null>(initial?.userId ?? 'u1');
+  // Not `?? 'u1'`: that collapses an explicitly-passed null back to a signed-in
+  // user and makes the anonymous-viewer test assert nothing.
+  const userId = ref<string | null>(
+    initial?.userId === undefined ? 'u1' : initial.userId
+  );
   return { currentVideoId, currentComparisonId, isAppLoading, userId };
 }
 
