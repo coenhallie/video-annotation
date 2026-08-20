@@ -25,6 +25,8 @@ import { useDashboardFolders } from '@/composables/useDashboardFolders';
 import type { ComparisonCreatedEvent } from '@/types/component-interfaces';
 import { getMergedRangesForVideos } from '@/services/watchProgressService';
 import { percentFromRanges } from '@/utils/watchedRanges';
+import { getRecentOpens } from '@/services/recentOpensService';
+import { sortByRecentOpens } from '@/utils/projectOrdering';
 
 const router = useRouter();
 const { user, signOut } = useAuth();
@@ -51,6 +53,10 @@ const annotationCounts = ref<Record<string, number>>({});
 const commentCounts = ref<Record<string, number>>({});
 // Per-project team watch coverage (union across users), keyed by project id.
 const watchCoverage = ref<Record<string, number>>({});
+// This user's own "last opened" times, keyed by project id. Per user by
+// construction: the query filters on userId and RLS enforces it independently,
+// so scope 'all' still reorders by YOUR opens only.
+const recentOpens = ref<Record<string, string>>({});
 const currentPage = ref(1);
 const itemsPerPage = ref(20);
 // Labels across the loaded projects: power the filter dropdown and resolve
@@ -114,7 +120,11 @@ async function loadData() {
       userId: user.value.id,
     });
     await dashFolders.refreshFolderContents();
-    const counts = await ProjectService.getProjectCountsBatched(projects.value);
+    const [counts, opens] = await Promise.all([
+      ProjectService.getProjectCountsBatched(projects.value),
+      getRecentOpens(user.value.id),
+    ]);
+    recentOpens.value = opens;
     annotationCounts.value = counts.annotationCounts;
     commentCounts.value = counts.commentCounts;
     const videoIds = projects.value
@@ -212,11 +222,18 @@ const filteredProjects = computed(() => {
   return list;
 });
 
+// Recency ordering lives here, not in ProjectService.mapToProjects: that is a
+// private static shared by getUserProjects and getAllProjects with no user
+// context, and it keeps owning created-date order as the stable base.
+const orderedProjects = computed(() =>
+  sortByRecentOpens(filteredProjects.value, recentOpens.value)
+);
+
 const totalPages = computed(() =>
   Math.max(1, Math.ceil(filteredProjects.value.length / itemsPerPage.value))
 );
 const paginatedProjects = computed(() =>
-  filteredProjects.value.slice(
+  orderedProjects.value.slice(
     (currentPage.value - 1) * itemsPerPage.value,
     currentPage.value * itemsPerPage.value
   )
