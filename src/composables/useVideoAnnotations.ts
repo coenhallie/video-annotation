@@ -33,6 +33,13 @@ export function useVideoAnnotations(
   // Derive comparison context from comparisonVideoId to avoid drift
   const isComparisonContext = computed(() => !!toValue(comparisonVideoId));
 
+  // Monotonic token for loadAnnotations. Tab clicks put several loads in flight
+  // at once, and without this whichever resolves last wins - so clicking
+  // Pipeline then Video can leave pipeline rows sitting in the Video tab, where
+  // nothing corrects them. Each call captures the token at entry and drops its
+  // result if a newer load has started since.
+  let loadToken = 0;
+
   // Watch for user changes and reload annotations if we have a current video
   watch(user, async (newUser, oldUser) => {
     if (newUser && currentVideo.value && newUser.id !== oldUser?.id) {
@@ -63,10 +70,14 @@ export function useVideoAnnotations(
   // markers, the quick pick - reads this one array, so they all follow.
   watch(
     () => toValue(surface),
-    async (next, previous) => {
-      if (next !== previous) {
-        await loadAnnotations();
-      }
+    async () => {
+      // Cleared synchronously, before any await. loadAnnotations can skip
+      // (no context, no video, unauthenticated) or fail, and every one of those
+      // paths leaves the list untouched - which would show the other tab's
+      // annotations under this tab, markers included. Empty is truthful here,
+      // stale is a lie.
+      annotations.value = [];
+      await loadAnnotations();
     }
   );
 
@@ -141,6 +152,11 @@ export function useVideoAnnotations(
   };
 
   const loadAnnotations = async () => {
+    // Captured before the first await, so every assignment below can check that
+    // this load is still the newest one.
+    const token = ++loadToken;
+    const isCurrent = () => token === loadToken;
+
     // DEV log (kept minimal)
     logger.debug('[useVideoAnnotations] loadAnnotations', {
       isComparisonContext: isComparisonContext.value,
@@ -182,7 +198,9 @@ export function useVideoAnnotations(
           count: shareData.annotations?.length ?? 0,
         });
 
-        annotations.value = (shareData.annotations || []) as unknown as Annotation[];
+        if (!isCurrent()) return;
+        annotations.value = (shareData.annotations ||
+          []) as unknown as Annotation[];
         return;
       } catch (error) {
         logger.error('[useVideoAnnotations] error loading shared video', error);
@@ -241,6 +259,7 @@ export function useVideoAnnotations(
               );
 
             // Flatten all annotations into a single array
+            if (!isCurrent()) return;
             annotations.value = [
               ...(allAnnotations.comparison || []),
               ...(allAnnotations.videoA || []),
@@ -248,6 +267,7 @@ export function useVideoAnnotations(
             ];
           } else {
             logger.warn('[useVideoAnnotations] no comparison video found');
+            if (!isCurrent()) return;
             annotations.value = [];
           }
         } catch (err) {
@@ -269,6 +289,7 @@ export function useVideoAnnotations(
           true, // includeCommentCounts
           toValue(surface)
         );
+        if (!isCurrent()) return;
         annotations.value = dbAnnotations.map((ann) => ann as Annotation);
       }
     } catch (err: unknown) {
@@ -281,6 +302,10 @@ export function useVideoAnnotations(
   const addAnnotation = async (annotationData) => {
     // Ensure comparison context is properly set
     const currentComparisonVideoId = toValue(comparisonVideoId);
+    // The surface this annotation belongs to, fixed at entry. Creating one and
+    // switching tabs before the insert returns must not drop the row into the
+    // other tab's list.
+    const surfaceAtEntry = toValue(surface);
     // isComparisonContext is derived via computed; no mutation here
 
     logger.debug('[useVideoAnnotations] addAnnotation', {
@@ -468,6 +493,16 @@ export function useVideoAnnotations(
           '[useVideoAnnotations] individual annotation created',
           newAnnotation?.id
         );
+      }
+
+      // The row exists in the database either way, which is correct: only the
+      // local list is surface-specific.
+      if (toValue(surface) !== surfaceAtEntry) {
+        logger.debug(
+          '[useVideoAnnotations] surface changed during create, skipping local push',
+          { from: surfaceAtEntry, to: toValue(surface) }
+        );
+        return newAnnotation;
       }
 
       annotations.value.push(newAnnotation);
