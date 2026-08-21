@@ -35,7 +35,7 @@ describe('QaStatusPill', () => {
 
   it('renders the uppercase label', () => {
     for (const [status, label] of [
-      ['not_started', 'NOT STARTED'],
+      ['not_started', 'UNREVIEWED'],
       ['in_review', 'IN REVIEW'],
       ['failed', 'FAILED'],
       ['staging', 'STAGING'],
@@ -77,6 +77,16 @@ describe('QaStatusPill', () => {
       expect(p.pill()?.className).not.toContain('bg-gray-900');
       p.unmount();
     }
+  });
+
+  // The state the user actually hit: frontend ahead of the migration, so every
+  // row's qaStatus is undefined. The pill must still read as a pill.
+  it('renders a label when the status is absent, not an empty capsule', () => {
+    const p = mountPill(undefined as never);
+    expect(p.pill()?.textContent?.trim()).toBe('UNREVIEWED');
+    expect(p.pill()?.className).toContain('text-gray-400');
+    expect(p.pill()?.getAttribute('title')).toBe('QA status: UNREVIEWED');
+    p.unmount();
   });
 
   it('does not shrink when the row is tight', () => {

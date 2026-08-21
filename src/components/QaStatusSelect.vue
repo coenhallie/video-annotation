@@ -54,6 +54,7 @@ import {
   isQaStatus,
   qaStatusLabel,
   qaStatusToneClass,
+  toQaStatus,
 } from '@/utils/qaStatus';
 import { VideoService } from '@/services/videoService';
 import { useNotifications } from '@/composables/useNotifications';
@@ -68,7 +69,10 @@ const emit = defineEmits<{ updated: [Video] }>();
 
 const { addNotification } = useNotifications();
 
-const current = ref<QaStatus>(props.video.qaStatus);
+// Through toQaStatus, not straight off the prop: a video loaded before the
+// qaStatus migration lands carries undefined, which would leave the select on
+// no option at all rather than on a word.
+const current = ref<QaStatus>(toQaStatus(props.video.qaStatus));
 const updatedAt = ref<string | undefined>(props.video.qaStatusUpdatedAt);
 const saving = ref(false);
 
@@ -87,7 +91,7 @@ watch(
   ([nextId, nextStatus, nextUpdatedAt], previous) => {
     const [previousId] = previous ?? [];
     if (saving.value && nextId === previousId) return;
-    current.value = nextStatus;
+    current.value = toQaStatus(nextStatus);
     updatedAt.value = nextUpdatedAt;
   }
 );

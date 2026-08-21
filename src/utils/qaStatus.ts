@@ -14,15 +14,53 @@ export const QA_STATUSES: readonly QaStatus[] = [
 ] as const;
 
 const LABELS: Record<QaStatus, string> = {
-  not_started: 'NOT STARTED',
+  not_started: 'UNREVIEWED',
   in_review: 'IN REVIEW',
   failed: 'FAILED',
   staging: 'STAGING',
   production: 'PRODUCTION',
 };
 
-export function qaStatusLabel(status: QaStatus): string {
-  return LABELS[status];
+/**
+ * What an absent status renders as.
+ *
+ * Absent is not the same as `not_started`, but it looks the same on purpose: a
+ * pill with no text is a 96px empty outline that reads as a progress bar, which
+ * is worse than a label that is merely approximate. And it is not approximate
+ * in the case that actually produces it - a video whose status has never been
+ * written has not been reviewed.
+ *
+ * The status can be absent for one real reason: the frontend is running against
+ * a database where the `qaStatus` column does not exist yet. That is a
+ * deployment error, so `qaStatusLabel` warns once rather than papering over it
+ * in silence.
+ */
+const ABSENT_FALLBACK: QaStatus = 'not_started';
+
+let warnedAboutAbsentStatus = false;
+
+export function toQaStatus(status: QaStatus | null | undefined): QaStatus {
+  if (status && isQaStatus(status)) return status;
+
+  if (!warnedAboutAbsentStatus) {
+    warnedAboutAbsentStatus = true;
+    console.warn(
+      '[qaStatus] A video arrived with no qaStatus. Rendering it as ' +
+        `${LABELS[ABSENT_FALLBACK]}. If every video is doing this, the ` +
+        'migration adding videos.qaStatus has not been applied to this database.'
+    );
+  }
+
+  return ABSENT_FALLBACK;
+}
+
+/**
+ * Total by design: every caller renders a pill or a select option, and there is
+ * no value of `status` for which returning nothing is better than returning a
+ * word.
+ */
+export function qaStatusLabel(status: QaStatus | null | undefined): string {
+  return LABELS[toQaStatus(status)];
 }
 
 export function isQaStatus(value: unknown): value is QaStatus {
@@ -35,8 +73,8 @@ export function isQaStatus(value: unknown): value is QaStatus {
  * Text colour for the select, which sits among grey meta tokens. `failed` gets
  * the one accent the app already uses for destructive and error states.
  */
-export function qaStatusToneClass(status: QaStatus): string {
-  return status === 'failed'
+export function qaStatusToneClass(status: QaStatus | null | undefined): string {
+  return toQaStatus(status) === 'failed'
     ? 'text-red-600 dark:text-red-400'
     : 'text-gray-500 dark:text-gray-400';
 }
@@ -61,8 +99,8 @@ const PILL_CLASSES: Record<QaStatus, string> = {
     'border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-gray-900',
 };
 
-export function qaStatusPillClass(status: QaStatus): string {
-  return PILL_CLASSES[status];
+export function qaStatusPillClass(status: QaStatus | null | undefined): string {
+  return PILL_CLASSES[toQaStatus(status)];
 }
 
 /**

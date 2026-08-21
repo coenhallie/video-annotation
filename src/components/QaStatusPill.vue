@@ -19,5 +19,8 @@
 import type { QaStatus } from '@/types/database';
 import { qaStatusLabel, qaStatusPillClass } from '@/utils/qaStatus';
 
-defineProps<{ status: QaStatus }>();
+// Nullable on purpose. A frontend running ahead of the migration that adds
+// videos.qaStatus hands us undefined, and qaStatusLabel is total precisely so
+// that case still renders a word instead of an empty 96px outline.
+defineProps<{ status: QaStatus | null | undefined }>();
 </script>

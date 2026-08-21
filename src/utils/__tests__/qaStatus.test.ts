@@ -7,6 +7,7 @@ import {
   qaStatusToneClass,
   resolveQaStatusTarget,
   mergeQaStatusUpdate,
+  toQaStatus,
 } from '@/utils/qaStatus';
 import type { Video } from '@/types/database';
 
@@ -22,11 +23,30 @@ describe('qaStatus vocabulary', () => {
   });
 
   it('renders labels as uppercase display text', () => {
-    expect(qaStatusLabel('not_started')).toBe('NOT STARTED');
+    expect(qaStatusLabel('not_started')).toBe('UNREVIEWED');
     expect(qaStatusLabel('in_review')).toBe('IN REVIEW');
     expect(qaStatusLabel('failed')).toBe('FAILED');
     expect(qaStatusLabel('staging')).toBe('STAGING');
     expect(qaStatusLabel('production')).toBe('PRODUCTION');
+  });
+
+  // A pill with no text is a 96px empty outline that reads as a progress bar.
+  // These three are what stop that shipping again, whatever the input.
+  it('never renders an empty label, whatever it is handed', () => {
+    for (const absent of [undefined, null, '', 'shipped', 7, {}]) {
+      expect(qaStatusLabel(absent as never)).toBe('UNREVIEWED');
+    }
+  });
+
+  it('gives an absent status the same pill treatment as not started', () => {
+    expect(qaStatusPillClass(undefined)).toBe(qaStatusPillClass('not_started'));
+    expect(qaStatusToneClass(undefined)).toBe(qaStatusToneClass('not_started'));
+  });
+
+  it('normalises an absent status to not started', () => {
+    expect(toQaStatus(undefined)).toBe('not_started');
+    expect(toQaStatus(null)).toBe('not_started');
+    expect(toQaStatus('staging')).toBe('staging');
   });
 
   it('accepts only the five values', () => {
