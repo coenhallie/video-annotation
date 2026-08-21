@@ -38,7 +38,7 @@ Five, ordered as the work flows:
 
 | Value | Meaning |
 | --- | --- |
-| `not_started` | Nobody has looked at it |
+| `not_started` | Nobody has looked at it. Renders as `UNREVIEWED` |
 | `in_review` | Being QA'd right now |
 | `failed` | QA found blocking issues |
 | `staging` | Tested, released to staging |
@@ -238,8 +238,12 @@ new.
   the same class the duration, FPS, date and annotation-count tokens use.
 - Section heading in the details panel: the existing eyebrow,
   `text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400`.
-- Labels render uppercase: `NOT STARTED`, `IN REVIEW`, `FAILED`, `STAGING`,
-  `PRODUCTION`.
+- Labels render uppercase: `UNREVIEWED`, `IN REVIEW`, `FAILED`, `STAGING`,
+  `PRODUCTION`. The label functions are total: anything that is not one of the
+  five, `undefined` included, renders as `UNREVIEWED` with the `not_started`
+  treatment, and warns once to the console. A pill with no text is a 96px empty
+  outline that reads as a progress bar, and that is exactly what a frontend
+  running ahead of the migration produces on every row.
 - One exception to the greyscale: `FAILED` is `text-red-600 dark:text-red-400`,
   the app's only accent, already used for destructive and error states. It is the
   one status that has to catch the eye in a list of 171 rows.
