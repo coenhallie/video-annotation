@@ -18,6 +18,7 @@ import EditorHeader from '@/components/EditorHeader.vue';
 import UnifiedVideoPlayer from '@/components/UnifiedVideoPlayer.vue';
 import DashboardModals from '@/components/DashboardModals.vue';
 import AnnotationQuickPick from '@/components/AnnotationQuickPick.vue';
+import EditorSurfaceTabs from '@/components/EditorSurfaceTabs.vue';
 import { useLabelCatalog } from '@/composables/useLabelCatalog';
 import { buildAnnotationPayload, stampSnapshotFrame } from '@/utils/annotationPayload';
 import { canCreateAnnotations } from '@/utils/annotationPermissions';
@@ -40,7 +41,12 @@ import { useVideoEventHandlers } from '@/composables/useVideoEventHandlers';
 import { useWatchProgress } from '@/composables/useWatchProgress';
 import { useRecordProjectOpen } from '@/composables/useRecordProjectOpen';
 import { supabase } from '@/composables/useSupabase';
-import type { Video, Annotation, ComparisonVideo } from '@/types/database';
+import type {
+  Video,
+  Annotation,
+  ComparisonVideo,
+  AnnotationSurface,
+} from '@/types/database';
 import type {
   ProjectSelection,
   ComparisonCreatedEvent,
@@ -238,6 +244,10 @@ const canAnnotate = computed(() => {
   return canCreateAnnotations(currentVideoObject.value, user.value?.id);
 });
 
+// ── Editor surface (Video / Pipeline output tabs) ────────────────────────────
+
+const activeSurface = ref<AnnotationSurface>('video');
+
 // Annotations data
 const {
   annotations,
@@ -259,7 +269,8 @@ const {
       return comparisonWorkflow.currentComparison.value.id;
     }
     return null;
-  })
+  }),
+  activeSurface
 );
 
 const handleAddAnnotation = async (annotationData: AnnotationFormData) => {
@@ -716,7 +727,7 @@ const isChangelogModalOpen = ref(false);
 
 // Real-time features
 const { setupPresenceTracking } =
-  useRealtimeAnnotations(videoId, annotations);
+  useRealtimeAnnotations(videoId, annotations, activeSurface);
 // Use either currentVideoId or currentComparisonId depending on mode
 const activeContentId = computed(() => {
   return currentComparisonId.value || currentVideoId.value;
@@ -1296,6 +1307,48 @@ const {
   comparisonWorkflow,
 });
 
+/**
+ * Derived from the loaded video, not from the videoStore's `isAwsVideo` ref.
+ * That ref is set true on both load paths but only ever cleared by
+ * resetForProjectSwitch, so a path that skips the reset leaves it stale-true
+ * and puts the tab bar on a video that has no pipeline output.
+ *
+ * Share views are excluded on purpose. loadAnnotations returns early for a
+ * share link and takes its list from ShareService, which calls
+ * getVideoAnnotations without a surface (shareService.ts:88) and so returns
+ * both surfaces. Showing tabs there would put every annotation in both tabs.
+ */
+const hasPipelineSurface = computed(
+  () =>
+    playerMode.value === 'single' &&
+    !isSharedVideo.value &&
+    VideoService.isAwsVideo(
+      (currentVideoObject.value ?? {}) as Record<string, unknown>
+    )
+);
+
+// A project without the pipeline surface must never sit on the pipeline tab:
+// switching to a plain video would otherwise hide its annotations behind a tab
+// bar that is no longer rendered.
+watch(hasPipelineSurface, (available) => {
+  if (!available) activeSurface.value = 'video';
+});
+
+// Opening a different project starts on the video tab.
+watch(currentVideoId, () => {
+  activeSurface.value = 'video';
+});
+
+// The player stays mounted behind the pipeline tab (v-show, not v-if), so
+// without this the audio keeps running with no picture. Switching back does not
+// auto-resume: the timeline's own play control is still there and still owns
+// playback on both tabs.
+watch(activeSurface, (surface) => {
+  if (surface === 'pipeline' && isPlaying.value) {
+    unifiedVideoPlayerRef.value?.pause();
+  }
+});
+
 // ── Keyboard shortcuts (extracted composable) ────────────────────────────────
 useDashboardKeyboard({
   playerMode,
@@ -1506,9 +1559,19 @@ watch(
       <!-- Main App Content -->
       <!-- Video Section -->
       <section class="flex-1 flex flex-col bg-black min-w-0 overflow-hidden">
+        <EditorSurfaceTabs
+          v-if="hasPipelineSurface"
+          v-model="activeSurface"
+        />
         <div class="flex-1 flex items-center justify-center p-6">
           <div class="w-full h-full flex flex-col items-center justify-center">
+            <!--
+              The player stays mounted with v-show rather than v-if: v-if would
+              tear down the video element on every tab switch, dropping playback
+              position, the decoded buffer and the drawing canvas with it.
+            -->
             <div
+              v-show="activeSurface === 'video'"
               class="relative w-full h-full max-h-full"
               @contextmenu="openQuickPick"
             >
@@ -1558,6 +1621,32 @@ watch(
                 @drawing-deleted="handleDrawingDeleted"
                 @error="handleVideoError"
               />
+            </div>
+            <div
+              v-if="activeSurface === 'pipeline'"
+              data-testid="pipeline-empty-state"
+              class="flex h-full w-full flex-col items-center justify-center text-center"
+            >
+              <svg
+                class="mb-3 h-8 w-8 text-gray-600"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"
+                />
+              </svg>
+              <p class="text-[12px] text-gray-400">
+                Pipeline output is not available yet
+              </p>
+              <p class="mt-1 text-[11px] text-gray-600">
+                Annotations you add here stay separate from the video's.
+              </p>
             </div>
           </div>
         </div>
@@ -1640,6 +1729,7 @@ watch(
         :fps="quickPickSnapshot?.fps ?? 30"
         :draw-color="quickPickDrawColor"
         :draw-width="quickPickDrawWidth"
+        :allow-drawing="activeSurface === 'video'"
         @select="handleQuickPickSelect"
         @comment="handleQuickPickComment"
         @comment-mode="handleQuickPickCommentMode"
