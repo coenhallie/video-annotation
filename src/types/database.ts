@@ -72,10 +72,18 @@ export interface DatabaseVideo {
   updatedAt: string;
 }
 
+/**
+ * Which surface of a match an annotation was made on. The editor shows the
+ * rendered video and the pipeline's data output as two tabs over one video row,
+ * and each tab shows only its own annotations.
+ */
+export type AnnotationSurface = 'video' | 'pipeline';
+
 export interface DatabaseAnnotation {
   id: string;
   videoId?: string; // Nullable for comparison annotations
   comparisonVideoId?: string; // For comparison video annotations
+  surface: AnnotationSurface; // Which editor tab this annotation belongs to
   userId: string;
   projectId?: string;
   content: string;
@@ -316,7 +324,15 @@ export interface Database {
       };
       annotations: {
         Row: DatabaseAnnotation;
-        Insert: Omit<DatabaseAnnotation, 'id' | 'createdAt' | 'updatedAt'>;
+        // `surface` is optional on insert only because the column is
+        // NOT NULL DEFAULT 'video'. Omitting it means 'video'. Four call sites
+        // omit it deliberately: annotationService.ts createComparisonAnnotation
+        // and the two useComparisonVideoWorkflow inserts, where the value is
+        // meaningless, plus any legacy path not yet surface-aware.
+        Insert: Omit<
+          DatabaseAnnotation,
+          'id' | 'createdAt' | 'updatedAt' | 'surface'
+        > & { surface?: AnnotationSurface };
         Update: Partial<
           Omit<DatabaseAnnotation, 'id' | 'createdAt' | 'updatedAt'>
         >;
