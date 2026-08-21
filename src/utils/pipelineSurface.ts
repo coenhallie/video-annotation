@@ -1,6 +1,12 @@
 import { VideoService } from '@/services/videoService';
 import type { Video } from '@/types/database';
 
+export type PipelineSurfaceVideo =
+  | Partial<Video>
+  | Record<string, unknown>
+  | null
+  | undefined;
+
 /**
  * Whether the Video / Pipeline output tab bar should show for the currently
  * loaded content.
@@ -23,12 +29,6 @@ import type { Video } from '@/types/database';
  *   the reset leaves it stale-true and would put the tab bar on a video that
  *   has no pipeline output.
  */
-export type PipelineSurfaceVideo =
-  | Partial<Video>
-  | Record<string, unknown>
-  | null
-  | undefined;
-
 export function isPipelineSurfaceVisible(
   video: PipelineSurfaceVideo,
   playerMode: 'single' | 'dual',

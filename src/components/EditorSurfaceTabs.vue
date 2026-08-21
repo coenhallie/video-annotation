@@ -26,7 +26,7 @@ const select = (surface: AnnotationSurface) => {
   <div
     role="tablist"
     aria-label="Editor surface"
-    class="flex items-center gap-1 border-b border-white/10 bg-black px-4"
+    class="flex shrink-0 items-center gap-1 border-b border-white/10 bg-black px-4"
   >
     <button
       v-for="tab in TABS"
