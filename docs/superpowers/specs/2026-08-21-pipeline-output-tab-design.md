@@ -92,8 +92,21 @@ playhead and an annotation panel.
 
 ### Visibility gate
 
-The tab bar renders only when `isAwsVideo && playerMode === 'single'`. Every
-other video keeps today's layout with no tab bar at all.
+The tab bar renders only for a single-mode AWS pipeline video, derived from the
+loaded video rather than read from a flag:
+
+```ts
+VideoService.isAwsVideo(currentVideoObject) && playerMode === 'single'
+```
+
+The `isAwsVideo` ref on the video store looks like the obvious gate and is not.
+It is set true on both load paths (`EditorView.vue:1156` for a dashboard open,
+`:1363` for the `?outputVideo=` deep link) but is only ever cleared by
+`resetForProjectSwitch`. Opening a non-AWS project on a path that skips that
+reset leaves it stale-true, and the tab bar appears on a video with no pipeline
+output. Deriving from `currentVideoObject` cannot go stale.
+
+Every other video keeps today's layout with no tab bar at all.
 
 Dual mode is excluded on purpose: comparison annotations scope by
 `comparisonVideoId` and bypass `videoId`, so `surface` does not apply cleanly
