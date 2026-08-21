@@ -70,6 +70,9 @@ export interface DatabaseVideo {
   originalFilename?: string;
   createdAt: string;
   updatedAt: string;
+  qaStatus: QaStatus;
+  qaStatusUpdatedAt?: string;
+  qaStatusUpdatedBy?: string;
 }
 
 /**
@@ -78,6 +81,21 @@ export interface DatabaseVideo {
  * and each tab shows only its own annotations.
  */
 export type AnnotationSurface = 'video' | 'pipeline';
+
+/**
+ * QA completion status of a video. A saved label and nothing more: no code
+ * reads it to gate, filter or trigger anything.
+ *
+ * `failed` is not in the literal request. It is here because a QA control with
+ * no way to say "this did not pass" forces reviewers to leave the video in a
+ * state that lies.
+ */
+export type QaStatus =
+  | 'not_started'
+  | 'in_review'
+  | 'failed'
+  | 'staging'
+  | 'production';
 
 export interface DatabaseAnnotation {
   id: string;
@@ -227,6 +245,9 @@ export interface Video {
   originalFilename?: string;
   createdAt: string;
   updatedAt: string;
+  qaStatus: QaStatus;
+  qaStatusUpdatedAt?: string;
+  qaStatusUpdatedBy?: string;
 }
 
 // Application interface for comparison videos

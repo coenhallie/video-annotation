@@ -318,6 +318,7 @@ export class VideoService {
       videoType: 'url',
       videoId: '', //This will be handled by the database
       isPublic: false,
+      qaStatus: 'not_started',
       ...(thumbnailUrl && { thumbnailUrl }),
     };
 
