@@ -340,7 +340,12 @@ export interface Database {
       };
       videos: {
         Row: DatabaseVideo;
-        Insert: Omit<DatabaseVideo, 'id' | 'createdAt' | 'updatedAt'>;
+        // `qaStatus` is optional on insert only because the column is
+        // NOT NULL DEFAULT 'not_started'. Omitting it means 'not_started'.
+        Insert: Omit<
+          DatabaseVideo,
+          'id' | 'createdAt' | 'updatedAt' | 'qaStatus'
+        > & { qaStatus?: QaStatus };
         Update: Partial<Omit<DatabaseVideo, 'id' | 'createdAt' | 'updatedAt'>>;
       };
       annotations: {
