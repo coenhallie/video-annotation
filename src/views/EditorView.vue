@@ -22,6 +22,7 @@ import EditorSurfaceTabs from '@/components/EditorSurfaceTabs.vue';
 import { useLabelCatalog } from '@/composables/useLabelCatalog';
 import { buildAnnotationPayload, stampSnapshotFrame } from '@/utils/annotationPayload';
 import { canCreateAnnotations } from '@/utils/annotationPermissions';
+import { isPipelineSurfaceVisible } from '@/utils/pipelineSurface';
 import { ShareService } from '@/services/shareService';
 import { VideoService } from '@/services/videoService';
 import { ComparisonVideoService } from '@/services/comparisonVideoService';
@@ -1307,24 +1308,14 @@ const {
   comparisonWorkflow,
 });
 
-/**
- * Derived from the loaded video, not from the videoStore's `isAwsVideo` ref.
- * That ref is set true on both load paths but only ever cleared by
- * resetForProjectSwitch, so a path that skips the reset leaves it stale-true
- * and puts the tab bar on a video that has no pipeline output.
- *
- * Share views are excluded on purpose. loadAnnotations returns early for a
- * share link and takes its list from ShareService, which calls
- * getVideoAnnotations without a surface (shareService.ts:88) and so returns
- * both surfaces. Showing tabs there would put every annotation in both tabs.
- */
-const hasPipelineSurface = computed(
-  () =>
-    playerMode.value === 'single' &&
-    !isSharedVideo.value &&
-    VideoService.isAwsVideo(
-      (currentVideoObject.value ?? {}) as Record<string, unknown>
-    )
+// See isPipelineSurfaceVisible for why dual mode, share views and a stale
+// videoStore isAwsVideo ref are each excluded.
+const hasPipelineSurface = computed(() =>
+  isPipelineSurfaceVisible(
+    currentVideoObject.value,
+    playerMode.value,
+    isSharedVideo.value
+  )
 );
 
 // A project without the pipeline surface must never sit on the pipeline tab:
