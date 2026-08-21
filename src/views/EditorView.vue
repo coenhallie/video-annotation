@@ -23,7 +23,11 @@ import { useLabelCatalog } from '@/composables/useLabelCatalog';
 import { buildAnnotationPayload, stampSnapshotFrame } from '@/utils/annotationPayload';
 import { canCreateAnnotations } from '@/utils/annotationPermissions';
 import { isPipelineSurfaceVisible } from '@/utils/pipelineSurface';
-import { resolveQaStatusTarget, type QaStatusTarget } from '@/utils/qaStatus';
+import {
+  resolveQaStatusTarget,
+  mergeQaStatusUpdate,
+  type QaStatusTarget,
+} from '@/utils/qaStatus';
 import { ShareService } from '@/services/shareService';
 import { VideoService } from '@/services/videoService';
 import { ComparisonVideoService } from '@/services/comparisonVideoService';
@@ -1342,6 +1346,18 @@ const qaStatusTarget = computed<QaStatusTarget | null>(() =>
   )
 );
 
+// Keeps currentVideoObject authoritative after a write, mirroring
+// VideoDetailsPanel's own Object.assign. Without this, a later unrelated
+// reassignment of the same ref (an AWS presigned URL refresh, for instance)
+// spreads the pre-save qaStatus forward and the control reverts to the old
+// value even though the write already succeeded.
+function onQaStatusUpdated(updated: Video) {
+  currentVideoObject.value = mergeQaStatusUpdate(
+    currentVideoObject.value,
+    updated
+  );
+}
+
 // The player stays mounted behind the pipeline tab (v-show, not v-if), so
 // without this the audio keeps running with no picture. Switching back does not
 // auto-resume: the timeline's own play control is still there and still owns
@@ -1804,6 +1820,7 @@ watch(
             @form-show="handleFormShow"
             @form-hide="handleFormHide"
             @pause="handleTimelinePause"
+            @qa-status-updated="onQaStatusUpdated"
             @create-anonymous-session="handleCreateAnonymousSession"
           />
           <div

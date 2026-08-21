@@ -109,3 +109,22 @@ export function resolveQaStatusTarget(
       : {}),
   };
 }
+
+/**
+ * Folds a successful QA status write back into the loaded video object the
+ * store still holds, so a later unrelated reassignment of the same ref (an
+ * AWS presigned URL refresh after a playback error, say) does not carry the
+ * pre-save qaStatus forward and quietly revert the control that already
+ * reported the new value.
+ *
+ * Guarded on id rather than applied unconditionally: if the viewer has moved
+ * on to a different video by the time a write resolves, that video's fields
+ * must not land on this one.
+ */
+export function mergeQaStatusUpdate(
+  current: Partial<Video> | null,
+  updated: Video
+): Partial<Video> | null {
+  if (!current || current.id !== updated.id) return current;
+  return { ...current, ...updated };
+}

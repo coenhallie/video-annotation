@@ -16,7 +16,7 @@ import { useAuth } from '../composables/useAuth';
 import { useGlobalComments } from '../composables/useGlobalComments';
 import { useAnnotationFiltering } from '../composables/useAnnotationFiltering';
 import { useLabelCatalog } from '../composables/useLabelCatalog';
-import type { Comment } from '../types/database';
+import type { Comment, Video } from '../types/database';
 import type { UseDrawingCanvas } from '../composables/useDrawingCanvas';
 import type { UseDrawingCoordinator } from '../composables/useDrawingCoordinator';
 import type { DualVideoPlayer } from '../composables/useDualVideoPlayer';
@@ -147,6 +147,7 @@ const emit = defineEmits([
   'comment-added',
   'comment-updated',
   'comment-deleted',
+  'qa-status-updated',
 ]);
 
 // Authentication
@@ -290,6 +291,13 @@ const handleCommentDeleted = (comment: Comment) => {
   emit('comment-deleted', comment);
 };
 
+// Pass-through only: this panel does not know about the store that owns the
+// loaded video, so it hands the saved row to whoever mounted it rather than
+// writing anywhere itself.
+const handleQaStatusUpdated = (updated: Video) => {
+  emit('qa-status-updated', updated);
+};
+
 // --- Label management ---
 
 const openLabelManagement = () => {
@@ -391,7 +399,10 @@ watch(
       v-if="video && !isDualMode && canAnnotate"
       class="shrink-0 border-b border-gray-200 px-4 pb-3 dark:border-white/10"
     >
-      <QaStatusSelect :video="video" />
+      <QaStatusSelect
+        :video="video"
+        @updated="handleQaStatusUpdated"
+      />
     </div>
 
     <!-- Category filter. Hidden until the video has categorised annotations,

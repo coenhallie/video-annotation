@@ -73,6 +73,9 @@
       v-if="project.projectType === 'single'"
       class="border-b border-gray-200 px-4 py-3 dark:border-white/10"
     >
+      <!-- updated-by-name is the video's OWNER, not necessarily whoever set
+           the status: qaStatusUpdatedBy has no name lookup yet, since
+           fetchOwners is keyed on owner ids only. Known approximation. -->
       <QaStatusSelect
         :video="project.video"
         :updated-by-name="project.owner?.name"

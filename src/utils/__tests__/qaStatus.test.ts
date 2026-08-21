@@ -6,7 +6,9 @@ import {
   qaStatusPillClass,
   qaStatusToneClass,
   resolveQaStatusTarget,
+  mergeQaStatusUpdate,
 } from '@/utils/qaStatus';
+import type { Video } from '@/types/database';
 
 describe('qaStatus vocabulary', () => {
   it('lists the five values in workflow order', () => {
@@ -101,5 +103,52 @@ describe('resolveQaStatusTarget', () => {
     const target = resolveQaStatusTarget({ id: 'video-1', qaStatus: 'not_started' }, false, false);
     expect(target).toEqual({ id: 'video-1', qaStatus: 'not_started' });
     expect(target && 'qaStatusUpdatedAt' in target).toBe(false);
+  });
+});
+
+describe('mergeQaStatusUpdate', () => {
+  const fullVideo = (overrides: Partial<Video> = {}): Video =>
+    ({
+      id: 'video-1',
+      title: 'Match 1',
+      url: 'http://v',
+      videoId: 'aws:abc',
+      fps: 30,
+      duration: 10,
+      totalFrames: 300,
+      isPublic: false,
+      allowAnnotations: true,
+      ownerId: 'u1',
+      videoType: 'url',
+      createdAt: '2026-08-01T00:00:00Z',
+      updatedAt: '2026-08-01T00:00:00Z',
+      qaStatus: 'not_started',
+      ...overrides,
+    }) as Video;
+
+  // The exact failure this closes: a store ref holding a partial, pre-save
+  // video (e.g. after an AWS presigned URL refresh spreads a stale copy)
+  // must pick up the saved status rather than keep showing the old one.
+  it('folds the saved fields onto the current video when ids match', () => {
+    const current = { id: 'video-1', qaStatus: 'not_started' as const, duration: 10 };
+    const updated = fullVideo({ qaStatus: 'staging', qaStatusUpdatedAt: '2026-08-21T00:00:00Z' });
+
+    expect(mergeQaStatusUpdate(current, updated)).toEqual({
+      ...current,
+      ...updated,
+    });
+  });
+
+  // A write that resolves after the viewer has already moved to a different
+  // video must not stamp that video's fields onto this one.
+  it('leaves a different video untouched', () => {
+    const current = { id: 'video-2', qaStatus: 'not_started' as const };
+    const updated = fullVideo({ id: 'video-1', qaStatus: 'production' });
+
+    expect(mergeQaStatusUpdate(current, updated)).toBe(current);
+  });
+
+  it('stays null when nothing is loaded', () => {
+    expect(mergeQaStatusUpdate(null, fullVideo())).toBeNull();
   });
 });
