@@ -17,7 +17,7 @@
 - Surface values are exactly `'video'` and `'pipeline'`. No other value is valid anywhere.
 - `AnnotationService.getVideoAnnotations` with `surface` **omitted** means **no surface filter**. It never defaults to `'video'`. There are 18 call sites across the repo and only the single-video path in `useVideoAnnotations` passes the argument.
 - Database columns in this schema are camelCase and quoted in SQL. `surface` is a single lowercase word, so it needs no quoting.
-- Run the whole suite with `npm test`. Baseline on this branch before any of this work: **30 files, 268 tests, all passing**. Every task must leave it green.
+- Run the whole suite with `npm test`. Baseline in this worktree before any of this work: **28 files, 244 tests, all passing**. Every task must leave it green. (A measurement taken in the main checkout reads 268; that tree carries unrelated uncommitted work with extra test files. Trust the 244 figure - it is what this worktree actually runs.)
 - Typecheck with `npx vue-tsc --noEmit -p tsconfig.json`. This project does NOT typecheck clean: the baseline is **95 pre-existing errors**, 20 of them in `useVideoAnnotations.ts`, 12 in `EditorView.vue`, 11 in `annotationService.ts` - all three files this plan edits. So the gate is never "no errors". It is: count with `npx vue-tsc --noEmit -p tsconfig.json 2>&1 | grep -c "error TS"` and confirm the count did not rise above 95, and that `grep -E "surface|Surface|allowDrawing"` over the output finds nothing. Do not fix unrelated pre-existing errors; report them instead.
 - Migrations are applied manually. This project's Supabase CLI has no `db execute`; the working invocation is `supabase db query --linked -f <file>`. Do NOT apply the migration as part of these tasks - it is a separate, explicitly-requested step.
 
@@ -165,7 +165,7 @@ Run: `npx vue-tsc --noEmit -p tsconfig.json 2>&1 | grep -E "surface|AnnotationIn
 Expected: no output.
 
 Run: `npm test`
-Expected: 30 files, 268 tests, all passing.
+Expected: 28 files, 244 tests, all passing.
 
 If the typecheck reports a missing `surface` on an object literal, the `Insert` override in Step 4 was not applied correctly. Do not "fix" it by adding `surface: 'video'` to `createComparisonAnnotation` or to `useComparisonVideoWorkflow`.
 
@@ -371,7 +371,7 @@ In the same file, directly below the existing `watch` on `comparisonVideoId` (wh
 - [ ] **Step 9: Run the whole suite and typecheck**
 
 Run: `npm test`
-Expected: 30 files passing, 271 tests (268 baseline plus the 3 added here).
+Expected: 247 tests passing (244 baseline plus the 3 added here).
 
 Run: `npx vue-tsc --noEmit -p tsconfig.json 2>&1 | grep -c "error TS"`
 Expected: 95 or lower.
@@ -562,7 +562,7 @@ Expected: PASS, 3 tests.
 - [ ] **Step 5: Run the whole suite**
 
 Run: `npm test`
-Expected: 274 tests passing (271 after Task 2 plus the 3 added here).
+Expected: 250 tests passing (247 after Task 2 plus the 3 added here).
 
 - [ ] **Step 6: Commit**
 
@@ -1084,7 +1084,7 @@ Run: `npx vue-tsc --noEmit -p tsconfig.json 2>&1 | grep -E "surface|Surface|allo
 Expected: no output.
 
 Run: `npm test`
-Expected: 281 tests passing (274 after Task 3, plus 4 for the tab bar and 3 for the drawing gate).
+Expected: 257 tests passing (250 after Task 3, plus 4 for the tab bar and 3 for the drawing gate).
 
 Run: `npx eslint src/views/EditorView.vue src/components/EditorSurfaceTabs.vue src/components/AnnotationQuickPick.vue`
 Expected: no errors.
