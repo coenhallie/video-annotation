@@ -11,7 +11,7 @@ const chain = {
 const fromMock = vi.fn(() => chain);
 
 vi.mock('@/composables/useSupabase', () => ({
-  supabase: { from: (...a: unknown[]) => fromMock(...a) },
+  supabase: { from: fromMock },
 }));
 
 const eqCalls = () => chain.eq.mock.calls.map((call: unknown[]) => call[0]);
