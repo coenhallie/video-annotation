@@ -69,4 +69,35 @@ describe('VideoService.setQaStatus', () => {
 
     await expect(VideoService.setQaStatus('v1', 'staging')).rejects.toThrow();
   });
+
+  // PostgREST can return a single-row function's result as `[row]` instead
+  // of a bare object, depending on how the function is declared and called.
+  // Every other test in this file mocks the object shape, which would let a
+  // regression to the array shape pass the whole suite while breaking every
+  // real save.
+  it('resolves with the updated row when the RPC returns it wrapped in an array', async () => {
+    rpc.mockResolvedValue({
+      data: [
+        {
+          id: 'v1',
+          qaStatus: 'production',
+          qaStatusUpdatedAt: '2026-08-21T10:00:00Z',
+        },
+      ],
+      error: null,
+    });
+    const VideoService = await loadService();
+
+    const video = await VideoService.setQaStatus('v1', 'production');
+
+    expect(video.id).toBe('v1');
+    expect(video.qaStatus).toBe('production');
+  });
+
+  it('throws when the RPC returns an empty array and no error', async () => {
+    rpc.mockResolvedValue({ data: [], error: null });
+    const VideoService = await loadService();
+
+    await expect(VideoService.setQaStatus('v1', 'staging')).rejects.toThrow();
+  });
 });

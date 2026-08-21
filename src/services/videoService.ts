@@ -753,13 +753,20 @@ export class VideoService {
       throw new Error(error.message);
     }
 
-    if (!data) {
+    // PostgREST does not guarantee a bare object back for a function declared
+    // `RETURNS public.videos`: depending on how the function is called it can
+    // come back as `[row]` instead. CommentService.updateComment already
+    // treats its own single-row RPC result as a set for the same reason; do
+    // the same here rather than assuming the object shape.
+    const row = Array.isArray(data) ? data[0] : data;
+
+    if (!row) {
       const missing = new Error('set_video_qa_status returned no row');
       handleServiceError('VideoService.setQaStatus', missing);
       throw missing;
     }
 
-    return data as Video;
+    return row as Video;
   }
 
   /**

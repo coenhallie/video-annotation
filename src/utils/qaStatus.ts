@@ -120,11 +120,30 @@ export function resolveQaStatusTarget(
  * Guarded on id rather than applied unconditionally: if the viewer has moved
  * on to a different video by the time a write resolves, that video's fields
  * must not land on this one.
+ *
+ * Merges only the QA fields plus `updatedAt`, not the whole returned row. A
+ * full-row spread would also overwrite fields the QA write never touched -
+ * `url`, `duration`, `title` and the like - with whatever `updated` happened
+ * to hold, which is one more way a stale or racing write could corrupt the
+ * currently displayed video.
  */
 export function mergeQaStatusUpdate(
   current: Partial<Video> | null,
   updated: Video
 ): Partial<Video> | null {
   if (!current || current.id !== updated.id) return current;
-  return { ...current, ...updated };
+  return {
+    ...current,
+    qaStatus: updated.qaStatus,
+    updatedAt: updated.updatedAt,
+    // Conditional spreads, not literal assignments: with
+    // exactOptionalPropertyTypes, assigning undefined to an optional field is
+    // not the same as omitting it.
+    ...(updated.qaStatusUpdatedAt !== undefined
+      ? { qaStatusUpdatedAt: updated.qaStatusUpdatedAt }
+      : {}),
+    ...(updated.qaStatusUpdatedBy !== undefined
+      ? { qaStatusUpdatedBy: updated.qaStatusUpdatedBy }
+      : {}),
+  };
 }

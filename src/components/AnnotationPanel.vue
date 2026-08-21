@@ -394,7 +394,15 @@ watch(
          buttons under a stated rule of one hover colour for all of them. A
          five-value dropdown there would be the loudest thing in the bar. The
          rail is the editor's per-video sidebar, so the control lives in the
-         same kind of block VideoDetailsPanel gives it. -->
+         same kind of block VideoDetailsPanel gives it.
+
+         `canAnnotate` is a third gate beyond the two the spec names (dual
+         projects, shared/anonymous viewers). It is coincidentally correct
+         today: canAnnotate resolves to isPublic || own, the same set the RPC's
+         first two visibility branches allow. That coupling is load-bearing
+         but not enforced anywhere - if annotation permissions ever narrow
+         independently of QA visibility, this control silently disappears for
+         the reviewers this feature exists for. -->
     <div
       v-if="video && !isDualMode && canAnnotate"
       class="shrink-0 border-b border-gray-200 px-4 pb-3 dark:border-white/10"

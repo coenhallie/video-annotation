@@ -109,23 +109,48 @@ async function onChange(event: Event) {
   const previous = current.value;
   if (next === previous) return;
 
+  // Captured before the await: `props.video` can be swapped out from under
+  // this same mounted instance while the write is in flight (a parent with
+  // no `:key` reusing this control across a project switch), and the write
+  // must be judged against the video it started on, not whatever is
+  // displayed by the time it resolves.
+  const targetId = props.video.id;
+
   // Optimistic: the value moves now, and moves back if the write is refused.
   current.value = next;
   saving.value = true;
 
   try {
-    const updated = await VideoService.setQaStatus(props.video.id, next);
+    const updated = await VideoService.setQaStatus(targetId, next);
+    // The control may now belong to a different video than the one this
+    // write started on. Applying the resolved row here would show this
+    // video's stale status on top of whatever is really displayed, and
+    // emitting it would hand the parent a row for the wrong video under the
+    // right one's name - exactly the "denied write looks like a success"
+    // failure the RPC itself guards against, reintroduced client-side.
+    if (props.video.id !== targetId) return;
     current.value = updated.qaStatus;
     updatedAt.value = updated.qaStatusUpdatedAt;
     emit('updated', updated);
   } catch (error) {
-    current.value = previous;
+    // The rollback is video-specific and must stay guarded: writing
+    // `previous` into `current` here would corrupt whatever video is now
+    // displayed. The notification is not video-specific, and the user still
+    // needs to know their save was refused even after switching away -
+    // silently swallowing it would be the same "denied write looks like a
+    // success" failure this whole guard exists to prevent, just moved to the
+    // error path.
+    if (props.video.id === targetId) current.value = previous;
     addNotification({
       type: 'error',
       title: 'Could not save QA status',
       message: error instanceof Error ? error.message : undefined,
     });
   } finally {
+    // Reset unconditionally, even if the video swapped mid-write: the write
+    // this flag was tracking has concluded either way, and the select is
+    // disabled while `saving` is true, so nothing else could have started a
+    // second write for whatever video is now displayed.
     saving.value = false;
   }
 }

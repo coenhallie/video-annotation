@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createApp, defineComponent, h, nextTick, reactive } from 'vue';
+import { createApp, defineComponent, h, nextTick, reactive, ref } from 'vue';
 import type { Video } from '@/types/database';
 
 const setQaStatus = vi.fn();
@@ -207,5 +207,130 @@ describe('QaStatusSelect', () => {
 
     expect(s.select().value).toBe('production');
     s.unmount();
+  });
+
+  // The critical swap bug: DashboardView mounts VideoDetailsPanel with no
+  // `:key`, so clicking a different project reuses this same instance and
+  // just swaps the `video` prop to a different id. A write started on video A
+  // must not be allowed to land on video B just because it happens to
+  // resolve after the swap.
+  it('does not corrupt the display or emit when the video swaps mid-write', async () => {
+    const videoA = video({ id: 'video-a', qaStatus: 'in_review' });
+    const videoB = video({ id: 'video-b', qaStatus: 'not_started' });
+    let resolveWrite!: (video: Video) => void;
+    setQaStatus.mockImplementation(
+      () =>
+        new Promise<Video>((resolve) => {
+          resolveWrite = resolve;
+        })
+    );
+
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    const { default: QaStatusSelect } = await import('@/components/QaStatusSelect.vue');
+    const currentVideo = ref<Video>(videoA);
+    const updates: Video[] = [];
+    const app = createApp(
+      defineComponent({
+        setup: () => () =>
+          h(QaStatusSelect, {
+            video: currentVideo.value,
+            onUpdated: (v: Video) => updates.push(v),
+          }),
+      })
+    );
+    app.mount(root);
+    const select = () =>
+      root.querySelector<HTMLSelectElement>('[data-testid="qa-status-select"]')!;
+
+    // Start a write on video A.
+    const el = select();
+    el.value = 'production';
+    el.dispatchEvent(new Event('change'));
+    await nextTick();
+    expect(setQaStatus).toHaveBeenCalledWith('video-a', 'production');
+
+    // The user switches to a different project while A's write is still
+    // in flight. VideoDetailsPanel has no :key, so this is a prop swap on
+    // the same mounted instance, not a remount.
+    currentVideo.value = videoB;
+    await nextTick();
+    expect(select().value).toBe('not_started');
+    // B is locked out while A's write is still in flight. Not ideal, but the
+    // alternative - letting B start a second write while A's is unresolved -
+    // is worse; this must not be permanent (see the assertion after resolve).
+    expect(select().disabled).toBe(true);
+
+    // A's stale write resolves after the swap.
+    resolveWrite(video({ id: 'video-a', qaStatus: 'production' }));
+    await nextTick();
+    await Promise.resolve();
+    await nextTick();
+
+    // The display must keep showing B's real value, and no emit may fire
+    // handing the parent A's row as if it were B's update.
+    expect(select().value).toBe('not_started');
+    expect(updates).toHaveLength(0);
+    // `saving` must be released once A's write settles, even though it
+    // settled for a video this control no longer displays. Gating the reset
+    // on an id match instead would leave B's select disabled forever.
+    expect(select().disabled).toBe(false);
+
+    app.unmount();
+    root.remove();
+  });
+
+  // The rollback half of a rejected write is video-specific (writing the
+  // stale `previous` value into `current` would corrupt whatever video is
+  // now displayed), but the notification is not: swallowing it after a swap
+  // would mean a denied write leaves no trace anywhere, which is exactly the
+  // failure class this whole guard exists to prevent.
+  it('still notifies on a rejected write after the video swaps mid-write', async () => {
+    const videoA = video({ id: 'video-a', qaStatus: 'in_review' });
+    const videoB = video({ id: 'video-b', qaStatus: 'not_started' });
+    let rejectWrite!: (error: Error) => void;
+    setQaStatus.mockImplementation(
+      () =>
+        new Promise<Video>((_resolve, reject) => {
+          rejectWrite = reject;
+        })
+    );
+
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    const { default: QaStatusSelect } = await import('@/components/QaStatusSelect.vue');
+    const currentVideo = ref<Video>(videoA);
+    const app = createApp(
+      defineComponent({
+        setup: () => () => h(QaStatusSelect, { video: currentVideo.value }),
+      })
+    );
+    app.mount(root);
+    const select = () =>
+      root.querySelector<HTMLSelectElement>('[data-testid="qa-status-select"]')!;
+
+    const el = select();
+    el.value = 'production';
+    el.dispatchEvent(new Event('change'));
+    await nextTick();
+
+    currentVideo.value = videoB;
+    await nextTick();
+    expect(select().value).toBe('not_started');
+
+    rejectWrite(new Error('Video video-a is not visible to the caller'));
+    await nextTick();
+    await Promise.resolve();
+    await nextTick();
+
+    // B's display must not be touched by A's rollback, but the user still
+    // needs to be told the save failed.
+    expect(select().value).toBe('not_started');
+    expect(addNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'error' })
+    );
+
+    app.unmount();
+    root.remove();
   });
 });

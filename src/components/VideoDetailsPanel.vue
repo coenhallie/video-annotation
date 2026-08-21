@@ -232,6 +232,7 @@ import type { PanelAnnotation } from '@/composables/useVideoDetails';
 import type { Label } from '@/types/labels';
 import type { Video } from '@/types/database';
 import QaStatusSelect from './QaStatusSelect.vue';
+import { mergeQaStatusUpdate } from '@/utils/qaStatus';
 import {
   getProgressForVideo,
   mergeDualProgress,
@@ -257,10 +258,18 @@ const emit = defineEmits<{
 
 // Keep the panel's own copy in step, so closing and reopening it does not show
 // the value the row was loaded with.
+//
+// Both VideoDetailsPanel instances (the desktop aside and the mobile Teleport)
+// mount over the same project prop with no `:key`, so a write that resolves
+// after the user has switched to a different project must not land here.
+// mergeQaStatusUpdate carries the id guard for that case, and it merges only
+// the QA fields plus updatedAt rather than the whole row, so a stale or
+// racing write can never clobber this video's url/duration/etc. with another
+// video's values.
 function onQaStatusUpdated(updated: Video) {
-  if (props.project.projectType === 'single') {
-    Object.assign(props.project.video, updated);
-  }
+  if (props.project.projectType !== 'single') return;
+  const merged = mergeQaStatusUpdate(props.project.video, updated);
+  if (merged) Object.assign(props.project.video, merged);
 }
 
 const watchProgress = ref<UserWatchProgress[]>([]);

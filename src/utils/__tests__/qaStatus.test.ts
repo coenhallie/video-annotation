@@ -129,14 +129,37 @@ describe('mergeQaStatusUpdate', () => {
   // The exact failure this closes: a store ref holding a partial, pre-save
   // video (e.g. after an AWS presigned URL refresh spreads a stale copy)
   // must pick up the saved status rather than keep showing the old one.
-  it('folds the saved fields onto the current video when ids match', () => {
-    const current = { id: 'video-1', qaStatus: 'not_started' as const, duration: 10 };
-    const updated = fullVideo({ qaStatus: 'staging', qaStatusUpdatedAt: '2026-08-21T00:00:00Z' });
-
-    expect(mergeQaStatusUpdate(current, updated)).toEqual({
-      ...current,
-      ...updated,
+  it('folds the saved QA fields onto the current video when ids match', () => {
+    const current = {
+      id: 'video-1',
+      qaStatus: 'not_started' as const,
+      duration: 10,
+      title: 'Match 1',
+      url: 'http://v',
+    };
+    const updated = fullVideo({
+      qaStatus: 'staging',
+      qaStatusUpdatedAt: '2026-08-21T00:00:00Z',
+      qaStatusUpdatedBy: 'u2',
+      updatedAt: '2026-08-21T00:00:01Z',
+      // Deliberately different from `current`, to prove these do NOT jump
+      // onto the merged result: only the QA fields and updatedAt should.
+      duration: 999,
+      title: 'Renamed elsewhere',
+      url: 'http://different-video',
     });
+
+    const merged = mergeQaStatusUpdate(current, updated);
+
+    expect(merged?.qaStatus).toBe('staging');
+    expect(merged?.qaStatusUpdatedAt).toBe('2026-08-21T00:00:00Z');
+    expect(merged?.qaStatusUpdatedBy).toBe('u2');
+    expect(merged?.updatedAt).toBe('2026-08-21T00:00:01Z');
+    // Everything outside the QA write survives from `current` unchanged; a
+    // full-row spread would have let `updated`'s values win here instead.
+    expect(merged?.duration).toBe(10);
+    expect(merged?.title).toBe('Match 1');
+    expect(merged?.url).toBe('http://v');
   });
 
   // A write that resolves after the viewer has already moved to a different
