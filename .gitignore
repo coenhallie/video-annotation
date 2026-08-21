@@ -42,3 +42,7 @@ check-homography.js
 
 # Local Netlify folder
 .netlify
+
+# Agent scratch: git worktrees and subagent-driven-development ledgers
+.claude/worktrees/
+.superpowers/
