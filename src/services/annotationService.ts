@@ -4,6 +4,7 @@ import type {
   AnnotationUpdate,
   VideoContext,
   Annotation,
+  AnnotationSurface,
 } from '../types/database';
 import { CommentService, type CommentPermissions } from './commentService';
 import { handleServiceError } from '../utils/errorHandler';
@@ -33,7 +34,8 @@ export class AnnotationService {
   static async getVideoAnnotations(
     videoId: string,
     projectId?: string,
-    includeCommentCounts?: boolean
+    includeCommentCounts?: boolean,
+    surface?: AnnotationSurface
   ) {
     // Validate videoId to prevent undefined queries
     if (!videoId || videoId === 'undefined') {
@@ -60,6 +62,13 @@ export class AnnotationService {
       // For backward compatibility: get annotations without projectId
       // This handles legacy annotations
       query = query.is('projectId', null);
+    }
+
+    // Omitted means "no surface filter", never "surface = video". Most callers
+    // here are comparison, share and project-summary paths that predate
+    // surfaces and must keep seeing every row.
+    if (surface) {
+      query = query.eq('surface', surface);
     }
 
     const { data, error } = await query.order('timestamp', { ascending: true });

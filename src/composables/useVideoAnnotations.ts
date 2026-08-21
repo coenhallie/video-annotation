@@ -6,6 +6,7 @@ import {
   onMounted,
   computed,
   type Ref,
+  type MaybeRefOrGetter,
 } from 'vue';
 import { VideoService } from '../services/videoService';
 import { logger } from '../utils/logger';
@@ -13,13 +14,14 @@ import { AnnotationService } from '../services/annotationService';
 import { AnnotationLabelService } from '../services/annotationLabelService';
 import { useAuth } from './useAuth';
 import { ComparisonVideoService } from '../services/comparisonVideoService';
-import type { Annotation } from '../types/database';
+import type { Annotation, AnnotationSurface } from '../types/database';
 
 export function useVideoAnnotations(
   videoUrl: Ref<string | null> | string,
   videoId: Ref<string | null> | string,
   projectId: Ref<string | null> | string,
-  comparisonVideoId: Ref<string | null> | string
+  comparisonVideoId: Ref<string | null> | string,
+  surface: MaybeRefOrGetter<AnnotationSurface> = 'video'
 ) {
   const { user } = useAuth();
 
@@ -51,6 +53,18 @@ export function useVideoAnnotations(
           old: oldId,
           new: newId,
         });
+        await loadAnnotations();
+      }
+    }
+  );
+
+  // Switching tabs swaps which annotations exist, so the list has to be
+  // refetched. Everything downstream - the annotation panel, the timeline
+  // markers, the quick pick - reads this one array, so they all follow.
+  watch(
+    () => toValue(surface),
+    async (next, previous) => {
+      if (next !== previous) {
         await loadAnnotations();
       }
     }
@@ -252,7 +266,8 @@ export function useVideoAnnotations(
         dbAnnotations = await AnnotationService.getVideoAnnotations(
           currentVideo.value.id,
           toValue(projectId),
-          true // includeCommentCounts
+          true, // includeCommentCounts
+          toValue(surface)
         );
         annotations.value = dbAnnotations.map((ann) => ann as Annotation);
       }
@@ -413,6 +428,7 @@ export function useVideoAnnotations(
           annotationType: annotationWithoutLabels.annotationType,
           drawingData: annotationWithoutLabels.drawingData,
           metadata: annotationWithoutLabels.metadata,
+          surface: toValue(surface),
         };
 
         const createdAnnotation = await AnnotationService.createAnnotation(
