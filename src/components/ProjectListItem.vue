@@ -98,10 +98,21 @@
          This is a deliberate exception to the note above about flattening the
          row into one meta line "instead of pills competing along both edges".
          One pill, at one edge, in one column. The meta line stays flat and
-         nothing returns to the left edge. -->
+         nothing returns to the left edge.
+
+         A dual project has no video.qaStatus, but the slot still has to hold
+         its ground: the v-else spacer below reserves the same w-24 width so
+         the watch-coverage chip does not slide right and break its own
+         column just because the row next to it has no pill. -->
     <QaStatusPill
       v-if="project.projectType === 'single'"
       :status="project.video.qaStatus"
+    />
+    <span
+      v-else
+      data-testid="qa-status-pill-placeholder"
+      class="w-24 shrink-0"
+      aria-hidden="true"
     />
   </div>
 </template>
