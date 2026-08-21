@@ -75,10 +75,14 @@
     >
       <!-- updated-by-name is the video's OWNER, not necessarily whoever set
            the status: qaStatusUpdatedBy has no name lookup yet, since
-           fetchOwners is keyed on owner ids only. Known approximation. -->
+           fetchOwners is keyed on owner ids only. Known approximation.
+
+           Suppressed when the lookup failed: fetchOwners fills unresolved ids
+           with the placeholder "Unknown", and "SET BY Unknown" reads worse than
+           the plain "SET" the attribution falls back to. -->
       <QaStatusSelect
         :video="project.video"
-        :updated-by-name="project.owner?.name"
+        :updated-by-name="attributionName"
         @updated="onQaStatusUpdated"
       />
     </div>
@@ -226,13 +230,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import type { Project } from '@/types/project';
 import type { PanelAnnotation } from '@/composables/useVideoDetails';
 import type { Label } from '@/types/labels';
 import type { Video } from '@/types/database';
 import QaStatusSelect from './QaStatusSelect.vue';
 import { mergeQaStatusUpdate } from '@/utils/qaStatus';
+import { UNKNOWN_OWNER_NAME } from '@/services/ownerEnrichmentService';
 import {
   getProgressForVideo,
   mergeDualProgress,
@@ -266,6 +271,15 @@ const emit = defineEmits<{
 // the QA fields plus updatedAt rather than the whole row, so a stale or
 // racing write can never clobber this video's url/duration/etc. with another
 // video's values.
+// fetchOwners guarantees an entry for every requested id, filling unresolved
+// ones with a placeholder rather than omitting them. Printing that placeholder
+// into "SET BY ..." states a falsehood about who acted, so drop it and let the
+// attribution line fall back to a bare "SET".
+const attributionName = computed(() => {
+  const name = props.project.owner?.name;
+  return name && name !== UNKNOWN_OWNER_NAME ? name : undefined;
+});
+
 function onQaStatusUpdated(updated: Video) {
   if (props.project.projectType !== 'single') return;
   const merged = mergeQaStatusUpdate(props.project.video, updated);

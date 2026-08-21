@@ -1,5 +1,12 @@
 import { supabase } from '@/composables/useSupabase';
 
+/**
+ * Stands in for an owner whose user row could not be read. Exported because it
+ * is a placeholder, not a name: callers that would otherwise print it into a
+ * sentence ("SET BY Unknown") should check for it and say nothing instead.
+ */
+export const UNKNOWN_OWNER_NAME = 'Unknown';
+
 export type ProjectOwner = {
   id: string;
   name: string;
@@ -26,13 +33,13 @@ export async function fetchOwners(
   for (const u of data ?? []) {
     map[u.id] = {
       id: u.id,
-      name: u.fullName || u.email || 'Unknown',
+      name: u.fullName || u.email || UNKNOWN_OWNER_NAME,
       avatarUrl: u.avatarUrl ?? undefined,
     };
   }
   // Ensure every requested id has an entry
   for (const id of uniqueIds) {
-    if (!map[id]) map[id] = { id, name: 'Unknown' };
+    if (!map[id]) map[id] = { id, name: UNKNOWN_OWNER_NAME };
   }
   return map;
 }
