@@ -289,6 +289,14 @@ Under the details panel control, attribution on one grey line:
 `SET BY <name> · <relative time>`, using `formatRelativeTime` and the owner name
 already resolved by `fetchOwners`. Hidden when `qaStatusUpdatedAt` is null.
 
+In the editor rail the same line renders as `SET · <relative time>`, with no
+name. The rail has no owner lookup: `EditorView` holds the video as a
+`Partial<Video>` and `fetchOwners` is keyed on owner ids the dashboard has
+already batched. Showing the timestamp without a name beats showing nothing, and
+beats resolving a name that would be the owner rather than the person who set the
+status. It goes away with the same follow-up that fixes the details panel's
+owner-versus-setter approximation.
+
 ### Behaviour
 
 The select applies optimistically: the local value changes on `change`, the RPC
@@ -345,7 +353,31 @@ a unit test:
 - Call it as a non-owner on a public video. Expect success and correct
   attribution.
 - Call it with a bogus status. Expect the explicit raise.
-- Confirm `anon` cannot execute it.
+- Confirm `anon` cannot execute it. Not by inference from a null `auth.uid()`,
+  which is a different thing: ask the catalog directly.
+
+  ```sql
+  select has_function_privilege('anon',          'public.set_video_qa_status(uuid,text)', 'EXECUTE') as anon_can,
+         has_function_privilege('authenticated', 'public.set_video_qa_status(uuid,text)', 'EXECUTE') as auth_can;
+  ```
+
+  Expect false, true.
+
+- Confirm the function's visibility predicate is not broader than the table's
+  own SELECT policies. It is documented as mirroring them, and a `SECURITY
+  DEFINER` function that `RETURNS public.videos` hands the caller a whole row, so
+  a predicate wider than the policies would leak a row they cannot otherwise
+  read.
+
+  ```sql
+  select policyname, qual from pg_policies
+  where tablename = 'videos' and cmd = 'SELECT';
+  ```
+
+  Checked against prod on 2026-08-21, before the function existed: the three
+  SELECT policies are `auth.uid() = "ownerId"`, `"isPublic" = true`, and
+  membership of a public comparison. The function's three predicate branches are
+  exactly those. Re-run this whenever either side changes.
 
 `videos.id` is `uuid` and `users.id` is `uuid`, both confirmed against prod, so
 the `set_video_qa_status(uuid, text)` signature resolves and the REVOKE and GRANT
