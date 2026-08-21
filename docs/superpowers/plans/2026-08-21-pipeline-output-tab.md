@@ -1104,6 +1104,8 @@ This task touches the live database and a running app. Do NOT start it without t
 
 **Files:** none.
 
+**Ordering, non-negotiable: the migration goes first, the frontend second, never the reverse.** The read filter and the insert stamp are unconditional - `useVideoAnnotations` defaults `surface` to `'video'` and passes it on every single-video project, AWS or not - so this frontend against a database without the column takes annotations down everywhere: reads answer `400` / `42703` (unknown column `surface`) and every project's list comes back empty, inserts answer `400` / `PGRST204` and nobody can create an annotation on anything. Deploys on this project are manual and production lags behind the branch, so never let a build carrying this change reach an environment whose database has not had the migration applied and verified.
+
 - [ ] **Step 1: Count annotations before**
 
 ```bash
@@ -1120,7 +1122,26 @@ supabase db query --linked -f migrations/20260821_annotation_surface.sql
 
 This CLI has no `db execute`; `db query --linked -f` is the invocation that works on this project.
 
-- [ ] **Step 3: Verify the backfill**
+- [ ] **Step 3: Verify PostgREST exposes the column**
+
+The `ALTER TABLE` succeeding is not enough. The app reaches the column through PostgREST, which answers from a cached schema, and a SQL-level `select surface from annotations limit 1` proves only that Postgres knows about it. Check over REST:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' \
+  "$VITE_SUPABASE_URL/rest/v1/annotations?select=id,surface&limit=1" \
+  -H "apikey: $VITE_SUPABASE_ANON_KEY" \
+  -H "Authorization: Bearer $VITE_SUPABASE_ANON_KEY"
+```
+
+Expected: `200`. A `400` with `42703` (unknown column on read) or `PGRST204` (column not found in the schema cache, on insert) means the cache is stale, not that the migration failed. The remedy:
+
+```bash
+supabase db query --linked --query "NOTIFY pgrst, 'reload schema';"
+```
+
+Then re-run the curl. Do not deploy the frontend until this returns `200`.
+
+- [ ] **Step 4: Verify the backfill**
 
 ```bash
 supabase db query --linked --query "SELECT surface, count(*) FROM public.annotations GROUP BY surface;"
@@ -1128,7 +1149,7 @@ supabase db query --linked --query "SELECT surface, count(*) FROM public.annotat
 
 Expected: one row, `video`, with the count from Step 1. Any NULL row, or a total that does not match, means the column was added without the `NOT NULL DEFAULT 'video'` and every existing annotation has just disappeared from the Video tab.
 
-- [ ] **Step 4: Verify in the running app**
+- [ ] **Step 5: Verify in the running app**
 
 Run the dev server, sign in, and open an AWS pipeline project from the dashboard, not through `?outputVideo=`. Then confirm each of these:
 

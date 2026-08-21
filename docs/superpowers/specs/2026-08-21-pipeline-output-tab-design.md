@@ -115,6 +115,14 @@ shows no tab bar and behaves exactly as it does today. See Limitations.
 
 Every other video keeps today's layout with no tab bar at all.
 
+The gate decides only whether the tab bar renders. It does not scope the
+annotation flow below: `useVideoAnnotations` defaults `surface` to `'video'` and
+passes it unconditionally, so every single-video read filters on the column and
+every single-video insert stamps it, AWS pipeline video or not. That is
+deliberate - a video with no tab bar can only ever be on the `'video'` surface,
+so the filter is a no-op there - but it is also why the migration has to be in
+place before this frontend is. See Deploy ordering.
+
 Dual mode is excluded on purpose: comparison annotations scope by
 `comparisonVideoId` and bypass `videoId`, so `surface` does not apply cleanly
 there, and a single pipeline output for a two-match comparison is incoherent.
@@ -130,8 +138,14 @@ pipeline tab is worth deep-linking to while it is empty.
 An `activeSurface` ref threads through three sites:
 
 1. **Fetch.** `AnnotationService.getVideoAnnotations(videoId, projectId, ...)`
-   gains a `surface` argument and filters on it. Switching tabs reloads.
-2. **Create.** The insert path stamps `surface` with the active tab.
+   gains a `surface` argument and filters on it when one is given. Omitted means
+   no filter, never a default of `'video'`: 17 of its 18 call sites, including
+   every comparison and share path, ask about no surface at all and must keep
+   seeing every row. The single-video path in `useVideoAnnotations` is the one
+   caller that passes the argument, and it passes it on every project, not only
+   AWS ones. Switching tabs reloads.
+2. **Create.** The insert path stamps `surface` with the active tab, again on
+   every single-video project rather than only AWS ones.
 3. **Realtime.** `useRealtimeAnnotations` currently filters only on
    `videoId=eq.<id>` and pushes every insert into the shared `annotations` ref.
    It must drop inserts whose `surface` differs from the active one. Without
@@ -140,6 +154,26 @@ An `activeSurface` ref threads through three sites:
 One `annotations` ref feeds the annotation panel, the timeline markers
 (`VideoTimeline :annotations`) and the quick pick, so all three follow a tab
 switch with no further work.
+
+## Deploy ordering
+
+**The migration goes first. The frontend second. Never the reverse.**
+
+Because the read filter and the insert stamp are unconditional, this frontend
+against a database without the `surface` column breaks annotations everywhere,
+not only on AWS pipeline videos:
+
+- Reads answer `400` with PostgREST code `42703`, unknown column `surface`, so
+  every project's annotation list comes back empty and the timeline loses every
+  marker.
+- Inserts answer `400` with `PGRST204`, column not found in the schema cache, so
+  nobody can create an annotation on anything.
+
+Deploys on this project are manual and production runs behind the branch, so the
+two can drift apart by days. Apply the migration to the target database and
+confirm the column is exposed over PostgREST before the build that contains this
+change goes out. The reverse order is a full outage of the annotation feature,
+for every user and every project, until the migration lands.
 
 ## Limitations of this round
 
