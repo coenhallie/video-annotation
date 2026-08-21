@@ -98,6 +98,10 @@ option then looks exactly like the thing it filters for, which is the whole
 argument for having built a pill in the first place, and it costs no new
 component.
 
+Note the pill's remaining home. `2026-08-22-qa-status-inline-edit-design.md`
+turns the list's pills into editable selects, so after both changes this panel
+is the only place the read-only `QaStatusPill` renders.
+
 All five statuses always render, including ones with a count of zero. The list
 is a fixed vocabulary, not a discovered one: hiding empty statuses would make
 the panel's contents shift as data changes, and "nothing is in staging" is
