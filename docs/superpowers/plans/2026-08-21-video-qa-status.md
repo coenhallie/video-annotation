@@ -4,7 +4,7 @@
 
 **Goal:** Give every video a saved five-value QA status label, settable by any signed-in user who can see the video, shown on the dashboard row, in the details panel and in the editor's annotation rail.
 
-**Architecture:** Three columns on `public.videos` carry the value and its attribution. Writes go through one `SECURITY DEFINER` RPC, `set_video_qa_status`, because the `videos` UPDATE policy is owner-only and row-level security cannot restrict a policy to individual columns. Reads need no new query: the columns ride along on the `select *` the dashboard, details panel and editor already do. The frontend is one pure vocabulary module, one read-only token component, one editable select component, and three call sites.
+**Architecture:** Three columns on `public.videos` carry the value and its attribution. Writes go through one `SECURITY DEFINER` RPC, `set_video_qa_status`, because the `videos` UPDATE policy is owner-only and row-level security cannot restrict a policy to individual columns. Reads need no new query: the columns ride along on the `select *` the dashboard, details panel and editor already do. The frontend is one pure vocabulary module, one read-only pill component, one editable select component, and three call sites.
 
 **Tech Stack:** Vue 3 (`<script setup>`, Composition API), TypeScript, Tailwind v4, Supabase (PostgREST + PL/pgSQL), Vitest.
 
@@ -31,20 +31,20 @@
 | --- | --- |
 | `migrations/20260821_video_qa_status.sql` | Create (Task 1). The three columns, the CHECK constraint, and the RPC with its grants. |
 | `src/types/database.ts` | Modify (Task 2). Add `QaStatus` type and the three fields to `DatabaseVideo` and `Video`. |
-| `src/utils/qaStatus.ts` | Create (Task 2). Pure vocabulary: ordered value list, display labels, accent rule, type guard. No Vue, no Supabase. |
+| `src/utils/qaStatus.ts` | Create (Task 2). Pure vocabulary: ordered value list, display labels, select tone, pill weights, type guard. No Vue, no Supabase. |
 | `src/utils/__tests__/qaStatus.test.ts` | Create (Task 2). |
 | `src/services/videoService.ts` | Modify (Task 3). Add `setQaStatus`, the only write path. |
 | `src/services/__tests__/setQaStatus.test.ts` | Create (Task 3). |
-| `src/components/QaStatusToken.vue` | Create (Task 4). Read-only uppercase token. Renders nothing at `not_started`. |
-| `src/components/__tests__/qaStatusToken.test.ts` | Create (Task 4). |
-| `src/components/ProjectListItem.vue` | Modify (Task 4). Render the token in the existing mono meta line. |
+| `src/components/QaStatusPill.vue` | Create (Task 4). Read-only uppercase pill, one fixed width, rendered for all five values. |
+| `src/components/__tests__/qaStatusPill.test.ts` | Create (Task 4). |
+| `src/components/ProjectListItem.vue` | Modify (Task 4). Render the pill as a fixed-width column at the row's right edge. |
 | `src/components/QaStatusSelect.vue` | Create (Task 5). The editable control: native `<select>`, optimistic write, rollback, toast, attribution line. |
 | `src/components/__tests__/qaStatusSelect.test.ts` | Create (Task 5). |
 | `src/components/VideoDetailsPanel.vue` | Modify (Task 6). Mount the select in a bordered block. |
 | `src/components/AnnotationPanel.vue` | Modify (Task 6). Mount the select in a bordered row under the header. |
 | `src/views/EditorView.vue` | Modify (Task 6). Pass the loaded video down to `AnnotationPanel`. |
 
-Why two components rather than one with a `readonly` prop: the token is a text span with a visibility rule, the select owns async state, rollback and a toast. Sharing them behind a flag would put a network call inside a component that renders 171 times on the dashboard.
+Why two components rather than one with a `readonly` prop: the pill is a static span, the select owns async state, rollback and a toast. Sharing them behind a flag would put a network call inside a component that renders 171 times on the dashboard.
 
 ---
 
@@ -337,6 +337,7 @@ attribution."
   - `qaStatusLabel(status: QaStatus): string` (uppercase display text)
   - `isQaStatus(value: unknown): value is QaStatus`
   - `qaStatusToneClass(status: QaStatus): string`
+  - `qaStatusPillClass(status: QaStatus): string`
   - `interface QaStatusTarget { id: string; qaStatus: QaStatus; qaStatusUpdatedAt?: string }`
   - `Video` and `DatabaseVideo` each gain `qaStatus: QaStatus`, `qaStatusUpdatedAt?: string`, `qaStatusUpdatedBy?: string`
 
@@ -350,6 +351,7 @@ import {
   QA_STATUSES,
   isQaStatus,
   qaStatusLabel,
+  qaStatusPillClass,
   qaStatusToneClass,
 } from '@/utils/qaStatus';
 
@@ -384,6 +386,26 @@ describe('qaStatus vocabulary', () => {
     expect(qaStatusToneClass('failed')).toBe('text-red-600 dark:text-red-400');
     for (const status of QA_STATUSES.filter((s) => s !== 'failed')) {
       expect(qaStatusToneClass(status)).toBe('text-gray-500 dark:text-gray-400');
+    }
+  });
+
+  it('gives every status a pill treatment', () => {
+    for (const status of QA_STATUSES) {
+      expect(qaStatusPillClass(status)).toBeTruthy();
+    }
+  });
+
+  // Three weights, not five colours. These two assertions are what stop a later
+  // change from quietly turning the column into a rainbow.
+  it('fills only production and accents only failed', () => {
+    expect(qaStatusPillClass('production')).toContain('bg-gray-900');
+    for (const status of QA_STATUSES.filter((s) => s !== 'production')) {
+      expect(qaStatusPillClass(status)).not.toContain('bg-');
+    }
+
+    expect(qaStatusPillClass('failed')).toContain('text-red-600');
+    for (const status of QA_STATUSES.filter((s) => s !== 'failed')) {
+      expect(qaStatusPillClass(status)).not.toContain('red');
     }
   });
 });
@@ -462,15 +484,37 @@ export function isQaStatus(value: unknown): value is QaStatus {
 }
 
 /**
- * The app is deliberately monochrome, so this returns the same grey as every
- * other meta token for four of the five values. `failed` gets the one accent
- * the app already uses for destructive and error states, because it is the only
- * status that has to catch the eye in a list of 171 rows.
+ * Text colour for the select, which sits among grey meta tokens. `failed` gets
+ * the one accent the app already uses for destructive and error states.
  */
 export function qaStatusToneClass(status: QaStatus): string {
   return status === 'failed'
     ? 'text-red-600 dark:text-red-400'
     : 'text-gray-500 dark:text-gray-400';
+}
+
+/**
+ * Border, fill and text for the dashboard pill.
+ *
+ * Three weights, not five colours: recedes (not_started), outlined
+ * (in_review, staging, and failed in the accent), filled (production, the
+ * terminal state). Five hues would scan marginally faster and would add five
+ * accents to an app whose header comment says three were already too many.
+ * Weight also survives colour-blind viewing, which hue does not.
+ *
+ * Production inverts in dark mode. A dark fill on a dark page is invisible.
+ */
+const PILL_CLASSES: Record<QaStatus, string> = {
+  not_started: 'border-gray-200 text-gray-400 dark:border-white/10 dark:text-gray-500',
+  in_review: 'border-gray-300 text-gray-500 dark:border-white/15 dark:text-gray-400',
+  failed: 'border-red-300 text-red-600 dark:border-red-400/40 dark:text-red-400',
+  staging: 'border-gray-300 text-gray-900 dark:border-white/20 dark:text-white',
+  production:
+    'border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-gray-900',
+};
+
+export function qaStatusPillClass(status: QaStatus): string {
+  return PILL_CLASSES[status];
 }
 
 /**
@@ -491,7 +535,7 @@ export interface QaStatusTarget {
 - [ ] **Step 5: Run the test**
 
 Run: `npx vitest run src/utils/__tests__/qaStatus.test.ts`
-Expected: PASS, 4 tests.
+Expected: PASS, 6 tests.
 
 - [ ] **Step 6: Typecheck, since this task changes shared types**
 
@@ -657,37 +701,40 @@ rejected write can never be mistaken for a successful one."
 
 ---
 
-### Task 4: The read-only token on the dashboard row
+### Task 4: The status pill on the dashboard row
 
 **Files:**
-- Create: `src/components/QaStatusToken.vue`
-- Test: `src/components/__tests__/qaStatusToken.test.ts`
-- Modify: `src/components/ProjectListItem.vue:50-81` (the mono meta line)
+- Create: `src/components/QaStatusPill.vue`
+- Test: `src/components/__tests__/qaStatusPill.test.ts`
+- Modify: `src/components/ProjectListItem.vue:83-93` (the right edge, after the watch-coverage chip)
 
 **Interfaces:**
-- Consumes: `QaStatus`, `qaStatusLabel`, `qaStatusToneClass` from Task 2.
-- Produces: `<QaStatusToken :status="QaStatus" />`. Renders a `<span data-testid="qa-status-token">` for four values and nothing at all for `not_started`.
+- Consumes: `QaStatus` from Task 2, `qaStatusLabel` and `qaStatusPillClass` from Task 2.
+- Produces: `<QaStatusPill :status="QaStatus" />`, rendering `<span data-testid="qa-status-pill">` for all five values at a single fixed width.
+
+Read the spec's "The dashboard pill" section before starting. Two things in it are easy to undo by accident: every row shows a pill including `not_started`, and every pill is the same width. The fixed width is the entire reason the column scans; a hug-content pill puts every left edge somewhere different.
 
 - [ ] **Step 1: Write the failing test**
 
-Create `src/components/__tests__/qaStatusToken.test.ts`. This follows the mounting style of `editorSurfaceTabs.test.ts`: raw `createApp`, jsdom, `data-testid` selectors, no `@vue/test-utils`.
+Create `src/components/__tests__/qaStatusPill.test.ts`, following the mounting style of `editorSurfaceTabs.test.ts`: raw `createApp`, jsdom, `data-testid` selectors, no `@vue/test-utils`.
 
 ```ts
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
 import { createApp, defineComponent, h } from 'vue';
-import QaStatusToken from '@/components/QaStatusToken.vue';
+import QaStatusPill from '@/components/QaStatusPill.vue';
+import { QA_STATUSES } from '@/utils/qaStatus';
 import type { QaStatus } from '@/types/database';
 
-function mountToken(status: QaStatus) {
+function mountPill(status: QaStatus) {
   const root = document.createElement('div');
   document.body.appendChild(root);
   const app = createApp(
-    defineComponent({ setup: () => () => h(QaStatusToken, { status }) })
+    defineComponent({ setup: () => () => h(QaStatusPill, { status }) })
   );
   app.mount(root);
   return {
-    token: () => root.querySelector<HTMLElement>('[data-testid="qa-status-token"]'),
+    pill: () => root.querySelector<HTMLElement>('[data-testid="qa-status-pill"]'),
     unmount: () => {
       app.unmount();
       root.remove();
@@ -695,66 +742,93 @@ function mountToken(status: QaStatus) {
   };
 }
 
-describe('QaStatusToken', () => {
-  // Suppressed at not_started for the same reason the watch chip is suppressed
-  // at 0: 171 rows shouting NOT STARTED says less than no mark at all.
-  it('renders nothing at not_started', () => {
-    const t = mountToken('not_started');
-    expect(t.token()).toBeNull();
-    t.unmount();
+describe('QaStatusPill', () => {
+  // Not suppressed at not_started, unlike the watch chip. The column exists to
+  // tell states apart at a glance, and an empty slot cannot be told from a row
+  // whose data has not loaded.
+  it('renders a pill for all five values', () => {
+    for (const status of QA_STATUSES) {
+      const p = mountPill(status);
+      expect(p.pill()).not.toBeNull();
+      p.unmount();
+    }
   });
 
-  it('renders the uppercase label for the other four values', () => {
+  it('renders the uppercase label', () => {
     for (const [status, label] of [
+      ['not_started', 'NOT STARTED'],
       ['in_review', 'IN REVIEW'],
       ['failed', 'FAILED'],
       ['staging', 'STAGING'],
       ['production', 'PRODUCTION'],
     ] as [QaStatus, string][]) {
-      const t = mountToken(status);
-      expect(t.token()?.textContent?.trim()).toBe(label);
-      t.unmount();
+      const p = mountPill(status);
+      expect(p.pill()?.textContent?.trim()).toBe(label);
+      p.unmount();
     }
   });
 
-  it('gives failed the accent and the others the meta grey', () => {
-    const failed = mountToken('failed');
-    expect(failed.token()?.className).toContain('text-red-600');
-    failed.unmount();
-
-    const staging = mountToken('staging');
-    expect(staging.token()?.className).toContain('text-gray-500');
-    expect(staging.token()?.className).not.toContain('text-red-600');
-    staging.unmount();
+  // The load-bearing assertion for the column. Without one width, the left
+  // edges stagger and you are back to reading row by row.
+  it('gives every pill the same fixed width', () => {
+    const widths = new Set<string>();
+    for (const status of QA_STATUSES) {
+      const p = mountPill(status);
+      const className = p.pill()?.className ?? '';
+      const match = className.match(/\bw-\S+/);
+      expect(match).not.toBeNull();
+      widths.add(match![0]);
+      p.unmount();
+    }
+    expect(widths.size).toBe(1);
   });
 
-  it('uses the mono meta token type scale', () => {
-    const t = mountToken('production');
-    expect(t.token()?.className).toContain('font-mono');
-    expect(t.token()?.className).toContain('text-[10px]');
-    t.unmount();
+  it('accents only failed and fills only production', () => {
+    const failed = mountPill('failed');
+    expect(failed.pill()?.className).toContain('text-red-600');
+    failed.unmount();
+
+    const production = mountPill('production');
+    expect(production.pill()?.className).toContain('bg-gray-900');
+    production.unmount();
+
+    for (const status of ['not_started', 'in_review', 'staging'] as QaStatus[]) {
+      const p = mountPill(status);
+      expect(p.pill()?.className).not.toContain('red');
+      expect(p.pill()?.className).not.toContain('bg-gray-900');
+      p.unmount();
+    }
+  });
+
+  it('does not shrink when the row is tight', () => {
+    const p = mountPill('production');
+    expect(p.pill()?.className).toContain('shrink-0');
+    p.unmount();
   });
 });
 ```
 
 - [ ] **Step 2: Run it to make sure it fails**
 
-Run: `npx vitest run src/components/__tests__/qaStatusToken.test.ts`
-Expected: FAIL, cannot resolve `@/components/QaStatusToken.vue`.
+Run: `npx vitest run src/components/__tests__/qaStatusPill.test.ts`
+Expected: FAIL, cannot resolve `@/components/QaStatusPill.vue`.
 
 - [ ] **Step 3: Write the component**
 
-Create `src/components/QaStatusToken.vue`:
+Create `src/components/QaStatusPill.vue`:
 
 ```vue
 <template>
-  <!-- Hidden at not_started, following the watch-coverage chip's rule directly
-       above it in ProjectListItem: an unstarted video is better said by no mark
-       than by every row in the list shouting NOT STARTED. -->
+  <!-- Every row gets one, not_started included: the column's job is telling
+       states apart at a glance, and a gap cannot be told from unloaded data.
+       w-24 on all five is what makes it a column rather than five ragged
+       shapes; do not swap it for hug-content padding. -->
   <span
-    v-if="status !== 'not_started'"
-    data-testid="qa-status-token"
-    :class="['font-mono text-[10px] tracking-wider', qaStatusToneClass(status)]"
+    data-testid="qa-status-pill"
+    :class="[
+      'inline-flex w-24 shrink-0 items-center justify-center rounded-full border px-2 py-0.5 font-mono text-[10px] tracking-wider',
+      qaStatusPillClass(status),
+    ]"
     :title="`QA status: ${qaStatusLabel(status)}`"
   >
     {{ qaStatusLabel(status) }}
@@ -763,7 +837,7 @@ Create `src/components/QaStatusToken.vue`:
 
 <script setup lang="ts">
 import type { QaStatus } from '@/types/database';
-import { qaStatusLabel, qaStatusToneClass } from '@/utils/qaStatus';
+import { qaStatusLabel, qaStatusPillClass } from '@/utils/qaStatus';
 
 defineProps<{ status: QaStatus }>();
 </script>
@@ -771,24 +845,33 @@ defineProps<{ status: QaStatus }>();
 
 - [ ] **Step 4: Run the test**
 
-Run: `npx vitest run src/components/__tests__/qaStatusToken.test.ts`
-Expected: PASS, 4 tests.
+Run: `npx vitest run src/components/__tests__/qaStatusPill.test.ts`
+Expected: PASS, 5 tests.
+
+If the width test fails because `NOT STARTED` overflows `w-24` at the 10px mono size, widen to `w-28` in the component and leave the test alone. The test asserts one shared width, not a particular one.
 
 - [ ] **Step 5: Wire it into the dashboard row**
 
-In `src/components/ProjectListItem.vue`, inside the mono meta line, after the `commentCount` span and before the closing `</div>` of that line:
+In `src/components/ProjectListItem.vue`, after the watch-coverage `<span>` and before the closing `</div>` of the row, so the pill is the last element and its right edge is the row's right edge:
 
 ```vue
-        <QaStatusToken
-          v-if="project.projectType === 'single'"
-          :status="project.video.qaStatus"
-        />
+    <!-- QA status. Last in the row and fixed width, so both its edges land at
+         the same x on every row and the column scans vertically.
+
+         This is a deliberate exception to the note above about flattening the
+         row into one meta line "instead of pills competing along both edges".
+         One pill, at one edge, in one column. The meta line stays flat and
+         nothing returns to the left edge. -->
+    <QaStatusPill
+      v-if="project.projectType === 'single'"
+      :status="project.video.qaStatus"
+    />
 ```
 
-Add the import to the `<script setup>` block:
+Add the import to `<script setup>`:
 
 ```ts
-import QaStatusToken from './QaStatusToken.vue';
+import QaStatusPill from './QaStatusPill.vue';
 ```
 
 The `projectType === 'single'` guard is required, not defensive: `project.video` does not exist on a dual project, and the column is on `videos` only.
@@ -801,15 +884,30 @@ Expected: every test passes, including the pre-existing ones.
 Run: `npx vue-tsc --noEmit -p tsconfig.json`
 Expected: no new errors.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 7: Verify the column by eye**
+
+Run: `npm run dev` and open the dashboard with several projects visible.
+
+Check, and treat any miss as a defect:
+- Pill left edges and right edges each line up in a single vertical column down the list.
+- A dual project leaves a gap in the column rather than shifting its neighbours.
+- The title still truncates before it reaches the pill, at a narrow window width too.
+- `PRODUCTION` is filled dark with white text in light mode, and filled light with dark text in dark mode. Check both; a dark fill on a dark page is invisible.
+- `NOT STARTED` recedes and does not compete with the title.
+- `FAILED` is the only red thing in the row.
+
+- [ ] **Step 8: Commit**
 
 ```bash
-git add src/components/QaStatusToken.vue src/components/__tests__/qaStatusToken.test.ts src/components/ProjectListItem.vue
-git commit -m "feat: show QA status on the dashboard row
+git add src/components/QaStatusPill.vue src/components/__tests__/qaStatusPill.test.ts src/components/ProjectListItem.vue
+git commit -m "feat: show QA status as a pill column on the dashboard
 
-Read-only token in the existing mono meta line, hidden at not_started the
-way the watch chip is hidden at zero. Dual projects render nothing: the
-column is on videos."
+Fixed width and last in the row, so both edges align and the column scans
+top to bottom. Every row carries one, not_started included: a gap cannot
+be told from a row whose data has not loaded.
+
+Three weights rather than five colours. Filled for production, the accent
+for failed, outlines for the rest."
 ```
 
 ---
@@ -1276,7 +1374,7 @@ Expected: all tests pass.
 Run: `npx vue-tsc --noEmit -p tsconfig.json`
 Expected: no new errors.
 
-Run: `npx eslint src/components/QaStatusSelect.vue src/components/QaStatusToken.vue src/components/ProjectListItem.vue src/components/VideoDetailsPanel.vue src/components/AnnotationPanel.vue src/services/videoService.ts src/utils/qaStatus.ts`
+Run: `npx eslint src/components/QaStatusSelect.vue src/components/QaStatusPill.vue src/components/ProjectListItem.vue src/components/VideoDetailsPanel.vue src/components/AnnotationPanel.vue src/services/videoService.ts src/utils/qaStatus.ts`
 Expected: clean.
 
 - [ ] **Step 7: Commit**
@@ -1296,7 +1394,7 @@ in it. The rail is the editor's version of the details panel."
 
 - All six tasks committed, `npm test` green, `vue-tsc` and `eslint` clean.
 - The four SQL probes from Task 1 passed against production, with Probe C confirming a non-owner is refused on a private video.
-- Setting a status in the editor and seeing it on the dashboard row after a reload, in both light and dark mode.
+- Setting a status in the editor and seeing it on the dashboard row after a reload, in both light and dark mode, with the pill column aligned down the list.
 
 ## Deliberately not built
 

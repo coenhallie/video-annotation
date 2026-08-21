@@ -207,7 +207,7 @@ and `Video` in `src/types/database.ts`.
 | --- | --- |
 | `VideoDetailsPanel` | The editable control, in its own bordered block under the stat row, matching the Watched block above it. |
 | `AnnotationPanel` | The same control, as one bordered row directly under the panel header and above the category filter. QA finishes in the editor; making people go back to the library, find the video and inspect it just to record the verdict is how a status goes stale. |
-| `ProjectListItem` | Read-only token in the existing mono meta line, after the `12A` / `3C` tokens. |
+| `ProjectListItem` | Read-only pill in a fixed-width column at the right edge of the row, after the watch-coverage chip. |
 
 Not `EditorHeader`. That row is `AppHeader`, shared with the dashboard, and it
 holds identity plus three icon buttons under a stated rule of one hover colour
@@ -248,9 +248,42 @@ new.
   it needs no menu, no popover, no outside-click handling. Styled
   `appearance-none` with no border until hover and focus, so at rest it reads as
   one more meta token that happens to be editable.
-- `ProjectListItem` hides the token entirely at `not_started`, following the
-  suppressed-at-zero rule the watch-coverage chip already states: an unstarted
-  video is better said by no mark than by 171 rows shouting NOT STARTED.
+### The dashboard pill
+
+The list row is where the status has to be readable at a glance across 171 rows,
+so it gets more shape than a bare meta token: a pill, in a fixed-width column at
+the right edge, after the watch-coverage chip. Because the pill is the last
+element in the row and has a fixed width, both its edges land at the same x on
+every row, and the column scans vertically. That is the entire reason for the
+fixed width; a hug-content pill would put every left edge somewhere different and
+you would be back to reading row by row.
+
+This knowingly reverses a decision recorded in `ProjectListItem.vue`: everything
+below the title was flattened into one mono meta line "so the row has a single
+reading order instead of pills competing along both edges." The reversal is
+narrow and keeps the reason intact. One pill, at one edge, in one column. The
+meta line stays flat, and nothing returns to the left edge.
+
+Every row shows a pill, including `not_started`. This is the one place the
+suppressed-at-zero rule the watch chip uses does not apply: the point of the
+column is telling states apart at a glance, and an empty slot cannot be told from
+a row whose data has not arrived.
+
+Three visual weights, which is as much separation as the palette allows without
+adding accents:
+
+| Status | Treatment |
+| --- | --- |
+| `not_started` | Faint grey border, muted grey text. Present but recedes. |
+| `in_review` | Grey border, meta-grey text. |
+| `failed` | Red border and red text, `text-red-600 dark:text-red-400`. |
+| `staging` | Grey border, full-strength foreground text. |
+| `production` | Solid fill: dark background with white text in light mode, inverted in dark mode. The terminal state, and the only one that reads as filled. |
+
+A colour per state would scan faster still, and was rejected: five new accents in
+an app whose own header comment says three were already the loudest thing in the
+bar. Weight carries the difference instead of hue, which also survives
+colour-blind viewing and greyscale printing.
 
 Under the details panel control, attribution on one grey line:
 `SET BY <name> · <relative time>`, using `formatRelativeTime` and the owner name
@@ -294,10 +327,11 @@ match, and the control shows the same value on both tabs.
 Unit, alongside the existing suites in `src/components/__tests__` and
 `src/services/__tests__`:
 
-- `ProjectListItem` renders no status token at `not_started` and renders the
-  uppercase token at every other value.
-- `ProjectListItem` renders no status token for a dual project.
-- `FAILED` carries the accent class; the other four do not.
+- `ProjectListItem` renders a pill for all five values, `not_started` included.
+- Every pill has the same width, so the column aligns.
+- `ProjectListItem` renders no pill for a dual project.
+- `FAILED` carries the accent class and no other status does; `production` is the
+  only filled pill.
 - `VideoService.setQaStatus` returns the updated row on success, and surfaces a
   raised exception as a thrown error rather than a silent resolve.
 - The details panel select rolls back to the previous value and notifies when the
