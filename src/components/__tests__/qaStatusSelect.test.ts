@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createApp, defineComponent, h, nextTick } from 'vue';
+import { createApp, defineComponent, h, nextTick, reactive } from 'vue';
 import type { Video } from '@/types/database';
 
 const setQaStatus = vi.fn();
@@ -135,6 +135,77 @@ describe('QaStatusSelect', () => {
   it('shows no attribution line before anyone has set it', async () => {
     const s = await mountSelect(video());
     expect(s.attribution()).toBeNull();
+    s.unmount();
+  });
+
+  // The disabled state is the double-write guard: without it, a user who
+  // changes the select twice before the first write resolves can fire two
+  // overlapping RPCs racing each other.
+  it('disables the select while the write is in flight, then re-enables it', async () => {
+    let resolveWrite!: (video: Video) => void;
+    setQaStatus.mockImplementation(
+      () =>
+        new Promise<Video>((resolve) => {
+          resolveWrite = resolve;
+        })
+    );
+    const s = await mountSelect(video());
+
+    const el = s.select();
+    el.value = 'staging';
+    el.dispatchEvent(new Event('change'));
+    await nextTick();
+
+    expect(el.disabled).toBe(true);
+
+    resolveWrite(video({ qaStatus: 'staging' }));
+    await nextTick();
+    await Promise.resolve();
+    await nextTick();
+
+    expect(el.disabled).toBe(false);
+    s.unmount();
+  });
+
+  // Task 6's VideoDetailsPanel mutates the same video object in place
+  // (Object.assign) rather than swapping in a new one, so the resync must key
+  // off the value, not just off `video.id`. It must also stay out of the way
+  // of an optimistic write already in flight for the same video, or a stale
+  // background value racing the write would make the control flicker.
+  it('follows an in-place prop mutation, but not over an in-flight write for the same video', async () => {
+    const target = reactive(video({ qaStatus: 'in_review' }));
+    let resolveWrite!: (video: Video) => void;
+    setQaStatus.mockImplementation(
+      () =>
+        new Promise<Video>((resolve) => {
+          resolveWrite = resolve;
+        })
+    );
+    const s = await mountSelect(target);
+
+    // A background refetch mutates the same object without changing id.
+    target.qaStatus = 'failed';
+    await nextTick();
+    expect(s.select().value).toBe('failed');
+
+    // Start an optimistic write for this video.
+    const el = s.select();
+    el.value = 'production';
+    el.dispatchEvent(new Event('change'));
+    await nextTick();
+    expect(s.select().value).toBe('production');
+
+    // A stale mutation arrives mid-write; the optimistic value must hold.
+    target.qaStatus = 'staging';
+    await nextTick();
+    expect(s.select().value).toBe('production');
+
+    resolveWrite(video({ qaStatus: 'production' }));
+    await nextTick();
+    await Promise.resolve();
+    await nextTick();
+
+    expect(s.select().value).toBe('production');
     s.unmount();
   });
 });

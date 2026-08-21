@@ -17,7 +17,7 @@
         aria-label="QA status"
         :class="[
           'ml-auto cursor-pointer appearance-none rounded border border-transparent bg-transparent py-0.5 pl-1 pr-1 font-mono text-[10px] tracking-wider transition-colors',
-          'hover:border-gray-200 focus:border-gray-300 focus:outline-none dark:hover:border-white/10 dark:focus:border-white/20',
+          'hover:border-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500 dark:hover:border-white/10 dark:focus:ring-gray-400',
           'disabled:cursor-not-allowed disabled:opacity-40',
           qaStatusToneClass(current),
         ]"
@@ -72,11 +72,23 @@ const current = ref<QaStatus>(props.video.qaStatus);
 const updatedAt = ref<string | undefined>(props.video.qaStatusUpdatedAt);
 const saving = ref(false);
 
+// Follows the prop, not just the prop's identity: a parent that mutates the
+// same video object in place (Object.assign from a refetch, for instance)
+// changes qaStatus/qaStatusUpdatedAt without changing id, and a watch keyed
+// on id alone would leave a mounted select silently stale. While a write is
+// in flight (saving), onChange already owns `current`/`updatedAt` end to
+// end, so an incoming prop mutation for the *same* video is either our own
+// resolved write echoed back through the parent, or a stale value racing our
+// optimistic one - either way, acting on it here would flicker or revert the
+// control mid-write. A genuine video swap (id changes) always takes effect
+// immediately, even mid-write, since that is a different control's value.
 watch(
-  () => props.video.id,
-  () => {
-    current.value = props.video.qaStatus;
-    updatedAt.value = props.video.qaStatusUpdatedAt;
+  () => [props.video.id, props.video.qaStatus, props.video.qaStatusUpdatedAt] as const,
+  ([nextId, nextStatus, nextUpdatedAt], previous) => {
+    const [previousId] = previous ?? [];
+    if (saving.value && nextId === previousId) return;
+    current.value = nextStatus;
+    updatedAt.value = nextUpdatedAt;
   }
 );
 
