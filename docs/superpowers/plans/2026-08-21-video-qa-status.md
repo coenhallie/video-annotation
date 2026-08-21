@@ -389,9 +389,10 @@ describe('qaStatus vocabulary', () => {
     }
   });
 
-  it('gives every status a pill treatment', () => {
+  it('gives every status a bordered pill treatment', () => {
     for (const status of QA_STATUSES) {
-      expect(qaStatusPillClass(status)).toBeTruthy();
+      expect(qaStatusPillClass(status)).toMatch(/\bborder-\S+/);
+      expect(qaStatusPillClass(status)).toMatch(/\btext-\S+/);
     }
   });
 
