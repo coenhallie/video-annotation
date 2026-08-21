@@ -1124,22 +1124,27 @@ This CLI has no `db execute`; `db query --linked -f` is the invocation that work
 
 - [ ] **Step 3: Verify PostgREST exposes the column**
 
-The `ALTER TABLE` succeeding is not enough. The app reaches the column through PostgREST, which answers from a cached schema, and a SQL-level `select surface from annotations limit 1` proves only that Postgres knows about it. Check over REST:
+The `ALTER TABLE` succeeding is not enough. The app reaches the column through PostgREST, which answers from a cached schema, and a SQL-level `select surface from annotations limit 1` proves only that Postgres knows about it. Check over REST, and check the *filter* path rather than the select list, because filtering is what `getVideoAnnotations` actually does:
 
 ```bash
-curl -s -o /dev/null -w '%{http_code}\n' \
-  "$VITE_SUPABASE_URL/rest/v1/annotations?select=id,surface&limit=1" \
+curl -s -w '\n%{http_code}\n' \
+  "$VITE_SUPABASE_URL/rest/v1/annotations?surface=eq.video&select=id&limit=1" \
   -H "apikey: $VITE_SUPABASE_ANON_KEY" \
   -H "Authorization: Bearer $VITE_SUPABASE_ANON_KEY"
 ```
 
-Expected: `200`. A `400` with `42703` (unknown column on read) or `PGRST204` (column not found in the schema cache, on insert) means the cache is stale, not that the migration failed. The remedy:
+Expected: `200`. The body is printed as well as the status because the two ways this can fail need different responses, and the status alone does not tell them apart:
+
+- **`42703`, `column annotations.surface does not exist`** - Postgres itself does not have the column. The migration did not apply, or it applied to a different database than the one this URL points at. `NOTIFY` will not help. Go back to Step 2 and confirm which project `--linked` resolved to.
+- **`PGRST204`, `Could not find the 'surface' column ... in the schema cache`** - Postgres has the column but PostgREST is serving a stale cache. This is the case `NOTIFY` fixes:
 
 ```bash
 supabase db query --linked --query "NOTIFY pgrst, 'reload schema';"
 ```
 
-Then re-run the curl. Do not deploy the frontend until this returns `200`.
+Then re-run the curl.
+
+Note what this check does NOT prove. `PGRST204` is raised when a request body names a column the cache does not know, so it is a *write*-path failure that can persist while reads already succeed. A `200` here means reads are safe; the insert path is only proven by actually creating an annotation, which Step 5's manual pass does. Do not deploy the frontend until this returns `200` AND Step 5's annotation-creation checks pass against the migrated database.
 
 - [ ] **Step 4: Verify the backfill**
 
