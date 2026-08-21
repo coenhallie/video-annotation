@@ -31,7 +31,10 @@ interface Harness {
   unmount: () => void;
 }
 
-function mountPanel(labels: Label[] = LABELS): Harness {
+function mountPanel(
+  labels: Label[] = LABELS,
+  options: { allowDrawing?: boolean } = {}
+): Harness {
   const events: Array<[string, unknown]> = [];
   const open = ref(true);
   const x = ref(400);
@@ -55,6 +58,7 @@ function mountPanel(labels: Label[] = LABELS): Harness {
             fps: 30,
             drawColor: drawColor.value,
             drawWidth: drawWidth.value,
+            allowDrawing: options.allowDrawing ?? true,
             onSelect: (label: Label) => events.push(['select', label]),
             onComment: (text: string) => events.push(['comment', text]),
             onCommentMode: (active: boolean) =>
@@ -586,5 +590,42 @@ describe('AnnotationQuickPick draw mode', () => {
     expect(
       panel.events.filter(([name, value]) => name === 'draw-mode' && value === false)
     ).toHaveLength(1);
+  });
+});
+
+describe('AnnotationQuickPick drawing gate', () => {
+  it('offers drawing by default', () => {
+    const harness = mountPanel();
+
+    const buttons = Array.from(
+      harness.root.querySelectorAll('button')
+    ).map((b) => b.textContent ?? '');
+    expect(buttons.some((text) => text.includes('DRAWING'))).toBe(true);
+
+    harness.unmount();
+  });
+
+  // The Pipeline tab has no video element for the drawing canvas to mount on,
+  // so the affordance must be gone, not merely inert.
+  it('hides the drawing entry when drawing is not allowed', () => {
+    const harness = mountPanel(LABELS, { allowDrawing: false });
+
+    const buttons = Array.from(
+      harness.root.querySelectorAll('button')
+    ).map((b) => b.textContent ?? '');
+    expect(buttons.some((text) => text.includes('DRAWING'))).toBe(false);
+
+    harness.unmount();
+  });
+
+  it('ignores the D key when drawing is not allowed', async () => {
+    const harness = mountPanel(LABELS, { allowDrawing: false });
+
+    press('d');
+    await nextTick();
+
+    expect(harness.events.map(([name]) => name)).not.toContain('draw-mode');
+
+    harness.unmount();
   });
 });
