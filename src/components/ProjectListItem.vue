@@ -91,6 +91,18 @@
     >
       {{ watchedPercentLabel }}%
     </span>
+
+    <!-- QA status. Last in the row and fixed width, so both its edges land at
+         the same x on every row and the column scans vertically.
+
+         This is a deliberate exception to the note above about flattening the
+         row into one meta line "instead of pills competing along both edges".
+         One pill, at one edge, in one column. The meta line stays flat and
+         nothing returns to the left edge. -->
+    <QaStatusPill
+      v-if="project.projectType === 'single'"
+      :status="project.video.qaStatus"
+    />
   </div>
 </template>
 
@@ -98,6 +110,7 @@
 import { computed } from 'vue';
 import type { Project } from '../types/project';
 import { formatRelativeTime } from '@/utils/relativeTime';
+import QaStatusPill from './QaStatusPill.vue';
 
 // Props
 const props = defineProps<{
