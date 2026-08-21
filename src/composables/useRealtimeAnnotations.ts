@@ -5,15 +5,17 @@ import {
   readonly,
   toValue,
   type Ref,
+  type MaybeRefOrGetter,
 } from 'vue';
 import { supabase } from './useSupabase';
-import type { Annotation } from '../types/database';
+import type { Annotation, AnnotationSurface } from '../types/database';
 
 type RealtimeChannel = ReturnType<typeof supabase.channel>;
 
 export function useRealtimeAnnotations(
   videoId: Ref<string | null> | (() => string | null),
-  annotations: Ref<Annotation[]>
+  annotations: Ref<Annotation[]>,
+  surface: MaybeRefOrGetter<AnnotationSurface> = 'video'
 ) {
   const isConnected = ref(false);
   const activeUsers = ref<Set<string>>(new Set());
@@ -36,6 +38,19 @@ export function useRealtimeAnnotations(
         },
         (payload) => {
           const newAnnotation = payload.new as Annotation;
+
+          // The channel filters on videoId only, and the Video and Pipeline
+          // tabs share one video row, so an insert from the other tab arrives
+          // here too. The local list holds the active surface alone; letting a
+          // foreign row in puts a phantom marker on the timeline.
+          //
+          // Rows written before the surface column existed have no value here.
+          // They are 'video' by the column's default, so treat a missing value
+          // as 'video' rather than dropping them.
+          const rowSurface =
+            (newAnnotation as { surface?: AnnotationSurface }).surface ??
+            'video';
+          if (rowSurface !== toValue(surface)) return;
 
           // Add to annotations if not already present
           if (!annotations.value.find((a) => a.id === newAnnotation.id)) {
