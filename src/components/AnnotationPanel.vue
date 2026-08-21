@@ -11,6 +11,7 @@ import AnnotationForm from './AnnotationForm.vue';
 import AnnotationCard from './AnnotationCard.vue';
 import AnnotationSkeleton from './AnnotationSkeleton.vue';
 import LabelManagement from './LabelManagement.vue';
+import QaStatusSelect from './QaStatusSelect.vue';
 import { useAuth } from '../composables/useAuth';
 import { useGlobalComments } from '../composables/useGlobalComments';
 import { useAnnotationFiltering } from '../composables/useAnnotationFiltering';
@@ -20,6 +21,7 @@ import type { UseDrawingCanvas } from '../composables/useDrawingCanvas';
 import type { UseDrawingCoordinator } from '../composables/useDrawingCoordinator';
 import type { DualVideoPlayer } from '../composables/useDualVideoPlayer';
 import type { DrawingCanvasExpose, PanelAnnotation } from '../types/component-interfaces';
+import type { QaStatusTarget } from '@/utils/qaStatus';
 
 const props = defineProps({
   annotations: {
@@ -63,6 +65,15 @@ const props = defineProps({
   },
   videoId: {
     type: String,
+    default: null,
+  },
+  /**
+   * The video this rail belongs to, for the QA status control. EditorView
+   * passes null in dual mode and in shared views, and the control does not
+   * render without it.
+   */
+  video: {
+    type: Object as PropType<QaStatusTarget | null>,
     default: null,
   },
   loading: {
@@ -369,6 +380,19 @@ watch(
         {{ accessLabel }}
       </span>
     </header>
+
+    <!-- QA status. Here rather than in EditorHeader: that row is AppHeader,
+         shared with the dashboard, and it holds identity plus three icon
+         buttons under a stated rule of one hover colour for all of them. A
+         five-value dropdown there would be the loudest thing in the bar. The
+         rail is the editor's per-video sidebar, so the control lives in the
+         same kind of block VideoDetailsPanel gives it. -->
+    <div
+      v-if="video && !isDualMode && canAnnotate"
+      class="shrink-0 border-b border-gray-200 px-4 pb-3 dark:border-white/10"
+    >
+      <QaStatusSelect :video="video" />
+    </div>
 
     <!-- Category filter. Hidden until the video has categorised annotations,
          so a lone "All" pill never sits over an empty list. -->

@@ -1,4 +1,4 @@
-import type { QaStatus } from '@/types/database';
+import type { QaStatus, Video } from '@/types/database';
 
 /**
  * The five values in workflow order. This array is the source of truth for the
@@ -77,4 +77,35 @@ export interface QaStatusTarget {
   id: string;
   qaStatus: QaStatus;
   qaStatusUpdatedAt?: string;
+}
+
+/**
+ * The QA control's target, or null when it must not render.
+ *
+ * Shared and anonymous viewers are outside the QA process, and the RPC that
+ * backs the control would refuse them anyway, so hiding it beats showing a
+ * control that always fails. A video with no id or no qaStatus yet loaded is
+ * not a usable target either.
+ *
+ * Pulled out as a pure function - mirroring isPipelineSurfaceVisible in
+ * pipelineSurface.ts - so EditorView's computed is testable without mounting
+ * the view.
+ */
+export function resolveQaStatusTarget(
+  video: Partial<Video> | null | undefined,
+  isSharedVideo: boolean,
+  isSharedComparison: boolean
+): QaStatusTarget | null {
+  if (isSharedVideo || isSharedComparison) return null;
+  if (!video?.id || !video.qaStatus) return null;
+  return {
+    id: video.id,
+    qaStatus: video.qaStatus,
+    // Not a literal `qaStatusUpdatedAt: video.qaStatusUpdatedAt`: with
+    // exactOptionalPropertyTypes, assigning undefined to an optional field is
+    // not the same as omitting it.
+    ...(video.qaStatusUpdatedAt !== undefined
+      ? { qaStatusUpdatedAt: video.qaStatusUpdatedAt }
+      : {}),
+  };
 }

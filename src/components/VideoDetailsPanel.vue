@@ -67,6 +67,19 @@
       </div>
     </div>
 
+    <!-- QA status. Its own bordered block, matching the Watched block below:
+         one row of per-video state per block. -->
+    <div
+      v-if="project.projectType === 'single'"
+      class="border-b border-gray-200 px-4 py-3 dark:border-white/10"
+    >
+      <QaStatusSelect
+        :video="project.video"
+        :updated-by-name="project.owner?.name"
+        @updated="onQaStatusUpdated"
+      />
+    </div>
+
     <!-- Team watch coverage (union of all users' ranges; hover for breakdown).
          The bar is the only graphic here, so it stays thin and monochrome:
          the number carries the reading, the bar just shapes it. -->
@@ -214,6 +227,8 @@ import { ref, watch } from 'vue';
 import type { Project } from '@/types/project';
 import type { PanelAnnotation } from '@/composables/useVideoDetails';
 import type { Label } from '@/types/labels';
+import type { Video } from '@/types/database';
+import QaStatusSelect from './QaStatusSelect.vue';
 import {
   getProgressForVideo,
   mergeDualProgress,
@@ -236,6 +251,14 @@ const emit = defineEmits<{
   share: [project: Project];
   'annotation-click': [project: Project, annotation: PanelAnnotation];
 }>();
+
+// Keep the panel's own copy in step, so closing and reopening it does not show
+// the value the row was loaded with.
+function onQaStatusUpdated(updated: Video) {
+  if (props.project.projectType === 'single') {
+    Object.assign(props.project.video, updated);
+  }
+}
 
 const watchProgress = ref<UserWatchProgress[]>([]);
 // True team coverage: the union of everyone's watched ranges, so overlap
