@@ -106,6 +106,13 @@ It is set true on both load paths (`EditorView.vue:1156` for a dashboard open,
 reset leaves it stale-true, and the tab bar appears on a video with no pipeline
 output. Deriving from `currentVideoObject` cannot go stale.
 
+Share views are excluded too. `loadAnnotations` returns early for a share link
+and takes its annotations from `ShareService.getSharedVideoWithCommentPermissions`,
+which calls `getVideoAnnotations` (`shareService.ts:88`) with no surface argument
+and therefore returns both surfaces. Rather than thread surfaces through the
+share path in a round that renders no pipeline content, a shared pipeline project
+shows no tab bar and behaves exactly as it does today. See Limitations.
+
 Every other video keeps today's layout with no tab bar at all.
 
 Dual mode is excluded on purpose: comparison annotations scope by
@@ -135,6 +142,12 @@ One `annotations` ref feeds the annotation panel, the timeline markers
 switch with no further work.
 
 ## Limitations of this round
+
+**Share views get no tab bar.** The share path loads annotations through
+`ShareService`, which does not filter by surface, so a shared pipeline project
+would show both surfaces' annotations in both tabs. The gate excludes
+`isSharedVideo` until the share path is surface-aware. A viewer following a share
+link sees today's behaviour, unchanged.
 
 **Drawing annotations are Video-tab only.** There is no video element on the
 pipeline tab for the drawing canvas to mount on, and `openQuickPick` is bound to

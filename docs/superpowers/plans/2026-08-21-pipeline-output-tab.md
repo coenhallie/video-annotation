@@ -39,7 +39,7 @@
 - `src/composables/useRealtimeAnnotations.ts:14,36` - `surface` param, INSERT handler drops foreign-surface rows.
 - `src/components/AnnotationQuickPick.vue:11,143,657` - `allowDrawing` prop.
 - `src/components/__tests__/annotationQuickPick.test.ts` - harness gains `allowDrawing`, plus two new tests.
-- `src/views/EditorView.vue` - `activeSurface` ref, derived gate, tab bar, pipeline empty state, thread `activeSurface` into the two composables and the quick pick.
+- `src/views/EditorView.vue` - `activeSurface` ref (near line 242), derived gate and watchers (after the `useSharedContent` destructure at line 1326), tab bar, pipeline empty state, thread `activeSurface` into the two composables and the quick pick.
 
 ---
 
@@ -894,22 +894,41 @@ import EditorSurfaceTabs from '@/components/EditorSurfaceTabs.vue';
 
 and add `type AnnotationSurface` to the existing `@/types/database` type import (line 43).
 
-Directly above the `// Annotation data` block at line 242, add:
+This state is deliberately split across two places in the file. `activeSurface`
+has to exist **before** the `useVideoAnnotations` call at line 251 that consumes
+it. `hasPipelineSurface` reads `isSharedVideo`, which is not destructured until
+line 1326, and `watch` evaluates a computed source eagerly - defining it at the
+top would hit the temporal dead zone and throw during setup.
+
+**11a.** Directly above the `// Annotation data` block at line 242, add only the
+ref:
 
 ```ts
 // ── Editor surface (Video / Pipeline output tabs) ────────────────────────────
 
 const activeSurface = ref<AnnotationSurface>('video');
+```
 
+**11b.** Then, immediately **after** the closing `});` of the `useSharedContent`
+destructure (the block beginning at line 1326 with `const { isSharedVideo, ...`),
+add the gate and its watchers:
+
+```ts
 /**
  * Derived from the loaded video, not from the videoStore's `isAwsVideo` ref.
  * That ref is set true on both load paths but only ever cleared by
  * resetForProjectSwitch, so a path that skips the reset leaves it stale-true
  * and puts the tab bar on a video that has no pipeline output.
+ *
+ * Share views are excluded on purpose. loadAnnotations returns early for a
+ * share link and takes its list from ShareService, which calls
+ * getVideoAnnotations without a surface (shareService.ts:88) and so returns
+ * both surfaces. Showing tabs there would put every annotation in both tabs.
  */
 const hasPipelineSurface = computed(
   () =>
     playerMode.value === 'single' &&
+    !isSharedVideo.value &&
     VideoService.isAwsVideo(
       (currentVideoObject.value ?? {}) as Record<string, unknown>
     )
@@ -926,9 +945,20 @@ watch(hasPipelineSurface, (available) => {
 watch(currentVideoId, () => {
   activeSurface.value = 'video';
 });
+
+// The player stays mounted behind the pipeline tab (v-show, not v-if), so
+// without this the audio keeps running with no picture. Switching back does not
+// auto-resume: the timeline's own play control is still there and still owns
+// playback on both tabs.
+watch(activeSurface, (surface) => {
+  if (surface === 'pipeline' && isPlaying.value) {
+    unifiedVideoPlayerRef.value?.pause();
+  }
+});
 ```
 
-`ref`, `computed` and `watch` are already imported, and `VideoService` is already imported.
+`ref`, `computed` and `watch` are already imported, `VideoService` is already
+imported, and `unifiedVideoPlayerRef` is already declared in this file.
 
 - [ ] **Step 12: Thread the surface into the two composables**
 
@@ -1109,8 +1139,10 @@ Run the dev server, sign in, and open an AWS pipeline project from the dashboard
 5. Left-click the timeline on the Pipeline tab. The quick pick opens with no DRAWING entry, and pressing D does nothing. Add a text annotation. It appears in the panel.
 6. Switch back to Video. Only the video annotation is listed. Switch again: only the pipeline one.
 7. Reload the page. Both tabs still show their own annotations.
-8. Open a non-AWS video. No tab bar, and the layout is pixel-identical to before this change.
-9. Open a comparison project. No tab bar, and dual-mode annotating is unchanged.
+8. Start playback, then switch to Pipeline output. Playback stops and no audio continues. Switch back: the video is where you left it, paused.
+9. Open a non-AWS video. No tab bar, and the layout is pixel-identical to before this change.
+10. Open a comparison project. No tab bar, and dual-mode annotating is unchanged.
+11. Open the pipeline project through a share link. No tab bar, and the annotation list matches what a share viewer saw before this change.
 
 Report anything that does not match, including anything visually off by a pixel. Do not report the feature working without having run every one of these.
 
