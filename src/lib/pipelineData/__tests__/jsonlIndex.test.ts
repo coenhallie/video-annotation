@@ -82,6 +82,21 @@ describe('buildIndex', () => {
     expect(index.first.frameCount).toBe(457);
     expect(index.last.frameCount).toBe(457 + 49);
   });
+
+  it('rejects an empty file rather than requesting a negative range', async () => {
+    const calls: Array<[number, number]> = [];
+    const fetcher: RangeFetcher = {
+      async head() {
+        return { size: 0, acceptsRanges: false };
+      },
+      async range(start: number, end: number) {
+        calls.push([start, end]);
+        return '';
+      },
+    };
+    await expect(buildIndex(fetcher)).rejects.toThrow(/empty/i);
+    expect(calls).toEqual([]);
+  });
 });
 
 describe('estimateOffset', () => {

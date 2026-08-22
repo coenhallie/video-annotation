@@ -59,6 +59,10 @@ export async function buildIndex(
 ): Promise<JsonlIndex> {
   const { size, acceptsRanges } = await fetcher.head();
 
+  // An empty object has no records to index, and the fallback below would ask
+  // for `bytes=0--1`, which is not a valid range.
+  if (size <= 0) throw new Error('Pipeline data file is empty');
+
   if (!acceptsRanges) {
     const text = await fetcher.range(0, size - 1);
     const records = parseWindow(text, { startsAtBof: true, endsAtEof: true });

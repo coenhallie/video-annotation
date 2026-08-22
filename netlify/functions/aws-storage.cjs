@@ -37,6 +37,64 @@ function json(statusCode, body) {
 }
 
 /**
+ * Pull the presigned URL out of whatever shape the Lambda answered with:
+ * a bare string, a quoted JSON string, or an object under one of several keys.
+ */
+function extractUrl(text) {
+  try {
+    const data = JSON.parse(text);
+    if (typeof data === 'string' && data.startsWith('http')) return data;
+    if (data && typeof data === 'object') {
+      const url =
+        data.url || data.signedUrl || data.downloadUrl || data.presignedUrl || data.link || data.href;
+      if (url) return url;
+      if (data.data) {
+        const nested = data.data;
+        const nestedUrl =
+          typeof nested === 'string' ? nested : nested.url || nested.signedUrl || nested.downloadUrl;
+        if (nestedUrl) return nestedUrl;
+      }
+    }
+  } catch (err) {
+    // Not JSON. Fall through to the plain-text case.
+  }
+  const trimmed = String(text).trim();
+  return trimmed.startsWith('http') ? trimmed : null;
+}
+
+/**
+ * Learn an object's size and whether it can be read in byte ranges.
+ *
+ * Done here rather than in the browser for two reasons. A presigned URL is
+ * signed for one HTTP method, so a HEAD against a playback URL fails signature
+ * verification. And `Content-Range` and `Accept-Ranges` are not CORS-safelisted,
+ * so a browser could not read them off a cross-origin response anyway. Server
+ * side, neither restriction exists.
+ *
+ * A 206 answers both questions at once: `Content-Range: bytes 0-0/<size>` gives
+ * the total. A 200 means the server ignored the Range header, so the object has
+ * to be read whole. A Content-Encoding makes byte offsets refer to the encoded
+ * stream, which is useless to a line-oriented reader, so that counts as no
+ * range support either.
+ */
+async function probeObject(url) {
+  const res = await fetch(url, { headers: { Range: 'bytes=0-0' } });
+  if (!res.ok) return null;
+
+  const encoded = Boolean(res.headers.get('content-encoding'));
+
+  if (res.status === 206) {
+    const match = /\/(\d+)\s*$/.exec(res.headers.get('content-range') || '');
+    if (match) {
+      return { size: Number(match[1]), acceptsRanges: !encoded };
+    }
+  }
+
+  const size = Number(res.headers.get('content-length') || 0);
+  return { size, acceptsRanges: false };
+}
+
+/**
  * Netlify lowercases event headers, but nothing in the contract guarantees it,
  * and here a missed header degrades a signed-in caller to anonymous.
  */
@@ -206,6 +264,29 @@ exports.handler = async function (event) {
     });
 
     const body = await res.text();
+
+    // The video kind is proxied byte for byte, unchanged from before this
+    // function learned about `kind` at all. The data kind is not: the client
+    // cannot HEAD a presigned URL (SigV4 binds the method into the signature)
+    // and cannot read Content-Range/Accept-Ranges off a cross-origin response
+    // (not CORS-safelisted), so this function probes the object itself, where
+    // neither restriction applies, and hands back an envelope instead of the
+    // raw Lambda body.
+    if (kind === 'data' && res.ok) {
+      const signed = extractUrl(body);
+      if (!signed) {
+        return json(502, { error: 'Storage API returned no usable URL' });
+      }
+      const probe = await probeObject(signed);
+      if (!probe) {
+        return json(502, { error: 'Pipeline data object is unreachable' });
+      }
+      return json(200, {
+        url: signed,
+        size: probe.size,
+        acceptsRanges: probe.acceptsRanges,
+      });
+    }
 
     return {
       statusCode: res.status,

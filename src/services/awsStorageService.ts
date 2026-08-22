@@ -97,4 +97,54 @@ export class AwsStorageService {
   static async getVideoUrlForProject(outputVideoId: string): Promise<string> {
     return this.getUrlForProject(outputVideoId, 'video');
   }
+
+  /** What the replay needs to read a pipeline data object. */
+  static async getPipelineDataSource(
+    outputVideoId: string
+  ): Promise<{ url: string; size: number; acceptsRanges: boolean }> {
+    const url = `/.netlify/functions/aws-storage?outputVideoId=${encodeURIComponent(
+      outputVideoId
+    )}&kind=data`;
+
+    const session = await getOptimizedSession();
+    const headers: Record<string, string> = {};
+    if (session?.access_token) {
+      headers.Authorization = `Bearer ${session.access_token}`;
+    }
+
+    const res = await fetch(url, { cache: 'no-store', headers });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      let message = `Failed to get pipeline data: ${res.status}`;
+      try {
+        const err = JSON.parse(body);
+        if (err.error) message = err.error;
+      } catch {
+        if (body) message = body;
+      }
+      throw new Error(message);
+    }
+
+    const payload = await res.json().catch(() => null);
+
+    // A function deployed before this change ignores `kind` and answers with the
+    // video's presigned URL, in the Lambda's own shape rather than this
+    // envelope. Both checks below catch that, so deploy order does not matter.
+    if (
+      !payload ||
+      typeof payload.url !== 'string' ||
+      typeof payload.size !== 'number' ||
+      /\/streams\/generated\.mp4/.test(payload.url)
+    ) {
+      throw new Error(
+        'No pipeline data for this project: the storage proxy did not return a data object.'
+      );
+    }
+
+    return {
+      url: payload.url,
+      size: payload.size,
+      acceptsRanges: Boolean(payload.acceptsRanges),
+    };
+  }
 }

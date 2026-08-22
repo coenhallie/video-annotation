@@ -18,6 +18,9 @@ const VALID_ID = 'bc9ac890-942a-4052-9b55-25e38bf53d51';
 
 const VIDEOS = 'https://sb.example.com/rest/v1/videos';
 const LAMBDA = 'https://lambda.example.com';
+// What routedFetch's LAMBDA branch answers with. For kind=data the handler
+// then probes this exact URL with a ranged GET, so it needs its own route.
+const PRESIGNED = 'https://s3.example.com/presigned.mp4';
 
 // A JWT is three base64url segments; only the payload is read, and only for its
 // `role` claim, so the signature can be anything.
@@ -31,7 +34,14 @@ function fakeKey(role: string): string {
 // request carrying a caller token, which is how a forged or expired token
 // presents. Records options so tests can assert on forwarded headers.
 function routedFetch(
-  opts: { videoVisible?: boolean; tokenRejected?: boolean; body?: unknown } = {}
+  opts: {
+    videoVisible?: boolean;
+    tokenRejected?: boolean;
+    body?: unknown;
+    // Controls the answer to the ranged GET the handler sends the presigned
+    // URL for kind=data. Defaults to a plain 206 with a 12345-byte object.
+    probe?: { status?: number; headers?: Record<string, string> };
+  } = {}
 ) {
   return vi.fn(async (url: string, init?: { headers?: Record<string, string> }) => {
     if (url.startsWith(VIDEOS)) {
@@ -50,9 +60,22 @@ function routedFetch(
     }
     if (url.startsWith(LAMBDA)) {
       return {
+        ok: true,
         status: 200,
         headers: { get: () => 'text/plain' },
-        text: async () => 'https://s3.example.com/presigned.mp4',
+        text: async () => PRESIGNED,
+      };
+    }
+    if (url === PRESIGNED) {
+      const status = opts.probe?.status ?? 206;
+      const headers: Record<string, string> = {
+        'content-range': 'bytes 0-0/12345',
+        ...opts.probe?.headers,
+      };
+      return {
+        ok: status < 400,
+        status,
+        headers: { get: (name: string) => headers[name.toLowerCase()] ?? null },
       };
     }
     throw new Error('unexpected fetch: ' + url);
@@ -388,10 +411,28 @@ describe('kind parameter', () => {
     vi.stubGlobal('fetch', fetchMock);
     const handler = await loadHandler();
     await handler(event({ outputVideoId: VALID_ID, kind: 'data' }));
-    const url = String(fetchMock.mock.calls.at(-1)?.[0]);
+    // Not .at(-1): kind=data probes the presigned URL after calling the
+    // Lambda, so the Lambda call is no longer necessarily the last one.
+    const url = String(lambdaCall(fetchMock)?.[0]);
     expect(url).toContain(
       encodeURIComponent(`pipeline-output/${VALID_ID}/data/${VALID_ID}.jsonl`)
     );
+  });
+
+  it('replaces every {id} placeholder with the validated id, ignoring any other query parameter', async () => {
+    process.env.AWS_PIPELINE_DATA_KEY = 'pipeline-output/{id}/data/{id}.jsonl';
+    const fetchMock = routedFetch({ videoVisible: true });
+    vi.stubGlobal('fetch', fetchMock);
+    const handler = await loadHandler();
+    const res = await handler(
+      event({ outputVideoId: VALID_ID, kind: 'data', filepath: 'secrets/private.jsonl' })
+    );
+    expect(res.statusCode).toBe(200);
+    const url = String(lambdaCall(fetchMock)?.[0]);
+    expect(url).toContain(
+      encodeURIComponent(`pipeline-output/${VALID_ID}/data/${VALID_ID}.jsonl`)
+    );
+    expect(url).not.toContain('secrets');
   });
 
   it('answers 501 for kind=data when no template is configured', async () => {
@@ -417,7 +458,13 @@ describe('kind parameter', () => {
     expect(res.statusCode).toBe(403);
   });
 
-  it('substitutes only the validated id, never caller text', async () => {
+  // Renamed from "substitutes only the validated id, never caller text": this
+  // trips the pre-existing OUTPUT_VIDEO_ID regex before keyFor ever runs, so
+  // it is a regression guard that the id check also applies when kind=data,
+  // not a test of the template-substitution logic itself. The substitution
+  // guarantee (keyFor only ever receives the regex-validated id) is verified
+  // by code inspection plus the "replaces every {id} placeholder" case above.
+  it('rejects a path-like id for kind=data too, via the existing id regex', async () => {
     process.env.AWS_PIPELINE_DATA_KEY = 'pipeline-output/{id}/data/{id}.jsonl';
     const fetchMock = routedFetch({ videoVisible: true });
     vi.stubGlobal('fetch', fetchMock);
@@ -426,5 +473,72 @@ describe('kind parameter', () => {
       event({ outputVideoId: '../../etc/passwd', kind: 'data' })
     );
     expect(res.statusCode).toBe(400);
+  });
+
+  it('kind=data with a ranged probe returns {url, size, acceptsRanges: true}', async () => {
+    process.env.AWS_PIPELINE_DATA_KEY = 'pipeline-output/{id}/data/{id}.jsonl';
+    const fetchMock = routedFetch({
+      videoVisible: true,
+      probe: { headers: { 'content-range': 'bytes 0-0/4096' } },
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const handler = await loadHandler();
+    const res = await handler(event({ outputVideoId: VALID_ID, kind: 'data' }));
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.url).toBeTruthy();
+    expect(body.size).toBe(4096);
+    expect(body.acceptsRanges).toBe(true);
+  });
+
+  it('kind=data where the server ignores Range reports acceptsRanges: false, size from content-length', async () => {
+    process.env.AWS_PIPELINE_DATA_KEY = 'pipeline-output/{id}/data/{id}.jsonl';
+    const fetchMock = routedFetch({
+      videoVisible: true,
+      probe: { status: 200, headers: { 'content-length': '9000' } },
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const handler = await loadHandler();
+    const res = await handler(event({ outputVideoId: VALID_ID, kind: 'data' }));
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.size).toBe(9000);
+    expect(body.acceptsRanges).toBe(false);
+  });
+
+  it('kind=data with a content-encoding on the probe reports acceptsRanges: false even on a 206', async () => {
+    process.env.AWS_PIPELINE_DATA_KEY = 'pipeline-output/{id}/data/{id}.jsonl';
+    const fetchMock = routedFetch({
+      videoVisible: true,
+      probe: {
+        headers: { 'content-range': 'bytes 0-0/4096', 'content-encoding': 'gzip' },
+      },
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const handler = await loadHandler();
+    const res = await handler(event({ outputVideoId: VALID_ID, kind: 'data' }));
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.acceptsRanges).toBe(false);
+  });
+
+  it('kind=data answers 502 when the probe is unreachable', async () => {
+    process.env.AWS_PIPELINE_DATA_KEY = 'pipeline-output/{id}/data/{id}.jsonl';
+    const fetchMock = routedFetch({ videoVisible: true, probe: { status: 500 } });
+    vi.stubGlobal('fetch', fetchMock);
+    const handler = await loadHandler();
+    const res = await handler(event({ outputVideoId: VALID_ID, kind: 'data' }));
+    expect(res.statusCode).toBe(502);
+  });
+
+  it('kind=video is unchanged: proxies the Lambda body directly and never probes', async () => {
+    const fetchMock = routedFetch({ videoVisible: true });
+    vi.stubGlobal('fetch', fetchMock);
+    const handler = await loadHandler();
+    const res = await handler(event({ outputVideoId: VALID_ID }));
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toBe(PRESIGNED);
+    // Exactly the videos-visibility check and the Lambda call. No probe.
+    expect(fetchMock.mock.calls).toHaveLength(2);
   });
 });

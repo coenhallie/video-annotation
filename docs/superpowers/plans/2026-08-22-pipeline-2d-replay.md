@@ -800,8 +800,20 @@ scale with how many players a frame holds."
 - Consumes: `RangeFetcher` from Task 3.
 - Produces:
   - `AwsStorageService.getUrlForProject(outputVideoId: string, kind?: 'video' | 'data'): Promise<string>`
+  - `AwsStorageService.getPipelineDataSource(outputVideoId: string): Promise<{ url: string; size: number; acceptsRanges: boolean }>`
   - `AwsStorageService.getVideoUrlForProject(outputVideoId: string): Promise<string>` (kept, delegates)
-  - `httpRangeFetcher(url: string): RangeFetcher`
+  - `httpRangeFetcher(url: string, meta: { size: number; acceptsRanges: boolean }): RangeFetcher`
+
+**Amended 2026-08-22 after review.** This task originally had the browser learn
+the object's size with an HTTP `HEAD`. That cannot work: a presigned URL is
+signed for one HTTP method and this one is minted for playback, so `HEAD` fails
+signature verification. Nor does a ranged GET rescue it client-side, because
+`Content-Range` and `Accept-Ranges` are not CORS-safelisted and `Content-Length`
+on a `206` is the slice length rather than the total. The probe therefore moved
+into the Netlify Function, which has no CORS restriction and can issue whatever
+method it likes. The browser reads only response bodies afterwards, so the
+bucket needs no `Access-Control-Expose-Headers`. This is the version to build
+against; see the Task 4 fix commit for the shipped code.
 
 - [ ] **Step 1: Write the failing function tests**
 
@@ -2145,7 +2157,7 @@ component guards on that so the states still render under test."
 - Test: `src/utils/__tests__/timelineBinding.test.ts`
 
 **Interfaces:**
-- Consumes: `PipelineOutputSurface` (Task 6), `usePipelineReplay` (Task 5), `httpRangeFetcher` (Task 4), `AwsStorageService.getUrlForProject` (Task 4), `AnnotationSurface` from `@/types/database`.
+- Consumes: `PipelineOutputSurface` (Task 6), `usePipelineReplay` (Task 5), `httpRangeFetcher` (Task 4), `AwsStorageService.getPipelineDataSource` (Task 4), `VideoService.isAwsVideo`, `AnnotationSurface` from `@/types/database`.
 - Produces:
   - `interface TimelineNumbers { currentTime: number; duration: number; currentFrame: number; totalFrames: number; fps: number; isPlaying: boolean }`
   - `timelineNumbersFor(surface: AnnotationSurface, video: TimelineNumbers, replay: TimelineNumbers): TimelineNumbers`
@@ -2176,9 +2188,9 @@ const pipelineReplay = usePipelineReplay({
     const video = currentVideoObject.value;
     if (!video || !VideoService.isAwsVideo(video)) return null;
     const outputVideoId = String(video.videoId).replace(/^aws:/, '');
-    return httpRangeFetcher(
-      await AwsStorageService.getUrlForProject(outputVideoId, 'data')
-    );
+    const { url, size, acceptsRanges } =
+      await AwsStorageService.getPipelineDataSource(outputVideoId);
+    return httpRangeFetcher(url, { size, acceptsRanges });
   },
 });
 ```
