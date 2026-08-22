@@ -31,18 +31,33 @@ export function timelineNumbersFor(
 }
 
 /**
- * The frame and fps to stamp on a new annotation.
+ * The frame and fps to stamp on a new annotation, from the active surface's
+ * current position.
  *
- * Both must come from the surface the user is actually looking at. The video's
- * refs are meaningless on the pipeline tab, where the player is hidden and
- * paused: its currentFrame is usually 0, and its fps is typically 30 against a
- * replay that runs at 25.
+ * The video branch reads its currentFrame ref directly, unchanged from this
+ * codebase's existing behaviour - that ref is already zero-based (video frame
+ * 0 is video time 0), so it is exactly what buildAnnotationPayload needs to
+ * derive a correct `timestamp: frame / fps`.
+ *
+ * The pipeline branch cannot do the same: frameWindow.ts documents the
+ * pipeline's own frame number as "not zero-based" - it is whatever number the
+ * pipeline itself assigned that frame, not a count from the start of this
+ * replay window. Stamping that value directly would make buildAnnotationPayload
+ * derive a timestamp far outside the replay's own duration. currentTime *is*
+ * zero-based on the pipeline surface too (a replay's time 0 is wherever its
+ * loaded window starts), so the pipeline branch derives the frame from that
+ * instead - the same computation `openQuickPickAtTime` already does for a
+ * scrubbed timeline position.
  */
 export function annotationStampFor(
   surface: AnnotationSurface,
   video: TimelineNumbers,
   replay: TimelineNumbers
 ): { frame: number; fps: number } {
-  const active = timelineNumbersFor(surface, video, replay);
-  return { frame: active.currentFrame, fps: active.fps || 30 };
+  if (surface === 'pipeline') {
+    const fps = replay.fps || 30;
+    return { frame: Math.round(replay.currentTime * fps), fps };
+  }
+  const fps = video.fps || 30;
+  return { frame: video.currentFrame, fps };
 }

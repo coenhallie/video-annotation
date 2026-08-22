@@ -27,7 +27,11 @@ import { useLabelCatalog } from '@/composables/useLabelCatalog';
 import { buildAnnotationPayload, stampSnapshotFrame } from '@/utils/annotationPayload';
 import { canCreateAnnotations } from '@/utils/annotationPermissions';
 import { isPipelineSurfaceVisible } from '@/utils/pipelineSurface';
-import { timelineNumbersFor } from '@/utils/timelineBinding';
+import {
+  timelineNumbersFor,
+  annotationStampFor,
+  type TimelineNumbers,
+} from '@/utils/timelineBinding';
 import {
   resolveQaStatusTarget,
   mergeQaStatusUpdate,
@@ -273,26 +277,43 @@ const pipelineReplay = usePipelineReplay({
   },
 });
 
+// The surface stays mounted once opened, so returning to the tab does not
+// re-fetch and re-index the whole JSONL behind a spinner, and the replay
+// keeps its own position.
+//
+// It is gated on having been opened at least once rather than simply always
+// mounted: most projects in this app are plain uploads with no pipeline data
+// at all, and mounting on every editor open would fire a request for each
+// one that can only fail.
+const pipelineEverOpened = ref(false);
+
+// The two raw sources `timeline` and `annotationStampFor` both read from.
+// Named separately so a new annotation's stamp can be derived from the same
+// numbers the timeline itself is drawing, rather than re-reading the refs.
+const videoTimelineNumbers = computed<TimelineNumbers>(() => ({
+  currentTime: currentTime.value,
+  duration: duration.value,
+  currentFrame: currentFrame.value,
+  totalFrames: totalFrames.value,
+  fps: fps.value,
+  isPlaying: isPlaying.value,
+}));
+
+const replayTimelineNumbers = computed<TimelineNumbers>(() => ({
+  currentTime: pipelineReplay.currentTime.value,
+  duration: pipelineReplay.duration.value,
+  currentFrame: pipelineReplay.currentFrame.value,
+  totalFrames: pipelineReplay.totalFrames.value,
+  fps: pipelineReplay.fps.value,
+  isPlaying: pipelineReplay.isPlaying.value,
+}));
+
 // One timeline, two sources. Nothing carries a position across a tab switch.
 const timeline = computed(() =>
   timelineNumbersFor(
     activeSurface.value,
-    {
-      currentTime: currentTime.value,
-      duration: duration.value,
-      currentFrame: currentFrame.value,
-      totalFrames: totalFrames.value,
-      fps: fps.value,
-      isPlaying: isPlaying.value,
-    },
-    {
-      currentTime: pipelineReplay.currentTime.value,
-      duration: pipelineReplay.duration.value,
-      currentFrame: pipelineReplay.currentFrame.value,
-      totalFrames: pipelineReplay.totalFrames.value,
-      fps: pipelineReplay.fps.value,
-      isPlaying: pipelineReplay.isPlaying.value,
-    }
+    videoTimelineNumbers.value,
+    replayTimelineNumbers.value
   )
 );
 
@@ -313,7 +334,13 @@ const onTimelinePause = () => {
 
 const onAnnotationClick = (annotation: Annotation) => {
   // Clicking a pipeline marker must move the replay, not the hidden video.
+  // selectedAnnotation is set here directly because handleAnnotationClick
+  // (reached via handleAnnotationSeek on the video branch) does that plus a
+  // video-only seek and drawing-canvas frame sync; drawing is off on the
+  // pipeline tab (`:allow-drawing="activeSurface === 'video'"`), so only the
+  // selection and the seek apply here.
   if (onPipeline.value) {
+    selectedAnnotation.value = annotation;
     void pipelineReplay.seek(annotation.timestamp);
     return;
   }
@@ -404,11 +431,18 @@ const openQuickPick = (event: MouseEvent) => {
   if (drawingCoordinator?.isDrawingMode?.value) return;
 
   // The pitch's right-click reaches here too, and on that tab the video is
-  // hidden and paused, so its currentFrame is meaningless. `timeline` already
-  // resolves to whichever surface is active.
+  // hidden and paused, so its currentFrame is meaningless. annotationStampFor
+  // resolves both frame and fps from whichever surface is active - see its
+  // doc comment for why the frame is derived from currentTime * fps rather
+  // than read off the surface's own currentFrame ref.
+  const stamp = annotationStampFor(
+    activeSurface.value,
+    videoTimelineNumbers.value,
+    replayTimelineNumbers.value
+  );
   quickPickSnapshot.value = {
-    frame: timeline.value.currentFrame,
-    fps: timeline.value.fps || 30,
+    frame: stamp.frame,
+    fps: stamp.fps,
     dual:
       playerMode.value === 'dual'
         ? {
@@ -1404,6 +1438,15 @@ watch(hasPipelineSurface, (available) => {
 // Opening a different project starts on the video tab.
 watch(currentVideoId, () => {
   activeSurface.value = 'video';
+  // EditorView is reused across editor -> editor navigations (see the
+  // route.params.id watcher below), so a project switch does not remount this
+  // component or PipelineOutputSurface with it. pipelineEverOpened keeps that
+  // surface mounted across a tab switch, which is the point, but it must not
+  // stay mounted across a video switch too: without resetting it here, the
+  // pipeline tab would keep showing the previous video's replay - its
+  // onMounted, and therefore its load(), only fires once per mount - until
+  // something else happened to unmount it.
+  pipelineEverOpened.value = false;
 });
 
 // The QA control's target, or null when it must not render. See
@@ -1429,13 +1472,17 @@ function onQaStatusUpdated(updated: Video) {
   );
 }
 
-// Each surface owns its own clock, so leaving a tab stops that tab's playback.
-// Without this the audio kept running behind the pipeline tab; the mirror case
-// is the replay advancing behind the video tab, burning range requests on a
-// pitch nobody is looking at.
+// The pipeline surface stays mounted once opened (see pipelineEverOpened
+// below), so returning to the tab does not re-fetch and re-index the whole
+// JSONL behind a spinner, and the replay keeps its own position. That makes
+// this pause more important, not less: a hidden but still-mounted replay
+// would otherwise keep ticking and issuing range requests for a pitch nobody
+// is looking at, the same way the player would keep its audio running behind
+// the pipeline tab without the mirror case below.
 watch(activeSurface, (surface, previous) => {
-  if (surface === 'pipeline' && isPlaying.value) {
-    unifiedVideoPlayerRef.value?.pause();
+  if (surface === 'pipeline') {
+    pipelineEverOpened.value = true;
+    if (isPlaying.value) unifiedVideoPlayerRef.value?.pause();
   }
   if (previous === 'pipeline' && pipelineReplay.isPlaying.value) {
     pipelineReplay.pause();
@@ -1716,7 +1763,8 @@ watch(
               />
             </div>
             <div
-              v-if="activeSurface === 'pipeline'"
+              v-if="pipelineEverOpened"
+              v-show="activeSurface === 'pipeline'"
               class="relative h-full w-full"
             >
               <PipelineOutputSurface

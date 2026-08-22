@@ -49,24 +49,30 @@ describe('timelineNumbersFor', () => {
 });
 
 describe('annotationStampFor', () => {
-  it('stamps the video surface frame and fps on the video tab', () => {
+  it('stamps the video surface currentFrame and fps unchanged on the video tab', () => {
     expect(annotationStampFor('video', VIDEO, REPLAY)).toEqual({
       frame: VIDEO.currentFrame,
       fps: VIDEO.fps,
     });
   });
 
-  it('stamps the replay frame and fps on the pipeline tab', () => {
-    expect(annotationStampFor('pipeline', VIDEO, REPLAY)).toEqual({
-      frame: REPLAY.currentFrame,
+  it('derives the pipeline frame from replay currentTime * fps, never its own currentFrame', () => {
+    // REPLAY.currentFrame (557) is deliberately not currentTime * fps (100):
+    // the pipeline's own frame numbering is not zero-based (frameWindow.ts),
+    // so a stamp built from it would persist a timestamp (frame / fps, from
+    // buildAnnotationPayload) far outside the replay's actual duration.
+    const stamp = annotationStampFor('pipeline', VIDEO, REPLAY);
+    expect(stamp).toEqual({
+      frame: Math.round(REPLAY.currentTime * REPLAY.fps),
       fps: REPLAY.fps,
     });
+    expect(stamp.frame).not.toBe(REPLAY.currentFrame);
   });
 
   it('falls back to 30fps when the active surface reports a zero fps', () => {
     const noFps: TimelineNumbers = { ...REPLAY, fps: 0 };
     expect(annotationStampFor('pipeline', VIDEO, noFps)).toEqual({
-      frame: noFps.currentFrame,
+      frame: Math.round(noFps.currentTime * 30),
       fps: 30,
     });
   });
