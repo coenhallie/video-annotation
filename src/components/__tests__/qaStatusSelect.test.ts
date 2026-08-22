@@ -208,5 +208,4 @@ describe('QaStatusSelect', () => {
     expect(s.select().value).toBe('production');
     s.unmount();
   });
-
 });

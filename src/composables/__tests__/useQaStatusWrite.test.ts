@@ -51,6 +51,12 @@ describe('useQaStatusWrite', () => {
 
     expect(seen).toHaveLength(0);
     expect(w.saving.value).toBe(false);
+    // The "applies nothing" half of this test's name: the resolved v1 write
+    // must not land on the swapped-to v2 target. current/updatedAt must show
+    // v2's own value ('in_review', no qaStatusUpdatedAt), never v1's resolved
+    // row ('staging', '2026-08-22T00:00:00Z' from the video() factory).
+    expect(w.current.value).toBe('in_review');
+    expect(w.updatedAt.value).toBeUndefined();
   });
 
   it('rolls back and notifies when the write is refused', async () => {

@@ -61,10 +61,10 @@ export function useQaStatusWrite(
     if (next === previous) return;
 
     // Captured before the await: the caller's target can be swapped out from
-    // under this same instance while the write is in flight (a parent with
-    // no `:key` reusing this control across a project switch), and the write
-    // must be judged against the video it started on, not whatever is
-    // displayed by the time it resolves.
+    // under this same mounted instance while the write is in flight (a
+    // parent with no `:key` reusing this control across a project switch),
+    // and the write must be judged against the video it started on, not
+    // whatever is displayed by the time it resolves.
     const targetId = target().id;
 
     // Optimistic: the value moves now, and moves back if the write is refused.
