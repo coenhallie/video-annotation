@@ -110,13 +110,17 @@ function inspectProject(project: Project) {
 function onProjectQaStatusUpdated(project: Project, updated: Video) {
   if (project.projectType !== 'single') return;
   const merged = mergeQaStatusUpdate(project.video, updated);
-  if (merged) Object.assign(project.video, merged);
+  if (!merged) return;
+  Object.assign(project.video, merged);
 
   // Silent on success everywhere except here: the row is about to disappear
   // from a list the user is looking at, because of something they just did.
+  // Nested under `merged` on purpose: if `updated` ever failed the id guard
+  // above, the row on screen did not actually change, so there is nothing to
+  // explain a disappearance of.
   if (qaStatusHiddenByFilter(updated.qaStatus, activeQaStatuses.value)) {
     notifySuccess(
-      `Marked ${qaStatusLabel(updated.qaStatus)}`,
+      `Marked ${qaStatusLabel(updated.qaStatus).toLowerCase()}`,
       'Hidden by the current filter.'
     );
   }
