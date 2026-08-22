@@ -7,6 +7,10 @@ import { ProjectService } from '@/services/projectService';
 import { LabelService } from '@/services/labelService';
 import type { Project } from '@/types/project';
 import type { Label } from '@/types/labels';
+import type { QaStatus } from '@/types/database';
+import { QA_STATUSES } from '@/utils/qaStatus';
+import { filterByQaStatus, countByQaStatus } from '@/utils/qaStatusFilter';
+import QaStatusPill from '@/components/QaStatusPill.vue';
 import AppHeader from '@/components/AppHeader.vue';
 import ProjectListItem from '@/components/ProjectListItem.vue';
 import CreateComparisonModal from '@/components/CreateComparisonModal.vue';
@@ -65,6 +69,7 @@ const availableLabels = ref<Label[]>([]);
 // project key (video id / comparison id) → label ids used on that project.
 const labelIdsByProject = ref<Record<string, string[]>>({});
 const activeLabelIds = ref<Set<string>>(new Set());
+const activeQaStatuses = ref<Set<QaStatus>>(new Set());
 const showLabelFilter = ref(false);
 
 const selectedProject = ref<Project | null>(null);
@@ -182,7 +187,7 @@ watch(scope, (s) => {
 // close the details panel so it never points at a project that scrolled
 // out of the current folder/scope.
 watch(
-  [scope, searchQuery, dashFolders.currentFolderId, activeLabelIds],
+  [scope, searchQuery, dashFolders.currentFolderId, activeLabelIds, activeQaStatuses],
   () => {
     currentPage.value = 1;
     closeDetails();
@@ -201,7 +206,15 @@ function projectLabelKey(p: Project): string {
   return p.projectType === 'single' ? p.video.id : p.id;
 }
 
-const filteredProjects = computed(() => {
+// Dual projects have no qaStatus: the column is on `videos` only. Null here is
+// what makes them fall out of a status filter and out of every count.
+const statusOfProject = (p: Project): QaStatus | null =>
+  p.projectType === 'single' ? p.video.qaStatus : null;
+
+// Everything except the status filter. The counts are computed against this,
+// so selecting FAILED does not drop the other four statuses to zero and make
+// the panel useless exactly when it is being used.
+const projectsBeforeQaFilter = computed(() => {
   let list = dashFolders.filterByFolder(projects.value);
   if (searchQuery.value.trim()) {
     const q = searchQuery.value.toLowerCase();
@@ -222,6 +235,18 @@ const filteredProjects = computed(() => {
   return list;
 });
 
+const qaStatusCounts = computed(() =>
+  countByQaStatus(projectsBeforeQaFilter.value, statusOfProject)
+);
+
+const filteredProjects = computed(() =>
+  filterByQaStatus(
+    projectsBeforeQaFilter.value,
+    activeQaStatuses.value,
+    statusOfProject
+  )
+);
+
 // Recency ordering lives here, not in ProjectService.mapToProjects: that is a
 // private static shared by getUserProjects and getAllProjects with no user
 // context, and it keeps owning created-date order as the stable base.
@@ -239,6 +264,10 @@ const paginatedProjects = computed(() =>
   )
 );
 
+const activeFilterCount = computed(
+  () => activeLabelIds.value.size + activeQaStatuses.value.size
+);
+
 function toggleLabelFilter(id: string) {
   const next = new Set(activeLabelIds.value);
   if (next.has(id)) next.delete(id);
@@ -246,8 +275,16 @@ function toggleLabelFilter(id: string) {
   activeLabelIds.value = next; // new Set so the watchers fire
 }
 
-function clearLabelFilter() {
+function toggleQaStatusFilter(status: QaStatus) {
+  const next = new Set(activeQaStatuses.value);
+  if (next.has(status)) next.delete(status);
+  else next.add(status);
+  activeQaStatuses.value = next; // new Set so the watchers fire
+}
+
+function clearAllFilters() {
   activeLabelIds.value = new Set();
+  activeQaStatuses.value = new Set();
 }
 
 function openProject(project: Project) {
@@ -433,7 +470,7 @@ watch(user, (u) => {
                 type="button"
                 class="flex items-center gap-1.5 rounded px-1 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] transition-colors"
                 :class="
-                  activeLabelIds.size > 0 || showLabelFilter
+                  activeFilterCount > 0 || showLabelFilter
                     ? 'text-gray-900 dark:text-gray-200'
                     : 'text-gray-500 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-300'
                 "
@@ -454,10 +491,10 @@ watch(user, (u) => {
                 </svg>
                 Filter
                 <span
-                  v-if="activeLabelIds.size > 0"
+                  v-if="activeFilterCount > 0"
                   class="font-mono text-[10px] tracking-wider"
                 >
-                  {{ activeLabelIds.size }}
+                  {{ activeFilterCount }}
                 </span>
               </button>
 
@@ -477,48 +514,41 @@ watch(user, (u) => {
                   <span
                     class="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-500"
                   >
-                    Filter by label
+                    Filter
                   </span>
                   <button
-                    v-if="activeLabelIds.size > 0"
+                    v-if="activeFilterCount > 0"
                     type="button"
                     class="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-300"
-                    @click="clearLabelFilter"
+                    @click="clearAllFilters"
                   >
                     Clear
                   </button>
                 </div>
-                <div
-                  v-if="availableLabels.length === 0"
-                  class="px-3 py-6 text-center text-[12px] text-gray-600 dark:text-gray-400"
-                >
-                  No labels in use yet.
-                </div>
-                <div
-                  v-else
-                  class="max-h-64 overflow-y-auto py-1"
-                >
-                  <button
-                    v-for="label in availableLabels"
-                    :key="label.id"
-                    type="button"
-                    class="flex w-full items-center gap-2.5 px-3 py-1.5 text-left transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]"
-                    @click="toggleLabelFilter(label.id)"
+                <div class="border-b border-gray-200 py-1 dark:border-white/10">
+                  <div
+                    class="px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-500"
                   >
-                    <span
-                      class="h-2 w-2 shrink-0 rounded-full"
-                      :style="{ backgroundColor: label.color }"
-                    />
-                    <span
-                      class="flex-1 truncate text-[12px]"
-                      :class="
-                        activeLabelIds.has(label.id)
-                          ? 'text-gray-900 dark:text-white'
-                          : 'text-gray-700 dark:text-gray-200'
-                      "
-                    >{{ label.name }}</span>
+                    QA status
+                  </div>
+                  <!-- All five always render, zeros included. The vocabulary is
+                       fixed, so hiding empty ones would make the panel's
+                       contents shift as data changes, and "nothing is in
+                       staging" is itself an answer. -->
+                  <button
+                    v-for="status in QA_STATUSES"
+                    :key="status"
+                    type="button"
+                    :data-testid="`qa-filter-${status}`"
+                    class="flex w-full items-center gap-2.5 px-3 py-1.5 text-left transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]"
+                    @click="toggleQaStatusFilter(status)"
+                  >
+                    <QaStatusPill :status="status" />
+                    <span class="flex-1 text-right font-mono text-[10px] tracking-wider text-gray-500 dark:text-gray-400">
+                      {{ qaStatusCounts[status] }}
+                    </span>
                     <svg
-                      v-if="activeLabelIds.has(label.id)"
+                      v-if="activeQaStatuses.has(status)"
                       class="h-3.5 w-3.5 shrink-0 text-gray-900 dark:text-white"
                       viewBox="0 0 24 24"
                       fill="none"
@@ -532,6 +562,58 @@ watch(user, (u) => {
                       />
                     </svg>
                   </button>
+                </div>
+                <div>
+                  <div
+                    class="px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-500"
+                  >
+                    Labels
+                  </div>
+                  <div
+                    v-if="availableLabels.length === 0"
+                    class="px-3 py-6 text-center text-[12px] text-gray-600 dark:text-gray-400"
+                  >
+                    No labels in use yet.
+                  </div>
+                  <div
+                    v-else
+                    class="max-h-64 overflow-y-auto py-1"
+                  >
+                    <button
+                      v-for="label in availableLabels"
+                      :key="label.id"
+                      type="button"
+                      class="flex w-full items-center gap-2.5 px-3 py-1.5 text-left transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]"
+                      @click="toggleLabelFilter(label.id)"
+                    >
+                      <span
+                        class="h-2 w-2 shrink-0 rounded-full"
+                        :style="{ backgroundColor: label.color }"
+                      />
+                      <span
+                        class="flex-1 truncate text-[12px]"
+                        :class="
+                          activeLabelIds.has(label.id)
+                            ? 'text-gray-900 dark:text-white'
+                            : 'text-gray-700 dark:text-gray-200'
+                        "
+                      >{{ label.name }}</span>
+                      <svg
+                        v-if="activeLabelIds.has(label.id)"
+                        class="h-3.5 w-3.5 shrink-0 text-gray-900 dark:text-white"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                      >
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="m5 13 4 4L19 7"
+                        />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
