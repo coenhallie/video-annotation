@@ -367,3 +367,64 @@ describe('aws-storage: authorization', () => {
     expect(body.error).toContain('JWT');
   });
 });
+
+describe('kind parameter', () => {
+  afterEach(() => {
+    delete process.env.AWS_PIPELINE_DATA_KEY;
+  });
+
+  it('defaults to the video key when kind is absent', async () => {
+    const fetchMock = routedFetch({ videoVisible: true });
+    vi.stubGlobal('fetch', fetchMock);
+    const handler = await loadHandler();
+    await handler(event({ outputVideoId: VALID_ID }));
+    const url = String(fetchMock.mock.calls.at(-1)?.[0]);
+    expect(url).toContain(encodeURIComponent('streams/generated.mp4'));
+  });
+
+  it('uses the configured data key template for kind=data', async () => {
+    process.env.AWS_PIPELINE_DATA_KEY = 'pipeline-output/{id}/data/{id}.jsonl';
+    const fetchMock = routedFetch({ videoVisible: true });
+    vi.stubGlobal('fetch', fetchMock);
+    const handler = await loadHandler();
+    await handler(event({ outputVideoId: VALID_ID, kind: 'data' }));
+    const url = String(fetchMock.mock.calls.at(-1)?.[0]);
+    expect(url).toContain(
+      encodeURIComponent(`pipeline-output/${VALID_ID}/data/${VALID_ID}.jsonl`)
+    );
+  });
+
+  it('answers 501 for kind=data when no template is configured', async () => {
+    delete process.env.AWS_PIPELINE_DATA_KEY;
+    vi.stubGlobal('fetch', routedFetch({ videoVisible: true }));
+    const handler = await loadHandler();
+    const res = await handler(event({ outputVideoId: VALID_ID, kind: 'data' }));
+    expect(res.statusCode).toBe(501);
+  });
+
+  it('rejects an unknown kind', async () => {
+    vi.stubGlobal('fetch', routedFetch({ videoVisible: true }));
+    const handler = await loadHandler();
+    const res = await handler(event({ outputVideoId: VALID_ID, kind: 'secrets' }));
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('still authorises before touching the data key', async () => {
+    process.env.AWS_PIPELINE_DATA_KEY = 'pipeline-output/{id}/data/{id}.jsonl';
+    vi.stubGlobal('fetch', routedFetch({ videoVisible: false }));
+    const handler = await loadHandler();
+    const res = await handler(event({ outputVideoId: VALID_ID, kind: 'data' }));
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('substitutes only the validated id, never caller text', async () => {
+    process.env.AWS_PIPELINE_DATA_KEY = 'pipeline-output/{id}/data/{id}.jsonl';
+    const fetchMock = routedFetch({ videoVisible: true });
+    vi.stubGlobal('fetch', fetchMock);
+    const handler = await loadHandler();
+    const res = await handler(
+      event({ outputVideoId: '../../etc/passwd', kind: 'data' })
+    );
+    expect(res.statusCode).toBe(400);
+  });
+});

@@ -43,14 +43,19 @@ export class AwsStorageService {
   }
 
   /**
-   * Get a presigned video URL for a pipeline project.
+   * Get a presigned URL for one of a pipeline project's objects.
    *
-   * Sends the project id, not a path: the Netlify Function builds the storage
-   * path itself so no caller can name an arbitrary object. See
+   * Sends the project id and a kind, never a path: the Netlify Function builds
+   * the storage key itself so no caller can name an arbitrary object. See
    * docs/superpowers/specs/2026-08-19-aws-proxy-auth-design.md.
    */
-  static async getVideoUrlForProject(outputVideoId: string): Promise<string> {
-    const url = `/.netlify/functions/aws-storage?outputVideoId=${encodeURIComponent(outputVideoId)}`;
+  static async getUrlForProject(
+    outputVideoId: string,
+    kind: 'video' | 'data' = 'video'
+  ): Promise<string> {
+    const query = new URLSearchParams({ outputVideoId });
+    if (kind !== 'video') query.set('kind', kind);
+    const url = `/.netlify/functions/aws-storage?${query.toString()}`;
 
     // Anonymous share-link viewers have no session; the function falls back to
     // an RLS visibility check for them, so sending no header is a valid case.
@@ -74,7 +79,22 @@ export class AwsStorageService {
       throw new Error(message);
     }
 
-    const text = await res.text();
-    return this.extractUrl(text);
+    const signed = this.extractUrl(await res.text());
+
+    // A function deployed before the kind parameter existed ignores it and
+    // answers with the video's URL. Without this guard the replay would try to
+    // parse an mp4 as JSONL. Checking here makes deploy order not matter.
+    if (kind === 'data' && /\/streams\/generated\.mp4/.test(signed)) {
+      throw new Error(
+        'No pipeline data for this project: the storage proxy answered with the video.'
+      );
+    }
+
+    return signed;
+  }
+
+  /** Back-compatible alias. The video is still the default kind. */
+  static async getVideoUrlForProject(outputVideoId: string): Promise<string> {
+    return this.getUrlForProject(outputVideoId, 'video');
   }
 }
