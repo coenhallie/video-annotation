@@ -83,10 +83,19 @@ describe('countByQaStatus', () => {
 });
 
 // The filter spec asks for a check that the chain composes: status AND label
-// together, not either alone. The label half is inline in DashboardView's
-// computed, so this asserts the composition at the seam this module owns -
-// a status filter applied to an already-label-narrowed list. The rest of the
-// chain is covered by the visual pass.
+// together, not either alone. This test does NOT provide that check. It hands
+// filterByQaStatus a list that has already been filtered by hand, but
+// filterByQaStatus is stateless and per-row - it has no idea the input was
+// narrowed by anything - so this is behaviourally identical to the
+// single-status test above on a smaller array. It cannot fail independently
+// of that test.
+//
+// The real AND-across-filter-types behaviour lives in DashboardView's
+// computed chain (projectsBeforeQaFilter -> filteredProjects), as sequential
+// `list = list.filter(...)` calls with no combining logic of its own to unit
+// test, and there is no view-level test harness in this repo to exercise that
+// chain end to end. That check is NOT covered by any test. It was covered
+// only by the manual visual pass at the end of the feature's implementation.
 describe('composing with an earlier filter', () => {
   it('ANDs with a list that has already been narrowed', () => {
     const labelNarrowed = rows.filter((r) => r.id === 'b' || r.id === 'c');

@@ -129,9 +129,12 @@ correct, and consistent with every other filter here, but abrupt when the user
 caused it themselves.
 
 So: let the row go, and fire a **success** toast in that one case, naming what
-happened ("Marked STAGING. Hidden by the current filter."). Every other
-successful write stays silent, as today. A toast on every change would be noise
-in a list built for working down quickly.
+happened - title `Marked staging`, message `Hidden by the current filter.`.
+(Sentence case on the status word, not the all-caps `qaStatusLabel` output
+verbatim: every other toast title in the app is sentence case, and this one
+follows that convention rather than breaking it.) Every other successful write
+stays silent, as today. A toast on every change would be noise in a list built
+for working down quickly.
 
 The condition is narrow and testable: an active status filter that does not
 include the newly chosen status.

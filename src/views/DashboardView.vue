@@ -105,19 +105,22 @@ function inspectProject(project: Project) {
 
 // The list row and the details panel reference the same project object -
 // DashboardView's `projects` array is not cloned on the way to either - so one
-// merge updates both surfaces. mergeQaStatusUpdate is id-guarded and merges
-// only the QA fields, never the whole returned row.
+// merge updates both surfaces. mergeQaStatusUpdate merges only the QA fields,
+// never the whole returned row; the id check below is this handler's own
+// guard, not a repeat of one inside the composable.
 function onProjectQaStatusUpdated(project: Project, updated: Video) {
   if (project.projectType !== 'single') return;
+  // Not reachable today - useQaStatusWrite already compares ids before
+  // emitting - but this handler should not depend on that invariant holding
+  // in a caller it does not control. If it ever mismatched, the row on screen
+  // did not actually change, so there is nothing to merge or to explain.
+  if (project.video.id !== updated.id) return;
   const merged = mergeQaStatusUpdate(project.video, updated);
-  if (!merged) return;
+  if (!merged) return; // narrows Partial<Video> | null; project.video is never null here
   Object.assign(project.video, merged);
 
   // Silent on success everywhere except here: the row is about to disappear
   // from a list the user is looking at, because of something they just did.
-  // Nested under `merged` on purpose: if `updated` ever failed the id guard
-  // above, the row on screen did not actually change, so there is nothing to
-  // explain a disappearance of.
   if (qaStatusHiddenByFilter(updated.qaStatus, activeQaStatuses.value)) {
     notifySuccess(
       `Marked ${qaStatusLabel(updated.qaStatus).toLowerCase()}`,
@@ -298,6 +301,20 @@ const orderedProjects = computed(() =>
 const totalPages = computed(() =>
   Math.max(1, Math.ceil(filteredProjects.value.length / itemsPerPage.value))
 );
+
+// Filtering is not the only thing that can shrink the list out from under the
+// current page: an inline QA status edit (onProjectQaStatusUpdated) removes a
+// row from filteredProjects without touching any of the refs the watcher above
+// resets on. Clamping on totalPages itself, rather than enumerating more
+// sources for that watcher, covers that case and any future one by
+// construction - the pager's own visibility condition (v-if="totalPages > 1")
+// is driven by the same value. Deliberately not closing the details panel
+// here: unlike the other watcher's filter/scope changes, an inline edit does
+// not put the panel out of context.
+watch(totalPages, (pages) => {
+  if (currentPage.value > pages) currentPage.value = pages;
+});
+
 const paginatedProjects = computed(() =>
   orderedProjects.value.slice(
     (currentPage.value - 1) * itemsPerPage.value,
@@ -644,20 +661,25 @@ watch(user, (u) => {
                             : 'text-gray-700 dark:text-gray-200'
                         "
                       >{{ label.name }}</span>
-                      <svg
-                        v-if="activeLabelIds.has(label.id)"
-                        class="h-3.5 w-3.5 shrink-0 text-gray-900 dark:text-white"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2"
-                      >
-                        <path
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                          d="m5 13 4 4L19 7"
-                        />
-                      </svg>
+                      <!-- Fixed-width slot, always present, same as the QA rows
+                           above, so toggling a label does not move where the
+                           name truncates. -->
+                      <span class="flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+                        <svg
+                          v-if="activeLabelIds.has(label.id)"
+                          class="h-3.5 w-3.5 text-gray-900 dark:text-white"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2"
+                        >
+                          <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            d="m5 13 4 4L19 7"
+                          />
+                        </svg>
+                      </span>
                     </button>
                   </div>
                 </div>
