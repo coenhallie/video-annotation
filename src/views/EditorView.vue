@@ -265,15 +265,21 @@ const activeSurface = ref<AnnotationSurface>('video');
 
 // The replay reads the pipeline's JSONL for this project. `openFetcher` returns
 // null for anything that is not an AWS pipeline video, which is most projects,
-// and the surface renders its no-data state.
+// and also when the project is an AWS pipeline video with no pipeline data
+// object yet - getPipelineDataSource returns null rather than throwing for
+// that whole family of cases. Either way the surface renders its no-data
+// state rather than an error panel.
 const pipelineReplay = usePipelineReplay({
   openFetcher: async () => {
     const video = currentVideoObject.value;
     if (!video || !VideoService.isAwsVideo(video)) return null;
     const outputVideoId = String(video.videoId).replace(/^aws:/, '');
-    const { url, size, acceptsRanges } =
-      await AwsStorageService.getPipelineDataSource(outputVideoId);
-    return httpRangeFetcher(url, { size, acceptsRanges });
+    const source = await AwsStorageService.getPipelineDataSource(outputVideoId);
+    if (!source) return null;
+    return httpRangeFetcher(source.url, {
+      size: source.size,
+      acceptsRanges: source.acceptsRanges,
+    });
   },
 });
 
@@ -544,11 +550,17 @@ const isPlaybackRunning = () =>
 
 const handleQuickPickCommentMode = (active: boolean) => {
   if (active) {
-    commentModeWasPlaying.value = isPlaybackRunning();
-    unifiedVideoPlayerRef.value?.pause();
+    commentModeWasPlaying.value = onPipeline.value
+      ? pipelineReplay.isPlaying.value
+      : isPlaybackRunning();
+    if (onPipeline.value) pipelineReplay.pause();
+    else unifiedVideoPlayerRef.value?.pause();
     return;
   }
-  if (commentModeWasPlaying.value) unifiedVideoPlayerRef.value?.play();
+  if (commentModeWasPlaying.value) {
+    if (onPipeline.value) pipelineReplay.play();
+    else unifiedVideoPlayerRef.value?.play();
+  }
   commentModeWasPlaying.value = false;
 };
 
@@ -1886,7 +1898,7 @@ watch(
             :selected-annotation="selectedAnnotation"
             :current-time="currentTime || 0"
             :current-frame="currentFrame || 0"
-            :fps="fps || 30"
+            :fps="timeline.fps"
             :drawing-canvas="drawingCanvas"
             :read-only="(isSharedVideo || isSharedComparison) && !canComment()"
             :can-annotate="canAnnotate"
@@ -1921,7 +1933,7 @@ watch(
             :video-b-fps="dualVideoPlayer?.videoBState?.fps || 30"
             @update-annotation="updateAnnotation"
             @delete-annotation="deleteAnnotation"
-            @select-annotation="handleAnnotationSeek"
+            @select-annotation="onAnnotationClick"
             @form-show="handleFormShow"
             @form-hide="handleFormHide"
             @pause="handleTimelinePause"

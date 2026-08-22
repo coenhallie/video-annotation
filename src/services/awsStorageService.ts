@@ -87,10 +87,30 @@ export class AwsStorageService {
     return this.getUrlForProject(outputVideoId);
   }
 
-  /** What the replay needs to read a pipeline data object. */
+  /**
+   * What the replay needs to read a pipeline data object, or `null` when
+   * there plainly is no pipeline data for this project - as opposed to a
+   * genuine transport failure, which still throws.
+   *
+   * The no-data family, none of which is an error worth showing:
+   *  - 501: `AWS_PIPELINE_DATA_KEY` is not configured.
+   *  - 404: the Lambda answered "object not found", proxied through as-is.
+   *  - 502 with `noData: true`: the function's own probe of the presigned
+   *    URL could not reach the object (see aws-storage.cjs). Distinguished
+   *    from the function's other 502s - auth-check failure, an unusable
+   *    Lambda response, a genuine request failure - by that explicit field,
+   *    never by the message text.
+   *  - a response in the envelope shape but missing `url`/`size`, or naming
+   *    the video file rather than a data object: an old deployment that
+   *    ignored `kind` and answered with the video's presigned URL instead.
+   *
+   * Everything else - the fetch itself rejecting, or a 5xx that is not the
+   * unreachable-object case - throws, and the caller should show it as a
+   * real error.
+   */
   static async getPipelineDataSource(
     outputVideoId: string
-  ): Promise<{ url: string; size: number; acceptsRanges: boolean }> {
+  ): Promise<{ url: string; size: number; acceptsRanges: boolean } | null> {
     const url = `/.netlify/functions/aws-storage?outputVideoId=${encodeURIComponent(
       outputVideoId
     )}&kind=data`;
@@ -104,6 +124,17 @@ export class AwsStorageService {
     const res = await fetch(url, { cache: 'no-store', headers });
     if (!res.ok) {
       const body = await res.text().catch(() => '');
+
+      if (res.status === 404 || res.status === 501) return null;
+      if (res.status === 502) {
+        try {
+          const err = JSON.parse(body);
+          if (err && err.noData === true) return null;
+        } catch {
+          // Not JSON. Fall through to the generic-failure handling below.
+        }
+      }
+
       let message = `Failed to get pipeline data: ${res.status}`;
       try {
         const err = JSON.parse(body);
@@ -119,15 +150,16 @@ export class AwsStorageService {
     // A function deployed before this change ignores `kind` and answers with the
     // video's presigned URL, in the Lambda's own shape rather than this
     // envelope. Both checks below catch that, so deploy order does not matter.
+    // Treated as no data rather than an error: an old deployment answering
+    // with the video URL is functionally the same as there being no
+    // pipeline data object yet.
     if (
       !payload ||
       typeof payload.url !== 'string' ||
       typeof payload.size !== 'number' ||
       /\/streams\/generated\.mp4/.test(payload.url)
     ) {
-      throw new Error(
-        'No pipeline data for this project: the storage proxy did not return a data object.'
-      );
+      return null;
     }
 
     return {

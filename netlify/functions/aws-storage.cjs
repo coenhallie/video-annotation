@@ -85,9 +85,12 @@ async function probeObject(url) {
 
   if (res.status === 206) {
     const match = /\/(\d+)\s*$/.exec(res.headers.get('content-range') || '');
-    if (match) {
-      return { size: Number(match[1]), acceptsRanges: !encoded };
-    }
+    // A 206 promises a Content-Range naming the total size. If it does not
+    // parse, `content-length` is just the length of the one-byte range body
+    // (1), which would silently pose as the object's real size. Treat that
+    // as a failed probe rather than pretend to have learned anything.
+    if (!match) return null;
+    return { size: Number(match[1]), acceptsRanges: !encoded };
   }
 
   const size = Number(res.headers.get('content-length') || 0);
@@ -279,7 +282,14 @@ exports.handler = async function (event) {
       }
       const probe = await probeObject(signed);
       if (!probe) {
-        return json(502, { error: 'Pipeline data object is unreachable' });
+        // `noData: true` distinguishes this from the function's other 502s
+        // (auth-check failure, an unusable Lambda response, a genuine
+        // request failure below): those are real errors, this is not. The
+        // client reads this field, never the message text, to decide.
+        return json(502, {
+          error: 'Pipeline data object is unreachable',
+          noData: true,
+        });
       }
       return json(200, {
         url: signed,

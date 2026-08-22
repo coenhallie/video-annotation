@@ -522,13 +522,30 @@ describe('kind parameter', () => {
     expect(body.acceptsRanges).toBe(false);
   });
 
-  it('kind=data answers 502 when the probe is unreachable', async () => {
+  it('kind=data answers 502 flagged noData when the probe is unreachable', async () => {
     process.env.AWS_PIPELINE_DATA_KEY = 'pipeline-output/{id}/data/{id}.jsonl';
     const fetchMock = routedFetch({ videoVisible: true, probe: { status: 500 } });
     vi.stubGlobal('fetch', fetchMock);
     const handler = await loadHandler();
     const res = await handler(event({ outputVideoId: VALID_ID, kind: 'data' }));
     expect(res.statusCode).toBe(502);
+    // The client tells this apart from the function's other 502s (auth-check
+    // failure, an unusable Lambda response, a request failure) by this field,
+    // never by the message text.
+    expect(JSON.parse(res.body).noData).toBe(true);
+  });
+
+  it('kind=data answers 502 without noData when a 206 probe has an unparseable Content-Range', async () => {
+    process.env.AWS_PIPELINE_DATA_KEY = 'pipeline-output/{id}/data/{id}.jsonl';
+    const fetchMock = routedFetch({
+      videoVisible: true,
+      probe: { headers: { 'content-range': 'not-a-range' } },
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const handler = await loadHandler();
+    const res = await handler(event({ outputVideoId: VALID_ID, kind: 'data' }));
+    expect(res.statusCode).toBe(502);
+    expect(JSON.parse(res.body).noData).toBe(true);
   });
 
   // The likeliest real-world state until the pipeline team confirms the key:

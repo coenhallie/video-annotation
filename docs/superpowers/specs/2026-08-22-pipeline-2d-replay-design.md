@@ -470,6 +470,14 @@ record card and a per-frame player table, and both are plainly useful for QA of
 the data itself. Whether to bring one across is an open question raised in
 conversation and not yet answered, so it is not specified here.
 
+**The pitch and the sidebar number the same moment differently.** The canvas HUD
+shows the pipeline's absolute `frame_count` (e.g. `Frame 30426`), while a
+persisted annotation's `frame` is 0-based, derived as `time * fps` (e.g.
+`F1200`). Nothing is mispositioned - annotation markers place by timestamp, not
+by frame number - but for a feature whose purpose is frame-accurate QA, two
+different numbers for the same instant will be reported as a bug if it is not
+written down here first.
+
 ## Verification: what is proven and what is not
 
 Implemented across seven tasks, each gated by an independent review. At the end
@@ -519,7 +527,3 @@ to a real value and a finished match to open.
 - That returning to the tab is instant, with no refetch.
 - That real record sizes are near enough the sample's for the window arithmetic
   to hold.
-- Whether shirt colours survive a malformed `ordered_colors` entry. `toRgb` does
-  arithmetic on three channels without checking length, which yields `NaN` on a
-  short array. Flagged in the first review, accepted deliberately to keep the
-  vendored copy diffable, and never exercised against real data.

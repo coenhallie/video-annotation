@@ -3,6 +3,19 @@ import { parseWindow, type ReplayRecord } from './frameWindow';
 /** How much to read for each probe. Comfortably more than one record. */
 export const PROBE_BYTES = 65536;
 
+/**
+ * Ceiling on reading a no-ranges object whole.
+ *
+ * When the server won't serve byte ranges, the fallback below reads the
+ * entire object into memory once to build the index - and then `load()`'s
+ * first `recordAt` reads it again in full, since the index it builds keeps
+ * only the first record's offset. The producer emits files on the order of a
+ * gigabyte; two full downloads of one of those would stall the tab. A file
+ * small enough to read whole twice without anyone noticing is fine. One that
+ * is not, is not - so refuse rather than attempt it.
+ */
+export const MAX_WHOLE_FILE_READ_BYTES = 8 * 1024 * 1024;
+
 export interface IndexEntry {
   /**
    * Byte offset where this record starts, with one exception: on
@@ -64,6 +77,11 @@ export async function buildIndex(
   if (size <= 0) throw new Error('Pipeline data file is empty');
 
   if (!acceptsRanges) {
+    if (size > MAX_WHOLE_FILE_READ_BYTES) {
+      throw new Error(
+        `Pipeline data file is too large to read without range support (${size} bytes, limit ${MAX_WHOLE_FILE_READ_BYTES})`
+      );
+    }
     const text = await fetcher.range(0, size - 1);
     const records = parseWindow(text, { startsAtBof: true, endsAtEof: true });
     if (!records.length) throw new Error('Pipeline data file holds no records');

@@ -1,6 +1,11 @@
 // Vendored from datalabelling-frontend/src/lib/vis/ on 2026-08-22. Keep edits
-// minimal so the two copies stay diffable. One deliberate difference: the
-// unused FRAME_W import was dropped, because it lints as an error here.
+// minimal so the two copies stay diffable. Deliberate differences from the
+// vendored copy:
+//  - the unused FRAME_W import was dropped, because it lints as an error here.
+//  - draw2DOverlay no longer draws the frame-count label. It was drawn onto
+//    the canvas bitmap, which PipelineOutputSurface.vue applies a CSS
+//    zoom/pan transform to, so the label slid off-screen under zoom.
+//    PipelineOutputSurface.vue draws its own fixed frame label instead.
 
 // ---------------------------------------------------------------------------
 // 2D canvas rendering composable.
@@ -187,7 +192,14 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
   }
 
   /**
-   * Draw the frame-count label (top-left) and action-type text (bottom-left).
+   * Draw the action-type text (bottom-left).
+   *
+   * The frame-count label used to be drawn here too (top-left), but that put
+   * it inside the canvas bitmap, which the surface's zoom/pan is a CSS
+   * transform on - so it slid off-screen under zoom instead of staying put
+   * like an overlay should. PipelineOutputSurface.vue now draws that label
+   * itself, fixed outside the canvas. `frameCount` stays a parameter so this
+   * still mirrors the vendored signature.
    */
   function draw2DOverlay(
     frameCount: number | null | undefined,
@@ -197,10 +209,6 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     ctx.textBaseline = 'top'
     ctx.fillStyle = '#ffffff'
     ctx.font = '700 16px sans-serif'
-
-    if (frameCount != null) {
-      ctx.fillText(`Frame ${frameCount}`, 20, 20)
-    }
 
     const at = actions
       .filter((a) => a.action_type)

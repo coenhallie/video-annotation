@@ -3,6 +3,7 @@ import {
   buildIndex,
   estimateOffset,
   insertEntry,
+  MAX_WHOLE_FILE_READ_BYTES,
   type RangeFetcher,
   type JsonlIndex,
 } from '@/lib/pipelineData/jsonlIndex';
@@ -95,6 +96,21 @@ describe('buildIndex', () => {
       },
     };
     await expect(buildIndex(fetcher)).rejects.toThrow(/empty/i);
+    expect(calls).toEqual([]);
+  });
+
+  it('refuses a large no-ranges file rather than reading it whole', async () => {
+    const calls: Array<[number, number]> = [];
+    const fetcher: RangeFetcher = {
+      async head() {
+        return { size: MAX_WHOLE_FILE_READ_BYTES + 1, acceptsRanges: false };
+      },
+      async range(start: number, end: number) {
+        calls.push([start, end]);
+        return '';
+      },
+    };
+    await expect(buildIndex(fetcher)).rejects.toThrow(/too large/i);
     expect(calls).toEqual([]);
   });
 });

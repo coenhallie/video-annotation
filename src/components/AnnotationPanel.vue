@@ -223,10 +223,13 @@ onMounted(() => {
 
 const startEditAnnotation = (annotation: PanelAnnotation) => {
   emit('pause');
-  // Editing an annotation moves the video to it and selects it, so the frame
-  // the form names is the frame on screen - and any drawing it carries is
-  // rendered, since the canvas only draws strokes stamped with its own frame.
-  // Selecting is what seeks: `seek-to-frame` had no listener at all.
+  // Editing an annotation selects it and moves whichever surface is active
+  // to it (EditorView routes this through onAnnotationClick), so the frame
+  // the form names is the frame on screen on the video tab. On the pipeline
+  // tab the video stays put and the replay moves instead - the underlying
+  // video element is hidden there, so there is nothing for the drawing
+  // canvas to render onto anyway. Selecting is what seeks: `seek-to-frame`
+  // had no listener at all.
   emit('select-annotation', annotation);
 
   editAnnotationData.value = annotation;

@@ -72,38 +72,71 @@ describe('getPipelineDataSource', () => {
     });
   });
 
-  it('rejects when the response is not the envelope shape, as an old deploy would answer', async () => {
+  // The no-data family: getPipelineDataSource resolves to null for all of
+  // these, rather than throwing, so the caller renders the "no pipeline
+  // data" state instead of an error panel.
+
+  it('resolves to null when the response is not the envelope shape, as an old deploy would answer', async () => {
     // Before this change the function proxied the Lambda's own {url} shape for
     // every kind, with no size or acceptsRanges field at all.
     const f = respondWithJson({ url: 'https://s3.example.com/x/data.jsonl?sig=1' });
     vi.stubGlobal('fetch', f);
-    await expect(AwsStorageService.getPipelineDataSource(ID)).rejects.toThrow(
-      /pipeline data/i
-    );
+    await expect(AwsStorageService.getPipelineDataSource(ID)).resolves.toBeNull();
   });
 
-  it('rejects when the envelope url points at the video', async () => {
+  it('resolves to null when the envelope url points at the video', async () => {
     const f = respondWithJson({
       url: 'https://s3.example.com/x/streams/generated.mp4?sig=1',
       size: 4096,
       acceptsRanges: true,
     });
     vi.stubGlobal('fetch', f);
+    await expect(AwsStorageService.getPipelineDataSource(ID)).resolves.toBeNull();
+  });
+
+  it('resolves to null on a 501, meaning AWS_PIPELINE_DATA_KEY is not configured', async () => {
+    const f = respondWithJson({ error: 'Pipeline data is not configured.' }, 501);
+    vi.stubGlobal('fetch', f);
+    await expect(AwsStorageService.getPipelineDataSource(ID)).resolves.toBeNull();
+  });
+
+  // This is what happens when AWS_PIPELINE_DATA_KEY is set but wrong (the key
+  // the pipeline team hasn't confirmed yet doesn't match a real object), so
+  // the Lambda itself answers non-ok and the function proxies that response
+  // instead of probing.
+  it('resolves to null on a 404 forwarded from the Lambda, without a size or acceptsRanges to read', async () => {
+    const f = respondWithJson({ error: 'not found' }, 404);
+    vi.stubGlobal('fetch', f);
+    await expect(AwsStorageService.getPipelineDataSource(ID)).resolves.toBeNull();
+  });
+
+  it('resolves to null on a 502 flagged noData, meaning the function could not reach the object to probe it', async () => {
+    const f = respondWithJson(
+      { error: 'Pipeline data object is unreachable', noData: true },
+      502
+    );
+    vi.stubGlobal('fetch', f);
+    await expect(AwsStorageService.getPipelineDataSource(ID)).resolves.toBeNull();
+  });
+
+  // Genuine failures still throw, so the caller shows a real error rather
+  // than quietly claiming there is no data.
+
+  it('rejects on a 502 without the noData flag, such as an auth-check failure', async () => {
+    const f = respondWithJson({ error: 'Authorization check failed' }, 502);
+    vi.stubGlobal('fetch', f);
     await expect(AwsStorageService.getPipelineDataSource(ID)).rejects.toThrow(
-      /pipeline data/i
+      /authorization check failed/i
     );
   });
 
-  // Not a 501 or a mp4-guard rejection: this is what happens when
-  // AWS_PIPELINE_DATA_KEY is set but wrong (the key the pipeline team hasn't
-  // confirmed yet doesn't match a real object), so the Lambda itself answers
-  // non-ok and the function proxies that response instead of probing. Whoever
-  // renders the "no pipeline data" state must catch this the same way as the
-  // other two: any thrown error from this method means no data, not just a
-  // 501 or the mp4-URL guard specifically.
-  it('rejects when the storage proxy forwards a non-ok Lambda response, without a size or acceptsRanges to read', async () => {
-    const f = respondWithJson({ error: 'not found' }, 404);
+  it('rejects when the fetch itself throws', async () => {
+    const f = vi.fn(async () => {
+      throw new Error('network down');
+    });
     vi.stubGlobal('fetch', f);
-    await expect(AwsStorageService.getPipelineDataSource(ID)).rejects.toThrow();
+    await expect(AwsStorageService.getPipelineDataSource(ID)).rejects.toThrow(
+      /network down/i
+    );
   });
 });
