@@ -1258,7 +1258,11 @@ describe('usePipelineReplay', () => {
     expect(r.currentTime.value).toBeCloseTo(4, 2);
   });
 
-  it('clamps a seek past the end', async () => {
+  // Also the regression test for the quarter-window backoff in recordAt.
+  // index.last.offset is the file size, so estimateOffset at the very end
+  // returns a byte past the last record; without the backoff the window is
+  // empty and currentFrame never reaches the final frame.
+  it('clamps a seek past the end and still finds the last record', async () => {
     const { fetcher } = counting(fakeFile(500));
     const r = usePipelineReplay({ openFetcher: async () => fetcher });
     await r.load();
@@ -1533,8 +1537,17 @@ export function usePipelineReplay(opts: {
     }
 
     const span = windowBytes();
-    // Start a little before the estimate: interpolation can overshoot, and
-    // landing early costs one window's worth of records rather than a retry.
+    // Start a quarter of a window before the estimate. Two reasons, and the
+    // second one is load-bearing rather than an optimisation:
+    //
+    //  1. Interpolation can overshoot, and landing early costs part of a window
+    //     rather than a whole retry.
+    //  2. `index.last.offset` is the FILE SIZE, not the last record's start
+    //     byte (see the note on JsonlIndex.last). So seeking to the very end
+    //     makes estimateOffset return a byte one past the last record. Backing
+    //     off means the window still ENDS at EOF and therefore still contains
+    //     that record. Remove this backoff and the final frame silently
+    //     disappears from the replay.
     let start = Math.max(0, estimateOffset(index, target) - Math.round(span / 4));
     for (let attempt = 0; attempt < 3; attempt++) {
       // Upholds the invariant parseWindow documents. A non-BOF range always has
