@@ -8,7 +8,7 @@ import { LabelService } from '@/services/labelService';
 import type { Project } from '@/types/project';
 import type { Label } from '@/types/labels';
 import type { QaStatus } from '@/types/database';
-import { QA_STATUSES } from '@/utils/qaStatus';
+import { QA_STATUSES, toQaStatus } from '@/utils/qaStatus';
 import { filterByQaStatus, countByQaStatus } from '@/utils/qaStatusFilter';
 import QaStatusPill from '@/components/QaStatusPill.vue';
 import AppHeader from '@/components/AppHeader.vue';
@@ -208,8 +208,17 @@ function projectLabelKey(p: Project): string {
 
 // Dual projects have no qaStatus: the column is on `videos` only. Null here is
 // what makes them fall out of a status filter and out of every count.
+//
+// The single-project case is normalised through toQaStatus rather than read as
+// a bare property: a frontend running ahead of the videos.qaStatus migration
+// gets `undefined` here at runtime despite the Video type calling the field
+// required (see toQaStatus/ABSENT_FALLBACK in qaStatus.ts, and the comment on
+// QaStatusPill). QaStatusPill already renders that undefined as UNREVIEWED, so
+// the counts and the filter must agree with what the pill shows - otherwise
+// selecting UNREVIEWED would hide rows the user can see labelled UNREVIEWED.
+// Do not simplify this back to `p.video.qaStatus`.
 const statusOfProject = (p: Project): QaStatus | null =>
-  p.projectType === 'single' ? p.video.qaStatus : null;
+  p.projectType === 'single' ? toQaStatus(p.video.qaStatus) : null;
 
 // Everything except the status filter. The counts are computed against this,
 // so selecting FAILED does not drop the other four statuses to zero and make
@@ -547,20 +556,25 @@ watch(user, (u) => {
                     <span class="flex-1 text-right font-mono text-[10px] tracking-wider text-gray-500 dark:text-gray-400">
                       {{ qaStatusCounts[status] }}
                     </span>
-                    <svg
-                      v-if="activeQaStatuses.has(status)"
-                      class="h-3.5 w-3.5 shrink-0 text-gray-900 dark:text-white"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                    >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        d="m5 13 4 4L19 7"
-                      />
-                    </svg>
+                    <!-- Fixed-width slot, always present, so the count above
+                         never shifts when a status is toggled on or off. Only
+                         the svg inside comes and goes. -->
+                    <span class="flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+                      <svg
+                        v-if="activeQaStatuses.has(status)"
+                        class="h-3.5 w-3.5 text-gray-900 dark:text-white"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                      >
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="m5 13 4 4L19 7"
+                        />
+                      </svg>
+                    </span>
                   </button>
                 </div>
                 <div class="py-1">
