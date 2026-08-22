@@ -1537,23 +1537,30 @@ export function usePipelineReplay(opts: {
     // landing early costs one window's worth of records rather than a retry.
     let start = Math.max(0, estimateOffset(index, target) - Math.round(span / 4));
     for (let attempt = 0; attempt < 3; attempt++) {
-      const end = Math.min(index.size, start + span) - 1;
-      const text = await fetcher.range(start, end);
+      // Upholds the invariant parseWindow documents. A non-BOF range always has
+      // its first line discarded as a partial, so a range beginning exactly on a
+      // record boundary would throw a whole record away and that record would be
+      // unreachable. Backing up one byte puts the preceding newline first, which
+      // makes the discarded fragment provably empty. Applied here rather than at
+      // the estimate because the retry branches below reassign `start` too.
+      const from = start === 0 ? 0 : start - 1;
+      const end = Math.min(index.size, from + span) - 1;
+      const text = await fetcher.range(from, end);
       const records = parseWindow(text, {
-        startsAtBof: start === 0,
+        startsAtBof: from === 0,
         endsAtEof: end === index.size - 1,
       });
       if (!records.length) return null;
 
       // Feed the true offset back so the next estimate in this region is better.
-      const firstNewline = start === 0 ? -1 : text.indexOf('\n');
+      const firstNewline = from === 0 ? -1 : text.indexOf('\n');
       insertEntry(index, {
-        offset: start === 0 ? 0 : start + firstNewline + 1,
+        offset: from === 0 ? 0 : from + firstNewline + 1,
         frameCount: records[0].frameCount,
         t: records[0].t,
       });
 
-      const win: LoadedWindow = { startOffset: start, records };
+      const win: LoadedWindow = { startOffset: from, records };
       touch(win);
 
       const hit = findIn(win, target);
