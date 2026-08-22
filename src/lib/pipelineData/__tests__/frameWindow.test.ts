@@ -1,7 +1,26 @@
 import { describe, it, expect } from 'vitest';
 import { readRecord, parseWindow } from '@/lib/pipelineData/frameWindow';
 
-function record(frameCount: number, t: number, extra: object = {}) {
+const DT = 0.04;
+const WINDOW_SIZE = 9; // matches the real pipeline's rolling window
+
+/**
+ * Build one JSONL record whose `frame_uuid` window ends at `t`, the frame's
+ * own timestamp. Older entries are derived by subtracting DT per step, so
+ * `t` is always the LAST entry and never the first (once the window is
+ * full). This lets each test assert the timestamp it expects to get back,
+ * rather than an arithmetic result.
+ */
+function record(
+  frameCount: number,
+  t: number,
+  extra: object = {},
+  windowSize: number = WINDOW_SIZE
+) {
+  const frame_uuid = Array.from({ length: windowSize }, (_, i) => ({
+    timestamp: t - (windowSize - 1 - i) * DT,
+    uuid: String.fromCharCode(97 + i),
+  }));
   return JSON.stringify({
     match_id: 1,
     pitch_dimensions: { length: 105, width: 68 },
@@ -11,10 +30,7 @@ function record(frameCount: number, t: number, extra: object = {}) {
     frame_data: [
       {
         frame_count: frameCount,
-        frame_uuid: [
-          { timestamp: t, uuid: 'a' },
-          { timestamp: t + 0.04, uuid: 'b' },
-        ],
+        frame_uuid,
       },
     ],
     ...extra,
@@ -29,6 +45,40 @@ describe('readRecord', () => {
     const r = readRecord(record(457, 1208.44));
     expect(r?.frameCount).toBe(457);
     expect(r?.t).toBeCloseTo(1208.44, 5);
+  });
+
+  it('takes the LAST entry of the window, not the first', () => {
+    // A full window where every entry is a distinguishable timestamp. If
+    // readRecord ever regresses to frame_uuid[0], this asserts against the
+    // oldest (stale) entry instead of the newest and fails.
+    const line = JSON.stringify({
+      frame_data: [
+        {
+          frame_count: 30426,
+          frame_uuid: [
+            { timestamp: 2619.529, uuid: 'a' },
+            { timestamp: 2619.569, uuid: 'b' },
+            { timestamp: 2619.609, uuid: 'c' },
+            { timestamp: 2619.848, uuid: 'z' }, // the frame this record describes
+          ],
+        },
+      ],
+    });
+    const r = readRecord(line);
+    expect(r?.t).toBeCloseTo(2619.848, 5);
+    expect(r?.t).not.toBeCloseTo(2619.529, 5);
+  });
+
+  it('takes the last entry even when the window is only partially filled', () => {
+    // At the start of a run the window hasn't reached its full ~9 entries
+    // yet. The old first-entry reasoning assumed a constant offset that
+    // only holds once the window is full; a partial window is exactly
+    // where it breaks. The last entry is still the frame's own timestamp.
+    const twoEntries = record(2, 10.08, {}, 2);
+    expect(readRecord(twoEntries)?.t).toBeCloseTo(10.08, 5);
+
+    const oneEntry = record(1, 10.0, {}, 1);
+    expect(readRecord(oneEntry)?.t).toBeCloseTo(10.0, 5);
   });
 
   it('unwraps a { match: ... } envelope', () => {
@@ -47,6 +97,20 @@ describe('readRecord', () => {
 
   it('returns null when the record carries no frame_data', () => {
     expect(readRecord(JSON.stringify({ teams: [] }))).toBeNull();
+  });
+
+  it('returns null when frame_uuid is missing', () => {
+    const line = JSON.stringify({
+      frame_data: [{ frame_count: 1 }],
+    });
+    expect(readRecord(line)).toBeNull();
+  });
+
+  it('returns null when frame_uuid is empty', () => {
+    const line = JSON.stringify({
+      frame_data: [{ frame_count: 1, frame_uuid: [] }],
+    });
+    expect(readRecord(line)).toBeNull();
   });
 });
 

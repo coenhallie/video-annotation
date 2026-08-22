@@ -18,23 +18,20 @@ export interface ReplayRecord {
  * datalabelling-frontend). Accept both so one parser serves either source.
  *
  * `frame_uuid` is dropped from the retained frame. It is a rolling window of
- * nine `{timestamp, uuid}` entries per record, it is the single largest field,
- * and the renderer never reads it. The first entry's timestamp is lifted out as
- * `t` before it goes.
+ * roughly nine `{timestamp, uuid}` entries per record, it is the single largest
+ * field, and the renderer never reads it. One timestamp is lifted out as `t`
+ * before it goes.
  *
- * Index 0 is the OLDEST entry in that window, not the current frame: measured
- * against a real 201-record sample, the window is always nine entries,
- * ascending, and rolls by exactly one per record, so `frame_uuid[0]` sits
- * 0.3219 s (about 8 frames) behind the newest. That constant offset is
- * harmless here because replay time is always measured relative to the first
- * record in the file, so it cancels: across that sample, choosing index 0
- * instead of the last entry moves any record's relative time by at most
- * 0.0042 s, a tenth of a frame at 25 fps.
+ * It must be the LAST entry, not the first. The window holds the last ~9
+ * frames, so entry 0 is the OLDEST, about 0.32 s stale, and the final entry is
+ * the frame this record actually describes. That is not merely a constant
+ * offset that would cancel out of a relative timebase: while the window is
+ * still filling at the start of a run it is short, so the lag varies exactly
+ * where replay time is measured from.
  *
- * The one case that would not cancel is a file whose opening records carry a
- * partial window (fewer than nine entries) while it fills. The sample never
- * shows one. If replay ever looks compressed in its first third of a second,
- * this is the reason.
+ * Source: datalabelling's data-analysis project, ingest/labels.py, which uses
+ * `float(ts[-1])` and has scanned 32 matches end to end. Measured there on
+ * match 1681: at frame 30,426 the window spanned 2619.529 to 2619.848.
  */
 export function readRecord(line: string): ReplayRecord | null {
   let parsed: unknown;
@@ -53,7 +50,8 @@ export function readRecord(line: string): ReplayRecord | null {
     | undefined;
   if (!meta || typeof meta.frame_count !== 'number') return null;
 
-  const t = meta.frame_uuid?.[0]?.timestamp;
+  const uuids = meta.frame_uuid;
+  const t = uuids?.[uuids.length - 1]?.timestamp;
   if (typeof t !== 'number') return null;
 
   return {
