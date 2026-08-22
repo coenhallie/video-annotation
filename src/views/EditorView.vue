@@ -1661,7 +1661,7 @@ watch(
                 />
               </svg>
               <p class="text-[12px] text-gray-400">
-                Pipeline output is not available yet
+                No pipeline output for this video
               </p>
               <p class="mt-1 text-[11px] text-gray-600">
                 Annotations you add here stay separate from the video's.
