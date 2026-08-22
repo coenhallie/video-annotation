@@ -1,5 +1,6 @@
 // Vendored from datalabelling-frontend/src/lib/vis/ on 2026-08-22. Keep edits
-// minimal so the two copies stay diffable.
+// minimal so the two copies stay diffable. One deliberate difference: the
+// unused FRAME_W import was dropped, because it lints as an error here.
 
 // ---------------------------------------------------------------------------
 // 2D canvas rendering composable.
@@ -11,7 +12,7 @@
 // ---------------------------------------------------------------------------
 
 import type { Player, Ball, TeamColors, Frame, Transform2D } from './types'
-import { FRAME_W, FRAME_H, PLAYER_RADIUS } from './constants'
+import { FRAME_H, PLAYER_RADIUS } from './constants'
 import { build2DTransform, worldToPx, buildPitchCache } from './pitchGeometry'
 import { resolveTeamColors } from './useColorResolver'
 
