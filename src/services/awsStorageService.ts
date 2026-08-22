@@ -43,19 +43,19 @@ export class AwsStorageService {
   }
 
   /**
-   * Get a presigned URL for one of a pipeline project's objects.
+   * Get a presigned URL for the pipeline's video object.
    *
-   * Sends the project id and a kind, never a path: the Netlify Function builds
-   * the storage key itself so no caller can name an arbitrary object. See
+   * Sends the project id, not a path: the Netlify Function builds the storage
+   * key itself so no caller can name an arbitrary object. See
    * docs/superpowers/specs/2026-08-19-aws-proxy-auth-design.md.
+   *
+   * Pipeline data (the frame JSONL) is not served through this method: for
+   * kind=data the function returns a `{url, size, acceptsRanges}` envelope
+   * rather than a bare URL, because the browser cannot learn those two fields
+   * on its own (see getPipelineDataSource below). Use that method instead.
    */
-  static async getUrlForProject(
-    outputVideoId: string,
-    kind: 'video' | 'data' = 'video'
-  ): Promise<string> {
-    const query = new URLSearchParams({ outputVideoId });
-    if (kind !== 'video') query.set('kind', kind);
-    const url = `/.netlify/functions/aws-storage?${query.toString()}`;
+  static async getUrlForProject(outputVideoId: string): Promise<string> {
+    const url = `/.netlify/functions/aws-storage?outputVideoId=${encodeURIComponent(outputVideoId)}`;
 
     // Anonymous share-link viewers have no session; the function falls back to
     // an RLS visibility check for them, so sending no header is a valid case.
@@ -79,23 +79,12 @@ export class AwsStorageService {
       throw new Error(message);
     }
 
-    const signed = this.extractUrl(await res.text());
-
-    // A function deployed before the kind parameter existed ignores it and
-    // answers with the video's URL. Without this guard the replay would try to
-    // parse an mp4 as JSONL. Checking here makes deploy order not matter.
-    if (kind === 'data' && /\/streams\/generated\.mp4/.test(signed)) {
-      throw new Error(
-        'No pipeline data for this project: the storage proxy answered with the video.'
-      );
-    }
-
-    return signed;
+    return this.extractUrl(await res.text());
   }
 
-  /** Back-compatible alias. The video is still the default kind. */
+  /** Back-compatible alias, kept for its two existing call sites. */
   static async getVideoUrlForProject(outputVideoId: string): Promise<string> {
-    return this.getUrlForProject(outputVideoId, 'video');
+    return this.getUrlForProject(outputVideoId);
   }
 
   /** What the replay needs to read a pipeline data object. */

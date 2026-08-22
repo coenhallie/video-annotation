@@ -799,7 +799,7 @@ scale with how many players a frame holds."
 **Interfaces:**
 - Consumes: `RangeFetcher` from Task 3.
 - Produces:
-  - `AwsStorageService.getUrlForProject(outputVideoId: string, kind?: 'video' | 'data'): Promise<string>`
+  - `AwsStorageService.getUrlForProject(outputVideoId: string): Promise<string>` (video only; no `kind` parameter)
   - `AwsStorageService.getPipelineDataSource(outputVideoId: string): Promise<{ url: string; size: number; acceptsRanges: boolean }>`
   - `AwsStorageService.getVideoUrlForProject(outputVideoId: string): Promise<string>` (kept, delegates)
   - `httpRangeFetcher(url: string, meta: { size: number; acceptsRanges: boolean }): RangeFetcher`
@@ -814,6 +814,17 @@ into the Netlify Function, which has no CORS restriction and can issue whatever
 method it likes. The browser reads only response bodies afterwards, so the
 bucket needs no `Access-Control-Expose-Headers`. This is the version to build
 against; see the Task 4 fix commit for the shipped code.
+
+`getUrlForProject` no longer accepts a `kind` argument at all: the server's
+`kind=data` response is a `{url, size, acceptsRanges}` envelope, not a bare
+URL, so it cannot share `getUrlForProject`'s single-string contract. Pipeline
+data goes through `getPipelineDataSource` exclusively; nothing outside its own
+tests ever called `getUrlForProject(id, 'data')`. Also note
+`getPipelineDataSource` throws for three distinct server states, and a caller
+must treat all three as "no pipeline data": `AWS_PIPELINE_DATA_KEY` unset
+(501), the key set but wrong so the Lambda itself answers non-ok (proxied
+through unchanged), and an old-deploy or mp4-pointing response (caught by the
+envelope-shape/mp4 guard in `getPipelineDataSource`).
 
 - [ ] **Step 1: Write the failing function tests**
 

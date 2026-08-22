@@ -27,6 +27,18 @@ export function httpRangeFetcher(
       // offset the index computes from it would be wrong, and the corruption is
       // silent. Only trust a 206 when a range was genuinely requested.
       const wantsWholeObject = !meta.acceptsRanges;
+
+      // When ranges are unsupported, buildIndex's only valid call is the full
+      // read range(0, size - 1). A caller asking for anything narrower here
+      // would otherwise silently get the whole object back and misread it as
+      // the requested slice - the same corruption the check below prevents at
+      // the response end, just at the request end instead.
+      if (wantsWholeObject && (start !== 0 || endInclusive !== meta.size - 1)) {
+        throw new Error(
+          'Pipeline data does not support ranged reads; only a whole-object read is valid'
+        );
+      }
+
       const res = await fetch(url, {
         cache: 'no-store',
         ...(wantsWholeObject

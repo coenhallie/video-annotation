@@ -531,6 +531,36 @@ describe('kind parameter', () => {
     expect(res.statusCode).toBe(502);
   });
 
+  // The likeliest real-world state until the pipeline team confirms the key:
+  // AWS_PIPELINE_DATA_KEY is set but wrong, so the Lambda itself answers
+  // non-ok (a 404, say) before this function ever gets a URL to probe. That
+  // response is proxied through unchanged, same as any other kind=video
+  // failure - no probe is attempted, since there is no URL yet to probe.
+  it('kind=data proxies a non-ok Lambda response unchanged, without attempting a probe', async () => {
+    process.env.AWS_PIPELINE_DATA_KEY = 'pipeline-output/{id}/data/{id}.jsonl';
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.startsWith(VIDEOS)) {
+        return { ok: true, status: 200, json: async () => [{ id: 'v1' }] };
+      }
+      if (url.startsWith(LAMBDA)) {
+        return {
+          ok: false,
+          status: 404,
+          headers: { get: () => 'application/json' },
+          text: async () => JSON.stringify({ error: 'not found' }),
+        };
+      }
+      // A call to PRESIGNED here would mean the handler tried to probe with
+      // no URL to probe, which is exactly what this test guards against.
+      throw new Error('unexpected fetch: ' + url);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const handler = await loadHandler();
+    const res = await handler(event({ outputVideoId: VALID_ID, kind: 'data' }));
+    expect(res.statusCode).toBe(404);
+    expect(JSON.parse(res.body)).toEqual({ error: 'not found' });
+  });
+
   it('kind=video is unchanged: proxies the Lambda body directly and never probes', async () => {
     const fetchMock = routedFetch({ videoVisible: true });
     vi.stubGlobal('fetch', fetchMock);

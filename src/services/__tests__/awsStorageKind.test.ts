@@ -28,26 +28,11 @@ function respondWithJson(payload: unknown, status = 200) {
 describe('getUrlForProject', () => {
   beforeEach(() => vi.restoreAllMocks());
 
-  it('requests the video kind by default', async () => {
+  it('requests the video object with no kind parameter', async () => {
     const f = respondWith('https://s3.example.com/generated.mp4?sig=1');
     vi.stubGlobal('fetch', f);
     await AwsStorageService.getUrlForProject(ID);
     expect(String(f.mock.calls[0]?.[0])).not.toContain('kind=');
-  });
-
-  it('requests kind=data when asked', async () => {
-    const f = respondWith('https://s3.example.com/x/data.jsonl?sig=1');
-    vi.stubGlobal('fetch', f);
-    await AwsStorageService.getUrlForProject(ID, 'data');
-    expect(String(f.mock.calls[0]?.[0])).toContain('kind=data');
-  });
-
-  it('rejects a data URL that points at the video, so an old deploy cannot mislead it', async () => {
-    const f = respondWith('https://s3.example.com/x/streams/generated.mp4?sig=1');
-    vi.stubGlobal('fetch', f);
-    await expect(AwsStorageService.getUrlForProject(ID, 'data')).rejects.toThrow(
-      /pipeline data/i
-    );
   });
 
   it('keeps getVideoUrlForProject working', async () => {
@@ -61,6 +46,17 @@ describe('getUrlForProject', () => {
 
 describe('getPipelineDataSource', () => {
   beforeEach(() => vi.restoreAllMocks());
+
+  it('requests kind=data', async () => {
+    const f = respondWithJson({
+      url: 'https://s3.example.com/x/data.jsonl?sig=1',
+      size: 4096,
+      acceptsRanges: true,
+    });
+    vi.stubGlobal('fetch', f);
+    await AwsStorageService.getPipelineDataSource(ID);
+    expect(String(f.mock.calls[0]?.[0])).toContain('kind=data');
+  });
 
   it('returns the envelope url, size and acceptsRanges', async () => {
     const f = respondWithJson({
@@ -96,5 +92,18 @@ describe('getPipelineDataSource', () => {
     await expect(AwsStorageService.getPipelineDataSource(ID)).rejects.toThrow(
       /pipeline data/i
     );
+  });
+
+  // Not a 501 or a mp4-guard rejection: this is what happens when
+  // AWS_PIPELINE_DATA_KEY is set but wrong (the key the pipeline team hasn't
+  // confirmed yet doesn't match a real object), so the Lambda itself answers
+  // non-ok and the function proxies that response instead of probing. Whoever
+  // renders the "no pipeline data" state must catch this the same way as the
+  // other two: any thrown error from this method means no data, not just a
+  // 501 or the mp4-URL guard specifically.
+  it('rejects when the storage proxy forwards a non-ok Lambda response, without a size or acceptsRanges to read', async () => {
+    const f = respondWithJson({ error: 'not found' }, 404);
+    vi.stubGlobal('fetch', f);
+    await expect(AwsStorageService.getPipelineDataSource(ID)).rejects.toThrow();
   });
 });
