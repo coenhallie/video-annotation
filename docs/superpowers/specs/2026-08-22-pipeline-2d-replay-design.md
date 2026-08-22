@@ -1,10 +1,9 @@
 # 2D pipeline replay in the Pipeline output tab
 
 Date: 2026-08-22
-Status: implemented and reviewed. The stored file was found on 2026-08-22 at
-`storage/pipeline-output/<id>/data_hose.jsonl`, so the only step left is setting
-`AWS_PIPELINE_DATA_KEY` to `pipeline-output/{id}/data_hose.jsonl` in Netlify.
-Nothing has yet been observed running against real data: see Verification.
+Status: implemented, reviewed, and **observed working against real data on
+2026-08-23**. The pitch renders from `data_hose.jsonl` on a Netlify draft
+deploy. See Verification for what that first run does and does not yet cover.
 
 ## Problem
 
@@ -513,14 +512,26 @@ Every one of those lives at a boundary a mock papers over: the network, the
 component lifecycle, or DOM patch timing. The suite covers the pure logic well
 and covers those boundaries not at all.
 
-### Still unverified, and only checkable with a real key
+### First real run, 2026-08-23
 
-Nothing below has been observed. All of it requires `AWS_PIPELINE_DATA_KEY` set
-to a real value and a finished match to open.
+The pitch renders from a real `data_hose.jsonl` on a draft deploy. That clears
+the two links nothing had ever exercised: **the Lambda does serve the hose file
+through the same `/api/v1/storage/` route it serves the video through**, and the
+server-side probe gets a usable size and range answer back from the bucket.
 
-- That the pitch draws at all, with players and ball in plausible positions.
-- That the storage proxy's server-side probe gets a usable answer from the real
-  Lambda and bucket, including whether that object supports byte ranges.
+Getting there also surfaced a production configuration fault that had nothing to
+do with this branch: the site had `AWS_STORAGE_API_URL` set but **no
+`SUPABASE_URL` or `SUPABASE_ANON_KEY`**, so `aws-storage` had been failing closed
+with a 500 on every call since the authorization check shipped on 2026-08-19.
+Nobody noticed because presigned video URLs are cached in `videos.url`, so
+existing projects keep playing without ever calling the function; only a fresh
+pipeline project would have failed. Both variables are now set for all contexts.
+
+### Still unverified after that first run
+
+Rendering proves the fetch, index and draw path work end to end. It does not
+prove any of the following, which need a person driving the real UI.
+
 - That the sparse index lands close enough that seeks resolve in one or two
   requests rather than repeatedly missing.
 - That a scrub lands on the frame the HUD claims.
