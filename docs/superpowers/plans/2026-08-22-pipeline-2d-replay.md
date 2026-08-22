@@ -2153,16 +2153,18 @@ Immediately after `const activeSurface = ref<AnnotationSurface>('video');` (near
 const pipelineReplay = usePipelineReplay({
   openFetcher: async () => {
     const video = currentVideoObject.value;
-    const id = video?.videoId;
-    if (typeof id !== 'string' || !id.startsWith('aws:')) return null;
-    const signed = await AwsStorageService.getUrlForProject(
-      id.replace(/^aws:/, ''),
-      'data'
+    if (!video || !VideoService.isAwsVideo(video)) return null;
+    const outputVideoId = String(video.videoId).replace(/^aws:/, '');
+    return httpRangeFetcher(
+      await AwsStorageService.getUrlForProject(outputVideoId, 'data')
     );
-    return httpRangeFetcher(signed);
   },
 });
 ```
+
+`VideoService.isAwsVideo` (`videoService.ts:775`) is the existing predicate for
+this. Do not hand-roll the `aws:` prefix check. `VideoService` is already
+imported by `EditorView` at line 32.
 
 - [ ] **Step 3: Write the failing binding test**
 
