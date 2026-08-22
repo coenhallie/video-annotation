@@ -311,6 +311,15 @@ const onTimelinePause = () => {
   else handleTimelinePause();
 };
 
+const onAnnotationClick = (annotation: Annotation) => {
+  // Clicking a pipeline marker must move the replay, not the hidden video.
+  if (onPipeline.value) {
+    void pipelineReplay.seek(annotation.timestamp);
+    return;
+  }
+  handleAnnotationSeek(annotation);
+};
+
 // Annotations data
 const {
   annotations,
@@ -394,9 +403,12 @@ const openQuickPick = (event: MouseEvent) => {
   // simply eating the click the way every other draw-mode key does.
   if (drawingCoordinator?.isDrawingMode?.value) return;
 
+  // The pitch's right-click reaches here too, and on that tab the video is
+  // hidden and paused, so its currentFrame is meaningless. `timeline` already
+  // resolves to whichever surface is active.
   quickPickSnapshot.value = {
-    frame: currentFrame.value ?? 0,
-    fps: fps.value || 30,
+    frame: timeline.value.currentFrame,
+    fps: timeline.value.fps || 30,
     dual:
       playerMode.value === 'dual'
         ? {
@@ -426,7 +438,9 @@ const openQuickPickAtTime = (payload: {
   if (!user.value) return;
   if (drawingCoordinator?.isDrawingMode?.value) return;
 
-  const activeFps = fps.value || 30;
+  // `payload.time` is on the active surface's timebase, so the fps used to turn
+  // it into a frame number has to come from the same surface.
+  const activeFps = timeline.value.fps || 30;
   quickPickSnapshot.value = {
     frame: Math.round(payload.time * activeFps),
     fps: activeFps,
@@ -1728,7 +1742,7 @@ watch(
             :is-playing="timeline.isPlaying"
             :player-mode="playerMode"
             @seek-to-time="onTimelineSeek"
-            @annotation-click="handleAnnotationSeek"
+            @annotation-click="onAnnotationClick"
             @play="onTimelinePlay"
             @pause="onTimelinePause"
             @open-quick-pick="openQuickPickAtTime"

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   timelineNumbersFor,
+  annotationStampFor,
   type TimelineNumbers,
 } from '@/utils/timelineBinding';
 
@@ -44,5 +45,35 @@ describe('timelineNumbersFor', () => {
     expect(
       timelineNumbersFor('something-else' as never, VIDEO, REPLAY)
     ).toEqual(VIDEO);
+  });
+});
+
+describe('annotationStampFor', () => {
+  it('stamps the video surface frame and fps on the video tab', () => {
+    expect(annotationStampFor('video', VIDEO, REPLAY)).toEqual({
+      frame: VIDEO.currentFrame,
+      fps: VIDEO.fps,
+    });
+  });
+
+  it('stamps the replay frame and fps on the pipeline tab', () => {
+    expect(annotationStampFor('pipeline', VIDEO, REPLAY)).toEqual({
+      frame: REPLAY.currentFrame,
+      fps: REPLAY.fps,
+    });
+  });
+
+  it('falls back to 30fps when the active surface reports a zero fps', () => {
+    const noFps: TimelineNumbers = { ...REPLAY, fps: 0 };
+    expect(annotationStampFor('pipeline', VIDEO, noFps)).toEqual({
+      frame: noFps.currentFrame,
+      fps: 30,
+    });
+  });
+
+  it('never blends video and replay when stamping', () => {
+    const stamp = annotationStampFor('pipeline', VIDEO, REPLAY);
+    expect(stamp.frame).not.toBe(VIDEO.currentFrame);
+    expect(stamp.fps).not.toBe(VIDEO.fps);
   });
 });
