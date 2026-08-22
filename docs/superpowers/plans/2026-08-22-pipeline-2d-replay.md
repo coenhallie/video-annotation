@@ -53,7 +53,7 @@ Why: the key is deployment configuration, exactly like the existing `AWS_STORAGE
 | Path | Change |
 | --- | --- |
 | `netlify/functions/aws-storage.cjs:170-172` | `kind` parameter selecting a server-built key. |
-| `src/services/awsStorageService.ts` | `getUrlForProject(id, kind)`, suffix guard. |
+| `src/services/awsStorageService.ts` | `getPipelineDataSource(id)` returning `{url, size, acceptsRanges}`, with the envelope and mp4 guards. `getUrlForProject` stays video-only. |
 | `src/services/videoService.ts:627,723` | Call-site rename. |
 | `src/views/EditorView.vue:1365,1645,1674-1690` | Symmetric pause, mount the surface, bind the timeline. |
 
