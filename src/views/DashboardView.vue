@@ -81,7 +81,22 @@ const activeLabelIds = ref<Set<string>>(new Set());
 const activeQaStatuses = ref<Set<QaStatus>>(new Set());
 const showLabelFilter = ref(false);
 
-const selectedProject = ref<Project | null>(null);
+// The panel's project is derived from the list, never stored alongside it.
+//
+// loadData() replaces every object in `projects` with a freshly fetched copy,
+// and it can run while the panel is open - a Supabase token refresh reassigns
+// `user`, and the watcher at the bottom of this file reloads on that. A stored
+// object would go on pointing at the previous copy, and since the two QA
+// controls stay in step only by sharing one object, the panel and the row would
+// each be editing a project the other cannot see.
+//
+// Deriving it also closes the panel by itself when the selected project is no
+// longer in the list at all (deleted, or filtered out by a reload under a
+// narrower scope), which is the right outcome and one less thing to remember.
+const selectedProjectId = ref<string | null>(null);
+const selectedProject = computed<Project | null>(
+  () => projects.value.find((p) => p.id === selectedProjectId.value) ?? null
+);
 const videoDetails = useVideoDetails();
 const shareTarget = ref<Project | null>(null);
 const showChangelog = ref(false);
@@ -95,19 +110,34 @@ const labelMap = computed(() => {
 
 function inspectProject(project: Project) {
   // Toggle off if the same card is clicked again.
-  if (selectedProject.value?.id === project.id) {
+  if (selectedProjectId.value === project.id) {
     closeDetails();
     return;
   }
-  selectedProject.value = project;
+  selectedProjectId.value = project.id;
   videoDetails.selectProject(project);
 }
 
+// A reload can drop the selected project out of the list. The panel is already
+// gone at that point (selectedProject is null), so this just retires the state
+// behind it rather than leaving a selection that would resurrect the panel on
+// the next reload that happens to return the project again.
+//
+// Only the null transition is handled: a reload that returns the project again
+// hands the panel a new object, but not a new id, and useVideoDetails keys its
+// fetch and its cache on the id alone - so the annotations it loaded at open
+// time are still this project's annotations. Re-selecting would refetch nothing
+// and reset the panel's scroll for no reason.
+watch(selectedProject, (project) => {
+  if (!project && selectedProjectId.value !== null) closeDetails();
+});
+
 // The list row and the details panel reference the same project object -
-// DashboardView's `projects` array is not cloned on the way to either - so one
-// merge updates both surfaces. mergeQaStatusUpdate merges only the QA fields,
-// never the whole returned row; the id check below is this handler's own
-// guard, not a repeat of one inside the composable.
+// `projects` is not cloned on the way to either, and the panel derives its
+// project from that array rather than keeping one - so one merge updates both
+// surfaces. mergeQaStatusUpdate merges only the QA fields, never the whole
+// returned row; the id check below is this handler's own guard, not a repeat
+// of one inside the composable.
 function onProjectQaStatusUpdated(project: Project, updated: Video) {
   if (project.projectType !== 'single') return;
   // Not reachable today - useQaStatusWrite already compares ids before
@@ -130,7 +160,7 @@ function onProjectQaStatusUpdated(project: Project, updated: Video) {
 }
 
 function closeDetails() {
-  selectedProject.value = null;
+  selectedProjectId.value = null;
   videoDetails.clear();
 }
 
@@ -146,7 +176,10 @@ function openAnnotation(project: Project, annotation: PanelAnnotation) {
 // Close the panel on Escape.
 function onKeydown(e: KeyboardEvent) {
   if (shareTarget.value) return; // let the Share modal handle its own Escape
-  if (e.key === 'Escape' && selectedProject.value) closeDetails();
+  // On the id, not the derived project: between a reload dropping the project
+  // and the watcher above retiring the selection, the two disagree, and the
+  // state still worth clearing is the id.
+  if (e.key === 'Escape' && selectedProjectId.value) closeDetails();
 }
 
 async function loadData() {
@@ -709,7 +742,7 @@ watch(user, (u) => {
               :key="project.id"
               :project="project"
               :is-selected="false"
-              :is-inspected="selectedProject?.id === project.id"
+              :is-inspected="selectedProjectId === project.id"
               :is-dragging="false"
               :annotation-count="annotationCounts[project.id] ?? 0"
               :comment-count="commentCounts[project.id] ?? 0"
