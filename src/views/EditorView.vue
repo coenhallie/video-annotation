@@ -19,10 +19,15 @@ import UnifiedVideoPlayer from '@/components/UnifiedVideoPlayer.vue';
 import DashboardModals from '@/components/DashboardModals.vue';
 import AnnotationQuickPick from '@/components/AnnotationQuickPick.vue';
 import EditorSurfaceTabs from '@/components/EditorSurfaceTabs.vue';
+import PipelineOutputSurface from '@/components/PipelineOutputSurface.vue';
+import { usePipelineReplay } from '@/composables/usePipelineReplay';
+import { httpRangeFetcher } from '@/lib/pipelineData/rangeFetcher';
+import { AwsStorageService } from '@/services/awsStorageService';
 import { useLabelCatalog } from '@/composables/useLabelCatalog';
 import { buildAnnotationPayload, stampSnapshotFrame } from '@/utils/annotationPayload';
 import { canCreateAnnotations } from '@/utils/annotationPermissions';
 import { isPipelineSurfaceVisible } from '@/utils/pipelineSurface';
+import { timelineNumbersFor } from '@/utils/timelineBinding';
 import {
   resolveQaStatusTarget,
   mergeQaStatusUpdate,
@@ -253,6 +258,58 @@ const canAnnotate = computed(() => {
 // ── Editor surface (Video / Pipeline output tabs) ────────────────────────────
 
 const activeSurface = ref<AnnotationSurface>('video');
+
+// The replay reads the pipeline's JSONL for this project. `openFetcher` returns
+// null for anything that is not an AWS pipeline video, which is most projects,
+// and the surface renders its no-data state.
+const pipelineReplay = usePipelineReplay({
+  openFetcher: async () => {
+    const video = currentVideoObject.value;
+    if (!video || !VideoService.isAwsVideo(video)) return null;
+    const outputVideoId = String(video.videoId).replace(/^aws:/, '');
+    const { url, size, acceptsRanges } =
+      await AwsStorageService.getPipelineDataSource(outputVideoId);
+    return httpRangeFetcher(url, { size, acceptsRanges });
+  },
+});
+
+// One timeline, two sources. Nothing carries a position across a tab switch.
+const timeline = computed(() =>
+  timelineNumbersFor(
+    activeSurface.value,
+    {
+      currentTime: currentTime.value,
+      duration: duration.value,
+      currentFrame: currentFrame.value,
+      totalFrames: totalFrames.value,
+      fps: fps.value,
+      isPlaying: isPlaying.value,
+    },
+    {
+      currentTime: pipelineReplay.currentTime.value,
+      duration: pipelineReplay.duration.value,
+      currentFrame: pipelineReplay.currentFrame.value,
+      totalFrames: pipelineReplay.totalFrames.value,
+      fps: pipelineReplay.fps.value,
+      isPlaying: pipelineReplay.isPlaying.value,
+    }
+  )
+);
+
+const onPipeline = computed(() => activeSurface.value === 'pipeline');
+
+const onTimelineSeek = (time: number) => {
+  if (onPipeline.value) void pipelineReplay.seek(time);
+  else handleTimelineSeek(time);
+};
+const onTimelinePlay = () => {
+  if (onPipeline.value) pipelineReplay.play();
+  else handleTimelinePlay();
+};
+const onTimelinePause = () => {
+  if (onPipeline.value) pipelineReplay.pause();
+  else handleTimelinePause();
+};
 
 // Annotations data
 const {
@@ -1358,13 +1415,16 @@ function onQaStatusUpdated(updated: Video) {
   );
 }
 
-// The player stays mounted behind the pipeline tab (v-show, not v-if), so
-// without this the audio keeps running with no picture. Switching back does not
-// auto-resume: the timeline's own play control is still there and still owns
-// playback on both tabs.
-watch(activeSurface, (surface) => {
+// Each surface owns its own clock, so leaving a tab stops that tab's playback.
+// Without this the audio kept running behind the pipeline tab; the mirror case
+// is the replay advancing behind the video tab, burning range requests on a
+// pitch nobody is looking at.
+watch(activeSurface, (surface, previous) => {
   if (surface === 'pipeline' && isPlaying.value) {
     unifiedVideoPlayerRef.value?.pause();
+  }
+  if (previous === 'pipeline' && pipelineReplay.isPlaying.value) {
+    pipelineReplay.pause();
   }
 });
 
@@ -1643,27 +1703,12 @@ watch(
             </div>
             <div
               v-if="activeSurface === 'pipeline'"
-              data-testid="pipeline-empty-state"
-              class="flex h-full w-full flex-col items-center justify-center text-center"
+              class="relative h-full w-full"
             >
-              <svg
-                class="mb-3 h-8 w-8 text-gray-600"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.5"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"
-                />
-              </svg>
-              <p class="text-[12px] text-gray-400">Nothing here yet</p>
-              <p class="mt-1 text-[11px] text-gray-600">
-                Annotations you add here stay separate from the video's.
-              </p>
+              <PipelineOutputSurface
+                :replay="pipelineReplay"
+                @context-menu="openQuickPick"
+              />
             </div>
           </div>
         </div>
@@ -1673,19 +1718,19 @@ watch(
           <!-- Single Video Timeline -->
           <VideoTimeline
             v-if="playerMode === 'single'"
-            :current-time="currentTime"
-            :duration="duration"
-            :current-frame="currentFrame"
-            :total-frames="totalFrames"
-            :fps="fps"
+            :current-time="timeline.currentTime"
+            :duration="timeline.duration"
+            :current-frame="timeline.currentFrame"
+            :total-frames="timeline.totalFrames"
+            :fps="timeline.fps"
             :annotations="annotations"
             :selected-annotation="selectedAnnotation"
-            :is-playing="isPlaying"
+            :is-playing="timeline.isPlaying"
             :player-mode="playerMode"
-            @seek-to-time="handleTimelineSeek"
+            @seek-to-time="onTimelineSeek"
             @annotation-click="handleAnnotationSeek"
-            @play="handleTimelinePlay"
-            @pause="handleTimelinePause"
+            @play="onTimelinePlay"
+            @pause="onTimelinePause"
             @open-quick-pick="openQuickPickAtTime"
           />
 
