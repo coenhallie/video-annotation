@@ -1,12 +1,10 @@
 # 2D pipeline replay in the Pipeline output tab
 
 Date: 2026-08-22
-Status: implemented and reviewed. **Blocked on a producer, not on a fill-in.**
-Confirmed 2026-08-22 that every observed source of frame data in this system is
-the live WebSocket on a running pipeline instance. No stored JSONL is known to
-exist, so the tab cannot leave its "no pipeline data" state until the pipeline
-persists one and `AWS_PIPELINE_DATA_KEY` names it. See The outstanding input and
-Verification at the end.
+Status: implemented and reviewed. The stored file was found on 2026-08-22 at
+`storage/pipeline-output/<id>/data_hose.jsonl`, so the only step left is setting
+`AWS_PIPELINE_DATA_KEY` to `pipeline-output/{id}/data_hose.jsonl` in Netlify.
+Nothing has yet been observed running against real data: see Verification.
 
 ## Problem
 
@@ -72,13 +70,27 @@ Because the replay is independent of the video (see below), the JSONL is the
 only clock that matters and the mp4 never has to agree with it. Replay time is
 
 ```
-t(record) = record.frame_data[0].frame_uuid[0].timestamp - t0
+t(record) = last(record.frame_data[0].frame_uuid).timestamp - t0
 ```
 
 where `t0` is the same field on the first record. This is robust to a dropped
 record in a way a positional index is not: a positional index desyncs silently
 on one missing frame, drifting further out of position the longer the match
 runs, with nothing on screen indicating an error.
+
+**It has to be the last entry, and this design originally got it wrong.**
+`frame_uuid` is a sliding window of roughly the last nine frames, so entry 0 is
+the oldest, about 0.32 s behind, and the final entry is the frame the record
+describes. The first version of this document argued that the lag was a constant
+that cancels out of a timebase measured from the first record, and backed it
+with a 4 ms worst case measured across a 201-record sample.
+
+That argument was wrong in exactly the place it hedged about. The window is
+short while it is still filling at the start of a run, so the lag varies
+precisely where replay time is anchored. The sample it was measured on happened
+never to contain a partial window. `data-analysis`'s `ingest/labels.py` states
+this outright, measured on match 1681 where the window at frame 30,426 spanned
+2619.529 to 2619.848, and its parser uses `ts[-1]`.
 
 ## Two playback sources, one timeline component
 
@@ -370,12 +382,37 @@ What is known:
   from the pipeline, renders 1280x720 video at 25 fps from a UUID-named
   `.jsonl`.
 
-**Confirmed on 2026-08-22: there is no known stored file, and this is a backend
-request rather than a fill-in.**
+**Resolved on 2026-08-22. The file exists.**
 
-The user checked directly: DALF's raw data view is fed by the WebSocket, not by
-a file. That closes the last open possibility. Every observed source of frame
-data in this system is live-only:
+```
+storage/pipeline-output/<instance>/data_hose.jsonl
+```
+
+Found in a sibling project, `data-analysis`, which ingests these files at scale.
+`ingest/config.py` defines the key (`PREFIX = "storage/pipeline-output/"`,
+`HOSE_LEAF = "data_hose.jsonl"`) and `ingest/labels.py` has scanned 32 World Cup
+matches end to end from them, so they demonstrably exist and are readable.
+
+`AWS_PIPELINE_DATA_KEY` is therefore `pipeline-output/{id}/data_hose.jsonl`. The
+leading `storage/` is omitted because the Lambda's `/api/v1/storage/` route
+already implies it, exactly as it does for the video key.
+
+Two facts from the same source that bear on this design:
+
+- **The files are about 1 GB**, with records around 7 KB. `config.py` calls out
+  "a 1 GB JSONL" by name. That settles the fetch strategy: loading whole was
+  never an option, and the windowed index is the only workable shape. It also
+  says the sample this design was measured on (5.2 KB per record) under-counted
+  by roughly a third, which the window sizing already accounts for by deriving
+  bytes from a measured mean rather than a constant.
+- **Restarts do not rewrite the hose.** A deeper path such as
+  `<id>/restarts/1/data_hose.jsonl` is a different file, so the top-level key is
+  the canonical one.
+
+### Why this was hard to find, recorded so the next search is shorter
+
+Every source reachable from the two frontends is live-only, which is what made
+the file look absent right up until someone named the project that reads it:
 
 - DALF reads frames from `wss://{pipeId}.{VITE_PIPELINE}:8766`, one at a time,
   buffer capped at 25 messages, from the running pipeline instance.
@@ -384,20 +421,17 @@ data in this system is live-only:
 - `/start` returns rich match metadata and no storage reference at all.
 - `football-visualisation` gets its JSONL from a local file drop, by hand.
 
-The backend's statement that "the jsonl file has frame data" is consistent with
-all of this: `render_jsonl.py`, lifted from the pipeline, reads a UUID-named
-`.jsonl` from a local path, so the pipeline plainly has such a file while it
-works. Nothing says it survives to S3.
+None of those touch storage, which is why four rounds of searching the
+frontends could not settle it. The consumer that proves the file exists lives in
+a fourth repository nobody had mentioned.
 
-So the answer landed on the second of these two branches:
+For completeness, the two branches this was hedged against, and which one it
+turned out to be:
 
-- **A key exists.** Set `AWS_PIPELINE_DATA_KEY` to its template and the feature
-  works. Nothing else is needed.
-- **No stored object exists.** Then this becomes a request to the pipeline team:
-  persist the frame stream alongside `streams/generated.mp4`. Format,
-  downsampling and retention are theirs to decide. Everything built here still
-  stands and will read whatever they produce, provided it is newline-delimited
-  JSON in the shape described above.
+- **A key exists.** This is the one that held. Set `AWS_PIPELINE_DATA_KEY` to
+  `pipeline-output/{id}/data_hose.jsonl` and nothing else is needed.
+- **No stored object exists.** Would have made this a request to the pipeline
+  team. Not required.
 
 The whole feature is built either way. What is unproven is different from what
 is unbuilt: see Verification below.
