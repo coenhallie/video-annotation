@@ -399,4 +399,67 @@ describe('usePipelineReplay', () => {
     await r.seek(12);
     expect(calls.length).toBe(afterPrefetch);
   });
+
+  it('does not let a disposed load clobber a newer one', async () => {
+    // Large enough that the fresh load's initial window does not cover the
+    // whole file: seeking far past it below must trigger a genuine fetch, so
+    // whichever fetcher the closure currently holds actually gets exercised.
+    // (A file that fits in one window would let this test pass vacuously,
+    // since a clobbered `fetcher` that's never called again proves nothing.)
+    const text = fakeFile(4000);
+    const madeFetchers: string[] = [];
+    let stall!: () => void;
+
+    function fetcherNamed(name: string) {
+      return {
+        async head() {
+          return { size: text.length, acceptsRanges: true };
+        },
+        async range(start: number, end: number) {
+          madeFetchers.push(name);
+          return text.slice(start, end + 1);
+        },
+      };
+    }
+
+    let openCount = 0;
+    const r = usePipelineReplay({
+      openFetcher: async () => {
+        openCount += 1;
+        if (openCount === 1) {
+          // The first (soon to be disposed) load hangs here until released.
+          await new Promise<void>((resolve) => {
+            stall = resolve;
+          });
+          return fetcherNamed('stale');
+        }
+        return fetcherNamed('fresh');
+      },
+    });
+
+    const first = r.load();
+    r.dispose();
+    const second = r.load();
+    await second;
+
+    // The fresh load's own buildIndex/recordAt calls prove the property so
+    // far: nothing has reached the stale fetcher yet.
+    expect(madeFetchers.length).toBeGreaterThan(0);
+    expect(madeFetchers.every((name) => name === 'fresh')).toBe(true);
+
+    // Release the stale load only after the fresh one has finished, so its
+    // continuation resolves last. With the bug this is exactly when it would
+    // clobber `fetcher`.
+    stall();
+    await first;
+
+    madeFetchers.length = 0;
+    // Seek well outside the window the fresh load already cached, so this
+    // must call fetcher.range() again and thereby exercise whichever fetcher
+    // the closure currently holds.
+    await r.seek(100);
+
+    expect(madeFetchers.length).toBeGreaterThan(0);
+    expect(madeFetchers.every((name) => name === 'fresh')).toBe(true);
+  });
 });

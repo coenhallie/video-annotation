@@ -224,14 +224,20 @@ export function usePipelineReplay(opts: {
     error.value = null;
     const startEpoch = ++epoch;
     try {
-      fetcher = await opts.openFetcher();
+      const openedFetcher = await opts.openFetcher();
+      // Capture into a local and check BEFORE assigning. A stale load whose
+      // continuation resolves after a newer one would otherwise clobber the
+      // live fetcher, and recordAt's guard tests `fetcher` for truthiness, not
+      // identity, so it could never notice.
       if (startEpoch !== epoch) return;
+      fetcher = openedFetcher;
       if (!fetcher) {
         state.value = 'empty';
         return;
       }
-      index = await buildIndex(fetcher);
+      const builtIndex = await buildIndex(fetcher);
       if (startEpoch !== epoch) return;
+      index = builtIndex;
       duration.value = Math.max(0, index.last.t - index.first.t);
       totalFrames.value = index.last.frameCount - index.first.frameCount + 1;
       if (duration.value > 0 && totalFrames.value > 1) {
