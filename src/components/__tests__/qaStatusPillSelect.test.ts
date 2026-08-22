@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createApp, defineComponent, h, nextTick } from 'vue';
-import type { Video } from '@/types/database';
+import type { QaStatus, Video } from '@/types/database';
 
 const setQaStatus = vi.fn();
 const addNotification = vi.fn();
@@ -10,24 +10,36 @@ vi.mock('@/composables/useNotifications', () => ({
   useNotifications: () => ({ addNotification }),
 }));
 
-async function mount(status = 'not_started') {
+async function mount(status: QaStatus = 'not_started') {
   const { default: C } = await import('@/components/QaStatusPillSelect.vue');
   const root = document.createElement('div');
   document.body.appendChild(root);
   const rowClicks: string[] = [];
+  const rowMousedowns: string[] = [];
+  const updates: Video[] = [];
   const app = createApp(
     defineComponent({
       setup: () => () =>
         // A stand-in for ProjectListItem's clickable, draggable row.
-        h('div', { onClick: () => rowClicks.push('row') }, [
-          h(C, { video: { id: 'v1', qaStatus: status } }),
-        ]),
+        h(
+          'div',
+          {
+            onClick: () => rowClicks.push('row'),
+            onMousedown: () => rowMousedowns.push('row'),
+          },
+          [
+            h(C, {
+              video: { id: 'v1', qaStatus: status },
+              onUpdated: (v: Video) => updates.push(v),
+            }),
+          ]
+        ),
     })
   );
   app.mount(root);
   const sel = () => root.querySelector<HTMLSelectElement>('[data-testid="qa-status-pill-select"]')!;
   return {
-    sel, rowClicks,
+    sel, rowClicks, rowMousedowns, updates,
     choose: async (v: string) => {
       sel().value = v;
       sel().dispatchEvent(new Event('change', { bubbles: true }));
@@ -86,11 +98,24 @@ describe('QaStatusPillSelect', () => {
     m.unmount();
   });
 
+  // Distinct from "is not draggable": that test only checks the static
+  // attribute. This one checks the actual propagation defence - a bubbling
+  // mousedown on the select must not reach a mousedown listener on the row.
+  it('does not trigger the row mousedown', async () => {
+    const m = await mount();
+    m.sel().dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    await nextTick();
+    expect(m.rowMousedowns).toHaveLength(0);
+    m.unmount();
+  });
+
   it('writes the chosen status and emits the updated video', async () => {
-    setQaStatus.mockResolvedValue({ id: 'v1', qaStatus: 'failed' } as Video);
+    const updated = { id: 'v1', qaStatus: 'failed' } as Video;
+    setQaStatus.mockResolvedValue(updated);
     const m = await mount();
     await m.choose('failed');
     expect(setQaStatus).toHaveBeenCalledWith('v1', 'failed');
+    expect(m.updates).toEqual([updated]);
     m.unmount();
   });
 
