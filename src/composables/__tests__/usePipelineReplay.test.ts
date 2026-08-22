@@ -355,4 +355,48 @@ describe('usePipelineReplay', () => {
     expect(r.currentTime.value).toBeCloseTo(60, 1);
     expect(r.currentFrame.value).toBe(457 + Math.round(60 / 0.04));
   });
+
+  it('still caches a prefetched window when playback seeks while it is in flight', async () => {
+    const clock = manualClock();
+    const text = fakeFile(4000);
+    const calls: Array<[number, number]> = [];
+    let slowFrom = false;
+    const fetcher = {
+      async head() {
+        return { size: text.length, acceptsRanges: true };
+      },
+      async range(start: number, end: number) {
+        calls.push([start, end]);
+        const slice = text.slice(start, end + 1);
+        if (slowFrom) await new Promise((resolve) => setTimeout(resolve, 10));
+        return slice;
+      },
+    };
+
+    const r = usePipelineReplay({
+      openFetcher: async () => fetcher,
+      raf: clock.raf,
+      caf: clock.caf,
+      windowSeconds: 10,
+    });
+    await r.load();
+    await r.seek(9);
+    await r.whenIdle();
+    slowFrom = true;
+
+    r.play();
+    clock.tick(0);
+    // Several ticks while the prefetch is still in flight. Each one seeks, so
+    // a seek-invalidated prefetch would be discarded and never cached.
+    clock.tick(20);
+    clock.tick(40);
+    clock.tick(60);
+    await r.whenIdle();
+    r.pause();
+
+    const afterPrefetch = calls.length;
+    // The prefetched region must now be served from cache, not refetched.
+    await r.seek(12);
+    expect(calls.length).toBe(afterPrefetch);
+  });
 });

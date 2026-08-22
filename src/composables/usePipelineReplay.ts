@@ -79,13 +79,17 @@ export function usePipelineReplay(opts: {
   let lastTickMs: number | null = null;
   let prefetching: Promise<unknown> | null = null;
 
-  // Bumped by every seek and by dispose. Async work compares the generation it
-  // started under against the current one after each await: if they differ, a
-  // newer seek or a teardown has happened and this result is stale, so it must
-  // neither be shown nor written back to the index. This is what keeps an
-  // unmount from resolving into a torn-down replay, and what keeps two
-  // overlapping seeks from landing out of order.
-  let generation = 0;
+  // Bumped only by dispose() and by a fresh load(). Async reads compare the
+  // epoch they started under after each await: a mismatch means the replay was
+  // torn down or reloaded underneath them, so they must not touch `index`, the
+  // window cache, or any reactive state.
+  let epoch = 0;
+
+  // Bumped by every seek. This governs one thing only: which record is allowed
+  // to reach show(). It deliberately does NOT invalidate fetches, because
+  // tick() seeks on every animation frame, and a fetch cancelled by an ordinary
+  // playback tick would mean no window is ever cached under real latency.
+  let seekSeq = 0;
 
   /** Absolute file time for a replay time. */
   const abs = (t: number) => (index ? index.first.t + t : t);
@@ -114,8 +118,8 @@ export function usePipelineReplay(opts: {
     windows = [win, ...windows.filter((w) => w !== win)].slice(0, lruSize);
   }
 
-  async function recordAt(target: number, gen: number): Promise<ReplayRecord | null> {
-    if (!index || !fetcher || gen !== generation) return null;
+  async function recordAt(target: number, startEpoch: number): Promise<ReplayRecord | null> {
+    if (!index || !fetcher || startEpoch !== epoch) return null;
 
     for (const win of windows) {
       const hit = findIn(win, target);
@@ -148,9 +152,9 @@ export function usePipelineReplay(opts: {
       const from = start === 0 ? 0 : start - 1;
       const end = Math.min(index.size, from + span) - 1;
       const text = await fetcher.range(from, end);
-      // A newer seek or a dispose happened while this range was in flight.
+      // A dispose (or a fresh load) happened while this range was in flight.
       // `index`/`fetcher` may already be null, so bail before touching them.
-      if (gen !== generation || !index) return null;
+      if (startEpoch !== epoch || !index) return null;
       const records = parseWindow(text, {
         startsAtBof: from === 0,
         endsAtEof: end === index.size - 1,
@@ -202,8 +206,8 @@ export function usePipelineReplay(opts: {
     if (abs(currentTime.value) < lastT - PREFETCH_SECONDS) return;
     if (lastT >= index.last.t) return;
 
-    const gen = generation;
-    prefetching = recordAt(lastT + 1e-6, gen)
+    const startEpoch = epoch;
+    prefetching = recordAt(lastT + 1e-6, startEpoch)
       .catch(() => null)
       .finally(() => {
         prefetching = null;
@@ -218,16 +222,16 @@ export function usePipelineReplay(opts: {
   async function load(): Promise<void> {
     state.value = 'loading';
     error.value = null;
-    const gen = ++generation;
+    const startEpoch = ++epoch;
     try {
       fetcher = await opts.openFetcher();
-      if (gen !== generation) return;
+      if (startEpoch !== epoch) return;
       if (!fetcher) {
         state.value = 'empty';
         return;
       }
       index = await buildIndex(fetcher);
-      if (gen !== generation) return;
+      if (startEpoch !== epoch) return;
       duration.value = Math.max(0, index.last.t - index.first.t);
       totalFrames.value = index.last.frameCount - index.first.frameCount + 1;
       if (duration.value > 0 && totalFrames.value > 1) {
@@ -237,12 +241,12 @@ export function usePipelineReplay(opts: {
         );
       }
       currentTime.value = 0;
-      const first = await recordAt(index.first.t, gen);
-      if (gen !== generation) return;
+      const first = await recordAt(index.first.t, startEpoch);
+      if (startEpoch !== epoch) return;
       if (first) show(first);
       state.value = 'ready';
     } catch (err) {
-      if (gen !== generation) return;
+      if (startEpoch !== epoch) return;
       error.value = err instanceof Error ? err.message : String(err);
       state.value = 'error';
     }
@@ -250,18 +254,20 @@ export function usePipelineReplay(opts: {
 
   async function seek(t: number): Promise<void> {
     if (state.value !== 'ready' || !index) return;
-    const gen = ++generation;
+    const startEpoch = epoch;
+    const seq = ++seekSeq;
     const clamped = Math.min(Math.max(0, t), duration.value);
     currentTime.value = clamped;
     try {
-      const record = await recordAt(abs(clamped), gen);
+      const record = await recordAt(abs(clamped), startEpoch);
+      if (startEpoch !== epoch) return;
       // A newer seek started while this one was in flight, so its frame is the
-      // one that belongs on screen. Dropping this result is what keeps the
-      // displayed frame consistent with currentTime.
-      if (gen !== generation) return;
+      // one that belongs on screen. The window this read cached stays cached
+      // either way, which is the point of separating the two counters.
+      if (seq !== seekSeq) return;
       if (record) show(record);
     } catch (err) {
-      if (gen !== generation) return;
+      if (startEpoch !== epoch) return;
       error.value = err instanceof Error ? err.message : String(err);
       state.value = 'error';
       pause();
@@ -315,7 +321,7 @@ export function usePipelineReplay(opts: {
     pause();
     // Invalidate every in-flight read, so nothing resolves into a torn-down
     // replay.
-    generation++;
+    epoch++;
     windows = [];
     index = null;
     fetcher = null;
