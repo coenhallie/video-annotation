@@ -1,9 +1,12 @@
 # 2D pipeline replay in the Pipeline output tab
 
 Date: 2026-08-22
-Status: implemented and reviewed. Not yet verified against real data: the tab
-cannot leave its "no pipeline data" state until `AWS_PIPELINE_DATA_KEY` is set
-in Netlify. See Verification at the end for what that leaves unproven.
+Status: implemented and reviewed. **Blocked on a producer, not on a fill-in.**
+Confirmed 2026-08-22 that every observed source of frame data in this system is
+the live WebSocket on a running pipeline instance. No stored JSONL is known to
+exist, so the tab cannot leave its "no pipeline data" state until the pipeline
+persists one and `AWS_PIPELINE_DATA_KEY` names it. See The outstanding input and
+Verification at the end.
 
 ## Problem
 
@@ -367,11 +370,26 @@ What is known:
   from the pipeline, renders 1280x720 video at 25 fps from a UUID-named
   `.jsonl`.
 
-**This is not certain to be a one-line fill-in, and it should not be read as
-one.** The backend confirmed that the JSONL *contains* frame data. That is about
-content. Nothing found in any of the three frontends says the file is written to
-`pipeline-output/` and kept after a match ends. So the answer lands on one of
-two branches:
+**Confirmed on 2026-08-22: there is no known stored file, and this is a backend
+request rather than a fill-in.**
+
+The user checked directly: DALF's raw data view is fed by the WebSocket, not by
+a file. That closes the last open possibility. Every observed source of frame
+data in this system is live-only:
+
+- DALF reads frames from `wss://{pipeId}.{VITE_PIPELINE}:8766`, one at a time,
+  buffer capped at 25 messages, from the running pipeline instance.
+- `fetch-pipeline-files.mjs` probes exactly one object per instance,
+  `streams/generated.mp4`, and no sibling data file.
+- `/start` returns rich match metadata and no storage reference at all.
+- `football-visualisation` gets its JSONL from a local file drop, by hand.
+
+The backend's statement that "the jsonl file has frame data" is consistent with
+all of this: `render_jsonl.py`, lifted from the pipeline, reads a UUID-named
+`.jsonl` from a local path, so the pipeline plainly has such a file while it
+works. Nothing says it survives to S3.
+
+So the answer landed on the second of these two branches:
 
 - **A key exists.** Set `AWS_PIPELINE_DATA_KEY` to its template and the feature
   works. Nothing else is needed.
