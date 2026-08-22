@@ -1,8 +1,22 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createApp, defineComponent, h, nextTick, ref } from 'vue';
 import PipelineOutputSurface from '@/components/PipelineOutputSurface.vue';
 import type { PipelineReplay, ReplayState } from '@/composables/usePipelineReplay';
+
+/**
+ * Declared through vi.hoisted because vi.mock is hoisted above the imports,
+ * and plain const declarations would still be in their temporal dead zone
+ * when the factory runs (see drawingCanvas.test.ts for the same pattern).
+ */
+const { renderFrame, useRenderer2D } = vi.hoisted(() => {
+  const renderFrame = vi.fn();
+  const invalidateCache = vi.fn();
+  const useRenderer2D = vi.fn(() => ({ renderFrame, invalidateCache }));
+  return { renderFrame, useRenderer2D };
+});
+
+vi.mock('@/lib/vis/useRenderer2D', () => ({ useRenderer2D }));
 
 function fakeReplay(state: ReplayState, message: string | null = null) {
   return {
@@ -46,6 +60,26 @@ const at = (root: HTMLElement, id: string) =>
   root.querySelector(`[data-testid="${id}"]`);
 
 describe('PipelineOutputSurface', () => {
+  beforeEach(() => {
+    renderFrame.mockClear();
+    useRenderer2D.mockClear();
+    // jsdom has no 2D context. Give it a stub so renderer attachment is
+    // observable; without this ensureRenderer bails and the tests cannot see
+    // the bug it exists to catch.
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
+      {} as unknown as CanvasRenderingContext2D
+    );
+  });
+
+  afterEach(() => {
+    // Deliberately not vi.restoreAllMocks(): that calls mockRestore() on
+    // every mock, and for a plain vi.fn() (as opposed to a vi.spyOn) restore
+    // behaves like reset and wipes the implementation set at creation - which
+    // would silently break useRenderer2D's mocked return value for every test
+    // that runs after the first one that touches it. Undo only the spy.
+    vi.mocked(HTMLCanvasElement.prototype.getContext).mockRestore();
+  });
+
   it('shows the loading state', async () => {
     const m = mount(fakeReplay('loading'));
     await nextTick();
@@ -115,5 +149,49 @@ describe('PipelineOutputSurface', () => {
 
     app.unmount();
     root.remove();
+  });
+
+  it('attaches the renderer and draws when state flips to ready', async () => {
+    const replay = fakeReplay('loading');
+    const m = mount(replay);
+    await nextTick();
+
+    // Exactly what usePipelineReplay.load() does: set the frame, then the
+    // state, synchronously in one tick.
+    (replay.frame as unknown as { value: unknown }).value = {
+      teams: [],
+      balls: [],
+      state: { actions: [] },
+      frame_data: [{ frame_count: 1 }],
+    };
+    (replay.state as unknown as { value: string }).value = 'ready';
+    await nextTick();
+
+    expect(useRenderer2D).toHaveBeenCalledTimes(1);
+    expect(renderFrame).toHaveBeenCalled();
+    m.unmount();
+  });
+
+  it('draws immediately when state flips to ready and the frame was already set', async () => {
+    // Covers the reverse ordering from usePipelineReplay: a case where
+    // `frame` is already populated (e.g. left over from a prior load) by the
+    // time `state` becomes 'ready'. The state watcher, not the frame watcher,
+    // is what must pick this up.
+    const replay = fakeReplay('loading');
+    (replay.frame as unknown as { value: unknown }).value = {
+      teams: [],
+      balls: [],
+      state: { actions: [] },
+      frame_data: [{ frame_count: 1 }],
+    };
+    const m = mount(replay);
+    await nextTick();
+
+    (replay.state as unknown as { value: string }).value = 'ready';
+    await nextTick();
+
+    expect(useRenderer2D).toHaveBeenCalledTimes(1);
+    expect(renderFrame).toHaveBeenCalled();
+    m.unmount();
   });
 });

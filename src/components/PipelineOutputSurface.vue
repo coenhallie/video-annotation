@@ -53,6 +53,16 @@ function onWheel(e: WheelEvent) {
   if (next <= MIN_ZOOM) {
     panX.value = 0;
     panY.value = 0;
+    // panOriginX/Y were captured at pointerdown and are not otherwise updated
+    // mid-pan. Without re-capturing them here, the next pointermove computes
+    // from the stale origin against the pan we just reset to 0, and the image
+    // jumps.
+    if (isPanning) {
+      panOriginX = 0;
+      panOriginY = 0;
+      panStartX = e.clientX;
+      panStartY = e.clientY;
+    }
   }
 }
 
@@ -93,23 +103,31 @@ function ensureRenderer() {
   renderer = useRenderer2D(canvas);
 }
 
+// flush: 'post' is load-bearing. Vue's default pre-flush timing runs the
+// callback BEFORE the component's DOM patch, and load() sets `frame` and then
+// `state` synchronously, so with the default both callbacks fire while the
+// canvas is still behind v-else and canvasRef is null. The renderer would
+// never attach and the pitch would stay blank until an unrelated later frame
+// arrived.
 watch(
   () => props.replay.frame.value,
   (frame) => {
     if (!frame) return;
     ensureRenderer();
     renderer?.renderFrame(frame);
-  }
+  },
+  { flush: 'post' }
 );
 
 watch(
   () => props.replay.state.value,
-  async (state) => {
+  (state) => {
     if (state !== 'ready') return;
     ensureRenderer();
     const frame = props.replay.frame.value;
     if (frame) renderer?.renderFrame(frame);
-  }
+  },
+  { flush: 'post' }
 );
 
 onMounted(() => {
