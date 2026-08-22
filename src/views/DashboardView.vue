@@ -563,7 +563,7 @@ watch(user, (u) => {
                     </svg>
                   </button>
                 </div>
-                <div>
+                <div class="py-1">
                   <div
                     class="px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-500"
                   >
