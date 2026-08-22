@@ -1660,9 +1660,7 @@ watch(
                   d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"
                 />
               </svg>
-              <p class="text-[12px] text-gray-400">
-                No pipeline output for this video
-              </p>
+              <p class="text-[12px] text-gray-400">Nothing here yet</p>
               <p class="mt-1 text-[11px] text-gray-600">
                 Annotations you add here stay separate from the video's.
               </p>

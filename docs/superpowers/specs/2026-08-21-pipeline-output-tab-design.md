@@ -187,6 +187,13 @@ replaces. Annotations on the pipeline tab are created from the timeline's
 single-video project, this applies to all of them rather than to AWS ones only.
 When the pipeline surface gets real content, that is the point to revisit.
 
+**Playback can run behind the empty pipeline tab.** Switching to the pipeline tab
+pauses the player, but the timeline's own play control still owns playback on
+both tabs, so pressing play while on the pipeline tab plays audio with no
+picture. That was a deliberate call - the timeline is shared - and it used to be
+reachable only on AWS pipeline videos. On every single-video project it is worth
+revisiting when the pipeline surface gets real content.
+
 ## Testing
 
 Unit:
