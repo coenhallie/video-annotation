@@ -763,6 +763,7 @@ watch(user, (u) => {
             @open="openProject"
             @share="(p) => (shareTarget = p)"
             @annotation-click="openAnnotation"
+            @qa-status-updated="onProjectQaStatusUpdated"
           />
         </aside>
       </div>
@@ -810,6 +811,7 @@ watch(user, (u) => {
               @open="openProject"
               @share="(p) => (shareTarget = p)"
               @annotation-click="openAnnotation"
+              @qa-status-updated="onProjectQaStatusUpdated"
             />
           </div>
         </div>

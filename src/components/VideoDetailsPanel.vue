@@ -236,7 +236,6 @@ import type { PanelAnnotation } from '@/composables/useVideoDetails';
 import type { Label } from '@/types/labels';
 import type { Video } from '@/types/database';
 import QaStatusSelect from './QaStatusSelect.vue';
-import { mergeQaStatusUpdate } from '@/utils/qaStatus';
 import { UNKNOWN_OWNER_NAME } from '@/services/ownerEnrichmentService';
 import {
   getProgressForVideo,
@@ -259,18 +258,9 @@ const emit = defineEmits<{
   open: [project: Project];
   share: [project: Project];
   'annotation-click': [project: Project, annotation: PanelAnnotation];
+  'qa-status-updated': [project: Project, updated: Video];
 }>();
 
-// Keep the panel's own copy in step, so closing and reopening it does not show
-// the value the row was loaded with.
-//
-// Both VideoDetailsPanel instances (the desktop aside and the mobile Teleport)
-// mount over the same project prop with no `:key`, so a write that resolves
-// after the user has switched to a different project must not land here.
-// mergeQaStatusUpdate carries the id guard for that case, and it merges only
-// the QA fields plus updatedAt rather than the whole row, so a stale or
-// racing write can never clobber this video's url/duration/etc. with another
-// video's values.
 // fetchOwners guarantees an entry for every requested id, filling unresolved
 // ones with a placeholder rather than omitting them. Printing that placeholder
 // into "SET BY ..." states a falsehood about who acted, so drop it and let the
@@ -280,10 +270,17 @@ const attributionName = computed(() => {
   return name && name !== UNKNOWN_OWNER_NAME ? name : undefined;
 });
 
+// Up, not sideways - the same route the dashboard row already takes.
+//
+// This panel used to merge into props.project.video itself. That kept the two
+// surfaces in step, because they share one project object, but it meant a
+// status changed from here never reached DashboardView. So a change that a
+// filter excludes made the row vanish from the list beside the panel with no
+// explanation, while the identical change made from the row explained itself.
+// Emitting instead gives both paths one handler, one merge and one toast.
 function onQaStatusUpdated(updated: Video) {
   if (props.project.projectType !== 'single') return;
-  const merged = mergeQaStatusUpdate(props.project.video, updated);
-  if (merged) Object.assign(props.project.video, merged);
+  emit('qa-status-updated', props.project, updated);
 }
 
 const watchProgress = ref<UserWatchProgress[]>([]);
