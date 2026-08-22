@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { filterByQaStatus, countByQaStatus } from '@/utils/qaStatusFilter';
+import {
+  filterByQaStatus,
+  countByQaStatus,
+  qaStatusHiddenByFilter,
+} from '@/utils/qaStatusFilter';
 import type { QaStatus } from '@/types/database';
 
 type Row = { id: string; status: QaStatus | null };
@@ -88,5 +92,19 @@ describe('composing with an earlier filter', () => {
     const labelNarrowed = rows.filter((r) => r.id === 'b' || r.id === 'c');
     const active = new Set<QaStatus>(['failed']);
     expect(ids(filterByQaStatus(labelNarrowed, active, statusOf))).toEqual(['b']);
+  });
+});
+
+describe('qaStatusHiddenByFilter', () => {
+  it('is false when no filter is active', () => {
+    expect(qaStatusHiddenByFilter('failed', new Set())).toBe(false);
+  });
+
+  it('is false when the new status is one of the selected ones', () => {
+    expect(qaStatusHiddenByFilter('failed', new Set<QaStatus>(['failed', 'staging']))).toBe(false);
+  });
+
+  it('is true when the new status is excluded by the active filter', () => {
+    expect(qaStatusHiddenByFilter('production', new Set<QaStatus>(['failed']))).toBe(true);
   });
 });

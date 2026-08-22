@@ -8,8 +8,17 @@ import { LabelService } from '@/services/labelService';
 import type { Project } from '@/types/project';
 import type { Label } from '@/types/labels';
 import type { QaStatus, Video } from '@/types/database';
-import { QA_STATUSES, toQaStatus, mergeQaStatusUpdate } from '@/utils/qaStatus';
-import { filterByQaStatus, countByQaStatus } from '@/utils/qaStatusFilter';
+import {
+  QA_STATUSES,
+  toQaStatus,
+  mergeQaStatusUpdate,
+  qaStatusLabel,
+} from '@/utils/qaStatus';
+import {
+  filterByQaStatus,
+  countByQaStatus,
+  qaStatusHiddenByFilter,
+} from '@/utils/qaStatusFilter';
 import QaStatusPill from '@/components/QaStatusPill.vue';
 import AppHeader from '@/components/AppHeader.vue';
 import ProjectListItem from '@/components/ProjectListItem.vue';
@@ -34,7 +43,7 @@ import { sortByRecentOpens } from '@/utils/projectOrdering';
 
 const router = useRouter();
 const { user, signOut } = useAuth();
-const { error: notifyError } = useNotifications();
+const { error: notifyError, success: notifySuccess } = useNotifications();
 
 const dashFolders = useDashboardFolders(() => user.value?.id);
 
@@ -102,6 +111,15 @@ function onProjectQaStatusUpdated(project: Project, updated: Video) {
   if (project.projectType !== 'single') return;
   const merged = mergeQaStatusUpdate(project.video, updated);
   if (merged) Object.assign(project.video, merged);
+
+  // Silent on success everywhere except here: the row is about to disappear
+  // from a list the user is looking at, because of something they just did.
+  if (qaStatusHiddenByFilter(updated.qaStatus, activeQaStatuses.value)) {
+    notifySuccess(
+      `Marked ${qaStatusLabel(updated.qaStatus)}`,
+      'Hidden by the current filter.'
+    );
+  }
 }
 
 function closeDetails() {

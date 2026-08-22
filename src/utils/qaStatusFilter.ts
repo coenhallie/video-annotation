@@ -52,3 +52,16 @@ export function countByQaStatus<T>(
 
   return counts;
 }
+
+/**
+ * Whether setting a video to `next` would drop it out of the currently
+ * filtered list. The one case where a successful write deserves a toast: the
+ * row vanishes, and the user is owed an explanation for a disappearance they
+ * caused.
+ */
+export function qaStatusHiddenByFilter(
+  next: QaStatus,
+  active: ReadonlySet<QaStatus>
+): boolean {
+  return active.size > 0 && !active.has(next);
+}
