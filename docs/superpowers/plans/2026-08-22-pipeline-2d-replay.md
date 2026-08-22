@@ -21,6 +21,7 @@
 - **`vite.config.js` sets `esbuild.drop: ['console', 'debugger']`.** Console logging is stripped from every build including dev. Never rely on it for user-visible behaviour.
 - **The storage proxy must never accept a caller-supplied path.** Every object key is built server-side from the regex-validated `outputVideoId`. This is a security property of `netlify/functions/aws-storage.cjs`; preserve it.
 - **Replay time is relative to the first record in the file.** Neither `frame_count` nor the record timestamp is zero-based.
+- **`npx vue-tsc --noEmit` is not clean on this repository and is not a gate.** It reports about 102 pre-existing errors and is wired into no npm script (`npm run build` is `vite build` alone). Where a task says to run it, the pass criterion is "no *new* error class introduced by this task", not zero errors. Seven `TS2532` errors in the vendored `src/lib/vis/useColorResolver.ts` are known and accepted: this repository sets `noUncheckedIndexedAccess: true` and the source repository has no tsconfig, so indexed access into `ordered_colors` / `color_weights` types as possibly-undefined here. Ruled on 2026-08-22 in favour of keeping the vendored copy byte-faithful, since DALF still iterates on that renderer and diffability is the reason for vendoring. Revisit if shirt colours actually misbehave.
 
 ## Amendment to the spec
 
@@ -214,7 +215,7 @@ Expected: PASS. The implementation is already complete, so these are characteris
 - [ ] **Step 7: Typecheck**
 
 Run: `npx vue-tsc --noEmit`
-Expected: no errors from `src/lib/vis/`.
+Expected: no error class beyond the accepted baseline in Global Constraints. The seven `TS2532` errors in `useColorResolver.ts` are expected and accepted.
 
 - [ ] **Step 8: Commit**
 
@@ -1105,7 +1106,7 @@ export function httpRangeFetcher(url: string): RangeFetcher {
 - [ ] **Step 10: Typecheck and commit**
 
 Run: `npx vue-tsc --noEmit`
-Expected: no errors.
+Expected: no NEW errors from the files this task touched. See Global Constraints: the repository has a large pre-existing error baseline and this command is not a gate.
 
 ```bash
 git add netlify/functions/aws-storage.cjs netlify/functions/__tests__/aws-storage.test.ts \
@@ -2100,7 +2101,7 @@ Expected: PASS, all seven cases.
 - [ ] **Step 5: Typecheck and commit**
 
 Run: `npx vue-tsc --noEmit`
-Expected: no errors.
+Expected: no NEW errors from the files this task touched. See Global Constraints: the repository has a large pre-existing error baseline and this command is not a gate.
 
 ```bash
 git add src/components/PipelineOutputSurface.vue src/components/__tests__/pipelineOutputSurface.test.ts
@@ -2386,7 +2387,7 @@ Run: `npm test`
 Expected: PASS. In particular `editorSurfaceTabs` and `useVideoAnnotationsSurface` must still pass.
 
 Run: `npx vue-tsc --noEmit`
-Expected: no errors.
+Expected: no NEW errors from the files this task touched. See Global Constraints: the repository has a large pre-existing error baseline and this command is not a gate.
 
 - [ ] **Step 12: Commit**
 
@@ -2421,7 +2422,9 @@ npx eslint src netlify --ext .ts,.vue
 npm run build
 ```
 
-Expected: all pass. `npm run build` must not pull `three` or any new package into the bundle; the 2D renderer has no dependencies.
+Expected: `npm test`, `eslint` and `npm run build` all pass. `npm run build` must not pull `three` or any new package into the bundle; the 2D renderer has no dependencies.
+
+`vue-tsc` is the exception and is informational here: see Global Constraints. Compare its output against the pre-existing baseline and confirm this branch introduced no new error class, rather than expecting zero.
 
 - [ ] **Step 2: Verify in the running app**
 
