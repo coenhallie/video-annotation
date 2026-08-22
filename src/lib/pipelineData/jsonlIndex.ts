@@ -4,6 +4,11 @@ import { parseWindow, type ReplayRecord } from './frameWindow';
 export const PROBE_BYTES = 65536;
 
 export interface IndexEntry {
+  /**
+   * Byte offset where this record starts, with one exception: on
+   * `JsonlIndex.last` this is the file size, an exclusive end-of-data
+   * boundary rather than a record start. See the note on `last`.
+   */
   offset: number;
   frameCount: number;
   t: number;
@@ -18,6 +23,18 @@ export interface JsonlIndex {
   size: number;
   acceptsRanges: boolean;
   first: IndexEntry;
+  /**
+   * The final record, with `offset` set to the file size rather than to that
+   * record's own start byte.
+   *
+   * That makes `last` a correct upper bracket for interpolation, which is all
+   * it is for: `estimateOffset` needs a `(offset, t)` pair beyond every real
+   * entry. It also means `estimateOffset(index, last.t)` returns a byte one
+   * past the last record, so a caller must NOT range-read forward from a
+   * returned offset expecting to find that record there. Read a window that
+   * ENDS at the estimate instead of starting at it, which is what the replay
+   * loop does by backing its window start off by a quarter window.
+   */
   last: IndexEntry;
   /** Measured, not assumed: window sizes are derived from this. */
   meanRecordBytes: number;
