@@ -254,4 +254,105 @@ describe('usePipelineReplay', () => {
     expect(clock.pending).toBe(false);
     expect(r.isPlaying.value).toBe(false);
   });
+
+  it('does not reject or write state when disposed mid-fetch', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const text = fakeFile(2000);
+    let call = 0;
+    const fetcher = {
+      async head() {
+        return { size: text.length, acceptsRanges: true };
+      },
+      async range(start: number, end: number) {
+        // Let the index build normally; stall only the first window read.
+        if (++call > 12) await gate;
+        return text.slice(start, end + 1);
+      },
+    };
+    const rejections: unknown[] = [];
+    const onRejection = (e: PromiseRejectionEvent | unknown) => rejections.push(e);
+    process.on('unhandledRejection', onRejection);
+
+    const r = usePipelineReplay({ openFetcher: async () => fetcher });
+    await r.load();
+    const pending = r.seek(30);
+    r.dispose();
+    release();
+    await pending;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    process.off('unhandledRejection', onRejection);
+    expect(rejections).toEqual([]);
+    expect(r.state.value).toBe('idle');
+  });
+
+  it('moves to error when a fetch rejects during a seek', async () => {
+    const text = fakeFile(2000);
+    let built = false;
+    const fetcher = {
+      async head() {
+        return { size: text.length, acceptsRanges: true };
+      },
+      async range(start: number, end: number) {
+        if (built) throw new Error('network is down');
+        return text.slice(start, end + 1);
+      },
+    };
+    const r = usePipelineReplay({ openFetcher: async () => fetcher });
+    await r.load();
+    built = true;
+    await r.seek(40);
+    expect(r.state.value).toBe('error');
+    expect(r.error.value).toContain('network is down');
+    expect(r.isPlaying.value).toBe(false);
+  });
+
+  it('is inert after dispose: play does not re-arm the clock', async () => {
+    const clock = manualClock();
+    const { fetcher } = counting(fakeFile(500));
+    const r = usePipelineReplay({
+      openFetcher: async () => fetcher,
+      raf: clock.raf,
+      caf: clock.caf,
+    });
+    await r.load();
+    r.dispose();
+    r.play();
+    expect(r.isPlaying.value).toBe(false);
+    expect(clock.pending).toBe(false);
+  });
+
+  it('shows the newer seek when two overlap out of order', async () => {
+    const text = fakeFile(4000);
+    const delays: number[] = [];
+    let built = false;
+    const fetcher = {
+      async head() {
+        return { size: text.length, acceptsRanges: true };
+      },
+      async range(start: number, end: number) {
+        const slice = text.slice(start, end + 1);
+        if (!built) return slice;
+        // Make the FIRST post-load read resolve last, so an unguarded
+        // implementation would show the older seek's frame.
+        const delay = delays.length === 0 ? 20 : 0;
+        delays.push(delay);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        return slice;
+      },
+    };
+    const r = usePipelineReplay({ openFetcher: async () => fetcher });
+    await r.load();
+    built = true;
+
+    const slow = r.seek(20);
+    const fast = r.seek(60);
+    await Promise.all([slow, fast]);
+
+    expect(r.currentTime.value).toBeCloseTo(60, 1);
+    expect(r.currentFrame.value).toBe(457 + Math.round(60 / 0.04));
+  });
 });

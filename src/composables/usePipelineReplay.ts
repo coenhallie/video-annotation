@@ -79,6 +79,14 @@ export function usePipelineReplay(opts: {
   let lastTickMs: number | null = null;
   let prefetching: Promise<unknown> | null = null;
 
+  // Bumped by every seek and by dispose. Async work compares the generation it
+  // started under against the current one after each await: if they differ, a
+  // newer seek or a teardown has happened and this result is stale, so it must
+  // neither be shown nor written back to the index. This is what keeps an
+  // unmount from resolving into a torn-down replay, and what keeps two
+  // overlapping seeks from landing out of order.
+  let generation = 0;
+
   /** Absolute file time for a replay time. */
   const abs = (t: number) => (index ? index.first.t + t : t);
 
@@ -106,8 +114,8 @@ export function usePipelineReplay(opts: {
     windows = [win, ...windows.filter((w) => w !== win)].slice(0, lruSize);
   }
 
-  async function recordAt(target: number): Promise<ReplayRecord | null> {
-    if (!index || !fetcher) return null;
+  async function recordAt(target: number, gen: number): Promise<ReplayRecord | null> {
+    if (!index || !fetcher || gen !== generation) return null;
 
     for (const win of windows) {
       const hit = findIn(win, target);
@@ -140,6 +148,9 @@ export function usePipelineReplay(opts: {
       const from = start === 0 ? 0 : start - 1;
       const end = Math.min(index.size, from + span) - 1;
       const text = await fetcher.range(from, end);
+      // A newer seek or a dispose happened while this range was in flight.
+      // `index`/`fetcher` may already be null, so bail before touching them.
+      if (gen !== generation || !index) return null;
       const records = parseWindow(text, {
         startsAtBof: from === 0,
         endsAtEof: end === index.size - 1,
@@ -191,9 +202,12 @@ export function usePipelineReplay(opts: {
     if (abs(currentTime.value) < lastT - PREFETCH_SECONDS) return;
     if (lastT >= index.last.t) return;
 
-    prefetching = recordAt(lastT + 1e-6).finally(() => {
-      prefetching = null;
-    });
+    const gen = generation;
+    prefetching = recordAt(lastT + 1e-6, gen)
+      .catch(() => null)
+      .finally(() => {
+        prefetching = null;
+      });
   }
 
   /** Resolves once any background prefetch has settled. For tests. */
@@ -204,13 +218,16 @@ export function usePipelineReplay(opts: {
   async function load(): Promise<void> {
     state.value = 'loading';
     error.value = null;
+    const gen = ++generation;
     try {
       fetcher = await opts.openFetcher();
+      if (gen !== generation) return;
       if (!fetcher) {
         state.value = 'empty';
         return;
       }
       index = await buildIndex(fetcher);
+      if (gen !== generation) return;
       duration.value = Math.max(0, index.last.t - index.first.t);
       totalFrames.value = index.last.frameCount - index.first.frameCount + 1;
       if (duration.value > 0 && totalFrames.value > 1) {
@@ -220,10 +237,12 @@ export function usePipelineReplay(opts: {
         );
       }
       currentTime.value = 0;
-      const first = await recordAt(index.first.t);
+      const first = await recordAt(index.first.t, gen);
+      if (gen !== generation) return;
       if (first) show(first);
       state.value = 'ready';
     } catch (err) {
+      if (gen !== generation) return;
       error.value = err instanceof Error ? err.message : String(err);
       state.value = 'error';
     }
@@ -231,10 +250,22 @@ export function usePipelineReplay(opts: {
 
   async function seek(t: number): Promise<void> {
     if (state.value !== 'ready' || !index) return;
+    const gen = ++generation;
     const clamped = Math.min(Math.max(0, t), duration.value);
     currentTime.value = clamped;
-    const record = await recordAt(abs(clamped));
-    if (record) show(record);
+    try {
+      const record = await recordAt(abs(clamped), gen);
+      // A newer seek started while this one was in flight, so its frame is the
+      // one that belongs on screen. Dropping this result is what keeps the
+      // displayed frame consistent with currentTime.
+      if (gen !== generation) return;
+      if (record) show(record);
+    } catch (err) {
+      if (gen !== generation) return;
+      error.value = err instanceof Error ? err.message : String(err);
+      state.value = 'error';
+      pause();
+    }
   }
 
   function tick(ms: number): void {
@@ -250,11 +281,15 @@ export function usePipelineReplay(opts: {
     const next = currentTime.value + delta;
     if (next >= duration.value) {
       currentTime.value = duration.value;
+      // seek() handles its own failures (catches and moves to 'error'), so
+      // nothing here needs to observe the rejection.
       void seek(duration.value);
       pause();
       return;
     }
     currentTime.value = next;
+    // seek() handles its own failures (catches and moves to 'error'), so
+    // nothing here needs to observe the rejection.
     void seek(next);
     maybePrefetch();
     rafHandle = raf(tick);
@@ -278,9 +313,16 @@ export function usePipelineReplay(opts: {
 
   function dispose(): void {
     pause();
+    // Invalidate every in-flight read, so nothing resolves into a torn-down
+    // replay.
+    generation++;
     windows = [];
     index = null;
     fetcher = null;
+    // Not just bookkeeping: play() guards on state === 'ready', so leaving it
+    // there would let a stray play() after unmount re-arm the clock over no
+    // data at all.
+    state.value = 'idle';
   }
 
   return {
