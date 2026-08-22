@@ -7,8 +7,8 @@ import { ProjectService } from '@/services/projectService';
 import { LabelService } from '@/services/labelService';
 import type { Project } from '@/types/project';
 import type { Label } from '@/types/labels';
-import type { QaStatus } from '@/types/database';
-import { QA_STATUSES, toQaStatus } from '@/utils/qaStatus';
+import type { QaStatus, Video } from '@/types/database';
+import { QA_STATUSES, toQaStatus, mergeQaStatusUpdate } from '@/utils/qaStatus';
 import { filterByQaStatus, countByQaStatus } from '@/utils/qaStatusFilter';
 import QaStatusPill from '@/components/QaStatusPill.vue';
 import AppHeader from '@/components/AppHeader.vue';
@@ -92,6 +92,16 @@ function inspectProject(project: Project) {
   }
   selectedProject.value = project;
   videoDetails.selectProject(project);
+}
+
+// The list row and the details panel reference the same project object -
+// DashboardView's `projects` array is not cloned on the way to either - so one
+// merge updates both surfaces. mergeQaStatusUpdate is id-guarded and merges
+// only the QA fields, never the whole returned row.
+function onProjectQaStatusUpdated(project: Project, updated: Video) {
+  if (project.projectType !== 'single') return;
+  const merged = mergeQaStatusUpdate(project.video, updated);
+  if (merged) Object.assign(project.video, merged);
 }
 
 function closeDetails() {
@@ -663,6 +673,7 @@ watch(user, (u) => {
               :opened-at="recentOpens[project.id] ?? ''"
               @inspect="inspectProject"
               @dragstart="onCardDragStart"
+              @qa-status-updated="onProjectQaStatusUpdated"
             />
           </div>
 

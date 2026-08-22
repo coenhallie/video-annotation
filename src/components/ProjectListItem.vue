@@ -104,9 +104,10 @@
          its ground: the v-else spacer below reserves the same w-24 width so
          the watch-coverage chip does not slide right and break its own
          column just because the row next to it has no pill. -->
-    <QaStatusPill
+    <QaStatusPillSelect
       v-if="project.projectType === 'single'"
-      :status="project.video.qaStatus"
+      :video="project.video"
+      @updated="(updated) => emit('qa-status-updated', project, updated)"
     />
     <span
       v-else
@@ -120,8 +121,9 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { Project } from '../types/project';
+import type { Video } from '../types/database';
 import { formatRelativeTime } from '@/utils/relativeTime';
-import QaStatusPill from './QaStatusPill.vue';
+import QaStatusPillSelect from './QaStatusPillSelect.vue';
 
 // Props
 const props = defineProps<{
@@ -141,6 +143,7 @@ const emit = defineEmits<{
   inspect: [project: Project];
   dragstart: [project: Project, event: DragEvent];
   dragend: [event: DragEvent];
+  'qa-status-updated': [project: Project, updated: Video];
 }>();
 
 /**

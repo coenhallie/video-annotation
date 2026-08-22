@@ -82,11 +82,11 @@ function mountItem(project: Project, watchPercent: number) {
 }
 
 // The trailing slot in the row (after the watch-coverage chip) is a fixed
-// w-24 column. On a single project it holds the QaStatusPill; on a dual
-// project there is no video.qaStatus to show, but the slot must still hold
-// its position - otherwise a watch chip on a dual row (DashboardView passes
-// a real, non-zero watchPercent for dual projects too) slides right by
-// roughly the pill's own width and breaks its own column.
+// w-24 column. On a single project it holds the editable QaStatusPillSelect;
+// on a dual project there is no video.qaStatus to show, but the slot must
+// still hold its position - otherwise a watch chip on a dual row (DashboardView
+// passes a real, non-zero watchPercent for dual projects too) slides right by
+// roughly the control's own width (~108px) and breaks its own column.
 describe('ProjectListItem QA status slot', () => {
   it('reserves the trailing width slot on a dual project instead of collapsing it', () => {
     const harness = mountItem(dualProject, 42);
@@ -98,19 +98,19 @@ describe('ProjectListItem QA status slot', () => {
     expect(placeholder?.className).toContain('w-24');
     expect(placeholder?.className).toContain('shrink-0');
 
-    // No pill on a dual project - there is no per-video status to show.
+    // No control on a dual project - there is no per-video status to show.
     expect(
-      harness.root.querySelector('[data-testid="qa-status-pill"]')
+      harness.root.querySelector('[data-testid="qa-status-pill-select"]')
     ).toBeNull();
 
     harness.unmount();
   });
 
-  it('renders the pill, not the placeholder, on a single project', () => {
+  it('renders the editable control, not the placeholder, on a single project', () => {
     const harness = mountItem(singleProject, 42);
 
     expect(
-      harness.root.querySelector('[data-testid="qa-status-pill"]')
+      harness.root.querySelector('[data-testid="qa-status-pill-select"]')
     ).not.toBeNull();
     expect(
       harness.root.querySelector('[data-testid="qa-status-pill-placeholder"]')
