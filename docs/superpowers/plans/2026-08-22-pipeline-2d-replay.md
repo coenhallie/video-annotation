@@ -2388,7 +2388,8 @@ Replace the whole `<div v-if="activeSurface === 'pipeline'" data-testid="pipelin
 
 ```html
             <div
-              v-if="activeSurface === 'pipeline'"
+              v-if="pipelineEverOpened"
+              v-show="activeSurface === 'pipeline'"
               class="relative h-full w-full"
             >
               <PipelineOutputSurface
@@ -2397,6 +2398,26 @@ Replace the whole `<div v-if="activeSurface === 'pipeline'" data-testid="pipelin
               />
             </div>
 ```
+
+**Amended 2026-08-22 after review.** This was originally a plain
+`v-if="activeSurface === 'pipeline'"`. That tore the surface down on every switch
+away, so `PipelineOutputSurface`'s `onUnmounted` disposed the replay and coming
+back re-fetched and re-indexed the whole JSONL behind a spinner, roughly ten
+range requests each visit, with the replay's position reset to zero every time.
+
+The two flags together give the behaviour that was actually wanted:
+
+- `v-if="pipelineEverOpened"` keeps the surface unmounted until the user first
+  opens the tab. Without it the component would mount on every editor open,
+  including the majority of projects that have no pipeline data at all, and each
+  one would fire a request that can only fail.
+- `v-show` then hides it without unmounting, so the renderer stays bound to its
+  canvas, the index stays built, and the replay keeps its own position.
+
+`pipelineEverOpened` is a `ref(false)` set true by a watcher on `activeSurface`.
+The symmetric pause watcher stays exactly as it is and becomes more important,
+not less: a hidden but mounted replay must not keep ticking and issuing range
+requests for a pitch nobody is looking at.
 
 - [ ] **Step 10: Point the timeline at the binding**
 
@@ -2489,6 +2510,9 @@ With `AWS_PIPELINE_DATA_KEY` set to the real template, confirm:
 - [ ] Right-click on the pitch opens the annotation quick pick.
 - [ ] An annotation added on the pipeline tab appears on the timeline there, and **not** on the Video tab.
 - [ ] Switching tabs mid-playback pauses that tab's playback, and each tab keeps its own position.
+- [ ] Returning to the pipeline tab is instant: no spinner, no refetch, and the pitch is exactly where it was left. Confirm in the network panel that no range requests fire on the switch back.
+- [ ] Opening a project and staying on the Video tab issues no pipeline data request at all. The surface must not mount until the tab is first opened.
+- [ ] Leaving the pipeline tab while it is playing stops it issuing requests. A mounted but hidden replay that keeps ticking is a defect.
 
 Be picky here: pixel-level sloppiness in the HUD, the states or the canvas fit is a defect, not a detail.
 
