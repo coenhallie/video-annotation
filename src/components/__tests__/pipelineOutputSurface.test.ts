@@ -194,4 +194,99 @@ describe('PipelineOutputSurface', () => {
     expect(renderFrame).toHaveBeenCalled();
     m.unmount();
   });
+
+  describe('transport', () => {
+    /** The bar itself: the element the visibility classes are bound to. */
+    const bar = (root: HTMLElement) =>
+      at(root, 'pipeline-controls')?.firstElementChild as HTMLElement;
+
+    const setPlaying = (replay: PipelineReplay, playing: boolean) => {
+      (replay.isPlaying as unknown as { value: boolean }).value = playing;
+    };
+
+    it('starts playback and pauses it again from one button', async () => {
+      const replay = fakeReplay('ready');
+      const m = mount(replay);
+      await nextTick();
+
+      (at(m.root, 'pipeline-play-pause') as HTMLButtonElement).click();
+      expect(replay.play).toHaveBeenCalledOnce();
+
+      setPlaying(replay, true);
+      await nextTick();
+      expect(at(m.root, 'pipeline-play-pause')?.getAttribute('aria-label')).toBe(
+        'Pause'
+      );
+
+      (at(m.root, 'pipeline-play-pause') as HTMLButtonElement).click();
+      expect(replay.pause).toHaveBeenCalledOnce();
+      m.unmount();
+    });
+
+    it('stays visible while paused, so the tab never looks control-less', async () => {
+      const m = mount(fakeReplay('ready'));
+      await nextTick();
+      expect(bar(m.root).className).toContain('opacity-100');
+      m.unmount();
+    });
+
+    it('hides during playback, and comes back on hover', async () => {
+      const replay = fakeReplay('ready');
+      const m = mount(replay);
+      await nextTick();
+
+      setPlaying(replay, true);
+      await nextTick();
+      expect(bar(m.root).className).toContain('opacity-0');
+      // A hidden bar must not swallow pan drags that start over it. Checked
+      // on the class list, since the focus-visible variant carries the same
+      // utility name as a substring.
+      expect(bar(m.root).classList.contains('pointer-events-auto')).toBe(false);
+
+      at(m.root, 'pipeline-stage')?.dispatchEvent(new Event('pointerenter'));
+      await nextTick();
+      expect(bar(m.root).className).toContain('opacity-100');
+
+      at(m.root, 'pipeline-stage')?.dispatchEvent(new Event('pointerleave'));
+      await nextTick();
+      expect(bar(m.root).className).toContain('opacity-0');
+      m.unmount();
+    });
+
+    it('carries the focus-visible reveal rule', async () => {
+      // Keyboard reveal is a CSS rule rather than a reactive flag, because a
+      // focusin listener cannot distinguish the focus a mouse click leaves
+      // behind from a real tab stop. jsdom does not evaluate :focus-visible,
+      // so this asserts the rule is present; the behaviour itself is checked
+      // against a real browser.
+      const m = mount(fakeReplay('ready'));
+      await nextTick();
+      expect(bar(m.root).className).toContain('has-[:focus-visible]:opacity-100');
+      m.unmount();
+    });
+
+    it('steps a frame either way, pausing first', async () => {
+      const replay = fakeReplay('ready');
+      // 10 s in at 25 fps: frame 250 on the grid the step snaps to.
+      (replay.currentTime as unknown as { value: number }).value = 10;
+      const m = mount(replay);
+      await nextTick();
+
+      // The millisecond over the grid position is the deliberate slack that
+      // keeps a step off the record it is stepping away from.
+      (at(m.root, 'pipeline-step-forward') as HTMLButtonElement).click();
+      expect(replay.pause).toHaveBeenCalled();
+      expect(vi.mocked(replay.seek).mock.calls[0][0]).toBeCloseTo(
+        251 / 25 + 0.001,
+        4
+      );
+
+      (at(m.root, 'pipeline-step-back') as HTMLButtonElement).click();
+      expect(vi.mocked(replay.seek).mock.calls[1][0]).toBeCloseTo(
+        249 / 25 + 0.001,
+        4
+      );
+      m.unmount();
+    });
+  });
 });

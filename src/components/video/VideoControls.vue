@@ -1,5 +1,8 @@
 <template>
-  <div class="video-controls">
+  <div
+    class="video-controls"
+    :class="{ 'is-paused': !isPlaying }"
+  >
     <div class="controls-content">
       <div class="controls-left">
         <!-- Previous Frame button -->
@@ -26,8 +29,9 @@
 
         <!-- Play/Pause button -->
         <button
-          class="control-button"
+          class="control-button primary"
           :aria-label="isPlaying ? 'Pause' : 'Play'"
+          :title="isPlaying ? 'Pause' : 'Play'"
           @click="$emit('toggle-play')"
         >
           <svg
@@ -40,17 +44,19 @@
               y="4"
               width="4"
               height="16"
+              rx="1"
             />
             <rect
               x="14"
               y="4"
               width="4"
               height="16"
+              rx="1"
             />
           </svg>
           <svg
             v-else
-            class="control-icon"
+            class="control-icon nudge-right"
             viewBox="0 0 24 24"
           >
             <polygon points="5,3 19,12 5,21" />
@@ -79,11 +85,14 @@
           </svg>
         </button>
 
+        <span class="controls-divider" />
+
         <!-- Volume controls -->
         <div class="volume-controls">
           <button
             class="control-button"
             :aria-label="isMuted ? 'Unmute' : 'Mute'"
+            :title="isMuted ? 'Unmute (M)' : 'Mute (M)'"
             @click="$emit('toggle-mute')"
           >
             <svg
@@ -135,6 +144,8 @@
           >
         </div>
 
+        <span class="controls-divider" />
+
         <!-- Speed controls -->
         <div class="speed-controls">
           <select
@@ -167,7 +178,7 @@
           </select>
         </div>
       </div>
-      
+
       <!-- Right side slot for extra controls like Pose/Calibration toggle -->
       <div class="controls-right">
         <slot name="right-controls" />
@@ -195,69 +206,146 @@ defineEmits<{
 </script>
 
 <style scoped>
+/*
+ * Drawn to match the pipeline replay's transport (PipelineOutputSurface.vue):
+ * one floating pill on the media rather than a full-width gradient bar, ghost
+ * icon buttons around a filled play button, and the same reveal rule - always
+ * visible while paused, on hover otherwise.
+ */
 .video-controls {
   position: absolute;
   bottom: 0;
   left: 0;
   right: 0;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0));
-  padding: 20px;
+  padding: 8px;
   display: flex;
   flex-direction: column;
   gap: 10px;
   opacity: 0;
-  transition: opacity 0.3s ease;
+  /* The bar spans the picture's full width but only the pill and the slot are
+     meant to be clickable, so the container never takes pointer events itself
+     and hands its children an inherited switch instead. Left interactive, it
+     covers a strip across the bottom of the picture and eats clicks meant for
+     the video - and while hidden it did exactly that. */
+  pointer-events: none;
+  --controls-interactive: none;
+  transform: translateY(4px);
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
   z-index: 20;
 }
 
-/* Show controls: when hovering video wrapper OR when explicitly visible (e.g. paused) */
-:global(.video-wrapper:hover) .video-controls,
-.video-controls:hover,
-:global(.video-wrapper.paused) .video-controls {
+/*
+ * Reveal. Written without :global() on purpose: `:global(.video-wrapper:hover)
+ * .video-controls` compiles to plain `.video-wrapper:hover` - the descendant is
+ * dropped - so the old rule raised the WRAPPER's opacity and never the bar's,
+ * leaving the controls reachable only by hovering the strip they occupy. A
+ * scoped selector already leaves ancestor classes unscoped, so these match.
+ *
+ * Both wrappers are listed because the dual player mounts this component
+ * outside .video-wrapper; `.is-paused` covers the paused case for both, since
+ * only the single player's wrapper carries a .paused class.
+ */
+.video-wrapper:hover .video-controls,
+.dual-video-wrapper:hover .video-controls,
+.video-controls.is-paused,
+.video-controls:has(:focus-visible) {
   opacity: 1;
+  --controls-interactive: auto;
+  transform: translateY(0);
 }
 
 .controls-content {
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
+  position: relative;
 }
 
 .controls-left {
+  pointer-events: var(--controls-interactive);
   display: flex;
   align-items: center;
-  gap: 15px;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 9999px;
+  background: rgba(0, 0, 0, 0.6);
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.3);
+  outline: 1px solid rgba(255, 255, 255, 0.1);
+  outline-offset: -1px;
+  backdrop-filter: blur(4px);
 }
 
 .control-button {
   background: none;
   border: none;
-  color: white;
+  color: rgba(255, 255, 255, 0.8);
   cursor: pointer;
-  padding: 5px;
-  border-radius: 4px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 9999px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 0.2s;
+  flex: none;
+  transition: background-color 0.2s, color 0.2s;
 }
 
 .control-button:hover {
   background-color: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.control-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6);
+}
+
+/* The one filled element: playback is the primary action on this bar. */
+.control-button.primary {
+  width: 32px;
+  height: 32px;
+  background: #fff;
+  color: #000;
+}
+
+.control-button.primary:hover {
+  background: rgba(255, 255, 255, 0.9);
+  color: #000;
+}
+
+.control-button.primary:focus-visible {
+  box-shadow:
+    0 0 0 1px #000,
+    0 0 0 3px rgba(255, 255, 255, 0.6);
 }
 
 .control-icon {
-  width: 24px;
-  height: 24px;
+  width: 16px;
+  height: 16px;
   stroke-width: 2px;
   fill: currentColor;
+}
+
+/* The play triangle reads off-centre in a circle without this. */
+.control-icon.nudge-right {
+  margin-left: 2px;
+}
+
+.controls-divider {
+  width: 1px;
+  height: 16px;
+  margin: 0 2px;
+  background: rgba(255, 255, 255, 0.15);
+  flex: none;
 }
 
 /* Volume controls specific */
 .volume-controls {
   display: flex;
   align-items: center;
-  gap: 8px;
   position: relative;
 }
 
@@ -265,25 +353,78 @@ defineEmits<{
 .volume-slider {
   width: 0;
   opacity: 0;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
   overflow: hidden;
   margin: 0;
+  /* The element's own box is the drag target, so it stays finger-sized and the
+     hairline look comes from the track pseudo-elements below. */
+  height: 16px;
+  accent-color: #fff;
+  cursor: pointer;
 }
 
-.volume-controls:hover .volume-slider {
-  width: 80px;
+.volume-slider::-webkit-slider-runnable-track {
+  height: 2px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.volume-slider::-moz-range-track {
+  height: 2px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.volume-controls:hover .volume-slider,
+.volume-slider:focus-visible {
+  width: 64px;
   opacity: 1;
-  margin-left: 5px;
+  margin: 0 6px 0 2px;
 }
 
 /* Speed controls specific */
 .speed-select {
-  background: rgba(0, 0, 0, 0.5);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 4px;
-  padding: 2px 5px;
-  font-size: 12px;
+  appearance: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.8);
+  border: none;
+  border-radius: 9999px;
+  padding: 4px 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
   outline: none;
+  /* Keeps the native option list dark instead of system-light. */
+  color-scheme: dark;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.speed-select:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.speed-select:focus-visible {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6);
+}
+
+.controls-right {
+  pointer-events: var(--controls-interactive);
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .video-controls,
+  .control-button,
+  .volume-slider,
+  .speed-select {
+    transition: none;
+  }
 }
 </style>

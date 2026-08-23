@@ -92,6 +92,56 @@ function resetZoom() {
   panY.value = 0;
 }
 
+// ── Transport ───────────────────────────────────────────────────────────────
+//
+// The replay has no video element, so it has no native controls either. These
+// mirror the ones SingleVideoPlayer overlays on the video (VideoControls.vue):
+// same gestures, same reveal rule, drawn in the pitch HUD's own vocabulary
+// rather than reusing that component, whose props and reveal CSS are all about
+// a video (volume, mute, speed, `.video-wrapper:hover`).
+
+const hovering = ref(false);
+
+/**
+ * Visible while paused, so arriving on the tab shows the controls without
+ * having to discover them, and while the pointer is over the stage. Hidden
+ * only during playback with the pointer elsewhere, which is exactly when the
+ * pitch should be unobstructed.
+ *
+ * Keyboard focus reveals the bar too, but through a `:has(:focus-visible)`
+ * rule rather than this flag. A focusin listener cannot tell the two apart,
+ * and clicking play leaves DOM focus on the button, which would pin the bar
+ * open for the rest of the session.
+ */
+const controlsVisible = computed(
+  () => !props.replay.isPlaying.value || hovering.value
+);
+
+function togglePlay() {
+  if (props.replay.isPlaying.value) props.replay.pause();
+  else props.replay.play();
+}
+
+/**
+ * Step one frame.
+ *
+ * Snapped to the frame grid rather than added to the raw clock: seeking
+ * resolves to the last record at or before the target, so a bare
+ * `currentTime + 1 / fps` can land a float's width short of the next record
+ * and show the same frame twice. The millisecond of slack is far inside one
+ * frame at any plausible rate, so it cannot skip past the intended record.
+ *
+ * Stepping stops playback first. Nudging the clock under a running rAF loop
+ * technically works, but the frame you stepped to is gone again immediately.
+ */
+function step(frames: number) {
+  const { replay } = props;
+  replay.pause();
+  const fps = replay.fps.value;
+  const grid = Math.round(replay.currentTime.value * fps) + frames;
+  void replay.seek(grid / fps + 0.001);
+}
+
 function ensureRenderer() {
   const canvas = canvasRef.value;
   if (!canvas || renderer) return;
@@ -146,6 +196,8 @@ onUnmounted(() => {
     data-testid="pipeline-stage"
     class="relative flex h-full w-full items-center justify-center overflow-hidden bg-black"
     @contextmenu.prevent="emit('context-menu', $event)"
+    @pointerenter="hovering = true"
+    @pointerleave="hovering = false"
   >
     <div
       v-if="replay.state.value === 'loading' || replay.state.value === 'idle'"
@@ -221,17 +273,134 @@ onUnmounted(() => {
         />
       </div>
 
-      <div
-        class="pointer-events-none absolute bottom-2 left-2 rounded bg-black/60 px-2.5 py-1 font-mono text-[11px] text-white"
-      >
-        F{{ replay.currentFrame.value }}
-      </div>
+      <!--
+        The HUD is anchored to the pitch, not to the stage. The canvas is
+        letterboxed inside the stage, so stage-relative badges float in the
+        black band beside it. This box carries the same width cap, aspect ratio
+        and max-* clamps as the canvas, which resolves it to exactly the
+        canvas's rendered rect at any editor size.
+      -->
+      <div class="pointer-events-none absolute inset-0 flex items-center justify-center">
+        <div
+          class="relative aspect-video max-h-full w-[1280px] max-w-full"
+          data-testid="pipeline-hud"
+        >
+          <div
+            class="absolute bottom-2 left-2 rounded bg-black/60 px-2.5 py-1 font-mono text-[11px] text-white"
+          >
+            F{{ replay.currentFrame.value }}
+          </div>
 
-      <div
-        v-if="zoom > 1"
-        class="pointer-events-none absolute bottom-2 right-2 rounded bg-black/50 px-1.5 py-0.5 font-mono text-[10px] text-white"
-      >
-        {{ zoom.toFixed(1) }}x
+          <div
+            class="absolute inset-x-0 bottom-2 flex justify-center"
+            data-testid="pipeline-controls"
+          >
+            <div
+              class="flex items-center gap-1 rounded-full bg-black/60 p-1 text-white shadow-lg ring-1 ring-white/10 backdrop-blur-sm transition duration-200 has-[:focus-visible]:pointer-events-auto has-[:focus-visible]:translate-y-0 has-[:focus-visible]:opacity-100 motion-reduce:transition-none"
+              :class="
+                controlsVisible
+                  ? 'pointer-events-auto translate-y-0 opacity-100'
+                  : 'translate-y-1 opacity-0'
+              "
+            >
+              <button
+                type="button"
+                data-testid="pipeline-step-back"
+                class="flex h-7 w-7 items-center justify-center rounded-full text-white/80 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/60 motion-reduce:transition-none"
+                aria-label="Previous frame"
+                title="Previous frame"
+                @click="step(-1)"
+              >
+                <svg
+                  class="h-4 w-4"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  aria-hidden="true"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M15.75 19.5L8.25 12l7.5-7.5"
+                  />
+                </svg>
+              </button>
+
+              <button
+                type="button"
+                data-testid="pipeline-play-pause"
+                class="flex h-8 w-8 items-center justify-center rounded-full bg-white text-black transition-colors hover:bg-white/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-1 focus-visible:ring-offset-black motion-reduce:transition-none"
+                :aria-label="replay.isPlaying.value ? 'Pause' : 'Play'"
+                :title="replay.isPlaying.value ? 'Pause' : 'Play'"
+                @click="togglePlay"
+              >
+                <svg
+                  v-if="replay.isPlaying.value"
+                  class="h-3.5 w-3.5"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  aria-hidden="true"
+                >
+                  <rect
+                    x="6"
+                    y="4"
+                    width="4"
+                    height="16"
+                    rx="1"
+                  />
+                  <rect
+                    x="14"
+                    y="4"
+                    width="4"
+                    height="16"
+                    rx="1"
+                  />
+                </svg>
+                <svg
+                  v-else
+                  class="ml-0.5 h-3.5 w-3.5"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  aria-hidden="true"
+                >
+                  <polygon points="5,3 19,12 5,21" />
+                </svg>
+              </button>
+
+              <button
+                type="button"
+                data-testid="pipeline-step-forward"
+                class="flex h-7 w-7 items-center justify-center rounded-full text-white/80 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/60 motion-reduce:transition-none"
+                aria-label="Next frame"
+                title="Next frame"
+                @click="step(1)"
+              >
+                <svg
+                  class="h-4 w-4"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  aria-hidden="true"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M8.25 4.5l7.5 7.5-7.5 7.5"
+                  />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div
+            v-if="zoom > 1"
+            class="absolute bottom-2 right-2 rounded bg-black/50 px-1.5 py-0.5 font-mono text-[10px] text-white"
+          >
+            {{ zoom.toFixed(1) }}x
+          </div>
+        </div>
       </div>
     </template>
   </div>
