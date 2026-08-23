@@ -165,6 +165,50 @@ describe('usePipelineReplay', () => {
     expect(r.currentTime.value).toBeCloseTo(r.duration.value, 2);
   });
 
+  it('replays from the start when play is pressed at the end', async () => {
+    const clock = manualClock();
+    const { fetcher } = counting(fakeFile(50));
+    const r = usePipelineReplay({
+      openFetcher: async () => fetcher,
+      raf: clock.raf,
+      caf: clock.caf,
+    });
+    await r.load();
+    r.play();
+    clock.tick(0);
+    clock.tick(60_000);
+    expect(r.isPlaying.value).toBe(false);
+
+    r.play();
+    expect(r.currentTime.value).toBe(0);
+    clock.tick(60_001);
+    clock.tick(60_101);
+    expect(r.isPlaying.value).toBe(true);
+    expect(r.currentTime.value).toBeCloseTo(0.1, 2);
+  });
+
+  it('replays from the start when play is pressed on the last frame', async () => {
+    const clock = manualClock();
+    const { fetcher } = counting(fakeFile(50));
+    const r = usePipelineReplay({
+      openFetcher: async () => fetcher,
+      raf: clock.raf,
+      caf: clock.caf,
+    });
+    await r.load();
+    // Where scrubbing to the far end of the timeline lands: short of duration,
+    // but inside the last frame.
+    await r.seek(r.duration.value - 0.5 / r.fps.value);
+    expect(r.currentTime.value).toBeGreaterThan(0);
+
+    r.play();
+    expect(r.currentTime.value).toBe(0);
+    clock.tick(0);
+    clock.tick(100);
+    expect(r.isPlaying.value).toBe(true);
+    expect(r.currentTime.value).toBeCloseTo(0.1, 2);
+  });
+
   it('serves a second seek inside a cached window without refetching', async () => {
     const { fetcher, calls } = counting(fakeFile(2000));
     const r = usePipelineReplay({ openFetcher: async () => fetcher });

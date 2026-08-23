@@ -309,6 +309,20 @@ export function usePipelineReplay(opts: {
 
   function play(): void {
     if (state.value !== 'ready' || isPlaying.value) return;
+    // tick() pauses as soon as it reaches the end and leaves currentTime there,
+    // so pressing play again would arm the clock only for the next tick to hit
+    // that same branch and pause. Rewind first, the way a video element does.
+    //
+    // The tolerance is a frame wide rather than an exact comparison because
+    // scrubbing to the very end of the bar lands a hair short of `duration`,
+    // and playing the remaining few milliseconds looks identical to the button
+    // doing nothing at all.
+    if (currentTime.value >= duration.value - 1 / fps.value) {
+      currentTime.value = 0;
+      // seek() handles its own failures (catches and moves to 'error'), so
+      // nothing here needs to observe the rejection.
+      void seek(0);
+    }
     isPlaying.value = true;
     lastTickMs = null;
     rafHandle = raf(tick);
