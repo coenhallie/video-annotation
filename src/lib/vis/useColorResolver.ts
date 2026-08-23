@@ -47,15 +47,37 @@ function textForFill(rgb: [number, number, number]): [number, number, number] {
 }
 
 /**
+ * Neutral stand-in used when the frame reported no colour for a team.
+ *
+ * Identical for every team on purpose. The previous fallback picked red for
+ * `team_id` 0 and blue for 1, which drew a confident shirt colour out of
+ * nothing but the team's index - on this pipeline's output that happens on
+ * 16.6% of team entries. `detected: false` lets the renderer draw the absence
+ * as an absence instead.
+ */
+const UNDETECTED: TeamColors = {
+  fill: 'rgba(20,20,20,0.55)',
+  outline: '#e5e7eb',
+  text: '#e5e7eb',
+  fillRgb: [20, 20, 20],
+  detected: false,
+}
+
+/**
  * Resolve a team's colour information into fill / outline / text colours.
  *
  * Resolution priority:
  *  1. `color_rgb` — the detected primary shirt colour from the pipeline.
  *  2. `ordered_colors` — an array of 3+ colour triplets [fill, outline, text].
  *  3. `colors` + `color_weights` — flat channel array sorted by weight.
- *  4. Hard-coded fallbacks keyed on `teamId` (0 = light, 1 = blue, else grey).
+ *  4. Nothing in the frame said anything: `UNDETECTED`.
+ *
+ * `teamId` is retained so the signature still matches the vendored copy. It no
+ * longer selects a colour, because a colour chosen from the team's index is not
+ * something the pipeline reported.
  */
 export function resolveTeamColors(team: Team, teamId: number): TeamColors {
+  void teamId
   // ── Priority 1: color_rgb (preferred primary shirt colour) ────────────────
   const cr = team.color_rgb
   if (Array.isArray(cr) && cr.length >= 3) {
@@ -65,6 +87,7 @@ export function resolveTeamColors(team: Team, teamId: number): TeamColors {
       outline: css(darken(fillRgb, 0.5)),
       text: css(textForFill(fillRgb)),
       fillRgb,
+      detected: true,
     }
   }
 
@@ -77,6 +100,7 @@ export function resolveTeamColors(team: Team, teamId: number): TeamColors {
       outline: css(toRgb(oc[1])),
       text: css(toRgb(oc[2])),
       fillRgb,
+      detected: true,
     }
   }
 
@@ -93,18 +117,20 @@ export function resolveTeamColors(team: Team, teamId: number): TeamColors {
       const pick = (i: number): [number, number, number] =>
         toRgb(colors.slice(idxs[i] * 3, idxs[i] * 3 + 3))
       const r0 = pick(0)
-      return { fill: css(r0), outline: css(pick(1)), text: css(pick(2)), fillRgb: r0 }
+      return {
+        fill: css(r0),
+        outline: css(pick(1)),
+        text: css(pick(2)),
+        fillRgb: r0,
+        detected: true,
+      }
     }
 
     // No weights — just take the first triplet
     const r0 = toRgb(colors.slice(0, 3))
-    return { fill: css(r0), outline: 'black', text: 'white', fillRgb: r0 }
+    return { fill: css(r0), outline: 'black', text: 'white', fillRgb: r0, detected: true }
   }
 
-  // ── Priority 3: hard-coded fallbacks per teamId ───────────────────────────
-  if (teamId === 0)
-    return { fill: '#e03030', outline: '#8b1a1a', text: '#ffffff', fillRgb: [224, 48, 48] }
-  if (teamId === 1)
-    return { fill: '#2d7cd6', outline: '#1a4a8b', text: '#ffffff', fillRgb: [45, 124, 214] }
-  return { fill: '#787878', outline: '#3c3c3c', text: '#c8c8c8', fillRgb: [120, 120, 120] }
+  // ── Nothing in the frame reported a colour ────────────────────────────────
+  return UNDETECTED
 }

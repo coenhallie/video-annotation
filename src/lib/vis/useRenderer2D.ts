@@ -105,6 +105,10 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     let fill: string
     let outline: string
     let textColor: string
+    // Dashed means "the frame reported no colour for this team". Only the
+    // team-coloured branch can be undetected: the other two are keyed on
+    // person_type, which the frame does state.
+    let undetected = false
 
     if (pt.includes('GOALKEEPER')) {
       fill = '#00af4b'
@@ -118,6 +122,7 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
       fill = colors.fill
       outline = colors.outline
       textColor = colors.text
+      undetected = !colors.detected
     }
 
     // Shadow (offset 1px down-right)
@@ -133,7 +138,9 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     ctx.fill()
     ctx.strokeStyle = outline
     ctx.lineWidth = 2
+    if (undetected) ctx.setLineDash([3, 3])
     ctx.stroke()
+    if (undetected) ctx.setLineDash([])
 
     // Possession ring (gold)
     if (player.in_possession) {
