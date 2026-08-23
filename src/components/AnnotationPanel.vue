@@ -536,31 +536,36 @@ watch(
     >
       <!-- Modal panel -->
       <div
-        class="relative flex max-h-[85vh] w-full max-w-2xl flex-col rounded border border-gray-200 bg-white shadow-xl dark:border-white/10 dark:bg-gray-900"
+        class="relative flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded border border-gray-200 bg-white shadow-xl dark:border-white/10 dark:bg-gray-900"
         @click.stop
       >
-        <button
-          type="button"
-          class="absolute right-3 top-3 z-10 rounded p-1 text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
-          @click="closeLabelManagement"
-        >
-          <span class="sr-only">Close</span>
-          <svg
-            class="h-3.5 w-3.5"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              d="M18 6 6 18M6 6l12 12"
-            />
-          </svg>
-        </button>
-        <div class="min-h-0 flex-1 overflow-y-auto p-4">
-          <LabelManagement :project-id="projectId" />
+        <!-- Close sits inside the panel's own sticky header row, so it never
+             covers the "+ New label" action or a scrolled row's actions. -->
+        <div class="min-h-0 flex-1 overflow-y-auto">
+          <LabelManagement :project-id="projectId">
+            <template #header-actions>
+              <button
+                type="button"
+                class="-mr-1 rounded p-1 text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
+                @click="closeLabelManagement"
+              >
+                <span class="sr-only">Close</span>
+                <svg
+                  class="h-3.5 w-3.5"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M18 6 6 18M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </template>
+          </LabelManagement>
         </div>
       </div>
     </div>

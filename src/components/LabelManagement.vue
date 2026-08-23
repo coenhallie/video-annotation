@@ -1,21 +1,16 @@
 <template>
   <div class="label-management w-full bg-white dark:bg-gray-900">
-    <!-- Loading State -->
-    <p
-      v-if="loading"
-      class="px-4 py-12 text-center text-[12px] text-gray-600 dark:text-gray-400"
+    <!-- Header. The three icon-and-number stat cards said less than one mono
+         line: two of the three counts are derivable from the list itself.
+         It sticks, and it renders while loading too, so a host's close control
+         can sit in the row's flow rather than float over the scrolling list. -->
+    <div
+      class="sticky top-0 z-20 flex items-baseline gap-2.5 border-b border-gray-200 bg-white px-4 pb-3 pt-4 dark:border-white/10 dark:bg-gray-900"
     >
-      Loading labels…
-    </p>
-
-    <!-- Content -->
-    <div v-else>
-      <!-- Header. The three icon-and-number stat cards said less than one mono
-           line: two of the three counts are derivable from the list itself. -->
-      <div class="mb-5 flex items-baseline gap-2.5">
-        <h2 class="text-[13px] font-semibold tracking-tight text-gray-900 dark:text-white">
-          Labels
-        </h2>
+      <h2 class="text-[13px] font-semibold tracking-tight text-gray-900 dark:text-white">
+        Labels
+      </h2>
+      <template v-if="!loading">
         <span class="font-mono text-[11px] tracking-wider text-gray-500 dark:text-gray-500">
           {{ labels.length }}
         </span>
@@ -30,17 +25,34 @@
         >
           · MOST USED {{ mostUsedLabel.name }}
         </span>
+      </template>
+      <!-- Actions travel together so a host's close control can never land on
+           top of the create action. -->
+      <div class="ml-auto flex shrink-0 items-center gap-2.5 self-center">
         <button
+          v-if="!loading"
           type="button"
-          class="ml-auto rounded px-1 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-300"
+          class="rounded px-1 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-300"
           @click="showCreateForm = true"
         >
           + New label
         </button>
+        <slot name="header-actions" />
       </div>
+    </div>
 
+    <!-- Loading State -->
+    <p
+      v-if="loading"
+      class="px-4 py-12 text-center text-[12px] text-gray-600 dark:text-gray-400"
+    >
+      Loading labels…
+    </p>
+
+    <!-- Content -->
+    <div v-else>
       <!-- Search and Filter -->
-      <div class="mb-4 flex flex-wrap items-center gap-2">
+      <div class="mb-4 flex flex-wrap items-center gap-2 px-4 pt-4">
         <label
           for="search"
           class="sr-only"
@@ -72,7 +84,7 @@
       </div>
 
       <!-- Labels List -->
-      <div>
+      <div class="px-4 pb-4">
         <ul>
           <li
             v-for="label in filteredLabels"
@@ -602,10 +614,10 @@ watch(
 </script>
 
 <style scoped>
+/* The host owns the scrollport: a second one here would nest inside it and let
+   the sticky header drift away from the panel's top edge. */
 .label-management {
   width: 100%;
   min-height: 500px;
-  max-height: 70vh;
-  overflow-y: auto;
 }
 </style>
