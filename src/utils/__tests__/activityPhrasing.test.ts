@@ -173,23 +173,29 @@ describe('groupActivityByDay', () => {
   });
 
   it('preserves the order it was given and never re-sorts', () => {
-    // Two entries on the same day where the second is older than the first,
-    // plus an older day group. If the implementation sorts by date descending,
-    // it would reorder these and fail.
+    // Supplied OLDEST first, which is the reverse of what the service sends.
+    // That is the point: this module must hand back exactly what it was given,
+    // because re-sorting here would let it silently disagree with the SQL
+    // ORDER BY that produced the rows. A sort-descending implementation would
+    // reverse both the group order and the entries inside the 25th's group, so
+    // this fixture fails against it and the previous already-descending one
+    // did not.
+    const yesterdayEvening = new Date(2026, 7, 24, 20, 0);
+    const todayMorning = new Date(2026, 7, 25, 9, 0);
+    const todayAfternoon = new Date(2026, 7, 25, 15, 0);
+
     const groups = groupActivityByDay(
       [
-        entry({ id: 'a', createdAt: '2026-08-25T15:00:00.000Z' }),
-        entry({ id: 'b', createdAt: '2026-08-25T09:00:00.000Z' }), // same day, but older
-        entry({ id: 'c', createdAt: '2026-08-24T20:00:00.000Z' }), // older day
+        entry({ id: 'c', createdAt: yesterdayEvening.toISOString() }),
+        entry({ id: 'a', createdAt: todayMorning.toISOString() }),
+        entry({ id: 'b', createdAt: todayAfternoon.toISOString() }),
       ],
-      now
+      new Date(2026, 7, 25, 18, 0)
     );
 
-    expect(groups).toHaveLength(2);
-    // TODAY group should preserve the order: a (newer), then b (older within same day)
-    expect(groups[0].entries.map((e) => e.id)).toEqual(['a', 'b']);
-    // YESTERDAY group
-    expect(groups[1].entries.map((e) => e.id)).toEqual(['c']);
+    expect(groups.map((g) => g.label)).toEqual(['YESTERDAY', 'TODAY']);
+    expect(groups[0].entries.map((e) => e.id)).toEqual(['c']);
+    expect(groups[1].entries.map((e) => e.id)).toEqual(['a', 'b']);
   });
 });
 
