@@ -31,6 +31,7 @@ import { useLabelCatalog } from '@/composables/useLabelCatalog';
 import { buildAnnotationPayload, stampSnapshotFrame } from '@/utils/annotationPayload';
 import { canCreateAnnotations } from '@/utils/annotationPermissions';
 import { isPipelineSurfaceVisible } from '@/utils/pipelineSurface';
+import { planHistorySelection } from '@/utils/historySelection';
 import {
   timelineNumbersFor,
   annotationStampFor,
@@ -890,12 +891,40 @@ const activeSidebarPanel = computed<SidebarTab>(() =>
 );
 
 /**
+ * An entry clicked on the History tab while its surface is not the active
+ * one. `annotations` is scoped to `activeSurface` (see useVideoAnnotations),
+ * so the annotation cannot be found until the surface switch's reload
+ * completes; consumed by the watch(annotations, ...) below, the same
+ * "act once the data arrives" idiom as `pendingSeekTime` / watch(videoLoaded).
+ */
+const pendingHistorySelection = ref<{
+  annotationId: string;
+  timestamp: number;
+} | null>(null);
+
+/**
  * The timeline seeks by the annotation's snapshotted timestamp, and selects it
  * when it is still in the loaded list. It does not go through
  * onAnnotationClick directly because that needs the Annotation object, which a
  * history entry does not carry.
+ *
+ * `surface` comes from the event's own summary (added so this can be exact
+ * rather than guessed), not from whatever tab happens to be open. It is
+ * optional: a row written before that field existed carries none, and for
+ * those the old behaviour - look in the current list, else just seek -
+ * still applies.
  */
-const onHistorySelect = (annotationId: string, timestamp: number) => {
+const onHistorySelect = (
+  annotationId: string,
+  timestamp: number,
+  surface?: AnnotationSurface
+) => {
+  const plan = planHistorySelection(surface, activeSurface.value);
+  if (plan.kind === 'switch-surface') {
+    pendingHistorySelection.value = { annotationId, timestamp };
+    activeSurface.value = plan.surface;
+    return;
+  }
   const annotation = (annotations.value || []).find(
     (a) => a.id === annotationId
   );
@@ -905,6 +934,20 @@ const onHistorySelect = (annotationId: string, timestamp: number) => {
   }
   void handleSeekToTimeWithFade(timestamp);
 };
+
+// Consumes pendingHistorySelection once the surface switch it triggered has
+// reloaded `annotations` for the new surface. useVideoAnnotations clears the
+// list synchronously on a surface change and repopulates it once the load
+// resolves (see its watch(surface, ...)), so this fires again with the real
+// data rather than the transient empty array.
+watch(annotations, (list) => {
+  const pending = pendingHistorySelection.value;
+  if (!pending) return;
+  const annotation = (list || []).find((a) => a.id === pending.annotationId);
+  if (!annotation) return;
+  pendingHistorySelection.value = null;
+  onAnnotationClick(annotation);
+});
 
 // Real-time features
 const { setupPresenceTracking } =
