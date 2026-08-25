@@ -463,15 +463,13 @@ BEGIN
     --    Clearing the claims is enough: auth.uid() on this database is
     --    nullif(current_setting(...), '')::jsonb->>'sub', so a claims value
     --    with no "sub" yields NULL rather than raising (verified 2026-08-25).
-    --    "sessionId" is required here by the pre-existing
-    --    valid_user_identification CHECK on annotation_comments, which is
-    --    ("userId" IS NOT NULL AND "sessionId" IS NULL) OR the reverse. It
-    --    predates this feature and the triggers never read it, so it changes
-    --    nothing about what this assertion tests - but omitting it fails the
-    --    insert before the trigger ever fires.
+    -- sessionId is required here by the pre-existing "valid_user_identification"
+    -- CHECK on annotation_comments (userId XOR sessionId), unrelated to this
+    -- migration: it predates activity_events and this migration's triggers
+    -- never read sessionId, so it does not affect what is being asserted.
     PERFORM set_config('request.jwt.claims', '{"role":"anon"}', true);
     INSERT INTO public.annotation_comments ("annotationId", content, "userDisplayName", "isAnonymous", "sessionId")
-    VALUES (v_ann, 'anon says hello', 'Visitor 7', true, gen_random_uuid()::text)
+    VALUES (v_ann, 'anon says hello', 'Visitor 7', true, 'anon-session-' || gen_random_uuid()::text)
     RETURNING id INTO v_anon_comment;
 
     IF (SELECT "actorId" FROM public.activity_events WHERE "entityId" = v_anon_comment) IS NOT NULL THEN
@@ -599,6 +597,17 @@ BEGIN
     -- event that had been logged during the delete would be swept away with
     -- the comparison video regardless of whether the guard fired.
     DELETE FROM public.comparison_videos WHERE id = v_cv;
+
+    -- Prove guard 2 was actually entered rather than trusting a schema fact
+    -- that lives outside this suite: annotations."comparisonVideoId" is
+    -- ON DELETE CASCADE (verified 2026-08-25), so the comparison delete must
+    -- have deleted this annotation too. If it were ON DELETE SET NULL instead,
+    -- the annotation would just be orphaned, no DELETE trigger would fire, and
+    -- the event count below would pass trivially even with guard 2 removed.
+    SELECT count(*) INTO n FROM public.annotations WHERE id = v_ann;
+    IF n <> 0 THEN
+        RAISE EXCEPTION 'guard 2 never ran: the comparison delete did not cascade to the annotation';
+    END IF;
 
     SELECT count(*) INTO n FROM public.activity_events WHERE "comparisonVideoId" = v_cv;
     IF n <> 0 THEN RAISE EXCEPTION 'comparison video delete left % events behind', n; END IF;
