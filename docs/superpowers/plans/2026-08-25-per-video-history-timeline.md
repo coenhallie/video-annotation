@@ -550,6 +550,104 @@ BEGIN
     END IF;
 END $$;
 
+-- 9. Guard 2: an annotation logged against a comparison video lands in
+--    "comparisonVideoId", and deleting that comparison video does not error.
+--    videoAId and videoBId must differ (comparison_videos_different_videos),
+--    so this needs two probe videos, not one reused for both sides.
+DO $$
+DECLARE
+    f        RECORD;
+    v_va     uuid;
+    v_vb     uuid;
+    v_cv     uuid;
+    v_ann    uuid;
+    v_target uuid;
+    n        int;
+BEGIN
+    SELECT * INTO f FROM fx;
+
+    PERFORM set_config('request.jwt.claims',
+        json_build_object('sub', f.author, 'role', 'authenticated')::text, true);
+
+    INSERT INTO public.videos ("ownerId", title, url, "videoId", duration, "totalFrames")
+    VALUES (f.author, 'activity probe A', 'https://example.invalid/probe-a.mp4',
+            'activity-probe-a-' || gen_random_uuid()::text, 10, 300)
+    RETURNING id INTO v_va;
+
+    INSERT INTO public.videos ("ownerId", title, url, "videoId", duration, "totalFrames")
+    VALUES (f.author, 'activity probe B', 'https://example.invalid/probe-b.mp4',
+            'activity-probe-b-' || gen_random_uuid()::text, 10, 300)
+    RETURNING id INTO v_vb;
+
+    INSERT INTO public.comparison_videos (title, "videoAId", "videoBId", "userId")
+    VALUES ('activity probe comparison', v_va, v_vb, f.author)
+    RETURNING id INTO v_cv;
+
+    INSERT INTO public.annotations ("comparisonVideoId", "userId", content, title, "timestamp", "startFrame")
+    VALUES (v_cv, f.author, 'body', 'comparison probe', 1, 30)
+    RETURNING id INTO v_ann;
+
+    SELECT "comparisonVideoId" INTO v_target FROM public.activity_events
+     WHERE "entityId" = v_ann AND action = 'created';
+    IF v_target IS DISTINCT FROM v_cv THEN
+        RAISE EXCEPTION 'comparison annotation logged against %, expected comparisonVideoId %', v_target, v_cv;
+    END IF;
+
+    -- The proof here is that this DELETE does not raise 23503, the same as
+    -- assertion 7. The zero-count check below is auxiliary, not conclusive:
+    -- activity_events."comparisonVideoId" is itself ON DELETE CASCADE, so any
+    -- event that had been logged during the delete would be swept away with
+    -- the comparison video regardless of whether the guard fired.
+    DELETE FROM public.comparison_videos WHERE id = v_cv;
+
+    SELECT count(*) INTO n FROM public.activity_events WHERE "comparisonVideoId" = v_cv;
+    IF n <> 0 THEN RAISE EXCEPTION 'comparison video delete left % events behind', n; END IF;
+END $$;
+
+-- 10. Guard 3: deleting the annotation author's public.users row (the same
+--     shape a users-cascading-from-auth.users delete produces) cascades the
+--     annotation and logs no delete event for it. A synthetic auth.users row
+--     gives handle_new_user() something to provision, so the trigger sees a
+--     real, then vanished, public.users row rather than one that was never
+--     satisfied by any FK in the first place.
+DO $$
+DECLARE
+    f       RECORD;
+    v_video uuid;
+    v_synth uuid;
+    v_ann   uuid;
+    n       int;
+BEGIN
+    SELECT * INTO f FROM fx;
+
+    INSERT INTO public.videos ("ownerId", title, url, "videoId", duration, "totalFrames")
+    VALUES (f.author, 'activity probe guard3', 'https://example.invalid/probe-guard3.mp4',
+            'activity-probe-guard3-' || gen_random_uuid()::text, 10, 300)
+    RETURNING id INTO v_video;
+
+    INSERT INTO auth.users (id, email)
+    VALUES (gen_random_uuid(), 'probe-' || gen_random_uuid()::text || '@example.invalid')
+    RETURNING id INTO v_synth;
+
+    PERFORM set_config('request.jwt.claims',
+        json_build_object('sub', v_synth, 'role', 'authenticated')::text, true);
+
+    INSERT INTO public.annotations ("videoId", "userId", content, title, "timestamp", "startFrame")
+    VALUES (v_video, v_synth, 'body', 'synthetic author probe', 1, 30)
+    RETURNING id INTO v_ann;
+
+    -- annotations."userId" is ON DELETE CASCADE from users, so this deletes
+    -- the annotation in the same statement, exactly as a users-row deletion
+    -- caused by deleting the underlying auth.users row would.
+    DELETE FROM public.users WHERE id = v_synth;
+
+    SELECT count(*) INTO n FROM public.activity_events
+     WHERE "entityId" = v_ann AND action = 'deleted';
+    IF n <> 0 THEN
+        RAISE EXCEPTION 'annotation delete for a vanished author logged % events', n;
+    END IF;
+END $$;
+
 SELECT 'ASSERTIONS PASSED' AS result;
 ```
 

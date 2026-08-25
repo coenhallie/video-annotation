@@ -210,6 +210,19 @@ BEGIN
         v_actor := v_row."userId";
     END IF;
 
+    -- "actorId" references public.users, ON DELETE SET NULL, so a departed
+    -- user already degrades gracefully once they're gone. But nothing stops
+    -- v_actor from naming a users row that never existed or was removed in
+    -- this same transaction (e.g. auth.uid() outliving its public.users row
+    -- some other way than the ordinary auth.users cascade). This table must
+    -- never fail a write it is only observing, the same rule that keeps
+    -- "entityId" unconstrained and the target CHECK weak, so degrade to NULL
+    -- here rather than let the FK raise 23503 and abort the annotation write.
+    IF v_actor IS NOT NULL
+       AND NOT EXISTS (SELECT 1 FROM public.users WHERE id = v_actor) THEN
+        v_actor := NULL;
+    END IF;
+
     INSERT INTO public.activity_events (
         "videoId", "comparisonVideoId", "actorId", "entityType", "entityId", action, summary
     ) VALUES (
@@ -239,6 +252,7 @@ DECLARE
     v_ann        RECORD;
     v_video      uuid;
     v_comparison uuid;
+    v_actor      uuid := auth.uid();
 BEGIN
     IF TG_OP = 'DELETE' THEN
         v_row := OLD;
@@ -268,13 +282,22 @@ BEGIN
         RETURN NULL;
     END IF;
 
+    -- Same degrade-to-NULL as log_annotation_activity(): "actorId" references
+    -- public.users, and this table must never fail a write it is only
+    -- observing. auth.uid() outliving its public.users row is not reachable
+    -- today, but nothing here should depend on that staying true.
+    IF v_actor IS NOT NULL
+       AND NOT EXISTS (SELECT 1 FROM public.users WHERE id = v_actor) THEN
+        v_actor := NULL;
+    END IF;
+
     INSERT INTO public.activity_events (
         "videoId", "comparisonVideoId", "actorId", "actorName",
         "entityType", "entityId", action, summary
     ) VALUES (
         v_video,
         v_comparison,
-        auth.uid(),
+        v_actor,
         -- An anonymous share-link commenter has no uid and no users row. The
         -- display name they chose is the only name this entry will ever have.
         CASE WHEN v_row."userId" IS NULL THEN v_row."userDisplayName" END,
