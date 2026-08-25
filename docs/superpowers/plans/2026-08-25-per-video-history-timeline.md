@@ -407,12 +407,13 @@ SELECT
 
 DO $$
 DECLARE
-    f            RECORD;
-    v_video      uuid;
-    v_ann        uuid;
-    v_comment    uuid;
-    n            int;
-    v_actor      uuid;
+    f               RECORD;
+    v_video         uuid;
+    v_ann           uuid;
+    v_comment       uuid;
+    v_anon_comment  uuid;
+    n               int;
+    v_actor         uuid;
 BEGIN
     SELECT * INTO f FROM fx;
     IF f.author = f.moderator THEN
@@ -459,32 +460,48 @@ BEGIN
     IF n <> 1 THEN RAISE EXCEPTION 'content update logged % events', n; END IF;
 
     -- 4. An anonymous comment stores the display name and a null actor.
-    PERFORM set_config('request.jwt.claims', '', true);
+    --    Clearing the claims is enough: auth.uid() on this database is
+    --    nullif(current_setting(...), '')::jsonb->>'sub', so a claims value
+    --    with no "sub" yields NULL rather than raising (verified 2026-08-25).
+    PERFORM set_config('request.jwt.claims', '{"role":"anon"}', true);
     INSERT INTO public.annotation_comments ("annotationId", content, "userDisplayName", "isAnonymous")
     VALUES (v_ann, 'anon says hello', 'Visitor 7', true)
-    RETURNING id INTO v_comment;
+    RETURNING id INTO v_anon_comment;
 
-    IF (SELECT "actorId" FROM public.activity_events WHERE "entityId" = v_comment) IS NOT NULL THEN
+    IF (SELECT "actorId" FROM public.activity_events WHERE "entityId" = v_anon_comment) IS NOT NULL THEN
         RAISE EXCEPTION 'anonymous comment got an actorId';
     END IF;
-    IF (SELECT "actorName" FROM public.activity_events WHERE "entityId" = v_comment) <> 'Visitor 7' THEN
+    IF (SELECT "actorName" FROM public.activity_events WHERE "entityId" = v_anon_comment) <> 'Visitor 7' THEN
         RAISE EXCEPTION 'anonymous comment did not snapshot the display name';
     END IF;
 
     -- 5. A comment deleted by someone other than its author attributes to the
-    --    deleter. This is the only cross-user case the policies allow today.
+    --    deleter. This is the only cross-user case the policies allow today,
+    --    so the comment must have a real author who is NOT the deleter: an
+    --    anonymous comment has "userId" IS NULL, which would make any uid
+    --    trivially "not the author" and prove nothing.
+    PERFORM set_config('request.jwt.claims',
+        json_build_object('sub', f.author, 'role', 'authenticated')::text, true);
+    INSERT INTO public.annotation_comments ("annotationId", content, "userId")
+    VALUES (v_ann, 'authored by the annotation owner', f.author)
+    RETURNING id INTO v_comment;
+
     PERFORM set_config('request.jwt.claims',
         json_build_object('sub', f.moderator, 'role', 'authenticated')::text, true);
     DELETE FROM public.annotation_comments WHERE id = v_comment;
 
     SELECT "actorId" INTO v_actor FROM public.activity_events
      WHERE "entityId" = v_comment AND action = 'deleted';
-    IF v_actor <> f.moderator THEN
-        RAISE EXCEPTION 'comment delete attributed to % not the deleter', v_actor;
+    IF v_actor IS DISTINCT FROM f.moderator THEN
+        RAISE EXCEPTION 'comment delete attributed to %, expected the deleter %',
+            v_actor, f.moderator;
+    END IF;
+    IF v_actor = f.author THEN
+        RAISE EXCEPTION 'comment delete attributed to the author, not the deleter';
     END IF;
 
     -- 6. Deleting an annotation that still has comments logs exactly one event,
-    --    for the annotation, and nothing for the cascaded comments.
+    --    for the annotation, and nothing for either cascaded comment.
     INSERT INTO public.annotation_comments ("annotationId", content, "userId")
     VALUES (v_ann, 'cascade me', f.author)
     RETURNING id INTO v_comment;
@@ -496,8 +513,8 @@ BEGIN
     IF n <> 1 THEN RAISE EXCEPTION 'annotation delete logged % events', n; END IF;
 
     SELECT count(*) INTO n FROM public.activity_events
-     WHERE "entityId" = v_comment AND action = 'deleted';
-    IF n <> 0 THEN RAISE EXCEPTION 'cascaded comment logged % delete events', n; END IF;
+     WHERE "entityId" IN (v_comment, v_anon_comment) AND action = 'deleted';
+    IF n <> 0 THEN RAISE EXCEPTION 'cascaded comments logged % delete events', n; END IF;
 
     -- 7. Deleting a video with annotations does not error and leaves no events.
     INSERT INTO public.annotations ("videoId", "userId", content, title, "timestamp", "startFrame")
@@ -1557,7 +1574,7 @@ describe('ActivityTimeline', () => {
     w.unmount();
   });
 
-  it('renders a dead entry as plain text, not a button, and emits nothing', async () => {
+  it('renders an entry whose target is gone as plain text, not a button, and emits nothing', async () => {
     getActivity.mockResolvedValue([entry({ live: false, action: 'deleted' })]);
     const w = mount({ target: { videoId: 'v1' }, active: true });
     await nextTick();
@@ -2083,8 +2100,9 @@ Open a video that has annotations. Confirm, and fix anything that is not true:
 4. Deleting that annotation and returning to History shows a `removed` entry, and the `added` entry is now struck through and inert.
 5. Clicking a live entry seeks the video.
 6. Clicking a dead entry does nothing, shows no pointer cursor, and cannot be focused with Tab.
-7. Both light and dark themes read correctly. The rule, dots and dead-entry greys must all stay legible in both.
+7. Both light and dark themes read correctly. The rule, dots and inert-entry greys must all stay legible in both.
 8. The sidebar tab bar is visually distinct from the surface tab bar above the player.
+9. **Canvas geometry survives the switch.** `v-show` keeps `AnnotationPanel` mounted but sets `display: none` on its subtree, and a canvas inside a hidden subtree reports zero width and height. Switch to History, switch back, then draw an annotation on the video and confirm the drawing lands under the cursor rather than offset or scaled. If it does not, the wrapper needs its size preserved (`v-show` on a sibling overlay, or an explicit resize on tab activation) rather than a switch to `v-if`, which would lose the form draft.
 
 - [ ] **Step 9: Commit**
 
