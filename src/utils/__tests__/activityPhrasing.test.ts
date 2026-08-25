@@ -101,6 +101,17 @@ describe('activityDayKey', () => {
     );
   });
 
+  it('keys by local calendar day, not UTC', () => {
+    // Both ends of a local day. In any timezone with a non-zero offset at least
+    // one of these lands on a different UTC date, so a getUTC*-based
+    // implementation returns the neighbouring day and fails. Under UTC itself
+    // both agree and the test simply passes - it can never false-fail.
+    const earlyLocal = new Date(2026, 7, 25, 0, 30);
+    const lateLocal = new Date(2026, 7, 25, 23, 30);
+    expect(activityDayKey(earlyLocal.toISOString())).toBe('2026-08-25');
+    expect(activityDayKey(lateLocal.toISOString())).toBe('2026-08-25');
+  });
+
   it('returns an empty key for an unparseable timestamp', () => {
     expect(activityDayKey('not a date')).toBe('');
   });
@@ -159,6 +170,26 @@ describe('groupActivityByDay', () => {
     const groups = groupActivityByDay([entry({ createdAt: 'nonsense' })], now);
     expect(groups).toHaveLength(1);
     expect(groups[0].entries).toHaveLength(1);
+  });
+
+  it('preserves the order it was given and never re-sorts', () => {
+    // Two entries on the same day where the second is older than the first,
+    // plus an older day group. If the implementation sorts by date descending,
+    // it would reorder these and fail.
+    const groups = groupActivityByDay(
+      [
+        entry({ id: 'a', createdAt: '2026-08-25T15:00:00.000Z' }),
+        entry({ id: 'b', createdAt: '2026-08-25T09:00:00.000Z' }), // same day, but older
+        entry({ id: 'c', createdAt: '2026-08-24T20:00:00.000Z' }), // older day
+      ],
+      now
+    );
+
+    expect(groups).toHaveLength(2);
+    // TODAY group should preserve the order: a (newer), then b (older within same day)
+    expect(groups[0].entries.map((e) => e.id)).toEqual(['a', 'b']);
+    // YESTERDAY group
+    expect(groups[1].entries.map((e) => e.id)).toEqual(['c']);
   });
 });
 
