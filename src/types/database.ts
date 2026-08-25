@@ -198,6 +198,49 @@ export interface DatabaseProjectOpen {
   openedAt: string;
 }
 
+// Activity log interfaces
+export type ActivityEntityType = 'annotation' | 'comment';
+export type ActivityAction = 'created' | 'updated' | 'deleted';
+
+/**
+ * Snapshot taken at event time. Every field is optional because the row has to
+ * survive schema drift in both directions: a deleted annotation has no title
+ * left to join to, and a future trigger may add fields this frontend predates.
+ */
+export interface ActivitySummary {
+  title?: string;
+  excerpt?: string;
+  annotationTitle?: string;
+  annotationId?: string;
+  timestamp?: number;
+}
+
+export interface DatabaseActivityEvent {
+  id: string;
+  videoId: string | null;
+  comparisonVideoId: string | null;
+  actorId: string | null;
+  actorName: string | null;
+  entityType: ActivityEntityType;
+  entityId: string;
+  action: ActivityAction;
+  summary: ActivitySummary;
+  createdAt: string;
+}
+
+/** A row with its actor name resolved and its target's liveness decided. */
+export interface ActivityEntry extends DatabaseActivityEvent {
+  actor: string;
+  /** The annotation this entry points at still exists, so clicking can seek. */
+  live: boolean;
+}
+
+export interface ActivityDayGroup {
+  key: string;
+  label: string;
+  entries: ActivityEntry[];
+}
+
 // Application-specific interfaces (for Vue components)
 export interface Annotation {
   id: string | number; // Support both UUID and legacy timestamp IDs
