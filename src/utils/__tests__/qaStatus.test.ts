@@ -5,7 +5,6 @@ import {
   qaStatusLabel,
   qaStatusPillClass,
   qaStatusToneClass,
-  resolveQaStatusTarget,
   mergeQaStatusUpdate,
   toQaStatus,
 } from '@/utils/qaStatus';
@@ -83,46 +82,6 @@ describe('qaStatus vocabulary', () => {
     for (const status of QA_STATUSES.filter((s) => s !== 'failed')) {
       expect(qaStatusPillClass(status)).not.toContain('red');
     }
-  });
-});
-
-describe('resolveQaStatusTarget', () => {
-  const loadedVideo = {
-    id: 'video-1',
-    qaStatus: 'in_review' as const,
-    qaStatusUpdatedAt: '2026-08-20T00:00:00.000Z',
-  };
-
-  it('narrows a loaded, non-shared video to its QA target', () => {
-    expect(resolveQaStatusTarget(loadedVideo, false, false)).toEqual({
-      id: 'video-1',
-      qaStatus: 'in_review',
-      qaStatusUpdatedAt: '2026-08-20T00:00:00.000Z',
-    });
-  });
-
-  it('returns null on a shared video, regardless of what loaded', () => {
-    expect(resolveQaStatusTarget(loadedVideo, true, false)).toBeNull();
-  });
-
-  it('returns null on a shared comparison, regardless of what loaded', () => {
-    expect(resolveQaStatusTarget(loadedVideo, false, true)).toBeNull();
-  });
-
-  it('returns null while no video has loaded', () => {
-    expect(resolveQaStatusTarget(null, false, false)).toBeNull();
-    expect(resolveQaStatusTarget(undefined, false, false)).toBeNull();
-  });
-
-  it('returns null for a partial video with no id or no qaStatus yet', () => {
-    expect(resolveQaStatusTarget({ qaStatus: 'staging' as const }, false, false)).toBeNull();
-    expect(resolveQaStatusTarget({ id: 'video-1' }, false, false)).toBeNull();
-  });
-
-  it('omits qaStatusUpdatedAt rather than setting it to undefined', () => {
-    const target = resolveQaStatusTarget({ id: 'video-1', qaStatus: 'not_started' }, false, false);
-    expect(target).toEqual({ id: 'video-1', qaStatus: 'not_started' });
-    expect(target && 'qaStatusUpdatedAt' in target).toBe(false);
   });
 });
 

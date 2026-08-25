@@ -37,11 +37,6 @@ import {
   annotationStampFor,
   type TimelineNumbers,
 } from '@/utils/timelineBinding';
-import {
-  resolveQaStatusTarget,
-  mergeQaStatusUpdate,
-  type QaStatusTarget,
-} from '@/utils/qaStatus';
 import { ShareService } from '@/services/shareService';
 import { VideoService } from '@/services/videoService';
 import { ComparisonVideoService } from '@/services/comparisonVideoService';
@@ -1562,29 +1557,6 @@ watch(currentVideoId, () => {
   pipelineEverOpened.value = false;
 });
 
-// The QA control's target, or null when it must not render. See
-// resolveQaStatusTarget for the rule; kept there as a pure function so it is
-// testable without mounting this view.
-const qaStatusTarget = computed<QaStatusTarget | null>(() =>
-  resolveQaStatusTarget(
-    currentVideoObject.value,
-    isSharedVideo.value,
-    isSharedComparison.value
-  )
-);
-
-// Keeps currentVideoObject authoritative after a write, mirroring
-// VideoDetailsPanel's own Object.assign. Without this, a later unrelated
-// reassignment of the same ref (an AWS presigned URL refresh, for instance)
-// spreads the pre-save qaStatus forward and the control reverts to the old
-// value even though the write already succeeded.
-function onQaStatusUpdated(updated: Video) {
-  currentVideoObject.value = mergeQaStatusUpdate(
-    currentVideoObject.value,
-    updated
-  );
-}
-
 // The pipeline surface stays mounted once opened (see pipelineEverOpened
 // below), so returning to the tab does not re-fetch and re-index the whole
 // JSONL behind a spinner, and the replay keeps its own position. That makes
@@ -2009,7 +1981,6 @@ watch(
             :read-only="(isSharedVideo || isSharedComparison) && !canComment()"
             :can-annotate="canAnnotate"
             :video-id="currentVideoId || ''"
-            :video="qaStatusTarget"
             :loading="annotationsLoading"
             :is-dual-mode="playerMode === 'dual'"
             :drawing-canvas-a="dualVideoPlayer?.drawingCanvasA || null"
@@ -2043,7 +2014,6 @@ watch(
             @form-show="handleFormShow"
             @form-hide="handleFormHide"
             @pause="handleTimelinePause"
-            @qa-status-updated="onQaStatusUpdated"
             @create-anonymous-session="handleCreateAnonymousSession"
           />
           <div

@@ -11,17 +11,15 @@ import AnnotationForm from './AnnotationForm.vue';
 import AnnotationCard from './AnnotationCard.vue';
 import AnnotationSkeleton from './AnnotationSkeleton.vue';
 import LabelManagement from './LabelManagement.vue';
-import QaStatusSelect from './QaStatusSelect.vue';
 import { useAuth } from '../composables/useAuth';
 import { useGlobalComments } from '../composables/useGlobalComments';
 import { useAnnotationFiltering } from '../composables/useAnnotationFiltering';
 import { useLabelCatalog } from '../composables/useLabelCatalog';
-import type { Comment, Video } from '../types/database';
+import type { Comment } from '../types/database';
 import type { UseDrawingCanvas } from '../composables/useDrawingCanvas';
 import type { UseDrawingCoordinator } from '../composables/useDrawingCoordinator';
 import type { DualVideoPlayer } from '../composables/useDualVideoPlayer';
 import type { DrawingCanvasExpose, PanelAnnotation } from '../types/component-interfaces';
-import type { QaStatusTarget } from '@/utils/qaStatus';
 
 const props = defineProps({
   annotations: {
@@ -65,15 +63,6 @@ const props = defineProps({
   },
   videoId: {
     type: String,
-    default: null,
-  },
-  /**
-   * The video this rail belongs to, for the QA status control. EditorView
-   * passes null in dual mode and in shared views, and the control does not
-   * render without it.
-   */
-  video: {
-    type: Object as PropType<QaStatusTarget | null>,
     default: null,
   },
   loading: {
@@ -147,7 +136,6 @@ const emit = defineEmits([
   'comment-added',
   'comment-updated',
   'comment-deleted',
-  'qa-status-updated',
 ]);
 
 // Authentication
@@ -294,13 +282,6 @@ const handleCommentDeleted = (comment: Comment) => {
   emit('comment-deleted', comment);
 };
 
-// Pass-through only: this panel does not know about the store that owns the
-// loaded video, so it hands the saved row to whoever mounted it rather than
-// writing anywhere itself.
-const handleQaStatusUpdated = (updated: Video) => {
-  emit('qa-status-updated', updated);
-};
-
 // --- Label management ---
 
 const openLabelManagement = () => {
@@ -392,35 +373,22 @@ watch(
       </span>
     </header>
 
-    <!-- QA status. Here rather than in EditorHeader: that row is AppHeader,
-         shared with the dashboard, and it holds identity plus three icon
-         buttons under a stated rule of one hover colour for all of them. A
-         five-value dropdown there would be the loudest thing in the bar. The
-         rail is the editor's per-video sidebar, so the control lives in the
-         same kind of block VideoDetailsPanel gives it.
-
-         `canAnnotate` is a third gate beyond the two the spec names (dual
-         projects, shared/anonymous viewers). It is coincidentally correct
-         today: canAnnotate resolves to isPublic || own, the same set the RPC's
-         first two visibility branches allow. That coupling is load-bearing
-         but not enforced anywhere - if annotation permissions ever narrow
-         independently of QA visibility, this control silently disappears for
-         the reviewers this feature exists for. -->
-    <div
-      v-if="video && !isDualMode && canAnnotate"
-      class="shrink-0 border-b border-gray-200 px-4 pb-3 dark:border-white/10"
-    >
-      <QaStatusSelect
-        :video="video"
-        @updated="handleQaStatusUpdated"
-      />
-    </div>
+    <!-- QA status is deliberately NOT here. It belongs to picking work, not to
+         doing it: the dashboard list and the details panel are where a
+         reviewer sets a video's state before opening it. Inside the editor the
+         rail is for annotating, and a five-value dropdown at the top of it was
+         competing with the annotation list for the same attention. See
+         VideoDetailsPanel for the control that remains. -->
 
     <!-- Category filter. Hidden until the video has categorised annotations,
-         so a lone "All" pill never sits over an empty list. -->
+         so a lone "All" pill never sits over an empty list.
+
+         pt-3 rather than sitting flush: the header above ends on a divider,
+         and without it the pill row reads as attached to that rule instead of
+         as the top of the list it filters. -->
     <div
       v-if="availableCategories.length > 0"
-      class="flex shrink-0 flex-wrap items-center gap-1 px-3 pb-3"
+      class="flex shrink-0 flex-wrap items-center gap-1 px-3 pb-3 pt-3"
     >
       <button
         type="button"
