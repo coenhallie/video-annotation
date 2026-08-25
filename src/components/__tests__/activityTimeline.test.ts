@@ -31,13 +31,15 @@ function entry(over: Partial<ActivityEntry> = {}): ActivityEntry {
 function mount(props: Record<string, unknown>) {
   const root = document.createElement('div');
   document.body.appendChild(root);
-  const selected: Array<[string, number]> = [];
+  const selected: Array<[string, number, string | undefined]> = [];
   const app = createApp(
     defineComponent({
       setup: () => () =>
         h(ActivityTimeline, {
           ...props,
-          onSelectAnnotation: (id: string, t: number) => selected.push([id, t]),
+          onSelectAnnotation: (id: string, t: number, surface?: string) => {
+            selected.push([id, t, surface]);
+          },
         }),
     })
   );
@@ -147,7 +149,7 @@ describe('ActivityTimeline', () => {
     await nextTick();
 
     w.q('[data-testid="activity-entry"]')?.click();
-    expect(w.selected).toEqual([['a1', 12.5]]);
+    expect(w.selected).toEqual([['a1', 12.5, undefined]]);
     w.unmount();
   });
 
@@ -248,7 +250,104 @@ describe('ActivityTimeline', () => {
     await nextTick();
 
     w.q('[data-testid="activity-entry"]')?.click();
-    expect(w.selected).toEqual([['a9', 4.25]]);
+    expect(w.selected).toEqual([['a9', 4.25, undefined]]);
+    w.unmount();
+  });
+
+  it('emits the surface the entry carries, so the caller can switch tabs before selecting', async () => {
+    getActivity.mockResolvedValue([
+      entry({ summary: { title: 'Pipeline note', timestamp: 8, surface: 'pipeline' } }),
+    ]);
+    const w = mount({ target: { videoId: 'v1' }, active: true });
+    await nextTick();
+    await nextTick();
+
+    w.q('[data-testid="activity-entry"]')?.click();
+    expect(w.selected).toEqual([['a1', 8, 'pipeline']]);
+    w.unmount();
+  });
+
+  it('clears entries immediately when the target changes to a different video, before the new fetch resolves', async () => {
+    // Regression test: a stale entry left on screen during the refetch can be
+    // clicked, emitting the OLD video's annotation id while the NEW video is
+    // now loaded - seeking the new player to the wrong timestamp.
+    getActivity.mockResolvedValueOnce([
+      entry({ id: 'old', summary: { title: 'old target entry' } }),
+    ]);
+    const w = mountReactive({ videoId: 'v1' });
+    await nextTick();
+    await nextTick();
+    expect(w.text()).toContain('old target entry');
+
+    let resolveSecond!: (rows: ActivityEntry[]) => void;
+    getActivity.mockImplementationOnce(
+      () => new Promise<ActivityEntry[]>((resolve) => { resolveSecond = resolve; })
+    );
+
+    w.target.value = { videoId: 'v2' };
+    await nextTick();
+    await nextTick();
+
+    // The v1 entry must be gone as soon as the target changes, not once v2's
+    // query happens to resolve.
+    expect(w.text()).not.toContain('old target entry');
+    expect(w.all('[data-testid="activity-entry"]')).toHaveLength(0);
+
+    resolveSecond([]);
+    await nextTick();
+    await nextTick();
+    w.unmount();
+  });
+
+  it('does not clear entries when the target is re-derived but names the same video', async () => {
+    // EditorView recomputes `activityTarget` as a fresh object; a naive fix
+    // that clears on any new object reference would blank the panel on every
+    // unrelated recompute, not just a real target change.
+    getActivity.mockResolvedValueOnce([entry({ id: 'first' })]);
+    const w = mountReactive({ videoId: 'v1' });
+    await nextTick();
+    await nextTick();
+    expect(w.all('[data-testid="activity-entry"]')).toHaveLength(1);
+
+    let resolveSecond!: (rows: ActivityEntry[]) => void;
+    getActivity.mockImplementationOnce(
+      () => new Promise<ActivityEntry[]>((resolve) => { resolveSecond = resolve; })
+    );
+
+    w.target.value = { videoId: 'v1' }; // new object, same video
+    await nextTick();
+
+    expect(w.all('[data-testid="activity-entry"]')).toHaveLength(1);
+
+    resolveSecond([entry({ id: 'first' })]);
+    await nextTick();
+    await nextTick();
+    w.unmount();
+  });
+
+  it('renders the wall-clock time of day, not a relative string that repeats the day heading', async () => {
+    // Both entries are more than 7 days old, so formatRelativeTime's old
+    // behaviour (toLocaleDateString()) would print the SAME string for both -
+    // identical to the day heading above them - with no way to tell them apart.
+    const morning = new Date('2020-01-15T09:04:00');
+    const afternoon = new Date('2020-01-15T16:47:00');
+    getActivity.mockResolvedValue([
+      entry({ id: 'a', createdAt: afternoon.toISOString(), summary: { title: 'Second' } }),
+      entry({ id: 'b', createdAt: morning.toISOString(), summary: { title: 'First' } }),
+    ]);
+    const w = mount({ target: { videoId: 'v1' }, active: true });
+    await nextTick();
+    await nextTick();
+
+    const times = w.all('[data-testid="activity-time"]').map((el) => el.textContent);
+    expect(times).toHaveLength(2);
+    expect(times[0]).not.toEqual(times[1]);
+    expect(times[0]).toContain(
+      afternoon.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+    );
+    expect(times[1]).toContain(
+      morning.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+    );
     w.unmount();
   });
 });

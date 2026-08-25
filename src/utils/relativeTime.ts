@@ -27,3 +27,19 @@ export function formatRelativeTime(iso: string, now: Date = new Date()): string 
   if (days < 7) return `${days} DAYS AGO`;
   return then.toLocaleDateString();
 }
+
+/**
+ * Wall-clock time of day, local, hours and minutes only. For the activity
+ * timeline: once an entry is more than 7 days old, `formatRelativeTime` above
+ * falls back to the same date string the day heading already printed, so two
+ * entries from different times on that day become indistinguishable. This
+ * always carries information the heading does not.
+ */
+export function formatClockTime(iso: string): string {
+  const then = new Date(iso);
+  if (!Number.isFinite(then.getTime())) return '';
+  return then.toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}

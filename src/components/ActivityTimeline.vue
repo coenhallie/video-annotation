@@ -8,8 +8,8 @@ import {
   groupActivityByDay,
 } from '@/utils/activityPhrasing';
 import { formatTime } from '@/utils/formatters';
-import { formatRelativeTime } from '@/utils/relativeTime';
-import type { ActivityEntry } from '@/types/database';
+import { formatClockTime } from '@/utils/relativeTime';
+import type { ActivityEntry, AnnotationSurface } from '@/types/database';
 
 const props = defineProps<{
   target: ActivityTarget | null;
@@ -18,7 +18,12 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'select-annotation', annotationId: string, timestamp: number): void;
+  (
+    e: 'select-annotation',
+    annotationId: string,
+    timestamp: number,
+    surface?: AnnotationSurface
+  ): void;
 }>();
 
 const entries = ref<ActivityEntry[]>([]);
@@ -31,8 +36,29 @@ const loading = ref(false);
  */
 let request = 0;
 
+/** A stable, structural identity for a target, so a freshly-computed object
+ * with the same underlying video does not read as "changed". */
+function targetKey(target: ActivityTarget | null): string | null {
+  if (!target) return null;
+  return 'videoId' in target
+    ? `video:${target.videoId}`
+    : `comparison:${target.comparisonVideoId}`;
+}
+
+let lastTargetKey: string | null = null;
+
 const load = async () => {
   if (!props.active || !props.target) return;
+  const key = targetKey(props.target);
+  // Cleared only when the target itself changed, not on every load() call: a
+  // refetch for the same target (e.g. re-activating the tab) must not blank
+  // the panel it is refreshing, but a genuinely new target must not go on
+  // showing the previous one's rows while its query is in flight - clicking a
+  // still-rendered old entry would seek the new player to the old timestamp.
+  if (key !== lastTargetKey) {
+    entries.value = [];
+  }
+  lastTargetKey = key;
   const reqId = ++request;
   loading.value = true;
   const rows = await getActivity(props.target);
@@ -60,7 +86,7 @@ const onEntryClick = (entry: ActivityEntry) => {
   if (!entry.live) return;
   const id = annotationIdOf(entry);
   if (!id) return;
-  emit('select-annotation', id, entry.summary.timestamp ?? 0);
+  emit('select-annotation', id, entry.summary.timestamp ?? 0, entry.summary.surface);
 };
 </script>
 
@@ -154,7 +180,9 @@ const onEntryClick = (entry: ActivityEntry) => {
                 >
                   {{ formatTime(entry.summary.timestamp ?? 0) }}
                   ·
-                  {{ formatRelativeTime(entry.createdAt) }}
+                  <span data-testid="activity-time">{{
+                    formatClockTime(entry.createdAt)
+                  }}</span>
                 </span>
 
                 <span
