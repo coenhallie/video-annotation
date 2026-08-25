@@ -1,5 +1,5 @@
 import { supabase } from '@/composables/useSupabase';
-import { fetchOwners } from '@/services/ownerEnrichmentService';
+import { fetchOwners, UNKNOWN_OWNER_NAME } from '@/services/ownerEnrichmentService';
 import { UNKNOWN_ACTOR } from '@/utils/activityPhrasing';
 import type { ActivityEntry, DatabaseActivityEvent } from '@/types/database';
 
@@ -121,7 +121,7 @@ function resolveActor(
 ): string {
   if (row.actorId) {
     const name = owners[row.actorId]?.name;
-    if (name && name !== 'Unknown') return name;
+    if (name && name !== UNKNOWN_OWNER_NAME) return name;
   }
   return row.actorName || UNKNOWN_ACTOR;
 }

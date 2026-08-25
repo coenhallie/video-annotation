@@ -6,6 +6,7 @@ const fetchOwners = vi.fn();
 vi.mock('@/composables/useSupabase', () => ({ supabase: { from } }));
 vi.mock('@/services/ownerEnrichmentService', () => ({
   fetchOwners: (...args: unknown[]) => fetchOwners(...args),
+  UNKNOWN_OWNER_NAME: 'Unknown',
 }));
 
 const loadService = async () => await import('@/services/activityService');
