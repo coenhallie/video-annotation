@@ -13,16 +13,35 @@ export type ProjectOwner = {
   avatarUrl?: string;
 };
 
+type DisplayNameRow = {
+  id: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+};
+
+/**
+ * Names for a set of user ids.
+ *
+ * Goes through the `get_user_display_names` RPC rather than selecting from
+ * `public.users` directly. That table's only SELECT policy is
+ * `auth.uid() = id`, so a direct read returns the caller's own row and nothing
+ * else - which is why every owner but yourself used to render "Unknown".
+ * Widening that policy is not an option: row-level security is row level, not
+ * column level, so anything permissive enough to expose a name also exposes
+ * `email` and `metadata`.
+ *
+ * The RPC derives the display name server-side and never returns the address
+ * itself. See migrations/20260825_user_display_names.sql.
+ */
 export async function fetchOwners(
   ownerIds: string[]
 ): Promise<Record<string, ProjectOwner>> {
   const uniqueIds = [...new Set(ownerIds.filter(Boolean))];
   if (uniqueIds.length === 0) return {};
 
-  const { data, error } = await supabase
-    .from('users')
-    .select('id, fullName, email, avatarUrl')
-    .in('id', uniqueIds);
+  const { data, error } = await supabase.rpc('get_user_display_names', {
+    p_ids: uniqueIds,
+  });
 
   if (error) {
     console.warn('⚠️ [ownerEnrichment] fetchOwners error:', error);
@@ -30,10 +49,10 @@ export async function fetchOwners(
   }
 
   const map: Record<string, ProjectOwner> = {};
-  for (const u of data ?? []) {
+  for (const u of (data ?? []) as DisplayNameRow[]) {
     map[u.id] = {
       id: u.id,
-      name: u.fullName || u.email || UNKNOWN_OWNER_NAME,
+      name: u.displayName || UNKNOWN_OWNER_NAME,
       avatarUrl: u.avatarUrl ?? undefined,
     };
   }
