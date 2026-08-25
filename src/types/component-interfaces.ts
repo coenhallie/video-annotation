@@ -210,3 +210,10 @@ export type CommentEvent = Comment;
 
 /** Label color lookup map: label ID -> Label object. */
 export type LabelColorMap = Record<string, Label>;
+
+// ---------------------------------------------------------------------------
+// Editor sidebar
+// ---------------------------------------------------------------------------
+
+/** Which panel the editor sidebar is showing. */
+export type SidebarTab = 'annotations' | 'history';

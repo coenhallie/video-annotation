@@ -13,6 +13,10 @@ import {
 import DualTimeline from '@/components/DualTimeline.vue';
 import VideoTimeline from '@/components/VideoTimeline.vue';
 import AnnotationPanel from '@/components/AnnotationPanel.vue';
+import SidebarTabs from '@/components/SidebarTabs.vue';
+import ActivityTimeline from '@/components/ActivityTimeline.vue';
+import type { SidebarTab } from '@/types/component-interfaces';
+import type { ActivityTarget } from '@/services/activityService';
 import EditorHeader from '@/components/EditorHeader.vue';
 
 import UnifiedVideoPlayer from '@/components/UnifiedVideoPlayer.vue';
@@ -847,6 +851,46 @@ const pendingSeekTime = ref<number | null>(null);
 // videoLoaded, currentVideoId, currentComparisonId, isAwsVideo are now from videoStore via storeToRefs
 
 const isChangelogModalOpen = ref(false);
+
+const sidebarTab = ref<SidebarTab>('annotations');
+
+/**
+ * Null while the editor is still resolving a project, which keeps
+ * ActivityTimeline from firing a query against an id that is about to change.
+ */
+const activityTarget = computed<ActivityTarget | null>(() => {
+  if (currentComparisonId.value) {
+    return { comparisonVideoId: currentComparisonId.value };
+  }
+  if (currentVideoId.value) return { videoId: currentVideoId.value };
+  return null;
+});
+
+/**
+ * Anonymous and shared-link viewers get no History tab. The RLS policy on
+ * activity_events is TO authenticated, so the feed would be empty for them, and
+ * an empty tab reads as a bug rather than as a permission.
+ */
+const showHistoryTab = computed(
+  () => !!user.value && !isSharedVideo.value && !isSharedComparison.value
+);
+
+/**
+ * The timeline seeks by the annotation's snapshotted timestamp, and selects it
+ * when it is still in the loaded list. It does not go through
+ * onAnnotationClick directly because that needs the Annotation object, which a
+ * history entry does not carry.
+ */
+const onHistorySelect = (annotationId: string, timestamp: number) => {
+  const annotation = (annotations.value || []).find(
+    (a) => a.id === annotationId
+  );
+  if (annotation) {
+    onAnnotationClick(annotation);
+    return;
+  }
+  void handleSeekToTimeWithFade(timestamp);
+};
 
 // Real-time features
 const { setupPresenceTracking } =
@@ -1890,8 +1934,13 @@ watch(
           You've watched {{ Math.round(ownWatchPercent) }}% of this video
         </div>
 
+        <SidebarTabs
+          v-if="showHistoryTab"
+          v-model="sidebarTab"
+        />
+
         <!-- Annotation Panel -->
-        <div class="flex-1 overflow-hidden">
+        <div v-show="sidebarTab === 'annotations'" class="flex-1 overflow-hidden">
           <AnnotationPanel
             v-if="drawingCanvas"
             :annotations="annotations || []"
@@ -1963,6 +2012,14 @@ watch(
               </p>
             </div>
           </div>
+        </div>
+
+        <div v-if="showHistoryTab" v-show="sidebarTab === 'history'" class="flex-1 overflow-hidden">
+          <ActivityTimeline
+            :target="activityTarget"
+            :active="sidebarTab === 'history'"
+            @select-annotation="onHistorySelect"
+          />
         </div>
       </aside>
     </main>
