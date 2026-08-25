@@ -463,9 +463,15 @@ BEGIN
     --    Clearing the claims is enough: auth.uid() on this database is
     --    nullif(current_setting(...), '')::jsonb->>'sub', so a claims value
     --    with no "sub" yields NULL rather than raising (verified 2026-08-25).
+    --    "sessionId" is required here by the pre-existing
+    --    valid_user_identification CHECK on annotation_comments, which is
+    --    ("userId" IS NOT NULL AND "sessionId" IS NULL) OR the reverse. It
+    --    predates this feature and the triggers never read it, so it changes
+    --    nothing about what this assertion tests - but omitting it fails the
+    --    insert before the trigger ever fires.
     PERFORM set_config('request.jwt.claims', '{"role":"anon"}', true);
-    INSERT INTO public.annotation_comments ("annotationId", content, "userDisplayName", "isAnonymous")
-    VALUES (v_ann, 'anon says hello', 'Visitor 7', true)
+    INSERT INTO public.annotation_comments ("annotationId", content, "userDisplayName", "isAnonymous", "sessionId")
+    VALUES (v_ann, 'anon says hello', 'Visitor 7', true, gen_random_uuid()::text)
     RETURNING id INTO v_anon_comment;
 
     IF (SELECT "actorId" FROM public.activity_events WHERE "entityId" = v_anon_comment) IS NOT NULL THEN
