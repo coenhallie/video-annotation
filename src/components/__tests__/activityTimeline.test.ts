@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createApp, defineComponent, h, nextTick } from 'vue';
+import { createApp, defineComponent, h, nextTick, ref } from 'vue';
 import type { ActivityEntry } from '@/types/database';
 
 const getActivity = vi.fn();
@@ -47,6 +47,28 @@ function mount(props: Record<string, unknown>) {
     selected,
     q: (sel: string) => root.querySelector<HTMLElement>(sel),
     all: (sel: string) => Array.from(root.querySelectorAll<HTMLElement>(sel)),
+    unmount: () => {
+      app.unmount();
+      root.remove();
+    },
+  };
+}
+
+function mountReactive(initialTarget: Record<string, string> | null) {
+  const root = document.createElement('div');
+  document.body.appendChild(root);
+  const target = ref(initialTarget);
+  const app = createApp(
+    defineComponent({
+      setup: () => () =>
+        h(ActivityTimeline, { target: target.value, active: true }),
+    })
+  );
+  app.mount(root);
+  return {
+    target,
+    all: (sel: string) => Array.from(root.querySelectorAll<HTMLElement>(sel)),
+    text: () => root.textContent ?? '',
     unmount: () => {
       app.unmount();
       root.remove();
@@ -180,6 +202,53 @@ describe('ActivityTimeline', () => {
     const w = mount({ target: null, active: true });
     await nextTick();
     expect(getActivity).not.toHaveBeenCalled();
+    w.unmount();
+  });
+
+  it('discards a stale response when the target changes mid-flight', async () => {
+    // The first fetch is held open deliberately. The second target's response
+    // arrives first, then the first resolves late - which is exactly the order
+    // the request-generation guard exists to survive.
+    let resolveFirst!: (rows: ActivityEntry[]) => void;
+    getActivity
+      .mockImplementationOnce(
+        () => new Promise<ActivityEntry[]>((resolve) => { resolveFirst = resolve; })
+      )
+      .mockImplementationOnce(() =>
+        Promise.resolve([entry({ id: 'newer', summary: { title: 'from the second target' } })])
+      );
+
+    const w = mountReactive({ videoId: 'v1' });
+    await nextTick();
+
+    w.target.value = { videoId: 'v2' };
+    await nextTick();
+    await nextTick();
+
+    // The stale first response lands last and must be thrown away.
+    resolveFirst([entry({ id: 'stale', summary: { title: 'from the first target' } })]);
+    await nextTick();
+    await nextTick();
+
+    expect(w.text()).toContain('from the second target');
+    expect(w.text()).not.toContain('from the first target');
+    expect(w.all('[data-testid="activity-entry"]')).toHaveLength(1);
+    w.unmount();
+  });
+
+  it('emits with annotation id from comment summary when a comment entry is clicked', async () => {
+    getActivity.mockResolvedValue([
+      entry({
+        entityType: 'comment',
+        summary: { annotationId: 'a9', annotationTitle: 'Offside call', excerpt: 'looks wrong', timestamp: 4.25 },
+      }),
+    ]);
+    const w = mount({ target: { videoId: 'v1' }, active: true });
+    await nextTick();
+    await nextTick();
+
+    w.q('[data-testid="activity-entry"]')?.click();
+    expect(w.selected).toEqual([['a9', 4.25]]);
     w.unmount();
   });
 });
