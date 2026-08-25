@@ -48,12 +48,24 @@ Out of scope, deliberately:
 
 Three sources were considered.
 
-**Derived from existing rows.** Rejected on accuracy, not on completeness.
-`annotations."userId"` is the creator and `updatedAt` is a single timestamp, so
-an annotation Alice created and Bob edited yields exactly one derivable event
-and it names Alice. That is a wrong attribution in an attribution feature, and
-it is wrong silently. Deletions being invisible is the second, better-known
-problem.
+**Derived from existing rows.** Rejected, but for narrower reasons than it
+first appears. Today `annotations` UPDATE and DELETE are both owner-only
+(`auth.uid() = "userId"`, verified 2026-08-25), so the obvious objection, that a
+derived feed would credit an edit to the creator rather than the editor, is not
+currently reachable for annotations. What is reachable:
+
+- A deleted annotation leaves nothing to derive from. Since removals are half
+  of what this feature exists to show, that alone disqualifies the approach.
+- `updatedAt` collapses any number of edits into one timestamp, so a derived
+  feed can never say more than "edited at some point, most recently then".
+- Comment deletion is already cross-user: the DELETE policy on
+  `annotation_comments` lets an annotation's owner remove someone else's
+  comment. A derived feed would have to attribute that removal to the comment's
+  author, which is wrong.
+- The annotation case is one policy change away from being wrong too. INSERT
+  was opened to every signed-in user on 2026-08-17; UPDATE and DELETE were not.
+  If they widen the same way, a derived feed silently starts misattributing,
+  with nothing in the code to notice.
 
 **Written by the service layer** next to each mutation in
 `AnnotationService` / `CommentService`. Rejected because the log is then only as
@@ -117,8 +129,8 @@ create table if not exists public.activity_events (
   action              text not null check (action in ('created', 'updated', 'deleted')),
   summary             jsonb not null default '{}'::jsonb,
   "createdAt"         timestamptz not null default now(),
-  constraint activity_events_one_target check (
-    ("videoId" is null) <> ("comparisonVideoId" is null)
+  constraint activity_events_has_target check (
+    "videoId" is not null or "comparisonVideoId" is not null
   )
 );
 
@@ -148,8 +160,20 @@ propagates through the whole feed. The column exists for the two cases where
 there is no id to resolve: an anonymous share-link commenter, who has only
 `userDisplayName`, and a deleted user.
 
-The `one_target` check mirrors how annotations already work, where exactly one
-of `videoId` / `comparisonVideoId` is set.
+**The target check is deliberately weak.** Annotations today set exactly one of
+`videoId` / `comparisonVideoId` (verified across all 205 rows: none set both,
+none set neither), so the tempting constraint is an exclusive one,
+`("videoId" is null) <> ("comparisonVideoId" is null)`. That would be a mistake.
+The trigger inserts into this table inside the annotating transaction, so any
+constraint this table can fail is a constraint that can abort the annotation
+that caused it. An exclusive check would mean that the day a dual-mode
+annotation carries both ids, annotating in dual mode breaks, and it breaks in
+the write path rather than in the panel nobody was looking at.
+
+The rule for the whole feature: **the log must never be able to fail a write it
+is only observing.** So the check asserts only that an event names some target,
+and the trigger picks that target explicitly, preferring `comparisonVideoId`
+when both are set, so a dual annotation lands in one feed rather than two.
 
 ## Triggers
 
@@ -251,6 +275,22 @@ starts at its first annotation is reading something true.
 Current volume: 205 annotations, 16 comments, 171 videos, at most 19
 annotations on any one video.
 
+## Applying the migration
+
+The whole file is wrapped in `begin; ... commit;`. Table, policies, backfill
+and triggers have to land together or not at all: a backfill that commits
+without its triggers leaves a log that stops at the migration timestamp and
+looks complete, which is worse than no log.
+
+Ordering inside the transaction is table, policies, backfill, then triggers.
+Creating the triggers before the backfill would double-count nothing today, but
+only because the backfill reads rows that already exist; keeping the triggers
+last removes the question entirely.
+
+Applying it is a live production write, and it is the user's call, not the
+implementer's. Every probe behind this design ran inside `begin ... rollback`
+and changed nothing.
+
 ## Decomposition
 
 | File | Responsibility |
@@ -315,8 +355,12 @@ Vitest:
 SQL, run against the linked database inside `begin ... rollback` using the same
 `supabase db query --linked -f` harness the probes used:
 
-- Insert attributes to the caller, not to the row's `userId`, when the two
-  differ.
+- A comment deleted by the annotation's owner, which the DELETE policy on
+  `annotation_comments` permits, attributes to the moderator and not to the
+  comment's author. This is the only cross-user case currently constructible:
+  annotations are owner-only for UPDATE and DELETE, and the INSERT policy
+  forces `auth.uid() = "userId"`, so no annotation event can have an actor
+  other than its author until those policies widen.
 - Direct comment delete writes exactly one event.
 - Deleting an annotation with comments writes exactly one event, for the
   annotation.
