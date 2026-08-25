@@ -876,6 +876,20 @@ const showHistoryTab = computed(
 );
 
 /**
+ * Which panel actually renders. `sidebarTab` is what the user picked; this is
+ * what survives contact with permissions. Deriving it rather than watching and
+ * resetting `sidebarTab` means the blank-sidebar state cannot be rendered even
+ * for one frame: when the History tab is not available, the annotations panel
+ * is showing, whatever the stored preference says.
+ *
+ * The stored preference is deliberately left alone, so signing back in returns
+ * you to the tab you were on.
+ */
+const activeSidebarPanel = computed<SidebarTab>(() =>
+  showHistoryTab.value ? sidebarTab.value : 'annotations'
+);
+
+/**
  * The timeline seeks by the annotation's snapshotted timestamp, and selects it
  * when it is still in the loaded list. It does not go through
  * onAnnotationClick directly because that needs the Annotation object, which a
@@ -1940,7 +1954,7 @@ watch(
         />
 
         <!-- Annotation Panel -->
-        <div v-show="sidebarTab === 'annotations'" class="flex-1 overflow-hidden">
+        <div v-show="activeSidebarPanel === 'annotations'" class="flex-1 overflow-hidden">
           <AnnotationPanel
             v-if="drawingCanvas"
             :annotations="annotations || []"
@@ -2014,10 +2028,10 @@ watch(
           </div>
         </div>
 
-        <div v-if="showHistoryTab" v-show="sidebarTab === 'history'" class="flex-1 overflow-hidden">
+        <div v-if="showHistoryTab" v-show="activeSidebarPanel === 'history'" class="flex-1 overflow-hidden">
           <ActivityTimeline
             :target="activityTarget"
-            :active="sidebarTab === 'history'"
+            :active="activeSidebarPanel === 'history'"
             @select-annotation="onHistorySelect"
           />
         </div>
