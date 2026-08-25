@@ -15,6 +15,8 @@
 // never be reached, even for one frame, without a watcher or reset.
 import { describe, it, expect } from 'vitest';
 import { ref, computed } from 'vue';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { SidebarTab } from '@/types/component-interfaces';
 
 describe('EditorView sidebar panel derivation', () => {
@@ -41,5 +43,35 @@ describe('EditorView sidebar panel derivation', () => {
     expect(sidebarTab.value).toBe('history');
     showHistoryTab.value = true;
     expect(activeSidebarPanel.value).toBe('history');
+  });
+});
+
+// The computed above mirrors the intended behaviour but is decoupled from
+// EditorView.vue's actual template - it would keep passing even if the real
+// wrappers regressed to reading `sidebarTab` directly. This checks the
+// template source itself, so it fails on exactly that regression: replacing
+// `activeSidebarPanel` with a bare `sidebarTab` in either wrapper's
+// `v-show`, or in `ActivityTimeline`'s `:active`.
+describe('EditorView sidebar panel template bindings', () => {
+  const source = readFileSync(
+    resolve(process.cwd(), 'src/views/EditorView.vue'),
+    'utf-8'
+  );
+
+  it('drives the annotations wrapper from activeSidebarPanel', () => {
+    const match = source.match(
+      /<div v-show="([^"]+)" class="flex-1 overflow-hidden">\s*<AnnotationPanel/
+    );
+    expect(match).not.toBeNull();
+    expect(match?.[1]).toBe("activeSidebarPanel === 'annotations'");
+  });
+
+  it("drives the history wrapper and ActivityTimeline's active prop from activeSidebarPanel", () => {
+    const match = source.match(
+      /<div v-if="showHistoryTab" v-show="([^"]+)" class="flex-1 overflow-hidden">\s*<ActivityTimeline[\s\S]*?:active="([^"]+)"/
+    );
+    expect(match).not.toBeNull();
+    expect(match?.[1]).toBe("activeSidebarPanel === 'history'");
+    expect(match?.[2]).toBe("activeSidebarPanel === 'history'");
   });
 });
