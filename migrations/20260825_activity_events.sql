@@ -100,7 +100,7 @@ SELECT
     'annotation',
     a.id,
     'created',
-    jsonb_build_object('title', a.title, 'timestamp', a."timestamp"),
+    jsonb_build_object('title', a.title, 'timestamp', a."timestamp", 'surface', a.surface),
     COALESCE(a."createdAt", now())
 FROM public.annotations a
 WHERE (a."videoId" IS NOT NULL OR a."comparisonVideoId" IS NOT NULL)
@@ -123,7 +123,8 @@ SELECT
         'excerpt', left(c.content, 140),
         'annotationTitle', a.title,
         'annotationId', a.id,
-        'timestamp', a."timestamp"
+        'timestamp', a."timestamp",
+        'surface', a.surface
     ),
     COALESCE(c."createdAt", now())
 FROM public.annotation_comments c
@@ -232,7 +233,7 @@ BEGIN
         'annotation',
         v_row.id,
         v_action,
-        jsonb_build_object('title', v_row.title, 'timestamp', v_row."timestamp")
+        jsonb_build_object('title', v_row.title, 'timestamp', v_row."timestamp", 'surface', v_row.surface)
     );
 
     RETURN NULL;
@@ -262,8 +263,10 @@ BEGIN
         v_action := 'created';
     END IF;
 
-    -- annotation_comments has no videoId of its own.
-    SELECT a."videoId", a."comparisonVideoId", a.title, a."timestamp"
+    -- annotation_comments has no videoId of its own. surface is read here too:
+    -- a comment has no surface of its own, it inherits the one its parent
+    -- annotation lives on.
+    SELECT a."videoId", a."comparisonVideoId", a.title, a."timestamp", a.surface
       INTO v_ann
       FROM public.annotations a
      WHERE a.id = v_row."annotationId";
@@ -308,7 +311,8 @@ BEGIN
             'excerpt', left(v_row.content, 140),
             'annotationTitle', v_ann.title,
             'annotationId', v_row."annotationId",
-            'timestamp', v_ann."timestamp"
+            'timestamp', v_ann."timestamp",
+            'surface', v_ann.surface
         )
     );
 

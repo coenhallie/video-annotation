@@ -213,6 +213,13 @@ export interface ActivitySummary {
   annotationTitle?: string;
   annotationId?: string;
   timestamp?: number;
+  /**
+   * Which editor surface the annotation lives on. Optional because rows
+   * written before this field existed carry no such key; callers that need to
+   * switch surface before selecting must treat its absence as "unknown", not
+   * as "video".
+   */
+  surface?: AnnotationSurface;
 }
 
 export interface DatabaseActivityEvent {
