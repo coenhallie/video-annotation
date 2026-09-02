@@ -20,6 +20,7 @@ import DashboardModals from '@/components/DashboardModals.vue';
 import AnnotationQuickPick from '@/components/AnnotationQuickPick.vue';
 import { useLabelCatalog } from '@/composables/useLabelCatalog';
 import { buildAnnotationPayload, stampSnapshotFrame } from '@/utils/annotationPayload';
+import { resolveAnnotationDeepLink } from '@/utils/annotationDeepLink';
 import { canCreateAnnotations } from '@/utils/annotationPermissions';
 import { ShareService } from '@/services/shareService';
 import { VideoService } from '@/services/videoService';
@@ -704,9 +705,11 @@ const handleQuickPickComment = async (text: string) => {
 
 // Component Refs
 const unifiedVideoPlayerRef = ref<UnifiedVideoPlayerInstance | null>(null);
-// Deep-link seek target from `?t=` (set by annotation-panel navigation); consumed
-// once the video finishes loading (see watch(videoLoaded, ...) below).
+// Deep-link targets from `?a=` / `?t=` (set by dashboard annotation navigation);
+// consumed once the player and the annotation list are both ready (see the
+// deep-link watcher below).
 const pendingSeekTime = ref<number | null>(null);
+const pendingAnnotationId = ref<string | null>(null);
 
 
 
@@ -1194,6 +1197,10 @@ async function loadFromRoute() {
       tParam != null && tParam !== '' ? parseFloat(String(tParam)) : NaN;
     pendingSeekTime.value = Number.isFinite(parsedT) ? parsedT : null;
 
+    const aParam = route.query.a;
+    pendingAnnotationId.value =
+      aParam != null && aParam !== '' ? String(aParam) : null;
+
     if (route.name === 'editor-single' && route.params.id) {
       const video = await VideoService.getVideoById(route.params.id as string);
       if (video) {
@@ -1230,14 +1237,54 @@ watch(
   }
 );
 
-// When arriving via an annotation deep-link (?t=), seek once the player is ready.
-watch(videoLoaded, async (loaded) => {
-  if (!loaded || pendingSeekTime.value == null) return;
-  const time = pendingSeekTime.value;
-  pendingSeekTime.value = null;
-  await nextTick();
-  await handleSeekToTimeWithFade(time);
-});
+// Dual mode never emits the single player's `loaded` event, so `videoLoaded`
+// stays false there and each media element reports its own readiness instead.
+const deepLinkReady = computed(() =>
+  playerMode.value === 'dual'
+    ? Boolean(
+        dualVideoPlayer.videoAState?.isLoaded && dualVideoPlayer.videoBState?.isLoaded
+      )
+    : videoLoaded.value
+);
+
+// When arriving via an annotation deep-link (?a= / ?t=), select the annotation
+// so the sidebar highlights the row that was clicked on the dashboard; seeking
+// to its moment comes free with the same handler the sidebar and timeline use.
+// The player and the annotation list become ready independently, so this runs
+// on both and re-runs until resolveAnnotationDeepLink stops saying 'wait'.
+watch(
+  [deepLinkReady, () => annotations.value?.length ?? 0],
+  async () => {
+    const action = resolveAnnotationDeepLink({
+      ready: deepLinkReady.value,
+      annotationId: pendingAnnotationId.value,
+      annotations: (annotations.value ?? []) as readonly Annotation[],
+      seekTime: pendingSeekTime.value,
+    });
+
+    if (action.type === 'wait') return;
+
+    if (action.type === 'none') {
+      pendingAnnotationId.value = null;
+      pendingSeekTime.value = null;
+      return;
+    }
+
+    if (action.type === 'select') {
+      pendingAnnotationId.value = null;
+      pendingSeekTime.value = null;
+      await nextTick();
+      await handleAnnotationClick(action.annotation);
+      return;
+    }
+
+    // Seek only: the annotation id stays pending so a list that lands after the
+    // player still gets its row highlighted.
+    pendingSeekTime.value = null;
+    await nextTick();
+    await handleSeekToTimeWithFade(action.time);
+  }
+);
 
 const shareModalProps = computed(() => {
   if (playerMode.value === 'dual') {

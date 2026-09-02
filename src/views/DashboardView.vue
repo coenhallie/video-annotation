@@ -94,12 +94,15 @@ function closeDetails() {
   videoDetails.clear();
 }
 
+// `a` is what the editor selects on arrival, so the sidebar highlights the row
+// that was clicked here; `t` is the fallback seek for a link whose annotation no
+// longer exists.
 function openAnnotation(project: Project, annotation: PanelAnnotation) {
   const name = project.projectType === 'single' ? 'editor-single' : 'editor-dual';
   router.push({
     name,
     params: { id: project.id },
-    query: { t: String(annotation.timestamp ?? 0) },
+    query: { a: annotation.id, t: String(annotation.timestamp ?? 0) },
   });
 }
 

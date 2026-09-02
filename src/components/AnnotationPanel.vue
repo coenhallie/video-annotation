@@ -6,7 +6,15 @@ export type { PanelAnnotation, NewAnnotationDraft } from '../types/component-int
 
 <script setup lang="ts">
 import { logger } from '../utils/logger';
-import { ref, computed, onMounted, watch, onUnmounted, type PropType } from 'vue';
+import {
+  ref,
+  computed,
+  onMounted,
+  watch,
+  onUnmounted,
+  nextTick,
+  type PropType,
+} from 'vue';
 import AnnotationForm from './AnnotationForm.vue';
 import AnnotationCard from './AnnotationCard.vue';
 import AnnotationSkeleton from './AnnotationSkeleton.vue';
@@ -237,6 +245,22 @@ const handleFormHide = () => {
 
 // --- Annotation card actions ---
 
+// Selection can come from outside the list - the timeline, the video, or a
+// dashboard deep-link - so the highlighted row has to be brought into view.
+// `nearest` leaves an already-visible card alone, which keeps clicks in the list
+// itself from scrolling.
+const listRef = ref<HTMLElement | null>(null);
+
+watch(
+  [() => props.selectedAnnotation?.id ?? null, () => sortedAnnotations.value.length],
+  async ([id]) => {
+    if (!id) return;
+    await nextTick();
+    const card = listRef.value?.querySelector(`[data-annotation-id="${CSS.escape(id)}"]`);
+    card?.scrollIntoView({ block: 'nearest' });
+  }
+);
+
 const selectAnnotation = (annotation: PanelAnnotation) => {
   if (props.selectedAnnotation?.id === annotation.id) {
     return;
@@ -421,7 +445,10 @@ watch(
     />
 
     <!-- Annotations List -->
-    <div class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-1 pb-4">
+    <div
+      ref="listRef"
+      class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-1 pb-4"
+    >
       <!-- Loading Skeleton -->
       <AnnotationSkeleton
         v-if="shouldShowSkeleton"
@@ -458,6 +485,7 @@ watch(
         v-else
         :key="annotation.id"
         :annotation="annotation"
+        :data-annotation-id="annotation.id"
         :is-selected="selectedAnnotation?.id === annotation.id"
         :read-only="readOnly"
         :label-colors="labelColors"

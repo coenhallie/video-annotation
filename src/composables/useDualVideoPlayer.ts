@@ -522,6 +522,10 @@ export function useDualVideoPlayer(): DualVideoPlayer {
     videoARef.value = null;
     videoBRef.value = null;
     isReady.value = false;
+    // Both elements get new sources after a project switch, so their metadata
+    // is stale until `loadedmetadata` fires again.
+    videoAState.isLoaded = false;
+    videoBState.isLoaded = false;
   }
 
   return {
