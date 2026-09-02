@@ -778,7 +778,18 @@ export function useVideoAnnotations(
 
   return {
     currentVideo: readonly(currentVideo),
-    annotations: readonly(annotations),
+    /**
+     * Deliberately NOT wrapped in readonly().
+     *
+     * useRealtimeAnnotations applies server events by pushing, splicing and
+     * reassigning `annotations.value`. Behind Vue's readonly() - which is deep -
+     * every one of those writes was blocked, so a realtime insert from another
+     * client warned in dev and changed nothing at all in production. The
+     * wrapper also forced consumers to launder DeepReadonly<Annotation> back
+     * into Annotation at each hand-off, which is the same encapsulation claim
+     * failing louder.
+     */
+    annotations,
     isLoading: readonly(isLoading),
     error: readonly(error),
     isComparisonContext: readonly(isComparisonContext),
