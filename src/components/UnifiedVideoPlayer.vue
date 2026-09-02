@@ -130,7 +130,6 @@ interface Props {
   // Annotation/Pose props
   projectId?: string;
   comparisonVideoId?: string;
-  user?: unknown;
 }
 
 
@@ -145,9 +144,12 @@ const props = withDefaults(defineProps<Props>(), {
   videoAId: 'video-a',
   videoBUrl: '',
   videoBId: 'video-b',
-  // drawingCanvas / drawingCanvasA / drawingCanvasB / user have no default.
-  // Listing them as `undefined` here does not give them one - it just fails to
+  // null, not undefined: "no canvas" is a value these prop types already admit,
+  // whereas listing them as `undefined` gives no default at all and does not
   // typecheck against an optional prop under exactOptionalPropertyTypes.
+  drawingCanvas: null,
+  drawingCanvasA: null,
+  drawingCanvasB: null,
   videoAState: () => ({}),
   videoBState: () => ({}),
   dualVideoPlayer: null,

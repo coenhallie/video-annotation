@@ -1881,7 +1881,6 @@ watch(
                 :comparison-video-id="
                   comparisonWorkflow.currentComparison.value?.id || ''
                 "
-                :user="user"
                 @time-update="handleTimeUpdate"
                 @frame-update="handleFrameUpdate"
                 @fps-detected="handleFPSDetected"
