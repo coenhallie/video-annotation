@@ -18,6 +18,8 @@ const state: {
   existing: any;
   rowsById: Record<string, any>;
   inserted: any;
+  insertError: any;
+  existingOnRetry: any;
   updates: Array<{ id: string; row: any }>;
   deleted: any;
   updateError: any;
@@ -29,6 +31,8 @@ const state: {
   existing: null,
   rowsById: {},
   inserted: null,
+  insertError: null,
+  existingOnRetry: null,
   updates: [],
   deleted: null,
   updateError: null,
@@ -61,7 +65,15 @@ vi.mock('@/composables/useSupabase', () => ({
         state.inserted = row;
         return {
           select: () => ({
-            single: async () => ({ data: { id: 'v1', ...row }, error: null }),
+            single: async () => {
+              if (!state.insertError) {
+                return { data: { id: 'v1', ...row }, error: null };
+              }
+              // The winner's row only becomes visible once our insert has lost
+              // the race, which is exactly when the retry looks for it.
+              state.existing = state.existingOnRetry;
+              return { data: null, error: state.insertError };
+            },
           }),
         };
       },
@@ -120,6 +132,8 @@ function resetState() {
   state.existing = null;
   state.rowsById = { v1: { id: 'v1', ownerId: 'user-1', thumbnailUrl: null } };
   state.inserted = null;
+  state.insertError = null;
+  state.existingOnRetry = null;
   state.updates = [];
   state.deleted = null;
   state.updateError = null;
@@ -476,5 +490,44 @@ describe('findOrCreateOutputVideo ordering', () => {
       errorSpy.mock.calls.some((c) => String(c[0]).includes('orphan cleanup'))
     ).toBe(true);
     errorSpy.mockRestore();
+  });
+});
+
+
+describe('findOrCreateOutputVideo losing the insert race', () => {
+  beforeEach(resetState);
+
+  /**
+   * Two clients open the same pipeline output at once. Both find nothing, both
+   * insert, and the partial unique index on aws: videoIds lets exactly one win.
+   * Losing is a normal outcome: the winner's row is the row this caller wanted.
+   */
+  it('reads back the winner row instead of failing', async () => {
+    state.insertError = { code: '23505', message: 'duplicate key value' };
+    // What findVideoByOutputVideoId returns on the retry - the winner's row.
+    state.existingOnRetry = {
+      id: 'v1',
+      videoId: 'aws:proj-123',
+      ownerId: 'user-2',
+      url: '',
+      thumbnailUrl: null,
+    };
+
+    const result = await callFindOrCreate();
+
+    expect(result.id).toBe('v1');
+  });
+
+  it('explains the conflict when RLS hides the winner row', async () => {
+    state.insertError = { code: '23505', message: 'duplicate key value' };
+    state.existingOnRetry = null;
+
+    await expect(callFindOrCreate()).rejects.toThrow(/already claimed/i);
+  });
+
+  it('still throws on an unrelated insert error', async () => {
+    state.insertError = { code: '42501', message: 'permission denied' };
+
+    await expect(callFindOrCreate()).rejects.toMatchObject({ code: '42501' });
   });
 });

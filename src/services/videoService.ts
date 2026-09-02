@@ -624,11 +624,38 @@ export class VideoService {
         .select()
         .single();
 
-      if (error || !data) {
-        handleServiceError('VideoService.findOrCreateOutputVideo', error);
-        throw error ?? new Error('Insert returned no row');
+      if (error) {
+        // 23505 is the partial unique index on `videoId` for aws: ids. Two
+        // clients opening the same pipeline output at once both find nothing
+        // and both insert; the index lets exactly one win. Losing that race is
+        // a normal outcome, not a failure - the row the winner created is the
+        // row this caller wanted, so read it back.
+        //
+        // Every duplicate in production was created this way, same id, same
+        // day, before the index existed.
+        if (error.code === '23505') {
+          const winner = await this.findVideoByOutputVideoId(outputVideoId);
+          if (!winner) {
+            // The winner's row exists but this caller cannot SELECT it: a
+            // different user claimed the id first and RLS hides their row. That
+            // is the availability tradeoff the unique index deliberately
+            // accepts - see docs/superpowers/specs/2026-08-19-aws-proxy-auth-design.md
+            // section 11 - and it needs to say so rather than surface a raw
+            // constraint violation.
+            throw new Error(
+              `This pipeline output (${outputVideoId}) is already claimed by another account and cannot be opened here.`
+            );
+          }
+          record = winner;
+        } else {
+          handleServiceError('VideoService.findOrCreateOutputVideo', error);
+          throw error;
+        }
+      } else if (!data) {
+        throw new Error('Insert returned no row');
+      } else {
+        record = data;
       }
-      record = data;
     }
 
     let presignedUrl: string;
