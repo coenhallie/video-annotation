@@ -46,3 +46,6 @@ check-homography.js
 # Agent scratch: git worktrees and subagent-driven-development ledgers
 .claude/worktrees/
 .superpowers/
+
+# Supabase CLI local scratch
+supabase/.temp/
