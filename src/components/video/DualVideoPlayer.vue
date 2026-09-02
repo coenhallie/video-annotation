@@ -200,7 +200,7 @@ const setPlaybackRate = (rate: number) => {
 };
 
 // Events
-const onVideoLoaded = (id: 'A' | 'B', e: Event) => {
+const onVideoLoaded = (id: 'A' | 'B', _e: Event) => {
   if (id === 'A') emit('video-a-loaded');
   else emit('video-b-loaded');
 };

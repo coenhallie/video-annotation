@@ -1543,10 +1543,6 @@ const canShare = computed(() => {
 
 
 
-const openSharedLinksManagement = () => {
-  isSharedLinksModalOpen.value = true;
-};
-
 const closeSharedLinksManagement = () => {
   isSharedLinksModalOpen.value = false;
 };
@@ -1555,7 +1551,6 @@ const closeSharedLinksManagement = () => {
 const {
   isSharedVideo,
   isSharedComparison,
-  sharedVideoData,
   showAuthPrompt,
   pendingSharedContent,
   sharedContentPermissionText,
@@ -2013,7 +2008,10 @@ watch(
         />
 
         <!-- Annotation Panel -->
-        <div v-show="activeSidebarPanel === 'annotations'" class="flex-1 overflow-hidden">
+        <div
+          v-show="activeSidebarPanel === 'annotations'"
+          class="flex-1 overflow-hidden"
+        >
           <AnnotationPanel
             v-if="drawingCanvas"
             :annotations="annotations || []"
@@ -2085,7 +2083,11 @@ watch(
           </div>
         </div>
 
-        <div v-if="showHistoryTab" v-show="activeSidebarPanel === 'history'" class="flex-1 overflow-hidden">
+        <div
+          v-if="showHistoryTab"
+          v-show="activeSidebarPanel === 'history'"
+          class="flex-1 overflow-hidden"
+        >
           <ActivityTimeline
             :target="activityTarget"
             :active="activeSidebarPanel === 'history'"

@@ -473,31 +473,6 @@ export class AnnotationService {
   }
 
   /**
-   * Update annotation with comparison context
-   */
-  static async updateAnnotationContext(
-    annotationId: string,
-    videoContext: VideoContext,
-    comparisonVideoId?: string,
-    synchronizedFrame?: number
-  ) {
-    // Note: videoContext, comparisonVideoId, and synchronizedFrame are not supported in current database schema
-    // This method is kept for API compatibility but only updates basic annotation fields
-    const updates: Record<string, unknown> = {};
-
-    // Only update fields that exist in the database schema
-    // Since video_context doesn't exist in the database, we'll just return the annotation as-is
-    const { data, error } = await supabase
-      .from('annotations')
-      .select('*')
-      .eq('id', annotationId)
-      .single();
-
-    if (error) throw error;
-    return data;
-  }
-
-  /**
    * Get annotations at frame for comparison video
    */
   static async getComparisonAnnotationsAtFrame(
@@ -520,7 +495,7 @@ export class AnnotationService {
 
       if (error) throw error;
       return data;
-    } catch (error) {
+    } catch {
       // Fallback: Get annotations individually
       const [comparisonAnnotations, videoAAnnotations, videoBAnnotations] =
         await Promise.all([
@@ -534,33 +509,6 @@ export class AnnotationService {
         videoA: videoAAnnotations,
         videoB: videoBAnnotations,
       };
-    }
-  }
-
-  /**
-   * Delete all annotations for a comparison video
-   */
-  static async deleteComparisonVideoAnnotations(comparisonVideoId: string) {
-    try {
-      // First get all annotations for this comparison video
-      const { data: annotations, error: fetchError } = await supabase
-        .from('annotations')
-        .select('id')
-        .eq('videoId', comparisonVideoId);
-
-      if (fetchError) {
-        throw fetchError;
-      }
-
-      // Delete all annotations (comments will be cascade deleted automatically)
-      const { error } = await supabase
-        .from('annotations')
-        .delete()
-        .eq('videoId', comparisonVideoId);
-
-      if (error) throw error;
-    } catch (error) {
-      throw error;
     }
   }
 

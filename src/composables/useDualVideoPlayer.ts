@@ -153,7 +153,7 @@ export function useDualVideoPlayer(): DualVideoPlayer {
   function syncTime(
     target: HTMLVideoElement,
     other: HTMLVideoElement,
-    sourceVideo: 'A' | 'B'
+    _sourceVideo: 'A' | 'B'
   ) {
     try {
       // Only sync if:

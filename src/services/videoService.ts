@@ -78,7 +78,7 @@ export class VideoService {
         if (urlData?.publicUrl) {
           videoData.url = urlData.publicUrl;
         }
-      } catch (urlError) {
+      } catch {
         // Continue without URL - the video player will handle filePath directly
       }
     }
@@ -446,7 +446,7 @@ export class VideoService {
       try {
         const video = await this.getVideoById(entityId);
         return video;
-      } catch (individualError) {
+      } catch {
         // If not found as individual video, try as comparison video
         const { ComparisonVideoService } = await import(
           './comparisonVideoService'
@@ -478,7 +478,7 @@ export class VideoService {
             return comparisonVideo;
           }
           return null;
-        } catch (comparisonError) {
+        } catch {
           return null;
         }
       }

@@ -88,4 +88,13 @@ export default [
       ],
     },
   },
+  {
+    // Test files mount throwaway harness components with defineComponent, which
+    // is the point of the file rather than a structural problem. The rule is
+    // about keeping shipped components in their own file.
+    files: ['**/__tests__/**/*.{ts,tsx,js,jsx,vue}', '**/*.{test,spec}.{ts,tsx,js,jsx}'],
+    rules: {
+      'vue/one-component-per-file': 'off',
+    },
+  },
 ];

@@ -108,8 +108,6 @@ export function useVideoEventHandlers(deps: {
     selectedAnnotation,
     drawingCoordinator,
     drawingCanvas,
-    drawingCanvasA,
-    drawingCanvasB,
     dualVideoPlayer,
     dualVideoPlayerRef,
     comparisonWorkflow,

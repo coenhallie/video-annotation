@@ -30,10 +30,13 @@ import * as fabric from 'fabric';
 import type { DrawingData, DrawingPath, SeverityLevel } from '@/types/database';
 
 interface Props {
-  currentFrame: number;
-  isDrawingMode: boolean;
-  strokeWidth: number;
-  severity: SeverityLevel;
+  // Optional because withDefaults supplies a value for each: a prop that has a
+  // default is by definition not required of the caller. The resolved type stays
+  // non-optional inside the component.
+  currentFrame?: number;
+  isDrawingMode?: boolean;
+  strokeWidth?: number;
+  severity?: SeverityLevel;
   currentColor?: string; // Custom color override
   existingDrawings?: DrawingData[];
   isLoadingDrawings?: boolean;
@@ -111,9 +114,6 @@ const initCanvas = () => {
     brush.width = props.strokeWidth;
     brush.color = getCurrentDrawingColor();
     canvas.value.freeDrawingBrush = brush;
-
-    // DIAGNOSTIC: Check initial cursor state
-    const canvasElement = canvas.value.getElement();
 
     setupCanvasEvents();
     updateCanvasSize(); // Initial size update
@@ -210,16 +210,6 @@ const completeDrawingSession = () => {
   // Clear the session
   currentDrawingSession.value = null;
   sessionFabricObjects = [];
-};
-
-// Auto-complete drawing session when drawing mode is disabled
-const autoCompleteDrawingSession = () => {
-  if (
-    currentDrawingSession.value &&
-    currentDrawingSession.value.paths.length > 0
-  ) {
-    completeDrawingSession();
-  }
 };
 
 // Convert fabric path to DrawingPath (single path)
@@ -361,9 +351,9 @@ const loadDrawingsForFrame = async (skipTransition: boolean = false) => {
       }${props.videoContext ? ` (Video ${props.videoContext})` : ''}`
     );
 
-    frameDrawings.forEach((drawing, drawingIndex) => {
+    frameDrawings.forEach((drawing) => {
       if (drawing.paths && Array.isArray(drawing.paths)) {
-        drawing.paths.forEach((path, pathIndex) => {
+        drawing.paths.forEach((path) => {
           renderDrawingPath(path);
         });
       }
@@ -506,7 +496,7 @@ watch(
 
 watch(
   () => props.severity,
-  (newValue) => {
+  () => {
     if (canvas.value?.freeDrawingBrush && !canvas.value.disposed) {
       canvas.value.freeDrawingBrush.color = getCurrentDrawingColor();
     }

@@ -58,9 +58,12 @@ describe('EditorView sidebar panel template bindings', () => {
     'utf-8'
   );
 
+  // `\s+` between attributes rather than a single space: these assertions are
+  // about the bindings, not about whether the formatter has wrapped the tag
+  // across lines.
   it('drives the annotations wrapper from activeSidebarPanel', () => {
     const match = source.match(
-      /<div v-show="([^"]+)" class="flex-1 overflow-hidden">\s*<AnnotationPanel/
+      /<div\s+v-show="([^"]+)"\s+class="flex-1 overflow-hidden"\s*>\s*<AnnotationPanel/
     );
     expect(match).not.toBeNull();
     expect(match?.[1]).toBe("activeSidebarPanel === 'annotations'");
@@ -68,7 +71,7 @@ describe('EditorView sidebar panel template bindings', () => {
 
   it("drives the history wrapper and ActivityTimeline's active prop from activeSidebarPanel", () => {
     const match = source.match(
-      /<div v-if="showHistoryTab" v-show="([^"]+)" class="flex-1 overflow-hidden">\s*<ActivityTimeline[\s\S]*?:active="([^"]+)"/
+      /<div\s+v-if="showHistoryTab"\s+v-show="([^"]+)"\s+class="flex-1 overflow-hidden"\s*>\s*<ActivityTimeline[\s\S]*?:active="([^"]+)"/
     );
     expect(match).not.toBeNull();
     expect(match?.[1]).toBe("activeSidebarPanel === 'history'");

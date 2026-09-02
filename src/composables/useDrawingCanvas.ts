@@ -485,16 +485,6 @@ export function useDrawingCanvas() {
     }
   };
 
-  const getCurrentDrawingSession = (): DrawingData | null => {
-    if (state.value.activeDrawing) {
-      return {
-        ...state.value.activeDrawing,
-        frame: currentFrame.value,
-      };
-    }
-    return null;
-  };
-
   // Complete drawing session - compatibility method for AnnotationPanel
   const completeDrawingSession = (videoContext?: 'A' | 'B') => {
     // If there's an active drawing, commit it to the drawings Map
