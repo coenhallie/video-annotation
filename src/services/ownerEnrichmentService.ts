@@ -52,8 +52,12 @@ export async function fetchOwners(
   for (const u of (data ?? []) as DisplayNameRow[]) {
     map[u.id] = {
       id: u.id,
+      // Omitted rather than set to undefined: `avatarUrl?` means the owner may
+      // have no avatar, and an absent key is how that is spelled. Writing the
+      // key with an undefined value asserts the opposite - that there is a
+      // value - and is what exactOptionalPropertyTypes rejects.
+      ...(u.avatarUrl ? { avatarUrl: u.avatarUrl } : {}),
       name: u.displayName || UNKNOWN_OWNER_NAME,
-      avatarUrl: u.avatarUrl ?? undefined,
     };
   }
   // Ensure every requested id has an entry

@@ -97,33 +97,41 @@ export type QaStatus =
   | 'staging'
   | 'production';
 
+// Nullable columns are written `?: T | null`, not `?: T`. Both halves are load
+// bearing under exactOptionalPropertyTypes: the `?` is what lets an insert omit
+// the key, and the `| null` is what the column actually holds - PostgREST
+// returns an explicit null for an empty nullable column, never an absent key.
+// Modelling them as `?: T` alone claimed these columns were NOT NULL, which the
+// database contradicts (verified against information_schema on 2026-09-02) and
+// which made every legitimate `null` a type error at the call sites that write
+// one. DatabaseComment below already models its nullable columns this way.
 export interface DatabaseAnnotation {
   id: string;
-  videoId?: string; // Nullable for comparison annotations
-  comparisonVideoId?: string; // For comparison video annotations
+  videoId?: string | null; // Null for comparison annotations
+  comparisonVideoId?: string | null; // For comparison video annotations
   surface: AnnotationSurface; // Which editor tab this annotation belongs to
   userId: string;
-  projectId?: string;
+  projectId?: string | null;
   content: string;
   title: string;
   severity: SeverityLevel;
   color: string;
   timestamp: number;
-  frame?: number;
+  frame?: number | null;
   startFrame: number;
-  endFrame?: number;
+  endFrame?: number | null;
   duration: number;
   durationFrames: number;
   annotationType: AnnotationType;
-  drawingData?: DrawingData;
-  videoContext?: VideoContext; // Context for comparison annotations
-  synchronizedFrame?: number; // For synchronized comparison annotations
+  drawingData?: DrawingData | null;
+  videoContext?: VideoContext | null; // Context for comparison annotations
+  synchronizedFrame?: number | null; // For synchronized comparison annotations
   // Dual video frame tracking fields
-  videoAFrame?: number; // Frame number for video A in dual mode
-  videoBFrame?: number; // Frame number for video B in dual mode
-  videoATimestamp?: number; // Timestamp for video A in dual mode
-  videoBTimestamp?: number; // Timestamp for video B in dual mode
-  metadata?: Record<string, unknown>;
+  videoAFrame?: number | null; // Frame number for video A in dual mode
+  videoBFrame?: number | null; // Frame number for video B in dual mode
+  videoATimestamp?: number | null; // Timestamp for video A in dual mode
+  videoBTimestamp?: number | null; // Timestamp for video B in dual mode
+  metadata?: Record<string, unknown> | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -250,7 +258,11 @@ export interface ActivityDayGroup {
 
 // Application-specific interfaces (for Vue components)
 export interface Annotation {
-  id: string | number; // Support both UUID and legacy timestamp IDs
+  // `annotations.id` is `uuid NOT NULL`, and nothing in the codebase mints a
+  // numeric id - the old `string | number` was a legacy allowance no code
+  // exercised, which forced String() coercions at every consumer that needed a
+  // real string.
+  id: string;
   content: string;
   title: string;
   severity: SeverityLevel;
@@ -358,14 +370,29 @@ export interface AnonymousSession {
 }
 
 // New interface for shared comparison videos
+export interface SharedVideoWithCommentPermissions {
+  id: string;
+  title: string;
+  description?: string;
+  url?: string;
+  filePath?: string;
+  videoType: string;
+  /** `videos.ownerId` - needed to tell an owner from a share visitor. */
+  ownerId?: string;
+  isPublic: boolean;
+  canComment: boolean;
+  allowAnnotations: boolean;
+  annotations: Record<string, unknown>[];
+}
+
 export interface SharedComparisonVideoWithCommentPermissions {
   id: string;
   title: string;
   description?: string;
   /** `comparison_videos.userId` - needed to tell an owner from a share visitor. */
   ownerId?: string;
-  videoA: Record<string, unknown> | null; // SharedVideoWithCommentPermissions from shareService
-  videoB: Record<string, unknown> | null; // SharedVideoWithCommentPermissions from shareService
+  videoA: SharedVideoWithCommentPermissions | null;
+  videoB: SharedVideoWithCommentPermissions | null;
   isPublic: boolean;
   canComment: boolean;
   allowAnnotations: boolean;
@@ -390,12 +417,13 @@ export interface Database {
       };
       videos: {
         Row: DatabaseVideo;
-        // `qaStatus` is optional on insert only because the column is
-        // NOT NULL DEFAULT 'not_started'. Omitting it means 'not_started'.
+        // `qaStatus` and `allowAnnotations` are optional on insert only because
+        // both columns are NOT NULL with a default - 'not_started' and false
+        // respectively. Omitting either means taking that default.
         Insert: Omit<
           DatabaseVideo,
-          'id' | 'createdAt' | 'updatedAt' | 'qaStatus'
-        > & { qaStatus?: QaStatus };
+          'id' | 'createdAt' | 'updatedAt' | 'qaStatus' | 'allowAnnotations'
+        > & { qaStatus?: QaStatus; allowAnnotations?: boolean };
         Update: Partial<Omit<DatabaseVideo, 'id' | 'createdAt' | 'updatedAt'>>;
       };
       annotations: {

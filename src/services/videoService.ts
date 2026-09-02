@@ -325,7 +325,10 @@ export class VideoService {
       videoType: 'url',
       videoId: '', //This will be handled by the database
       isPublic: false,
-      ...(thumbnailUrl && { thumbnailUrl }),
+      // Ternary rather than `thumbnailUrl && { thumbnailUrl }`: the && form
+      // evaluates to the falsy value itself, so its type carries undefined into
+      // the spread and the optional `thumbnailUrl?: string` will not take it.
+      ...(thumbnailUrl ? { thumbnailUrl } : {}),
     };
 
     const { data, error } = await supabase

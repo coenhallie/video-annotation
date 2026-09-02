@@ -293,8 +293,11 @@ export class AnnotationService {
         return false;
       }
 
-      // User can moderate if they are the annotation owner
-      const canModerate = userId && annotation.userId === userId;
+      // User can moderate if they are the annotation owner. Boolean() rather
+      // than a bare `userId &&`: with no userId that expression evaluates to the
+      // falsy userId itself ('' or undefined), not to false, and this returns
+      // Promise<boolean>.
+      const canModerate = Boolean(userId) && annotation.userId === userId;
 
       return canModerate;
     } catch (error) {

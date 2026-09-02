@@ -4,21 +4,39 @@ import { AnnotationService } from './annotationService';
 import type {
   AnonymousSession,
   SharedComparisonVideoWithCommentPermissions,
+  SharedVideoWithCommentPermissions,
 } from '../types/database';
 
-export interface SharedVideoWithCommentPermissions {
-  id: string;
-  title: string;
-  description?: string;
-  url?: string;
-  filePath?: string;
-  videoType: string;
-  /** `videos.ownerId` - needed to tell an owner from a share visitor. */
-  ownerId?: string;
-  isPublic: boolean;
-  canComment: boolean;
-  allowAnnotations: boolean;
-  annotations: Record<string, unknown>[];
+// Declared in types/database.ts alongside its comparison sibling, so that type
+// can name this one instead of falling back to Record<string, unknown>.
+// Re-exported here because this is where callers have always imported it from.
+export type { SharedVideoWithCommentPermissions };
+
+/**
+ * Spread the three optional passthrough fields, omitting any that are absent.
+ *
+ * `description`, `url` and `filePath` are nullable on `videos` and optional on
+ * SharedVideoWithCommentPermissions. Under exactOptionalPropertyTypes "key
+ * absent" and "key present holding undefined" are different types and only the
+ * former is assignable, so assigning `description: video.description` straight
+ * through fails whenever the column is empty. Spreading nothing is how an absent
+ * optional is expressed.
+ */
+function optionalVideoFields(video: {
+  description?: string | undefined;
+  url?: string | undefined;
+  filePath?: string | undefined;
+}): Pick<
+  SharedVideoWithCommentPermissions,
+  'description' | 'url' | 'filePath'
+> {
+  return {
+    ...(video.description !== undefined
+      ? { description: video.description }
+      : {}),
+    ...(video.url !== undefined ? { url: video.url } : {}),
+    ...(video.filePath !== undefined ? { filePath: video.filePath } : {}),
+  };
 }
 
 export interface CommentPermissionContext {
@@ -431,9 +449,7 @@ export class ShareService {
     return {
       id: video.id,
       title: video.title,
-      description: video.description,
-      url: video.url,
-      filePath: video.filePath,
+      ...optionalVideoFields(video),
       videoType: video.videoType,
       isPublic: video.isPublic,
       canComment: false, // Comments are handled at comparison level
@@ -488,9 +504,7 @@ export class ShareService {
     return {
       id: video.id,
       title: video.title,
-      description: video.description,
-      url: video.url,
-      filePath: video.filePath,
+      ...optionalVideoFields(video),
       videoType: video.videoType,
       isPublic: video.isPublic,
       canComment: this.canCommentOnSharedVideo(video),
