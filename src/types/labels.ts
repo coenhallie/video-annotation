@@ -277,8 +277,13 @@ export const DEFAULT_LABELS: Omit<
   },
 ];
 
-// Predefined color palette for labels
-export const LABEL_COLORS = [
+// Predefined color palette for labels.
+//
+// Typed as a non-empty tuple so LABEL_COLORS[0] - the default colour for a new
+// label - reads as a string rather than `string | undefined`. The palette is a
+// literal in this file and is never emptied, so the type states a fact rather
+// than papering over a check.
+export const LABEL_COLORS: readonly [string, ...string[]] = [
   '#ef4444', // red-500
   '#f97316', // orange-500
   '#eab308', // yellow-500

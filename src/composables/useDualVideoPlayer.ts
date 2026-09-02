@@ -4,6 +4,13 @@
  * Expanded to cover independent controls for A/B while keeping a minimal API.
  */
 import { ref, reactive, onMounted, onUnmounted, watch, type Ref } from 'vue';
+import type { useDrawingCanvas } from './useDrawingCanvas';
+
+/**
+ * What EditorView stashes in the drawingCanvasA / drawingCanvasB slots below:
+ * the object useDrawingCanvas() returns.
+ */
+type DrawingCanvasApi = ReturnType<typeof useDrawingCanvas>;
 
 export interface DualVideoPlayerState {
   duration: number;
@@ -47,9 +54,18 @@ export interface DualVideoPlayer {
   videoAId?: Ref<string>;
   videoBId?: Ref<string>;
 
-  // Drawing canvas references
-  drawingCanvasA?: Ref<{ addDrawing?: (drawing: Record<string, unknown>) => void; updateDrawing?: (drawing: Record<string, unknown>) => void; deleteDrawing?: (drawingId: string) => void } | null>;
-  drawingCanvasB?: Ref<{ addDrawing?: (drawing: Record<string, unknown>) => void; updateDrawing?: (drawing: Record<string, unknown>) => void; deleteDrawing?: (drawingId: string) => void } | null>;
+  // Drawing canvas references.
+  //
+  // These are passthrough slots: EditorView assigns the useDrawingCanvas()
+  // composables into them and the template reads them back out to hand to
+  // UnifiedVideoPlayer. Nothing in this composable calls through them - its own
+  // drawing methods use the internal refs set by setDrawingCanvases.
+  //
+  // They were declared as `Ref<{ addDrawing?, updateDrawing?, deleteDrawing? }>`,
+  // which described neither what is stored (a composable object, not a ref) nor
+  // what is read.
+  drawingCanvasA?: DrawingCanvasApi | null;
+  drawingCanvasB?: DrawingCanvasApi | null;
 
   // Method to set video sources
   setVideoSources?: (
@@ -411,8 +427,15 @@ export function useDualVideoPlayer(): DualVideoPlayer {
     updateDrawing?: (drawing: Record<string, unknown>) => void;
     deleteDrawing?: (drawingId: string) => void;
   }
-  const drawingCanvasA = ref<DrawingCanvas | null>(null);
-  const drawingCanvasB = ref<DrawingCanvas | null>(null);
+  // The component instances this composable calls addDrawing/updateDrawing/
+  // deleteDrawing on, set by setCanvasRefs. Named apart from the
+  // drawingCanvasA/B slots on the returned object, which hold something else
+  // entirely - the useDrawingCanvas() composables EditorView stashes there for
+  // UnifiedVideoPlayer to read isDrawingMode, currentTool and allDrawings off.
+  // Both used to be called drawingCanvasA, and the return exposed this one under
+  // that name for EditorView to immediately overwrite.
+  const canvasComponentA = ref<DrawingCanvas | null>(null);
+  const canvasComponentB = ref<DrawingCanvas | null>(null);
 
   // Method to set video sources
   function setVideoSources(
@@ -438,8 +461,8 @@ export function useDualVideoPlayer(): DualVideoPlayer {
 
   // Method to set canvas references
   function setCanvasRefs(canvasA: DrawingCanvas | null, canvasB: DrawingCanvas | null) {
-    drawingCanvasA.value = canvasA;
-    drawingCanvasB.value = canvasB;
+    canvasComponentA.value = canvasA;
+    canvasComponentB.value = canvasB;
     console.log('🎨 [useDualVideoPlayer] Canvas refs set:', {
       canvasA,
       canvasB,
@@ -449,7 +472,7 @@ export function useDualVideoPlayer(): DualVideoPlayer {
   // Drawing methods for dual video mode
   function addDrawing(drawing: Record<string, unknown>, videoContext: 'A' | 'B') {
     const canvas =
-      videoContext === 'A' ? drawingCanvasA.value : drawingCanvasB.value;
+      videoContext === 'A' ? canvasComponentA.value : canvasComponentB.value;
     if (canvas && canvas.addDrawing) {
       console.log(
         `🎨 [useDualVideoPlayer] Adding drawing to video ${videoContext}:`,
@@ -465,7 +488,7 @@ export function useDualVideoPlayer(): DualVideoPlayer {
 
   function updateDrawing(drawing: Record<string, unknown>, videoContext: 'A' | 'B') {
     const canvas =
-      videoContext === 'A' ? drawingCanvasA.value : drawingCanvasB.value;
+      videoContext === 'A' ? canvasComponentA.value : canvasComponentB.value;
     if (canvas && canvas.updateDrawing) {
       console.log(
         `🎨 [useDualVideoPlayer] Updating drawing on video ${videoContext}:`,
@@ -481,7 +504,7 @@ export function useDualVideoPlayer(): DualVideoPlayer {
 
   function deleteDrawing(drawingId: string, videoContext: 'A' | 'B') {
     const canvas =
-      videoContext === 'A' ? drawingCanvasA.value : drawingCanvasB.value;
+      videoContext === 'A' ? canvasComponentA.value : canvasComponentB.value;
     if (canvas && canvas.deleteDrawing) {
       console.log(
         `🎨 [useDualVideoPlayer] Deleting drawing from video ${videoContext}:`,
@@ -560,9 +583,6 @@ export function useDualVideoPlayer(): DualVideoPlayer {
     videoBUrl,
     videoAId,
     videoBId,
-    // expose drawing canvas refs
-    drawingCanvasA,
-    drawingCanvasB,
     // expose utility methods
     setVideoSources,
     setCanvasRefs,
