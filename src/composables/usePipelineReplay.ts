@@ -102,16 +102,21 @@ export function usePipelineReplay(opts: {
 
   function findIn(win: LoadedWindow, target: number): ReplayRecord | null {
     const records = win.records;
-    if (!records.length) return null;
-    if (target < records[0].t || target > records[records.length - 1].t) return null;
+    const firstRecord = records[0];
+    const lastRecord = records[records.length - 1];
+    if (!firstRecord || !lastRecord) return null;
+    if (target < firstRecord.t || target > lastRecord.t) return null;
     let lo = 0;
     let hi = records.length - 1;
     while (lo < hi) {
       const mid = (lo + hi + 1) >> 1;
-      if (records[mid].t <= target) lo = mid;
+      const midRecord = records[mid];
+      if (midRecord && midRecord.t <= target) lo = mid;
       else hi = mid - 1;
     }
-    return records[lo];
+    // `?? null` reports "no record here", which is already this function's way
+    // of saying so. Nothing is substituted for a record the window lacks.
+    return records[lo] ?? null;
   }
 
   function touch(win: LoadedWindow): void {
@@ -159,14 +164,16 @@ export function usePipelineReplay(opts: {
         startsAtBof: from === 0,
         endsAtEof: end === index.size - 1,
       });
-      if (!records.length) return null;
+      const windowFirst = records[0];
+      const windowLast = records[records.length - 1];
+      if (!windowFirst || !windowLast) return null;
 
       // Feed the true offset back so the next estimate in this region is better.
       const firstNewline = from === 0 ? -1 : text.indexOf('\n');
       insertEntry(index, {
         offset: from === 0 ? 0 : from + firstNewline + 1,
-        frameCount: records[0].frameCount,
-        t: records[0].t,
+        frameCount: windowFirst.frameCount,
+        t: windowFirst.t,
       });
 
       const win: LoadedWindow = { startOffset: from, records };
@@ -175,12 +182,12 @@ export function usePipelineReplay(opts: {
       const hit = findIn(win, target);
       if (hit) return hit;
 
-      if (target < records[0].t) {
-        if (start === 0) return records[0];
+      if (target < windowFirst.t) {
+        if (start === 0) return windowFirst;
         start = Math.max(0, start - span);
       } else {
         const next = start + span;
-        if (next >= index.size) return records[records.length - 1];
+        if (next >= index.size) return windowLast;
         start = next;
       }
     }
@@ -199,8 +206,10 @@ export function usePipelineReplay(opts: {
    * every rAF tick asks and a boundary is many ticks wide.
    */
   function maybePrefetch(): void {
-    if (prefetching || !index || !windows.length) return;
-    const records = windows[0].records;
+    if (prefetching || !index) return;
+    const newest = windows[0];
+    if (!newest) return;
+    const records = newest.records;
     const lastT = records[records.length - 1]?.t;
     if (lastT === undefined) return;
     if (abs(currentTime.value) < lastT - PREFETCH_SECONDS) return;
