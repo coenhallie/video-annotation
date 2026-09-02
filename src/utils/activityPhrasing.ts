@@ -77,6 +77,9 @@ export function activityDayLabel(key: string, now: Date = new Date()): string {
   // Parsed as local midnight rather than through Date(key), which reads a bare
   // yyyy-mm-dd as UTC and can print the previous day.
   const [y, m, d] = key.split('-').map(Number);
+  // A key that is not yyyy-mm-dd is shown as it came rather than being turned
+  // into an Invalid Date.
+  if (y === undefined || m === undefined || d === undefined) return key;
   return new Date(y, m - 1, d).toLocaleDateString();
 }
 

@@ -14,13 +14,15 @@ import type { Team, TeamColors } from './types'
  * Returns [0, 0, 0] when the input is missing or too short.
  */
 function toRgb(color: number[] | undefined | null): [number, number, number] {
-  if (!color || color.length < 3) return [0, 0, 0]
+  if (!color) return [0, 0, 0]
+  // Destructured rather than indexed: a length check does not narrow an index
+  // read under noUncheckedIndexedAccess, and this keeps the documented
+  // behaviour - a channel that is not there yields the same [0, 0, 0] as a
+  // missing array, rather than NaN.
+  const [r, g, b] = color
+  if (r === undefined || g === undefined || b === undefined) return [0, 0, 0]
   const sc = Math.max(...color) <= 1.0 ? 255 : 1
-  return [
-    Math.round(color[0] * sc),
-    Math.round(color[1] * sc),
-    Math.round(color[2] * sc),
-  ]
+  return [Math.round(r * sc), Math.round(g * sc), Math.round(b * sc)]
 }
 
 /** Format an RGB tuple as a CSS `rgb(…)` string. */
@@ -110,12 +112,18 @@ export function resolveTeamColors(team: Team, teamId: number): TeamColors {
 
   if (Array.isArray(colors) && colors.length >= 3) {
     if (weights && weights.length * 3 <= colors.length) {
-      // Sort colour indices by descending weight
-      const idxs = Array.from({ length: weights.length }, (_, i) => i).sort(
-        (a, b) => weights[b] - weights[a],
-      )
-      const pick = (i: number): [number, number, number] =>
-        toRgb(colors.slice(idxs[i] * 3, idxs[i] * 3 + 3))
+      // Sort colour indices by descending weight. The weight travels with its
+      // index instead of being looked up inside the comparator, so there is no
+      // index read to guard and no weight to default.
+      const idxs = weights
+        .map((weight, i) => ({ weight, i }))
+        .sort((a, b) => b.weight - a.weight)
+        .map((entry) => entry.i)
+      const pick = (i: number): [number, number, number] => {
+        const idx = idxs[i]
+        if (idx === undefined) return [0, 0, 0]
+        return toRgb(colors.slice(idx * 3, idx * 3 + 3))
+      }
       const r0 = pick(0)
       return {
         fill: css(r0),

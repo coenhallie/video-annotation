@@ -392,11 +392,14 @@ const renderDrawingPath = (drawingPath: DrawingPath) => {
       y: point.y * canvasHeight.value,
     }));
 
-    if (points.length < 2) return;
+    const [startPoint, ...restPoints] = points;
+    if (!startPoint || restPoints.length < 1) return;
 
-    let pathString = `M ${points[0].x} ${points[0].y}`;
-    for (let i = 1; i < points.length; i++) {
-      pathString += ` L ${points[i].x} ${points[i].y}`;
+    // Built by walking the points rather than indexing them: a length check
+    // does not narrow an index read, and iterating says the same thing.
+    let pathString = `M ${startPoint.x} ${startPoint.y}`;
+    for (const point of restPoints) {
+      pathString += ` L ${point.x} ${point.y}`;
     }
 
     const fabricPath = new fabric.Path(pathString, {

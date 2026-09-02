@@ -152,9 +152,12 @@ export function useVideoPlayer(): UseVideoPlayer {
             return { fps: testFPS, totalFrames: frames, score };
           });
 
-          // Sort by score and pick the best match
+          // Sort by score and pick the best match. The detected rate is only
+          // overwritten when there is actually a candidate; with none, the
+          // value computed above stands.
           testResults.sort((a, b) => b.score - a.score);
-          detectedFPS = testResults[0].fps;
+          const best = testResults[0];
+          if (best) detectedFPS = best.fps;
         }
 
         fps.value = detectedFPS;
@@ -304,8 +307,9 @@ export function useVideoPlayer(): UseVideoPlayer {
     const currentIndex = speeds.indexOf(
       playbackSpeed.value as (typeof speeds)[number]
     );
-    if (currentIndex < speeds.length - 1) {
-      setPlaybackSpeed(speeds[currentIndex + 1]);
+    const next = speeds[currentIndex + 1];
+    if (next !== undefined) {
+      setPlaybackSpeed(next);
     }
   };
 
@@ -314,8 +318,9 @@ export function useVideoPlayer(): UseVideoPlayer {
     const currentIndex = speeds.indexOf(
       playbackSpeed.value as (typeof speeds)[number]
     );
-    if (currentIndex > 0) {
-      setPlaybackSpeed(speeds[currentIndex - 1]);
+    const previous = speeds[currentIndex - 1];
+    if (previous !== undefined) {
+      setPlaybackSpeed(previous);
     }
   };
 
