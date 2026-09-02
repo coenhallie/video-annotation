@@ -5,7 +5,9 @@ const chain = {
   eq: vi.fn(() => chain),
   order: vi.fn(() => Promise.resolve({ data: [], error: null })),
 };
-const fromMock = vi.fn(() => chain);
+// Declares the table argument it is called with, so the call sites typecheck
+// and toHaveBeenCalledWith can be checked against it.
+const fromMock = vi.fn((_table?: unknown) => chain);
 
 vi.mock('@/composables/useSupabase', () => ({
   supabase: { from: (...a: unknown[]) => fromMock(...a) },

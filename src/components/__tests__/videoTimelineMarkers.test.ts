@@ -2,33 +2,73 @@
 import { describe, it, expect } from 'vitest';
 import { createApp, defineComponent, h, nextTick } from 'vue';
 import VideoTimeline from '@/components/VideoTimeline.vue';
+import type { Annotation } from '@/types/database';
 
-const LABELLED = {
+/**
+ * Fill in the columns every annotation row has, so a fixture only has to state
+ * what the case under test is actually about. The timeline reads title,
+ * timestamp, severity, labels, annotationType and drawingData; the rest are
+ * required on the row and irrelevant here.
+ */
+// The optional keys explicitly admit undefined, so one fixture can be built by
+// spreading another - `{ ...DRAWING, labels: [...] }` carries drawingData as
+// `DrawingData | null | undefined`, which a plain Partial<Annotation> rejects.
+type AnnotationFixture = {
+  [K in keyof Annotation]?: Annotation[K] | undefined;
+} & { id: string };
+
+const annotation = (fields: AnnotationFixture): Annotation => {
+  // Indexable, so the loop below can apply overrides by key without a cast.
+  const built: Annotation & Record<string, unknown> = {
+    id: fields.id,
+    content: '',
+    title: '',
+    severity: 'medium',
+    color: '#6b7280',
+    timestamp: 0,
+    frame: 0,
+    annotationType: 'text',
+    duration: 1 / 30,
+    durationFrames: 1,
+  };
+  // Applied key by key, skipping undefined: an override that is undefined means
+  // "leave the default", which is not the same as writing undefined into a key
+  // the concrete Annotation types as present.
+  for (const [key, value] of Object.entries(fields)) {
+    if (value !== undefined) {
+      built[key] = value;
+    }
+  }
+  return built;
+};
+
+
+const LABELLED = annotation({
   id: 'annotation-labelled',
   title: 'BALL MISSED',
   timestamp: 10,
   severity: 'high',
   labels: ['label-ball-missed'],
-};
+});
 
-const COMMENT = {
+const COMMENT = annotation({
   id: 'annotation-comment',
   title: 'keeper off his line early',
   timestamp: 20,
   labels: [] as string[],
-};
+});
 
 // What useRealtimeAnnotations pushes: a raw annotations row, with no labels
 // property at all because the join was never resolved. Its labels are unknown,
 // not empty, so it must not be mistaken for a comment.
-const UNHYDRATED = {
+const UNHYDRATED = annotation({
   id: 'annotation-unhydrated',
   title: 'BALL MISSED',
   timestamp: 30,
   severity: 'low',
-};
+});
 
-const DRAWING = {
+const DRAWING = annotation({
   id: 'annotation-drawing',
   title: 'Drawing',
   timestamp: 40,
@@ -50,9 +90,9 @@ const DRAWING = {
       },
     ],
   },
-};
+});
 
-const LABELLED_DRAWING = {
+const LABELLED_DRAWING = annotation({
   id: 'annotation-labelled-drawing',
   title: 'BALL MISSED',
   timestamp: 50,
@@ -60,10 +100,10 @@ const LABELLED_DRAWING = {
   labels: ['label-ball-missed'],
   annotationType: 'drawing',
   drawingData: DRAWING.drawingData,
-};
+});
 
 function mountTimeline(
-  selectedAnnotation?: object,
+  selectedAnnotation?: Annotation,
   extraProps: Record<string, unknown> = {}
 ) {
   const root = document.createElement('div');

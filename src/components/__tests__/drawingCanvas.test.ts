@@ -2,6 +2,7 @@
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 import { createApp, defineComponent, h, nextTick, ref } from 'vue';
 import DrawingCanvas from '@/components/DrawingCanvas.vue';
+import type { DrawingData } from '@/types/database';
 
 /**
  * Fabric wants a real 2D context, which jsdom has none of. The component's
@@ -84,11 +85,11 @@ const fabricPathEvent = () => ({
   },
 });
 
-function mountCanvas(existingDrawings: unknown[] = []) {
+function mountCanvas(existingDrawings: DrawingData[] = []) {
   FakeCanvas.instances = [];
   const root = document.createElement('div');
   document.body.appendChild(root);
-  const instance = ref<any>(null);
+  const instance = ref<InstanceType<typeof DrawingCanvas> | null>(null);
   const frame = ref(300);
 
   const app = createApp(
@@ -110,12 +111,20 @@ function mountCanvas(existingDrawings: unknown[] = []) {
 
   return {
     get component() {
-      return instance.value;
+      // Every test reads this after mounting, so an absent instance is a broken
+      // harness rather than a case to handle. Failing here names that directly,
+      // instead of pushing a `?.` onto thirteen call sites where a silently
+      // undefined method call would look like a passing assertion.
+      const mounted = instance.value;
+      if (!mounted) throw new Error('DrawingCanvas harness is not mounted');
+      return mounted;
     },
     get canvas() {
-      // Asserted non-null: every test calls this only after ready(), by
-      // which point initCanvas has constructed the one instance under test.
-      return FakeCanvas.instances[0]!;
+      // Every test calls this only after ready(), by which point initCanvas has
+      // constructed the one instance under test.
+      const canvas = FakeCanvas.instances[0];
+      if (!canvas) throw new Error('FakeCanvas was never constructed');
+      return canvas;
     },
     setFrame: (value: number) => {
       frame.value = value;
@@ -155,11 +164,11 @@ describe('DrawingCanvas undoLastStroke', () => {
     await ready();
     await draw(harness);
     await draw(harness);
-    expect(harness.component.getCurrentDrawingSession().paths).toHaveLength(2);
+    expect(harness.component.getCurrentDrawingSession()?.paths).toHaveLength(2);
 
     harness.component.undoLastStroke();
 
-    expect(harness.component.getCurrentDrawingSession().paths).toHaveLength(1);
+    expect(harness.component.getCurrentDrawingSession()?.paths).toHaveLength(1);
     expect(harness.canvas.getObjects()).toHaveLength(1);
     harness.unmount();
   });

@@ -156,10 +156,10 @@ describe('groupActivityByDay', () => {
     );
 
     expect(groups).toHaveLength(2);
-    expect(groups[0].label).toBe('TODAY');
-    expect(groups[0].entries.map((e) => e.id)).toEqual(['a', 'c']);
-    expect(groups[1].label).toBe('YESTERDAY');
-    expect(groups[1].entries.map((e) => e.id)).toEqual(['b']);
+    expect(groups[0]?.label).toBe('TODAY');
+    expect(groups[0]?.entries.map((e) => e.id)).toEqual(['a', 'c']);
+    expect(groups[1]?.label).toBe('YESTERDAY');
+    expect(groups[1]?.entries.map((e) => e.id)).toEqual(['b']);
   });
 
   it('returns nothing for no entries', () => {
@@ -169,7 +169,7 @@ describe('groupActivityByDay', () => {
   it('keeps entries with an unparseable timestamp in their own group', () => {
     const groups = groupActivityByDay([entry({ createdAt: 'nonsense' })], now);
     expect(groups).toHaveLength(1);
-    expect(groups[0].entries).toHaveLength(1);
+    expect(groups[0]?.entries).toHaveLength(1);
   });
 
   it('preserves the order it was given and never re-sorts', () => {
@@ -194,8 +194,8 @@ describe('groupActivityByDay', () => {
     );
 
     expect(groups.map((g) => g.label)).toEqual(['YESTERDAY', 'TODAY']);
-    expect(groups[0].entries.map((e) => e.id)).toEqual(['c']);
-    expect(groups[1].entries.map((e) => e.id)).toEqual(['a', 'b']);
+    expect(groups[0]?.entries.map((e) => e.id)).toEqual(['c']);
+    expect(groups[1]?.entries.map((e) => e.id)).toEqual(['a', 'b']);
   });
 });
 

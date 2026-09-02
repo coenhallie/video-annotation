@@ -9,6 +9,8 @@ vi.mock('@/services/activityService', () => ({
 }));
 
 import ActivityTimeline from '@/components/ActivityTimeline.vue';
+import type { AnnotationSurface } from '@/types/database';
+import type { ActivityTarget } from '@/services/activityService';
 
 function entry(over: Partial<ActivityEntry> = {}): ActivityEntry {
   return {
@@ -28,16 +30,19 @@ function entry(over: Partial<ActivityEntry> = {}): ActivityEntry {
   };
 }
 
-function mount(props: Record<string, unknown>) {
+// The component's own props, rather than a loose record: spreading a
+// Record<string, unknown> into h() defeats prop checking entirely and pushes the
+// call onto the untyped overload.
+function mount(props: { target: ActivityTarget | null; active: boolean }) {
   const root = document.createElement('div');
   document.body.appendChild(root);
-  const selected: Array<[string, number, string | undefined]> = [];
+  const selected: Array<[string, number, AnnotationSurface | undefined]> = [];
   const app = createApp(
     defineComponent({
       setup: () => () =>
         h(ActivityTimeline, {
           ...props,
-          onSelectAnnotation: (id: string, t: number, surface?: string) => {
+          onSelectAnnotation: (id: string, t: number, surface?: AnnotationSurface) => {
             selected.push([id, t, surface]);
           },
         }),
@@ -56,7 +61,7 @@ function mount(props: Record<string, unknown>) {
   };
 }
 
-function mountReactive(initialTarget: Record<string, string> | null) {
+function mountReactive(initialTarget: ActivityTarget | null) {
   const root = document.createElement('div');
   document.body.appendChild(root);
   const target = ref(initialTarget);

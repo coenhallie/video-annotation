@@ -276,13 +276,13 @@ describe('PipelineOutputSurface', () => {
       // keeps a step off the record it is stepping away from.
       (at(m.root, 'pipeline-step-forward') as HTMLButtonElement).click();
       expect(replay.pause).toHaveBeenCalled();
-      expect(vi.mocked(replay.seek).mock.calls[0][0]).toBeCloseTo(
+      expect(vi.mocked(replay.seek).mock.calls[0]?.[0]).toBeCloseTo(
         251 / 25 + 0.001,
         4
       );
 
       (at(m.root, 'pipeline-step-back') as HTMLButtonElement).click();
-      expect(vi.mocked(replay.seek).mock.calls[1][0]).toBeCloseTo(
+      expect(vi.mocked(replay.seek).mock.calls[1]?.[0]).toBeCloseTo(
         249 / 25 + 0.001,
         4
       );

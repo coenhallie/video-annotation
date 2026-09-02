@@ -78,8 +78,8 @@ describe('VideoControls', () => {
     const m = mount({ isPlaying: false });
     await nextTick();
     const buttons = m.root.querySelectorAll<HTMLButtonElement>('.control-button');
-    buttons[0].click();
-    buttons[2].click();
+    buttons[0]?.click();
+    buttons[2]?.click();
     expect(m.events).toEqual(['prev-frame', 'next-frame']);
     m.unmount();
   });

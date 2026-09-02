@@ -291,6 +291,16 @@ export interface Annotation {
   updatedAt?: string;
   duration: number;
   durationFrames: number;
+  /**
+   * Label ids, hydrated from the annotation_labels join - not a column on
+   * annotations, which is why DatabaseAnnotation above does not carry it.
+   *
+   * Optional because absent and empty mean different things here: an absent
+   * `labels` is a row whose join was never resolved (what the realtime
+   * subscription pushes), while `[]` is a row that genuinely has no labels. The
+   * timeline distinguishes the two.
+   */
+  labels?: string[];
 }
 
 export interface Video {

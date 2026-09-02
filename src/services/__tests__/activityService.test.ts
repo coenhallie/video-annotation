@@ -96,7 +96,7 @@ describe('getActivity', () => {
     const entries = await getActivity({ videoId: 'v1' });
 
     expect(fetchOwners).toHaveBeenCalledWith(['u1']);
-    expect(entries[0].actor).toBe('Alice');
+    expect(entries[0]?.actor).toBe('Alice');
   });
 
   it('prefers the snapshot name when there is no actor id', async () => {
@@ -112,7 +112,7 @@ describe('getActivity', () => {
     const { getActivity } = await loadService();
     const entries = await getActivity({ videoId: 'v1' });
 
-    expect(entries[0].actor).toBe('Visitor 7');
+    expect(entries[0]?.actor).toBe('Visitor 7');
   });
 
   it('falls back to Unknown when neither an id nor a name resolves', async () => {
@@ -129,7 +129,7 @@ describe('getActivity', () => {
     const { getActivity } = await loadService();
     const entries = await getActivity({ videoId: 'v1' });
 
-    expect(entries[0].actor).toBe('Unknown');
+    expect(entries[0]?.actor).toBe('Unknown');
   });
 
   it('marks an entry live when its annotation still exists', async () => {
@@ -145,8 +145,8 @@ describe('getActivity', () => {
     const { getActivity } = await loadService();
     const entries = await getActivity({ videoId: 'v1' });
 
-    expect(entries[0].live).toBe(true);
-    expect(entries[1].live).toBe(false);
+    expect(entries[0]?.live).toBe(true);
+    expect(entries[1]?.live).toBe(false);
   });
 
   it('checks liveness against the comment parent, not the comment id', async () => {
@@ -169,7 +169,7 @@ describe('getActivity', () => {
     const entries = await getActivity({ videoId: 'v1' });
 
     expect(live.in).toHaveBeenCalledWith('id', ['a1']);
-    expect(entries[0].live).toBe(true);
+    expect(entries[0]?.live).toBe(true);
   });
 
   it('marks a deleted annotation as not live', async () => {
@@ -186,7 +186,7 @@ describe('getActivity', () => {
     const { getActivity } = await loadService();
     const entries = await getActivity({ videoId: 'v1' });
 
-    expect(entries[0].live).toBe(false);
+    expect(entries[0]?.live).toBe(false);
   });
 
   // Liveness is a fact about the target, not about the action. A removed
@@ -211,7 +211,7 @@ describe('getActivity', () => {
     const { getActivity } = await loadService();
     const entries = await getActivity({ videoId: 'v1' });
 
-    expect(entries[0].live).toBe(true);
+    expect(entries[0]?.live).toBe(true);
   });
 
   it('returns an empty list and does not throw when the query errors', async () => {

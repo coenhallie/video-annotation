@@ -14,7 +14,9 @@ chain.maybeSingle = vi.fn(() => settle());
 chain.then = (onFulfilled: any, onRejected: any) =>
   settle().then(onFulfilled, onRejected);
 
-const fromMock = vi.fn(() => chain);
+// Declares the table argument it is called with, so the call sites typecheck
+// and toHaveBeenCalledWith can be checked against it.
+const fromMock = vi.fn((_table?: unknown) => chain);
 
 vi.mock('@/composables/useSupabase', () => ({
   supabase: { from: (table: string) => fromMock(table) },

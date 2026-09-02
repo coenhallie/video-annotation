@@ -12,7 +12,9 @@ for (const m of ['select', 'eq', 'update', 'order']) {
 chain.then = (onFulfilled: any, onRejected: any) =>
   Promise.resolve(queryResult).then(onFulfilled, onRejected);
 
-const fromMock = vi.fn(() => chain);
+// Declares the table argument it is called with, so the call sites typecheck
+// and toHaveBeenCalledWith can be checked against it.
+const fromMock = vi.fn((_table?: unknown) => chain);
 const getSessionMock = vi.fn(() => Promise.resolve(sessionResult));
 
 vi.mock('@/composables/useSupabase', () => ({
