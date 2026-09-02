@@ -10,6 +10,9 @@ import type {
   DrawingData,
   Comment,
   SharedComparisonVideoWithCommentPermissions,
+  SeverityLevel,
+  AnnotationType,
+  VideoContext,
 } from './database';
 import type { SharedVideoWithCommentPermissions } from '../services/shareService';
 import type { Label } from './labels';
@@ -105,7 +108,13 @@ export interface PanelAnnotation {
   endFrame?: number;
   duration?: number;
   durationFrames?: number;
-  annotationType?: string;
+  // These three were undeclared or loosely typed, so they resolved through the
+  // index signature below as `unknown` / bare `string` - and every consumer that
+  // wrote them into an annotation row had to be an error. They are columns with
+  // enum types, so they get those types here.
+  severity?: SeverityLevel;
+  annotationType?: AnnotationType;
+  metadata?: Record<string, unknown> | null;
   drawingData?: DrawingData | null;
   videoAFrame?: number;
   videoBFrame?: number;
@@ -140,9 +149,15 @@ export interface AnnotationFormData {
   endFrame?: number;
   duration?: number;
   durationFrames?: number;
-  annotationType?: string;
+  // These three were undeclared or loosely typed, so they resolved through the
+  // index signature below as `unknown` / bare `string` - and every consumer that
+  // wrote them into an annotation row had to be an error. They are columns with
+  // enum types, so they get those types here.
+  severity?: SeverityLevel;
+  annotationType?: AnnotationType;
+  metadata?: Record<string, unknown> | null;
   drawingData?: DrawingData | null;
-  videoContext?: string;
+  videoContext?: VideoContext;
   videoAFrame?: number;
   videoBFrame?: number;
   videoATimestamp?: number;

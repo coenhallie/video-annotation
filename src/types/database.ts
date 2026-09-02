@@ -270,7 +270,11 @@ export interface Annotation {
   timestamp: number;
   frame: number;
   annotationType: AnnotationType;
-  drawingData?: DrawingData;
+  // Nullable in the database, and PostgREST hands the null straight through.
+  // The other nullable columns are left as-is deliberately: widening them all
+  // raised the error count, because a lot of consuming code treats an absent
+  // frame or timestamp as a number. Those are worth a separate pass.
+  drawingData?: DrawingData | null;
   projectId?: string;
   comparisonVideoId?: string;
   synchronizedFrame?: number;
@@ -281,7 +285,7 @@ export interface Annotation {
   videoATimestamp?: number;
   videoBTimestamp?: number;
   videoContext?: VideoContext;
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, unknown> | null;
   userId?: string;
   createdAt?: string;
   updatedAt?: string;

@@ -408,7 +408,10 @@ export class AnnotationService {
    */
   static async createComparisonAnnotation(
     comparisonVideoId: string,
-    annotation: Annotation,
+    // Partial, not Annotation: every field below is read through a `||` or a
+    // null check, so this has always accepted an incomplete draft. Declaring
+    // Annotation just moved the mismatch to the callers.
+    annotation: Partial<Annotation>,
     userId: string,
     videoContext: VideoContext = 'comparison',
     synchronizedFrame?: number,

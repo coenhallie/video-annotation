@@ -15,6 +15,8 @@ import { AnnotationLabelService } from '../services/annotationLabelService';
 import { useAuth } from './useAuth';
 import { ComparisonVideoService } from '../services/comparisonVideoService';
 import type { Annotation, AnnotationSurface } from '../types/database';
+import type { AnnotationFormData } from '../types/component-interfaces';
+import type { AnnotationInsert } from '../types/database';
 
 export function useVideoAnnotations(
   videoUrl: Ref<string | null> | string,
@@ -25,8 +27,21 @@ export function useVideoAnnotations(
 ) {
   const { user } = useAuth();
 
+  /**
+   * What this composable actually reads off the video record. Deliberately not
+   * the full Video type: `existingVideo` is handed in by callers as a loose
+   * object, and only `id` and `isPublic` are ever read here. Typing `id` is what
+   * matters - as a bare Record its type was `unknown`, so every service call
+   * taking it was an error.
+   */
+  type CurrentVideoRecord = {
+    id: string;
+    isPublic?: boolean;
+    [key: string]: unknown;
+  };
+
   // State
-  const currentVideo = ref<Record<string, unknown> | null>(null);
+  const currentVideo = ref<CurrentVideoRecord | null>(null);
   const annotations = ref<Annotation[]>([]);
   const isLoading = ref(false);
   const error = ref<string | null>(null);
@@ -93,18 +108,22 @@ export function useVideoAnnotations(
 
   // Create or get video record
   const initializeVideo = async (videoData: {
-    existingVideo?: Record<string, unknown>;
-    videoType?: string;
+    existingVideo?: CurrentVideoRecord;
+    // Not `string`: videos.videoType carries a check constraint accepting only
+    // these two values, so anything else is rejected by the database.
+    videoType?: 'url' | 'upload';
     title?: string;
     fps?: number;
     duration?: number;
     totalFrames?: number;
     [key: string]: unknown;
   }) => {
-    if (!toValue(user)) return;
+    const currentUser = toValue(user);
+    if (!currentUser) return;
 
     try {
       isLoading.value = true;
+      const url = toValue(videoUrl);
 
       // If we have an existing video record (for uploaded videos), use it directly
       if (videoData.existingVideo) {
@@ -115,11 +134,9 @@ export function useVideoAnnotations(
 
       // For uploaded videos, check if a video with this URL already exists as an upload via service
       if (videoData.videoType === 'upload') {
-        const existingUploadedVideo =
-          await VideoService.findExistingUploadedVideo(
-            toValue(videoUrl),
-            toValue(user).id
-          );
+        const existingUploadedVideo = url
+          ? await VideoService.findExistingUploadedVideo(url, currentUser.id)
+          : null;
         if (existingUploadedVideo) {
           currentVideo.value = existingUploadedVideo;
           await loadAnnotations();
@@ -127,12 +144,21 @@ export function useVideoAnnotations(
         }
       }
 
+      // A row with no url cannot be stored: videos.check_video_url_or_path
+      // requires a non-empty url for videoType 'url'. Failing here names the
+      // problem; letting it through surfaces as a constraint violation instead.
+      if (!url) {
+        throw new Error(
+          'Cannot create a video record without a URL (videoUrl is null)'
+        );
+      }
+
       // Create or update video record (handles duplicates automatically)
       const video = await VideoService.createVideo({
-        ownerId: toValue(user).id,
+        ownerId: currentUser.id,
         title: videoData.title || `Video ${new Date().toLocaleDateString()}`,
-        url: toValue(videoUrl),
-        videoId: toValue(videoId),
+        url,
+        videoId: toValue(videoId) ?? '',
         videoType: videoData.videoType || 'url',
         fps: videoData.fps || 30,
         duration: videoData.duration || 0,
@@ -225,7 +251,8 @@ export function useVideoAnnotations(
       isLoading.value = true;
       let dbAnnotations;
 
-      if (isComparisonContext.value && toValue(comparisonVideoId)) {
+      const comparisonId = toValue(comparisonVideoId);
+      if (comparisonId) {
         // In comparison context, load ALL annotations (individual + comparison-specific)
         logger.debug(
           '[useVideoAnnotations] loading all annotations for comparison',
@@ -253,7 +280,7 @@ export function useVideoAnnotations(
 
             const allAnnotations =
               await AnnotationService.getAllComparisonVideoAnnotations(
-                toValue(comparisonVideoId),
+                comparisonId,
                 comparisonVideo.videoAId,
                 comparisonVideo.videoBId
               );
@@ -278,14 +305,26 @@ export function useVideoAnnotations(
           throw err;
         }
       } else {
-        // In individual video context, load individual video annotations
+        // In individual video context, load individual video annotations.
+        // Reachable with no current video: the guard above lets a shared video
+        // through, and the shared branch only handles it when a share id is
+        // present. That combination used to throw a TypeError on `.id`.
+        const videoRecord = currentVideo.value;
+        if (!videoRecord) {
+          logger.warn('[useVideoAnnotations] skip load - no current video');
+          if (!isCurrent()) return;
+          annotations.value = [];
+          return;
+        }
         logger.debug(
           '[useVideoAnnotations] loading individual annotations for',
-          currentVideo.value.id
+          videoRecord.id
         );
         dbAnnotations = await AnnotationService.getVideoAnnotations(
-          currentVideo.value.id,
-          toValue(projectId),
+          videoRecord.id,
+          // `?? undefined`, not `!`: these services take an optional projectId,
+          // and "no project" is spelled undefined there but null here.
+          toValue(projectId) ?? undefined,
           true, // includeCommentCounts
           toValue(surface)
         );
@@ -299,7 +338,7 @@ export function useVideoAnnotations(
     }
   };
 
-  const addAnnotation = async (annotationData) => {
+  const addAnnotation = async (annotationData: AnnotationFormData) => {
     // Ensure comparison context is properly set
     const currentComparisonVideoId = toValue(comparisonVideoId);
     // The surface this annotation belongs to, fixed at entry. Creating one and
@@ -363,11 +402,17 @@ export function useVideoAnnotations(
 
       let newAnnotation;
 
-      if (isComparisonContext.value && toValue(comparisonVideoId)) {
+      const author = toValue(user);
+      if (!author) {
+        throw new Error('Cannot create an annotation without a signed-in user');
+      }
+
+      const comparisonId = toValue(comparisonVideoId);
+      if (comparisonId) {
         // In comparison context, create comparison-specific annotation
         logger.debug(
           '[useVideoAnnotations] create comparison annotation for',
-          toValue(comparisonVideoId)
+          comparisonId
         );
 
         // Extract labels from annotationData (they're handled separately)
@@ -375,12 +420,12 @@ export function useVideoAnnotations(
 
         const createdAnnotation =
           await AnnotationService.createComparisonAnnotation(
-            toValue(comparisonVideoId),
+            comparisonId,
             annotationWithoutLabels,
-            toValue(user).id,
+            author.id,
             'comparison',
             undefined, // synchronizedFrame
-            toValue(projectId)
+            toValue(projectId) ?? undefined
           );
 
         // Always stamp the labels we were given, empty array included. Absence
@@ -436,23 +481,33 @@ export function useVideoAnnotations(
         // Extract labels from annotationData (they're handled separately)
         const { labels, ...annotationWithoutLabels } = annotationData;
 
-        const dbAnnotation = {
-          videoId: videoIdToUse,
-          userId: toValue(user).id,
+        // The form draft has every field optional, but these columns are NOT
+        // NULL. The defaults are the same ones createComparisonAnnotation
+        // applies, so both creation paths agree on what an incomplete draft
+        // means. Passing undefined instead made PostgREST omit the column and
+        // the insert fail on the NOT NULL constraint.
+        const dbAnnotation: AnnotationInsert = {
+          videoId: videoIdToUse ?? null,
+          userId: author.id,
           projectId: toValue(projectId),
-          content: annotationWithoutLabels.content,
-          title: annotationWithoutLabels.title,
-          severity: annotationWithoutLabels.severity,
-          color: annotationWithoutLabels.color,
-          timestamp: annotationWithoutLabels.timestamp,
-          frame: annotationWithoutLabels.frame,
+          content: annotationWithoutLabels.content || '',
+          title: annotationWithoutLabels.title || 'Untitled Annotation',
+          severity: annotationWithoutLabels.severity || 'medium',
+          color: annotationWithoutLabels.color || '#6b7280',
+          timestamp: Math.max(annotationWithoutLabels.timestamp || 0, 0),
+          frame: annotationWithoutLabels.frame ?? null,
           startFrame: _start,
           endFrame: Math.max(_end, _start),
-          duration: annotationWithoutLabels.duration,
-          durationFrames: annotationWithoutLabels.durationFrames,
-          annotationType: annotationWithoutLabels.annotationType,
-          drawingData: annotationWithoutLabels.drawingData,
-          metadata: annotationWithoutLabels.metadata,
+          duration: Math.max(annotationWithoutLabels.duration || 1 / 30, 1 / 30),
+          durationFrames: Math.max(
+            annotationWithoutLabels.durationFrames || 1,
+            1
+          ),
+          annotationType:
+            annotationWithoutLabels.annotationType ||
+            (annotationWithoutLabels.drawingData ? 'drawing' : 'text'),
+          drawingData: annotationWithoutLabels.drawingData ?? null,
+          metadata: annotationWithoutLabels.metadata ?? null,
           surface: toValue(surface),
         };
 
@@ -520,14 +575,28 @@ export function useVideoAnnotations(
     }
   };
 
-  const updateAnnotation = async (annotationId, updates) => {
+  /**
+   * Updates accepted here: annotation fields plus the label ids, which are
+   * stored in a separate table and stripped out below.
+   */
+  type AnnotationUpdate = Partial<Annotation> & { labels?: string[] };
+
+  /**
+   * Two calling conventions, both in use: separate (id, updates), or a single
+   * object carrying its own id. The union spells that out instead of leaving the
+   * parameter untyped, which is what let `annotationId.id` narrow to never.
+   */
+  const updateAnnotation = async (
+    annotationId: string | (AnnotationUpdate & { id: string }),
+    updates?: AnnotationUpdate
+  ) => {
     // In comparison context, we don't need currentVideo
     if (!isComparisonContext.value && !currentVideo.value) return;
 
     try {
       // Handle both calling patterns: (id, updates) or (annotationObject)
       let actualAnnotationId;
-      let actualUpdates;
+      let actualUpdates: AnnotationUpdate | undefined;
 
       if (
         typeof annotationId === 'object' &&
@@ -653,7 +722,7 @@ export function useVideoAnnotations(
     }
   };
 
-  const deleteAnnotation = async (annotationId) => {
+  const deleteAnnotation = async (annotationId: string | Annotation) => {
     try {
       // Handle both cases: annotation object or annotation ID string
       const actualAnnotationId =
@@ -674,7 +743,9 @@ export function useVideoAnnotations(
   };
 
   // Method to load pre-existing annotations (for loading saved videos)
-  const loadExistingAnnotations = (existingAnnotations) => {
+  const loadExistingAnnotations = (
+    existingAnnotations: readonly Annotation[]
+  ) => {
     annotations.value = existingAnnotations.map((ann) => {
       // If it's already in app format, use as-is, otherwise transform
       if (ann.frame !== undefined) {
