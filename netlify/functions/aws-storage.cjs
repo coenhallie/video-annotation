@@ -12,12 +12,89 @@
 // is a UUID, so this rejects no valid id.
 const OUTPUT_VIDEO_ID = /^[A-Za-z0-9_-]+$/;
 
+// The caller names a kind, never a path. `video` is fixed in code because it has
+// never moved. `data` is deployment configuration (AWS_PIPELINE_DATA_KEY) so the
+// frontend can ship before the pipeline team confirms the key, and start working
+// the moment the variable is set. Either way the id substituted below is the
+// regex-validated one, so no caller can reach an object of their choosing.
+const KINDS = ['video', 'data'];
+
+function keyFor(kind, outputVideoId) {
+  if (kind === 'video') {
+    return 'pipeline-output/' + outputVideoId + '/streams/generated.mp4';
+  }
+  const template = process.env.AWS_PIPELINE_DATA_KEY;
+  if (!template) return null;
+  return template.split('{id}').join(outputVideoId);
+}
+
 function json(statusCode, body) {
   return {
     statusCode,
     headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
     body: JSON.stringify(body),
   };
+}
+
+/**
+ * Pull the presigned URL out of whatever shape the Lambda answered with:
+ * a bare string, a quoted JSON string, or an object under one of several keys.
+ */
+function extractUrl(text) {
+  try {
+    const data = JSON.parse(text);
+    if (typeof data === 'string' && data.startsWith('http')) return data;
+    if (data && typeof data === 'object') {
+      const url =
+        data.url || data.signedUrl || data.downloadUrl || data.presignedUrl || data.link || data.href;
+      if (url) return url;
+      if (data.data) {
+        const nested = data.data;
+        const nestedUrl =
+          typeof nested === 'string' ? nested : nested.url || nested.signedUrl || nested.downloadUrl;
+        if (nestedUrl) return nestedUrl;
+      }
+    }
+  } catch (err) {
+    // Not JSON. Fall through to the plain-text case.
+  }
+  const trimmed = String(text).trim();
+  return trimmed.startsWith('http') ? trimmed : null;
+}
+
+/**
+ * Learn an object's size and whether it can be read in byte ranges.
+ *
+ * Done here rather than in the browser for two reasons. A presigned URL is
+ * signed for one HTTP method, so a HEAD against a playback URL fails signature
+ * verification. And `Content-Range` and `Accept-Ranges` are not CORS-safelisted,
+ * so a browser could not read them off a cross-origin response anyway. Server
+ * side, neither restriction exists.
+ *
+ * A 206 answers both questions at once: `Content-Range: bytes 0-0/<size>` gives
+ * the total. A 200 means the server ignored the Range header, so the object has
+ * to be read whole. A Content-Encoding makes byte offsets refer to the encoded
+ * stream, which is useless to a line-oriented reader, so that counts as no
+ * range support either.
+ */
+async function probeObject(url) {
+  const res = await fetch(url, { headers: { Range: 'bytes=0-0' } });
+  if (!res.ok) return null;
+
+  const encoded = Boolean(res.headers.get('content-encoding'));
+
+  if (res.status === 206) {
+    const match = /\/(\d+)\s*$/.exec(res.headers.get('content-range') || '');
+    // A 206 promises a Content-Range naming the total size. If it does not
+    // parse, `content-length` is just the length of the one-byte range body
+    // (1), which would silently pose as the object's real size. Treat that
+    // as a failed probe rather than pretend to have learned anything.
+    if (!match) return null;
+    return { size: Number(match[1]), acceptsRanges: !encoded };
+  }
+
+  const size = Number(res.headers.get('content-length') || 0);
+  return { size, acceptsRanges: false };
 }
 
 /**
@@ -101,6 +178,13 @@ exports.handler = async function (event) {
     return json(400, { error: 'Missing or invalid outputVideoId parameter' });
   }
 
+  const kind =
+    (event.queryStringParameters && event.queryStringParameters.kind) || 'video';
+
+  if (!KINDS.includes(kind)) {
+    return json(400, { error: 'Invalid kind parameter' });
+  }
+
   const apiKey = process.env.AWS_STORAGE_API_KEY;
   const lambdaBaseUrl = process.env.AWS_STORAGE_API_URL;
 
@@ -167,7 +251,13 @@ exports.handler = async function (event) {
   }
 
   // Built here from a validated id. Never taken from the caller.
-  const filepath = 'pipeline-output/' + outputVideoId + '/streams/generated.mp4';
+  const filepath = keyFor(kind, outputVideoId);
+  if (!filepath) {
+    return json(501, {
+      error:
+        'Pipeline data is not configured. Set AWS_PIPELINE_DATA_KEY in Netlify env vars to the object key template, using {id} for the pipeline id.',
+    });
+  }
   const targetUrl =
     lambdaBaseUrl + '/api/v1/storage/' + encodeURIComponent(filepath) + '/no-redirect';
 
@@ -177,6 +267,36 @@ exports.handler = async function (event) {
     });
 
     const body = await res.text();
+
+    // The video kind is proxied byte for byte, unchanged from before this
+    // function learned about `kind` at all. The data kind is not: the client
+    // cannot HEAD a presigned URL (SigV4 binds the method into the signature)
+    // and cannot read Content-Range/Accept-Ranges off a cross-origin response
+    // (not CORS-safelisted), so this function probes the object itself, where
+    // neither restriction applies, and hands back an envelope instead of the
+    // raw Lambda body.
+    if (kind === 'data' && res.ok) {
+      const signed = extractUrl(body);
+      if (!signed) {
+        return json(502, { error: 'Storage API returned no usable URL' });
+      }
+      const probe = await probeObject(signed);
+      if (!probe) {
+        // `noData: true` distinguishes this from the function's other 502s
+        // (auth-check failure, an unusable Lambda response, a genuine
+        // request failure below): those are real errors, this is not. The
+        // client reads this field, never the message text, to decide.
+        return json(502, {
+          error: 'Pipeline data object is unreachable',
+          noData: true,
+        });
+      }
+      return json(200, {
+        url: signed,
+        size: probe.size,
+        acceptsRanges: probe.acceptsRanges,
+      });
+    }
 
     return {
       statusCode: res.status,

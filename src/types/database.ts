@@ -70,12 +70,38 @@ export interface DatabaseVideo {
   originalFilename?: string;
   createdAt: string;
   updatedAt: string;
+  qaStatus: QaStatus;
+  qaStatusUpdatedAt?: string;
+  qaStatusUpdatedBy?: string;
 }
+
+/**
+ * Which surface of a match an annotation was made on. The editor shows the
+ * rendered video and the pipeline's data output as two tabs over one video row,
+ * and each tab shows only its own annotations.
+ */
+export type AnnotationSurface = 'video' | 'pipeline';
+
+/**
+ * QA completion status of a video. A saved label and nothing more: no code
+ * reads it to gate, filter or trigger anything.
+ *
+ * `failed` is not in the literal request. It is here because a QA control with
+ * no way to say "this did not pass" forces reviewers to leave the video in a
+ * state that lies.
+ */
+export type QaStatus =
+  | 'not_started'
+  | 'in_review'
+  | 'failed'
+  | 'staging'
+  | 'production';
 
 export interface DatabaseAnnotation {
   id: string;
   videoId?: string; // Nullable for comparison annotations
   comparisonVideoId?: string; // For comparison video annotations
+  surface: AnnotationSurface; // Which editor tab this annotation belongs to
   userId: string;
   projectId?: string;
   content: string;
@@ -172,6 +198,56 @@ export interface DatabaseProjectOpen {
   openedAt: string;
 }
 
+// Activity log interfaces
+export type ActivityEntityType = 'annotation' | 'comment';
+export type ActivityAction = 'created' | 'updated' | 'deleted';
+
+/**
+ * Snapshot taken at event time. Every field is optional because the row has to
+ * survive schema drift in both directions: a deleted annotation has no title
+ * left to join to, and a future trigger may add fields this frontend predates.
+ */
+export interface ActivitySummary {
+  title?: string;
+  excerpt?: string;
+  annotationTitle?: string;
+  annotationId?: string;
+  timestamp?: number;
+  /**
+   * Which editor surface the annotation lives on. Optional because rows
+   * written before this field existed carry no such key; callers that need to
+   * switch surface before selecting must treat its absence as "unknown", not
+   * as "video".
+   */
+  surface?: AnnotationSurface;
+}
+
+export interface DatabaseActivityEvent {
+  id: string;
+  videoId: string | null;
+  comparisonVideoId: string | null;
+  actorId: string | null;
+  actorName: string | null;
+  entityType: ActivityEntityType;
+  entityId: string;
+  action: ActivityAction;
+  summary: ActivitySummary;
+  createdAt: string;
+}
+
+/** A row with its actor name resolved and its target's liveness decided. */
+export interface ActivityEntry extends DatabaseActivityEvent {
+  actor: string;
+  /** The annotation this entry points at still exists, so clicking can seek. */
+  live: boolean;
+}
+
+export interface ActivityDayGroup {
+  key: string;
+  label: string;
+  entries: ActivityEntry[];
+}
+
 // Application-specific interfaces (for Vue components)
 export interface Annotation {
   id: string | number; // Support both UUID and legacy timestamp IDs
@@ -219,6 +295,9 @@ export interface Video {
   originalFilename?: string;
   createdAt: string;
   updatedAt: string;
+  qaStatus: QaStatus;
+  qaStatusUpdatedAt?: string;
+  qaStatusUpdatedBy?: string;
 }
 
 // Application interface for comparison videos
@@ -311,12 +390,25 @@ export interface Database {
       };
       videos: {
         Row: DatabaseVideo;
-        Insert: Omit<DatabaseVideo, 'id' | 'createdAt' | 'updatedAt'>;
+        // `qaStatus` is optional on insert only because the column is
+        // NOT NULL DEFAULT 'not_started'. Omitting it means 'not_started'.
+        Insert: Omit<
+          DatabaseVideo,
+          'id' | 'createdAt' | 'updatedAt' | 'qaStatus'
+        > & { qaStatus?: QaStatus };
         Update: Partial<Omit<DatabaseVideo, 'id' | 'createdAt' | 'updatedAt'>>;
       };
       annotations: {
         Row: DatabaseAnnotation;
-        Insert: Omit<DatabaseAnnotation, 'id' | 'createdAt' | 'updatedAt'>;
+        // `surface` is optional on insert only because the column is
+        // NOT NULL DEFAULT 'video'. Omitting it means 'video'. Four call sites
+        // omit it deliberately: annotationService.ts createComparisonAnnotation
+        // and the two useComparisonVideoWorkflow inserts, where the value is
+        // meaningless, plus any legacy path not yet surface-aware.
+        Insert: Omit<
+          DatabaseAnnotation,
+          'id' | 'createdAt' | 'updatedAt' | 'surface'
+        > & { surface?: AnnotationSurface };
         Update: Partial<
           Omit<DatabaseAnnotation, 'id' | 'createdAt' | 'updatedAt'>
         >;

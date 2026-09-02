@@ -67,6 +67,26 @@
       </div>
     </div>
 
+    <!-- QA status. Its own bordered block, matching the Watched block below:
+         one row of per-video state per block. -->
+    <div
+      v-if="project.projectType === 'single'"
+      class="border-b border-gray-200 px-4 py-3 dark:border-white/10"
+    >
+      <!-- updated-by-name is the video's OWNER, not necessarily whoever set
+           the status: qaStatusUpdatedBy has no name lookup yet, since
+           fetchOwners is keyed on owner ids only. Known approximation.
+
+           Suppressed when the lookup failed: fetchOwners fills unresolved ids
+           with the placeholder "Unknown", and "SET BY Unknown" reads worse than
+           the plain "SET" the attribution falls back to. -->
+      <QaStatusSelect
+        :video="project.video"
+        :updated-by-name="attributionName"
+        @updated="onQaStatusUpdated"
+      />
+    </div>
+
     <!-- Team watch coverage (union of all users' ranges; hover for breakdown).
          The bar is the only graphic here, so it stays thin and monochrome:
          the number carries the reading, the bar just shapes it. -->
@@ -210,10 +230,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import type { Project } from '@/types/project';
 import type { PanelAnnotation } from '@/composables/useVideoDetails';
 import type { Label } from '@/types/labels';
+import type { Video } from '@/types/database';
+import QaStatusSelect from './QaStatusSelect.vue';
+import { UNKNOWN_OWNER_NAME } from '@/services/ownerEnrichmentService';
 import {
   getProgressForVideo,
   mergeDualProgress,
@@ -235,7 +258,30 @@ const emit = defineEmits<{
   open: [project: Project];
   share: [project: Project];
   'annotation-click': [project: Project, annotation: PanelAnnotation];
+  'qa-status-updated': [project: Project, updated: Video];
 }>();
+
+// fetchOwners guarantees an entry for every requested id, filling unresolved
+// ones with a placeholder rather than omitting them. Printing that placeholder
+// into "SET BY ..." states a falsehood about who acted, so drop it and let the
+// attribution line fall back to a bare "SET".
+const attributionName = computed(() => {
+  const name = props.project.owner?.name;
+  return name && name !== UNKNOWN_OWNER_NAME ? name : undefined;
+});
+
+// Up, not sideways - the same route the dashboard row already takes.
+//
+// This panel used to merge into props.project.video itself. That kept the two
+// surfaces in step, because they share one project object, but it meant a
+// status changed from here never reached DashboardView. So a change that a
+// filter excludes made the row vanish from the list beside the panel with no
+// explanation, while the identical change made from the row explained itself.
+// Emitting instead gives both paths one handler, one merge and one toast.
+function onQaStatusUpdated(updated: Video) {
+  if (props.project.projectType !== 'single') return;
+  emit('qa-status-updated', props.project, updated);
+}
 
 const watchProgress = ref<UserWatchProgress[]>([]);
 // True team coverage: the union of everyone's watched ranges, so overlap

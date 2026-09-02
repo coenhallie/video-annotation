@@ -58,24 +58,38 @@
       :video-element="videoRef"
     />
 
-    <!-- Controls -->
-    <VideoControls
-      v-if="controls && !isLoading"
-      :is-playing="isPlaying"
-      :is-muted="isMuted"
-      :volume="volume"
-      :playback-rate="playbackRate"
-      @toggle-play="togglePlay"
-      @prev-frame="seekFrame(-1)"
-      @next-frame="seekFrame(1)"
-      @toggle-mute="toggleMute"
-      @volume-change="setVolume"
-      @speed-change="setPlaybackRate"
-    >
-      <template #right-controls>
-        <slot name="custom-controls" />
-      </template>
-    </VideoControls>
+    <!--
+      Controls, anchored to the picture rather than to the wrapper. The video
+      is letterboxed inside the wrapper (max-width/max-height with auto sizing),
+      so a wrapper-relative bar can sit far below the picture - a 1920x660 clip
+      in this editor puts it nearly 300px into the black band. This frame takes
+      the video's own intrinsic width and aspect ratio under the same clamps,
+      which resolves it to exactly the rendered picture.
+    -->
+    <div class="controls-frame">
+      <div
+        class="controls-frame-box"
+        :style="frameBoxStyle"
+      >
+        <VideoControls
+          v-if="controls && !isLoading"
+          :is-playing="isPlaying"
+          :is-muted="isMuted"
+          :volume="volume"
+          :playback-rate="playbackRate"
+          @toggle-play="togglePlay"
+          @prev-frame="seekFrame(-1)"
+          @next-frame="seekFrame(1)"
+          @toggle-mute="toggleMute"
+          @volume-change="setVolume"
+          @speed-change="setPlaybackRate"
+        >
+          <template #right-controls>
+            <slot name="custom-controls" />
+          </template>
+        </VideoControls>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -137,6 +151,22 @@ const containerRef = ref<HTMLElement | null>(null);
 const isLoading = ref(true);
 const error = ref<string | null>(null);
 
+// The picture's own dimensions, read once metadata lands. See the frame comment
+// in the template: the controls are positioned against these, not the wrapper.
+const intrinsicWidth = ref(0);
+const intrinsicHeight = ref(0);
+
+const frameBoxStyle = computed(() => {
+  if (!intrinsicWidth.value || !intrinsicHeight.value) return undefined;
+  return {
+    width: `${intrinsicWidth.value}px`,
+    // Load-bearing: the fallback rule sizes the box to the whole wrapper, and
+    // an explicit height makes the browser ignore aspect-ratio outright.
+    height: 'auto',
+    aspectRatio: `${intrinsicWidth.value} / ${intrinsicHeight.value}`,
+  };
+});
+
 // Video Element API
 const togglePlay = () => {
   if (!videoRef.value) return;
@@ -187,6 +217,8 @@ const setPlaybackRate = (rate: number) => {
 const onLoadedMetadata = (e: Event) => {
   isLoading.value = false;
   if (videoRef.value) {
+    intrinsicWidth.value = videoRef.value.videoWidth;
+    intrinsicHeight.value = videoRef.value.videoHeight;
     if (!props.disableGlobalStore) {
       videoStore.updateDuration(videoRef.value.duration);
       videoStore.setDimensions(videoRef.value.videoWidth, videoRef.value.videoHeight);
@@ -379,6 +411,29 @@ watch(isPlaying, (playing) => {
   max-height: 100%;
   width: auto;
   height: auto;
+}
+
+/*
+ * Positioning frame for the controls. Centred like the video and clamped the
+ * same way, so `.controls-frame-box` resolves to the rendered picture's rect
+ * and the bar sits on the picture rather than in the letterbox band. Inert
+ * itself; only the bar inside it takes pointer events, and only when shown.
+ */
+.controls-frame {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.controls-frame-box {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
 }
 
 .loading-overlay,

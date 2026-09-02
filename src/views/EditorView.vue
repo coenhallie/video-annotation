@@ -13,15 +13,31 @@ import {
 import DualTimeline from '@/components/DualTimeline.vue';
 import VideoTimeline from '@/components/VideoTimeline.vue';
 import AnnotationPanel from '@/components/AnnotationPanel.vue';
+import SidebarTabs from '@/components/SidebarTabs.vue';
+import ActivityTimeline from '@/components/ActivityTimeline.vue';
+import type { SidebarTab } from '@/types/component-interfaces';
+import type { ActivityTarget } from '@/services/activityService';
 import EditorHeader from '@/components/EditorHeader.vue';
 
 import UnifiedVideoPlayer from '@/components/UnifiedVideoPlayer.vue';
 import DashboardModals from '@/components/DashboardModals.vue';
 import AnnotationQuickPick from '@/components/AnnotationQuickPick.vue';
+import EditorSurfaceTabs from '@/components/EditorSurfaceTabs.vue';
+import PipelineOutputSurface from '@/components/PipelineOutputSurface.vue';
+import { usePipelineReplay } from '@/composables/usePipelineReplay';
+import { httpRangeFetcher } from '@/lib/pipelineData/rangeFetcher';
+import { AwsStorageService } from '@/services/awsStorageService';
 import { useLabelCatalog } from '@/composables/useLabelCatalog';
 import { buildAnnotationPayload, stampSnapshotFrame } from '@/utils/annotationPayload';
 import { resolveAnnotationDeepLink } from '@/utils/annotationDeepLink';
 import { canCreateAnnotations } from '@/utils/annotationPermissions';
+import { isPipelineSurfaceVisible } from '@/utils/pipelineSurface';
+import { planHistorySelection } from '@/utils/historySelection';
+import {
+  timelineNumbersFor,
+  annotationStampFor,
+  type TimelineNumbers,
+} from '@/utils/timelineBinding';
 import { ShareService } from '@/services/shareService';
 import { VideoService } from '@/services/videoService';
 import { ComparisonVideoService } from '@/services/comparisonVideoService';
@@ -41,7 +57,12 @@ import { useVideoEventHandlers } from '@/composables/useVideoEventHandlers';
 import { useWatchProgress } from '@/composables/useWatchProgress';
 import { useRecordProjectOpen } from '@/composables/useRecordProjectOpen';
 import { supabase } from '@/composables/useSupabase';
-import type { Video, Annotation, ComparisonVideo } from '@/types/database';
+import type {
+  Video,
+  Annotation,
+  ComparisonVideo,
+  AnnotationSurface,
+} from '@/types/database';
 import type {
   ProjectSelection,
   ComparisonCreatedEvent,
@@ -239,6 +260,100 @@ const canAnnotate = computed(() => {
   return canCreateAnnotations(currentVideoObject.value, user.value?.id);
 });
 
+// ── Editor surface (Video / Pipeline output tabs) ────────────────────────────
+
+const activeSurface = ref<AnnotationSurface>('video');
+
+// The replay reads the pipeline's JSONL for this project. `openFetcher` returns
+// null for anything that is not an AWS pipeline video, which is most projects,
+// and also when the project is an AWS pipeline video with no pipeline data
+// object yet - getPipelineDataSource returns null rather than throwing for
+// that whole family of cases. Either way the surface renders its no-data
+// state rather than an error panel.
+const pipelineReplay = usePipelineReplay({
+  openFetcher: async () => {
+    const video = currentVideoObject.value;
+    if (!video || !VideoService.isAwsVideo(video)) return null;
+    const outputVideoId = String(video.videoId).replace(/^aws:/, '');
+    const source = await AwsStorageService.getPipelineDataSource(outputVideoId);
+    if (!source) return null;
+    return httpRangeFetcher(source.url, {
+      size: source.size,
+      acceptsRanges: source.acceptsRanges,
+    });
+  },
+});
+
+// The surface stays mounted once opened, so returning to the tab does not
+// re-fetch and re-index the whole JSONL behind a spinner, and the replay
+// keeps its own position.
+//
+// It is gated on having been opened at least once rather than simply always
+// mounted: most projects in this app are plain uploads with no pipeline data
+// at all, and mounting on every editor open would fire a request for each
+// one that can only fail.
+const pipelineEverOpened = ref(false);
+
+// The two raw sources `timeline` and `annotationStampFor` both read from.
+// Named separately so a new annotation's stamp can be derived from the same
+// numbers the timeline itself is drawing, rather than re-reading the refs.
+const videoTimelineNumbers = computed<TimelineNumbers>(() => ({
+  currentTime: currentTime.value,
+  duration: duration.value,
+  currentFrame: currentFrame.value,
+  totalFrames: totalFrames.value,
+  fps: fps.value,
+  isPlaying: isPlaying.value,
+}));
+
+const replayTimelineNumbers = computed<TimelineNumbers>(() => ({
+  currentTime: pipelineReplay.currentTime.value,
+  duration: pipelineReplay.duration.value,
+  currentFrame: pipelineReplay.currentFrame.value,
+  totalFrames: pipelineReplay.totalFrames.value,
+  fps: pipelineReplay.fps.value,
+  isPlaying: pipelineReplay.isPlaying.value,
+}));
+
+// One timeline, two sources. Nothing carries a position across a tab switch.
+const timeline = computed(() =>
+  timelineNumbersFor(
+    activeSurface.value,
+    videoTimelineNumbers.value,
+    replayTimelineNumbers.value
+  )
+);
+
+const onPipeline = computed(() => activeSurface.value === 'pipeline');
+
+const onTimelineSeek = (time: number) => {
+  if (onPipeline.value) void pipelineReplay.seek(time);
+  else handleTimelineSeek(time);
+};
+const onTimelinePlay = () => {
+  if (onPipeline.value) pipelineReplay.play();
+  else handleTimelinePlay();
+};
+const onTimelinePause = () => {
+  if (onPipeline.value) pipelineReplay.pause();
+  else handleTimelinePause();
+};
+
+const onAnnotationClick = (annotation: Annotation) => {
+  // Clicking a pipeline marker must move the replay, not the hidden video.
+  // selectedAnnotation is set here directly because handleAnnotationClick
+  // (reached via handleAnnotationSeek on the video branch) does that plus a
+  // video-only seek and drawing-canvas frame sync; drawing is off on the
+  // pipeline tab (`:allow-drawing="activeSurface === 'video'"`), so only the
+  // selection and the seek apply here.
+  if (onPipeline.value) {
+    selectedAnnotation.value = annotation;
+    void pipelineReplay.seek(annotation.timestamp);
+    return;
+  }
+  handleAnnotationSeek(annotation);
+};
+
 // Annotations data
 const {
   annotations,
@@ -260,7 +375,8 @@ const {
       return comparisonWorkflow.currentComparison.value.id;
     }
     return null;
-  })
+  }),
+  activeSurface
 );
 
 const handleAddAnnotation = async (annotationData: AnnotationFormData) => {
@@ -321,9 +437,19 @@ const openQuickPick = (event: MouseEvent) => {
   // simply eating the click the way every other draw-mode key does.
   if (drawingCoordinator?.isDrawingMode?.value) return;
 
+  // The pitch's right-click reaches here too, and on that tab the video is
+  // hidden and paused, so its currentFrame is meaningless. annotationStampFor
+  // resolves both frame and fps from whichever surface is active - see its
+  // doc comment for why the frame is derived from currentTime * fps rather
+  // than read off the surface's own currentFrame ref.
+  const stamp = annotationStampFor(
+    activeSurface.value,
+    videoTimelineNumbers.value,
+    replayTimelineNumbers.value
+  );
   quickPickSnapshot.value = {
-    frame: currentFrame.value ?? 0,
-    fps: fps.value || 30,
+    frame: stamp.frame,
+    fps: stamp.fps,
     dual:
       playerMode.value === 'dual'
         ? {
@@ -353,7 +479,9 @@ const openQuickPickAtTime = (payload: {
   if (!user.value) return;
   if (drawingCoordinator?.isDrawingMode?.value) return;
 
-  const activeFps = fps.value || 30;
+  // `payload.time` is on the active surface's timebase, so the fps used to turn
+  // it into a frame number has to come from the same surface.
+  const activeFps = timeline.value.fps || 30;
   quickPickSnapshot.value = {
     frame: Math.round(payload.time * activeFps),
     fps: activeFps,
@@ -423,11 +551,17 @@ const isPlaybackRunning = () =>
 
 const handleQuickPickCommentMode = (active: boolean) => {
   if (active) {
-    commentModeWasPlaying.value = isPlaybackRunning();
-    unifiedVideoPlayerRef.value?.pause();
+    commentModeWasPlaying.value = onPipeline.value
+      ? pipelineReplay.isPlaying.value
+      : isPlaybackRunning();
+    if (onPipeline.value) pipelineReplay.pause();
+    else unifiedVideoPlayerRef.value?.pause();
     return;
   }
-  if (commentModeWasPlaying.value) unifiedVideoPlayerRef.value?.play();
+  if (commentModeWasPlaying.value) {
+    if (onPipeline.value) pipelineReplay.play();
+    else unifiedVideoPlayerRef.value?.play();
+  }
   commentModeWasPlaying.value = false;
 };
 
@@ -717,9 +851,105 @@ const pendingAnnotationId = ref<string | null>(null);
 
 const isChangelogModalOpen = ref(false);
 
+const sidebarTab = ref<SidebarTab>('annotations');
+
+/**
+ * Null while the editor is still resolving a project, which keeps
+ * ActivityTimeline from firing a query against an id that is about to change.
+ */
+const activityTarget = computed<ActivityTarget | null>(() => {
+  if (currentComparisonId.value) {
+    return { comparisonVideoId: currentComparisonId.value };
+  }
+  if (currentVideoId.value) return { videoId: currentVideoId.value };
+  return null;
+});
+
+/**
+ * Anonymous and shared-link viewers get no History tab. The RLS policy on
+ * activity_events is TO authenticated, so the feed would be empty for them, and
+ * an empty tab reads as a bug rather than as a permission.
+ */
+const showHistoryTab = computed(
+  () => !!user.value && !isSharedVideo.value && !isSharedComparison.value
+);
+
+/**
+ * Which panel actually renders. `sidebarTab` is what the user picked; this is
+ * what survives contact with permissions. Deriving it rather than watching and
+ * resetting `sidebarTab` means the blank-sidebar state cannot be rendered even
+ * for one frame: when the History tab is not available, the annotations panel
+ * is showing, whatever the stored preference says.
+ *
+ * The stored preference is deliberately left alone, so signing back in returns
+ * you to the tab you were on.
+ */
+const activeSidebarPanel = computed<SidebarTab>(() =>
+  showHistoryTab.value ? sidebarTab.value : 'annotations'
+);
+
+/**
+ * An entry clicked on the History tab while its surface is not the active
+ * one. `annotations` is scoped to `activeSurface` (see useVideoAnnotations),
+ * so the annotation cannot be found until the surface switch's reload
+ * completes; consumed by the watch(annotations, ...) below, the same
+ * "act once the data arrives" idiom as `pendingSeekTime` / watch(videoLoaded).
+ */
+const pendingHistorySelection = ref<{
+  annotationId: string;
+  timestamp: number;
+} | null>(null);
+
+/**
+ * The timeline seeks by the annotation's snapshotted timestamp, and selects it
+ * when it is still in the loaded list. It does not go through
+ * onAnnotationClick directly because that needs the Annotation object, which a
+ * history entry does not carry.
+ *
+ * `surface` comes from the event's own summary (added so this can be exact
+ * rather than guessed), not from whatever tab happens to be open. It is
+ * optional: a row written before that field existed carries none, and for
+ * those the old behaviour - look in the current list, else just seek -
+ * still applies.
+ */
+const onHistorySelect = (
+  annotationId: string,
+  timestamp: number,
+  surface?: AnnotationSurface
+) => {
+  const plan = planHistorySelection(surface, activeSurface.value);
+  if (plan.kind === 'switch-surface') {
+    pendingHistorySelection.value = { annotationId, timestamp };
+    activeSurface.value = plan.surface;
+    return;
+  }
+  const annotation = (annotations.value || []).find(
+    (a) => a.id === annotationId
+  );
+  if (annotation) {
+    onAnnotationClick(annotation);
+    return;
+  }
+  void handleSeekToTimeWithFade(timestamp);
+};
+
+// Consumes pendingHistorySelection once the surface switch it triggered has
+// reloaded `annotations` for the new surface. useVideoAnnotations clears the
+// list synchronously on a surface change and repopulates it once the load
+// resolves (see its watch(surface, ...)), so this fires again with the real
+// data rather than the transient empty array.
+watch(annotations, (list) => {
+  const pending = pendingHistorySelection.value;
+  if (!pending) return;
+  const annotation = (list || []).find((a) => a.id === pending.annotationId);
+  if (!annotation) return;
+  pendingHistorySelection.value = null;
+  onAnnotationClick(annotation);
+});
+
 // Real-time features
 const { setupPresenceTracking } =
-  useRealtimeAnnotations(videoId, annotations);
+  useRealtimeAnnotations(videoId, annotations, activeSurface);
 // Use either currentVideoId or currentComparisonId depending on mode
 const activeContentId = computed(() => {
   return currentComparisonId.value || currentVideoId.value;
@@ -1343,6 +1573,54 @@ const {
   comparisonWorkflow,
 });
 
+// See isPipelineSurfaceVisible for why dual mode, share views and a stale
+// videoStore isAwsVideo ref are each excluded.
+const hasPipelineSurface = computed(() =>
+  isPipelineSurfaceVisible(
+    currentVideoObject.value,
+    playerMode.value,
+    isSharedVideo.value
+  )
+);
+
+// A project without the pipeline surface must never sit on the pipeline tab:
+// switching to a plain video would otherwise hide its annotations behind a tab
+// bar that is no longer rendered.
+watch(hasPipelineSurface, (available) => {
+  if (!available) activeSurface.value = 'video';
+});
+
+// Opening a different project starts on the video tab.
+watch(currentVideoId, () => {
+  activeSurface.value = 'video';
+  // EditorView is reused across editor -> editor navigations (see the
+  // route.params.id watcher below), so a project switch does not remount this
+  // component or PipelineOutputSurface with it. pipelineEverOpened keeps that
+  // surface mounted across a tab switch, which is the point, but it must not
+  // stay mounted across a video switch too: without resetting it here, the
+  // pipeline tab would keep showing the previous video's replay - its
+  // onMounted, and therefore its load(), only fires once per mount - until
+  // something else happened to unmount it.
+  pipelineEverOpened.value = false;
+});
+
+// The pipeline surface stays mounted once opened (see pipelineEverOpened
+// below), so returning to the tab does not re-fetch and re-index the whole
+// JSONL behind a spinner, and the replay keeps its own position. That makes
+// this pause more important, not less: a hidden but still-mounted replay
+// would otherwise keep ticking and issuing range requests for a pitch nobody
+// is looking at, the same way the player would keep its audio running behind
+// the pipeline tab without the mirror case below.
+watch(activeSurface, (surface, previous) => {
+  if (surface === 'pipeline') {
+    pipelineEverOpened.value = true;
+    if (isPlaying.value) unifiedVideoPlayerRef.value?.pause();
+  }
+  if (previous === 'pipeline' && pipelineReplay.isPlaying.value) {
+    pipelineReplay.pause();
+  }
+});
+
 // ── Keyboard shortcuts (extracted composable) ────────────────────────────────
 useDashboardKeyboard({
   playerMode,
@@ -1553,9 +1831,19 @@ watch(
       <!-- Main App Content -->
       <!-- Video Section -->
       <section class="flex-1 flex flex-col bg-black min-w-0 overflow-hidden">
+        <EditorSurfaceTabs
+          v-if="hasPipelineSurface"
+          v-model="activeSurface"
+        />
         <div class="flex-1 flex items-center justify-center p-6">
           <div class="w-full h-full flex flex-col items-center justify-center">
+            <!--
+              The player stays mounted with v-show rather than v-if: v-if would
+              tear down the video element on every tab switch, dropping playback
+              position, the decoded buffer and the drawing canvas with it.
+            -->
             <div
+              v-show="activeSurface === 'video'"
               class="relative w-full h-full max-h-full"
               @contextmenu="openQuickPick"
             >
@@ -1606,6 +1894,16 @@ watch(
                 @error="handleVideoError"
               />
             </div>
+            <div
+              v-if="pipelineEverOpened"
+              v-show="activeSurface === 'pipeline'"
+              class="relative h-full w-full"
+            >
+              <PipelineOutputSurface
+                :replay="pipelineReplay"
+                @context-menu="openQuickPick"
+              />
+            </div>
           </div>
         </div>
 
@@ -1614,19 +1912,19 @@ watch(
           <!-- Single Video Timeline -->
           <VideoTimeline
             v-if="playerMode === 'single'"
-            :current-time="currentTime"
-            :duration="duration"
-            :current-frame="currentFrame"
-            :total-frames="totalFrames"
-            :fps="fps"
+            :current-time="timeline.currentTime"
+            :duration="timeline.duration"
+            :current-frame="timeline.currentFrame"
+            :total-frames="timeline.totalFrames"
+            :fps="timeline.fps"
             :annotations="annotations"
             :selected-annotation="selectedAnnotation"
-            :is-playing="isPlaying"
+            :is-playing="timeline.isPlaying"
             :player-mode="playerMode"
-            @seek-to-time="handleTimelineSeek"
-            @annotation-click="handleAnnotationSeek"
-            @play="handleTimelinePlay"
-            @pause="handleTimelinePause"
+            @seek-to-time="onTimelineSeek"
+            @annotation-click="onAnnotationClick"
+            @play="onTimelinePlay"
+            @pause="onTimelinePause"
             @open-quick-pick="openQuickPickAtTime"
           />
 
@@ -1687,6 +1985,7 @@ watch(
         :fps="quickPickSnapshot?.fps ?? 30"
         :draw-color="quickPickDrawColor"
         :draw-width="quickPickDrawWidth"
+        :allow-drawing="activeSurface === 'video'"
         @select="handleQuickPickSelect"
         @comment="handleQuickPickComment"
         @comment-mode="handleQuickPickCommentMode"
@@ -1711,15 +2010,20 @@ watch(
           You've watched {{ Math.round(ownWatchPercent) }}% of this video
         </div>
 
+        <SidebarTabs
+          v-if="showHistoryTab"
+          v-model="sidebarTab"
+        />
+
         <!-- Annotation Panel -->
-        <div class="flex-1 overflow-hidden">
+        <div v-show="activeSidebarPanel === 'annotations'" class="flex-1 overflow-hidden">
           <AnnotationPanel
             v-if="drawingCanvas"
             :annotations="annotations || []"
             :selected-annotation="selectedAnnotation"
             :current-time="currentTime || 0"
             :current-frame="currentFrame || 0"
-            :fps="fps || 30"
+            :fps="timeline.fps"
             :drawing-canvas="drawingCanvas"
             :read-only="(isSharedVideo || isSharedComparison) && !canComment()"
             :can-annotate="canAnnotate"
@@ -1753,7 +2057,7 @@ watch(
             :video-b-fps="dualVideoPlayer?.videoBState?.fps || 30"
             @update-annotation="updateAnnotation"
             @delete-annotation="deleteAnnotation"
-            @select-annotation="handleAnnotationSeek"
+            @select-annotation="onAnnotationClick"
             @form-show="handleFormShow"
             @form-hide="handleFormHide"
             @pause="handleTimelinePause"
@@ -1782,6 +2086,14 @@ watch(
               </p>
             </div>
           </div>
+        </div>
+
+        <div v-if="showHistoryTab" v-show="activeSidebarPanel === 'history'" class="flex-1 overflow-hidden">
+          <ActivityTimeline
+            :target="activityTarget"
+            :active="activeSidebarPanel === 'history'"
+            @select-annotation="onHistorySelect"
+          />
         </div>
       </aside>
     </main>

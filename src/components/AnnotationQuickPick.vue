@@ -20,6 +20,11 @@ const props = defineProps({
   /** Brush colour, owned by the editor so the toolbar shows what the canvas uses. */
   drawColor: { type: String, default: '#ef4444' },
   drawWidth: { type: Number, default: 4 },
+  /**
+   * False on a surface with no video element under the panel, where the
+   * drawing canvas has nothing to mount on. Hides the entry and disarms D.
+   */
+  allowDrawing: { type: Boolean, default: true },
 });
 
 const emit = defineEmits<{
@@ -141,6 +146,7 @@ const leaveCommentMode = () => {
 };
 
 const enterDrawMode = () => {
+  if (!props.allowDrawing) return;
   if (mode.value === 'draw') return;
   mode.value = 'draw';
   emit('draw-mode', true);
@@ -655,6 +661,7 @@ onBeforeUnmount(() => {
           </button>
 
           <button
+            v-if="allowDrawing"
             type="button"
             class="flex w-full items-center gap-2.5 border-t border-gray-200 px-4 py-2 text-left transition-colors hover:bg-gray-50 dark:border-white/10 dark:hover:bg-white/[0.03]"
             @click="enterDrawMode"

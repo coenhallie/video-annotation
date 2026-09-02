@@ -91,13 +91,39 @@
     >
       {{ watchedPercentLabel }}%
     </span>
+
+    <!-- QA status. Last in the row and fixed width, so both its edges land at
+         the same x on every row and the column scans vertically.
+
+         This is a deliberate exception to the note above about flattening the
+         row into one meta line "instead of pills competing along both edges".
+         One pill, at one edge, in one column. The meta line stays flat and
+         nothing returns to the left edge.
+
+         A dual project has no video.qaStatus, but the slot still has to hold
+         its ground: the v-else spacer below reserves the same w-24 width so
+         the watch-coverage chip does not slide right and break its own
+         column just because the row next to it has no pill. -->
+    <QaStatusPillSelect
+      v-if="project.projectType === 'single'"
+      :video="project.video"
+      @updated="(updated) => emit('qa-status-updated', project, updated)"
+    />
+    <span
+      v-else
+      data-testid="qa-status-pill-placeholder"
+      class="w-24 shrink-0"
+      aria-hidden="true"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { Project } from '../types/project';
+import type { Video } from '../types/database';
 import { formatRelativeTime } from '@/utils/relativeTime';
+import QaStatusPillSelect from './QaStatusPillSelect.vue';
 
 // Props
 const props = defineProps<{
@@ -117,6 +143,7 @@ const emit = defineEmits<{
   inspect: [project: Project];
   dragstart: [project: Project, event: DragEvent];
   dragend: [event: DragEvent];
+  'qa-status-updated': [project: Project, updated: Video];
 }>();
 
 /**

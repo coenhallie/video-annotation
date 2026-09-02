@@ -219,10 +219,13 @@ onMounted(() => {
 
 const startEditAnnotation = (annotation: PanelAnnotation) => {
   emit('pause');
-  // Editing an annotation moves the video to it and selects it, so the frame
-  // the form names is the frame on screen - and any drawing it carries is
-  // rendered, since the canvas only draws strokes stamped with its own frame.
-  // Selecting is what seeks: `seek-to-frame` had no listener at all.
+  // Editing an annotation selects it and moves whichever surface is active
+  // to it (EditorView routes this through onAnnotationClick), so the frame
+  // the form names is the frame on screen on the video tab. On the pipeline
+  // tab the video stays put and the replay moves instead - the underlying
+  // video element is hidden there, so there is nothing for the drawing
+  // canvas to render onto anyway. Selecting is what seeks: `seek-to-frame`
+  // had no listener at all.
   emit('select-annotation', annotation);
 
   editAnnotationData.value = annotation;
@@ -394,11 +397,22 @@ watch(
       </span>
     </header>
 
+    <!-- QA status is deliberately NOT here. It belongs to picking work, not to
+         doing it: the dashboard list and the details panel are where a
+         reviewer sets a video's state before opening it. Inside the editor the
+         rail is for annotating, and a five-value dropdown at the top of it was
+         competing with the annotation list for the same attention. See
+         VideoDetailsPanel for the control that remains. -->
+
     <!-- Category filter. Hidden until the video has categorised annotations,
-         so a lone "All" pill never sits over an empty list. -->
+         so a lone "All" pill never sits over an empty list.
+
+         pt-3 rather than sitting flush: the header above ends on a divider,
+         and without it the pill row reads as attached to that rule instead of
+         as the top of the list it filters. -->
     <div
       v-if="availableCategories.length > 0"
-      class="flex shrink-0 flex-wrap items-center gap-1 px-3 pb-3"
+      class="flex shrink-0 flex-wrap items-center gap-1 px-3 pb-3 pt-3"
     >
       <button
         type="button"
@@ -518,31 +532,36 @@ watch(
     >
       <!-- Modal panel -->
       <div
-        class="relative flex max-h-[85vh] w-full max-w-2xl flex-col rounded border border-gray-200 bg-white shadow-xl dark:border-white/10 dark:bg-gray-900"
+        class="relative flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded border border-gray-200 bg-white shadow-xl dark:border-white/10 dark:bg-gray-900"
         @click.stop
       >
-        <button
-          type="button"
-          class="absolute right-3 top-3 z-10 rounded p-1 text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
-          @click="closeLabelManagement"
-        >
-          <span class="sr-only">Close</span>
-          <svg
-            class="h-3.5 w-3.5"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              d="M18 6 6 18M6 6l12 12"
-            />
-          </svg>
-        </button>
-        <div class="min-h-0 flex-1 overflow-y-auto p-4">
-          <LabelManagement :project-id="projectId" />
+        <!-- Close sits inside the panel's own sticky header row, so it never
+             covers the "+ New label" action or a scrolled row's actions. -->
+        <div class="min-h-0 flex-1 overflow-y-auto">
+          <LabelManagement :project-id="projectId">
+            <template #header-actions>
+              <button
+                type="button"
+                class="-mr-1 rounded p-1 text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
+                @click="closeLabelManagement"
+              >
+                <span class="sr-only">Close</span>
+                <svg
+                  class="h-3.5 w-3.5"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M18 6 6 18M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </template>
+          </LabelManagement>
         </div>
       </div>
     </div>

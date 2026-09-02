@@ -5,6 +5,7 @@ import type {
   Video,
   VideoEntity,
   ComparisonVideo,
+  QaStatus,
 } from '../types/database';
 import { isComparisonVideo, isIndividualVideo } from '../types/database';
 import { ThumbnailGenerator } from '../utils/thumbnailGenerator';
@@ -797,6 +798,41 @@ export class VideoService {
       handleServiceError('VideoService.refreshAwsVideoUrl', error);
       return null;
     }
+  }
+
+  /**
+   * The only write path for a video's QA status.
+   *
+   * Not a plain `.update()`: the videos UPDATE policy is auth.uid() = "ownerId",
+   * and QA is done by people who are not the uploader. The function is
+   * SECURITY DEFINER and raises when the caller cannot see the video, so a
+   * denied write arrives here as an error rather than as a silent success.
+   */
+  static async setQaStatus(videoId: string, status: QaStatus): Promise<Video> {
+    const { data, error } = await supabase.rpc('set_video_qa_status', {
+      p_video_id: videoId,
+      p_status: status,
+    });
+
+    if (error) {
+      handleServiceError('VideoService.setQaStatus', error);
+      throw new Error(error.message);
+    }
+
+    // PostgREST does not guarantee a bare object back for a function declared
+    // `RETURNS public.videos`: depending on how the function is called it can
+    // come back as `[row]` instead. CommentService.updateComment already
+    // treats its own single-row RPC result as a set for the same reason; do
+    // the same here rather than assuming the object shape.
+    const row = Array.isArray(data) ? data[0] : data;
+
+    if (!row) {
+      const missing = new Error('set_video_qa_status returned no row');
+      handleServiceError('VideoService.setQaStatus', missing);
+      throw missing;
+    }
+
+    return row as Video;
   }
 
   /**
