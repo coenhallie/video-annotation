@@ -53,7 +53,7 @@ const emit = defineEmits<{
   <ShareModal
     :is-visible="isShareModalOpen"
     :video-id="shareVideoId"
-    :comparison-id="shareComparisonId"
+    :comparison-id="shareComparisonId ?? ''"
     :share-type="shareType"
     @close="emit('close-share-modal')"
   />

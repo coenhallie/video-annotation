@@ -5,7 +5,7 @@
     <SingleVideoPlayer
       v-if="mode === 'single'"
       ref="singlePlayerRef"
-      :video-url="videoUrl"
+      :video-url="videoUrl ?? ''"
       :poster="posterAttr"
       :autoplay="autoplayAttr"
       :controls="controlsAttr"
@@ -28,7 +28,7 @@
           :current-color="resolveCanvasColor(drawingCanvas) ?? '#ef4444'"
           :existing-drawings="drawingCanvas?.allDrawings?.value ?? []"
           :is-loading-drawings="drawingCanvas?.isLoadingDrawings?.value ?? false"
-          @drawing-created="handleDrawingCreated"
+          @drawing-created="(d) => handleDrawingCreated(d)"
         />
       </template>
 
@@ -145,15 +145,14 @@ const props = withDefaults(defineProps<Props>(), {
   videoAId: 'video-a',
   videoBUrl: '',
   videoBId: 'video-b',
-  drawingCanvas: undefined,
-  drawingCanvasA: undefined,
-  drawingCanvasB: undefined,
+  // drawingCanvas / drawingCanvasA / drawingCanvasB / user have no default.
+  // Listing them as `undefined` here does not give them one - it just fails to
+  // typecheck against an optional prop under exactOptionalPropertyTypes.
   videoAState: () => ({}),
   videoBState: () => ({}),
   dualVideoPlayer: null,
   projectId: '',
   comparisonVideoId: '',
-  user: undefined
 });
 
 // Emits

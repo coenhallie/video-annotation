@@ -520,8 +520,10 @@ const saveLabel = async () => {
         name: labelForm.value.name.trim(),
         description: labelForm.value.description.trim() || '',
         color: labelForm.value.color,
-        userId: user.value?.id,
-        projectId: props.projectId || undefined,
+        // Omitted when signed out: `userId?` on labels means "no owner", which
+        // is an absent key, not a key holding undefined.
+        ...(user.value?.id ? { userId: user.value.id } : {}),
+        ...(props.projectId ? { projectId: props.projectId } : {}),
       });
 
       labels.value.push(created);

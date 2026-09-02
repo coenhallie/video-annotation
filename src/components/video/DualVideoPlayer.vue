@@ -7,7 +7,6 @@
         <SingleVideoPlayer
           ref="singlePlayerA"
           :video-url="videoAUrl"
-          :poster="null"
           :controls="false"
           :disable-global-store="true"
           :is-playing="videoAIsPlaying"
@@ -35,7 +34,6 @@
         <SingleVideoPlayer
           ref="singlePlayerB"
           :video-url="videoBUrl"
-          :poster="null"
           :controls="false"
           :disable-global-store="true"
           :is-playing="videoBIsPlaying"
@@ -144,10 +142,14 @@ watch(() => singlePlayerB.value?.videoRef, (el) => {
 // Skipped for an injected instance: the parent already owns the sources
 // (URLs and real video IDs) and this would clobber its IDs with placeholders.
 if (!injectedDualPlayer) {
-  watch(() => [props.videoAUrl, props.videoBUrl], ([urlA, urlB]) => {
+  // The props are read inside the callback rather than destructured out of the
+  // watch source: that source is a plain array, so its elements come back as
+  // `string | undefined` and neither element is really optional here. '' is the
+  // same "no source yet" value the parent already normalises to.
+  watch(() => [props.videoAUrl, props.videoBUrl], () => {
     setVideoSources?.(
-      { url: urlA, id: 'video-a' },
-      { url: urlB, id: 'video-b' }
+      { url: props.videoAUrl ?? '', id: 'video-a' },
+      { url: props.videoBUrl ?? '', id: 'video-b' }
     );
   }, { immediate: true });
 }

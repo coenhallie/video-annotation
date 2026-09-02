@@ -36,7 +36,7 @@
       ref="videoRef"
       class="video-element"
       :src="videoUrl"
-      :poster="poster"
+      v-bind="poster ? { poster } : {}"
       crossorigin="anonymous"
       preload="auto"
       @click="togglePlay"
@@ -235,8 +235,11 @@ const onLoadedMetadata = (e: Event) => {
 };
 
 const detectFPS = (video: HTMLVideoElement) => {
-  // If requestVideoFrameCallback is supported (Chrome, Edge, Firefox)
-  if ('requestVideoFrameCallback' in video) {
+  // If requestVideoFrameCallback is supported (Chrome, Edge, Firefox).
+  // Declared as an optional method in types/videoFrameCallback.d.ts, so this
+  // narrows without collapsing the fallback branch to never.
+  const requestFrame = video.requestVideoFrameCallback?.bind(video);
+  if (requestFrame) {
     let frameCount = 0;
     let startTime = 0;
     const maxFrames = 30; // Sample 30 frames
@@ -247,12 +250,12 @@ const detectFPS = (video: HTMLVideoElement) => {
     // If it's paused, we can't reliably get callbacks without playing
     // For now, let's rely on playback. If not playing, we might delay detection until play
     
-    const frameCallback = (now: number, _metadata: any) => {
+    const frameCallback = (now: number) => {
       if (!startTime) startTime = now;
       frameCount++;
       
       if (frameCount < maxFrames) {
-        (video as any).requestVideoFrameCallback(frameCallback);
+        requestFrame(frameCallback);
       } else {
         const duration = now - startTime;
         const avgFps = Math.round((frameCount / duration) * 1000);
@@ -296,7 +299,7 @@ const detectFPS = (video: HTMLVideoElement) => {
       }
     }
     
-    (video as any).requestVideoFrameCallback(frameCallback);
+    requestFrame(frameCallback);
   } else {
     // Fallback for Safari/others: Assume 30 or try to parse from metadata if possible (complex)
     // Default to 30
