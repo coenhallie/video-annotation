@@ -407,6 +407,14 @@ export interface Database {
         Args: {};
         Returns: void;
       };
+      set_video_thumbnail: {
+        Args: {
+          video_id: string;
+          thumbnail: string;
+        };
+        // false when the row already had a thumbnail or no longer exists.
+        Returns: boolean;
+      };
     };
   };
 }

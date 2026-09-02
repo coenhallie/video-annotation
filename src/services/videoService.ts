@@ -1,4 +1,4 @@
-import { supabase } from '../composables/useSupabase';
+import { supabase, getOptimizedSession } from '../composables/useSupabase';
 import type {
   VideoInsert,
   VideoUpdate,
@@ -10,6 +10,12 @@ import { isComparisonVideo, isIndividualVideo } from '../types/database';
 import { ThumbnailGenerator } from '../utils/thumbnailGenerator';
 import { AwsStorageService } from './awsStorageService';
 import { handleServiceError } from '../utils/errorHandler';
+
+/**
+ * How long to wait for a thumbnail before giving up on it. Generous: the frame
+ * has to be fetched and decoded over the network, and nothing is blocked on it.
+ */
+const THUMBNAIL_TIMEOUT_MS = 15_000;
 
 export class VideoService {
   static async findExistingUploadedVideo(url: string, ownerId: string) {
@@ -647,33 +653,9 @@ export class VideoService {
       throw error;
     }
 
-    // Generate a thumbnail whenever the record has none yet: new records, plus
-    // backfill for AWS videos created before thumbnails existed. Requires CORS
-    // on the S3 bucket; failure is non-fatal and leaves the video without one.
-    let thumbnailUrl: string | null = null;
-    if (!record.thumbnailUrl) {
-      try {
-        // Race against a timeout: generateSmallThumbnail can stall forever on a
-        // hung media load (no error event fires), and this await sits on the
-        // deep-link open path behind the app loading screen.
-        const THUMBNAIL_TIMEOUT_MS = 15_000;
-        thumbnailUrl = await Promise.race([
-          ThumbnailGenerator.generateSmallThumbnail(presignedUrl),
-          new Promise<null>((resolve) =>
-            setTimeout(() => resolve(null), THUMBNAIL_TIMEOUT_MS)
-          ),
-        ]);
-      } catch (error) {
-        console.warn('⚠️ Failed to generate thumbnail for AWS video:', error);
-      }
-    }
-
     const { data, error } = await supabase
       .from('videos')
-      .update({
-        url: presignedUrl,
-        ...(thumbnailUrl ? { thumbnailUrl } : {}),
-      })
+      .update({ url: presignedUrl })
       .eq('id', record.id)
       .select()
       .single();
@@ -707,7 +689,87 @@ export class VideoService {
       // fetched above is what the caller actually needs to play the video.
       return { ...record, url: presignedUrl };
     }
+
+    // Not awaited: it decodes video frames, and this sits on the path that puts
+    // a video on screen.
+    void this.ensureAwsThumbnail(record.id, presignedUrl);
+
     return data;
+  }
+
+  /**
+   * Generate a thumbnail for an AWS video that has none, and store it.
+   *
+   * Both AWS entry points call this, because either can be the first to open a
+   * given video: `findOrCreateOutputVideo` on the `?outputVideo=` deep link, and
+   * `refreshAwsVideoUrl` on every open from the dashboard afterwards. When only
+   * the ingest path generated one, a video whose deep link was opened before
+   * thumbnails existed never got one, however often it was opened since.
+   *
+   * Whoever opens the video generates it, owner or not: the dashboard is a
+   * shared library, and a video whose owner never reopens it would otherwise
+   * show a blank card to everybody forever. The write goes through the
+   * `set_video_thumbnail` function because the `videos` UPDATE policy is
+   * owner-gated - see migrations/20260820_set_video_thumbnail.sql for why that
+   * is a function and not a widened policy.
+   *
+   * A signed-in caller is still required, since that function refuses anonymous
+   * ones; without a session there is nowhere to put the result.
+   *
+   * Never rejects. A missing thumbnail is cosmetic and must not surface as a
+   * failure on a path whose real job is playing the video.
+   *
+   * Takes an id and reads the row itself rather than being handed one: the
+   * callers pass whatever video object they happen to hold - a Partial<Video>
+   * off a project, a comparison's videoA, a reshaped store object - and reading
+   * `thumbnailUrl` off a projection that omits it would regenerate a thumbnail
+   * the video already has on every single open.
+   */
+  private static async ensureAwsThumbnail(
+    videoId: string,
+    presignedUrl: string
+  ): Promise<void> {
+    try {
+      const { data: video, error: readError } = await supabase
+        .from('videos')
+        .select('id, thumbnailUrl')
+        .eq('id', videoId)
+        .maybeSingle();
+
+      if (readError) {
+        handleServiceError('VideoService.ensureAwsThumbnail', readError);
+        return;
+      }
+      if (!video || video.thumbnailUrl) return;
+
+      const session = await getOptimizedSession();
+      if (!session?.user?.id) return;
+
+      // Race against a timeout: generateSmallThumbnail can stall forever on a
+      // media load that neither completes nor errors, and an unsettled promise
+      // holds its video element and everything it has buffered for the life of
+      // the page.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const thumbnailUrl = await Promise.race([
+        ThumbnailGenerator.generateSmallThumbnail(presignedUrl),
+        new Promise<null>((resolve) => {
+          timer = setTimeout(() => resolve(null), THUMBNAIL_TIMEOUT_MS);
+        }),
+      ]).finally(() => clearTimeout(timer));
+
+      if (!thumbnailUrl) return;
+
+      const { error } = await supabase.rpc('set_video_thumbnail', {
+        video_id: video.id,
+        thumbnail: thumbnailUrl,
+      });
+
+      if (error) {
+        handleServiceError('VideoService.ensureAwsThumbnail', error);
+      }
+    } catch (error) {
+      handleServiceError('VideoService.ensureAwsThumbnail', error);
+    }
   }
 
   /**
@@ -725,6 +787,10 @@ export class VideoService {
         .from('videos')
         .update({ url: presignedUrl })
         .eq('id', video.id);
+
+      // Not awaited: see ensureAwsThumbnail. This is the path every dashboard
+      // open of an AWS video takes, so it is where most backfills happen.
+      void this.ensureAwsThumbnail(video.id, presignedUrl);
 
       return presignedUrl;
     } catch (error) {

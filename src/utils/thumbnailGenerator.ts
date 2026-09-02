@@ -49,6 +49,45 @@ export class ThumbnailGenerator {
   }
 
   /**
+   * The position to capture at, or null to capture wherever the element already is.
+   *
+   * A seek only completes - and so only fires `seeked` - when it targets a finite
+   * position the element is not already at. A realtime-pipeline mp4 reports
+   * `duration: Infinity` until it is fully buffered, so `duration * 0.3` is
+   * Infinity and that seek never lands: no `seeked`, no `error`, just a wait that
+   * outlives the caller. Same for a seek to the position already held. Returning
+   * null in those cases tells the caller to capture the decoded frame instead of
+   * waiting for an event that will never arrive.
+   *
+   * @param video - The element being captured
+   * @param seekTime - Caller-requested time, if any
+   * @param useSmartFrameSelection - Whether smart frame selection is in play
+   * @param position - Fraction of the duration to aim for under smart selection
+   */
+  private static resolveSeekTarget(
+    video: { duration: number; currentTime: number },
+    seekTime: number | undefined,
+    useSmartFrameSelection: boolean,
+    position: number
+  ): number | null {
+    const hasDuration = Number.isFinite(video.duration) && video.duration > 0;
+
+    let target: number;
+    if (seekTime !== undefined) {
+      target = hasDuration ? Math.min(seekTime, video.duration) : seekTime;
+    } else if (!hasDuration) {
+      return null;
+    } else if (useSmartFrameSelection) {
+      target = video.duration * position;
+    } else {
+      target = Math.min(2, video.duration * 0.1);
+    }
+
+    if (!Number.isFinite(target) || target === video.currentTime) return null;
+    return target;
+  }
+
+  /**
    * Generate a thumbnail from a video URL at a specific time
    * @param videoUrl - The URL of the video
    * @param seekTime - Time in seconds to capture the thumbnail (default: auto-calculated)
@@ -103,10 +142,19 @@ export class ThumbnailGenerator {
                   `Frame at ${video.currentTime}s appears to be black, trying another position...`
                 );
                 attemptCount++;
-                // Try next position
-                const nextPosition = positions[attemptCount] || 0.5;
-                video.currentTime = video.duration * nextPosition;
-                return; // Will trigger onseeked again
+                // Try next position. A null target means there is nowhere else
+                // to look (no usable duration), so keep the frame in hand
+                // rather than waiting on a seek that will never complete.
+                const nextTarget = this.resolveSeekTarget(
+                  video,
+                  undefined,
+                  true,
+                  positions[attemptCount] || 0.5
+                );
+                if (nextTarget !== null) {
+                  video.currentTime = nextTarget;
+                  return; // Will trigger onseeked again
+                }
               }
             }
 
@@ -133,21 +181,29 @@ export class ThumbnailGenerator {
           canvas.width = video.videoWidth;
           canvas.height = video.videoHeight;
 
-          // Calculate seek time
-          let targetTime: number;
+          const targetTime = this.resolveSeekTarget(
+            video,
+            seekTime,
+            useSmartFrameSelection,
+            positions[0] || 0.3
+          );
 
-          if (seekTime !== undefined) {
-            // Use provided seek time
-            targetTime = Math.min(seekTime, video.duration);
-          } else if (useSmartFrameSelection) {
-            // Use smart selection: start at 30% of video duration
-            targetTime = video.duration * (positions[0] || 0.3);
-          } else {
-            // Fallback to 2 seconds or 10% of duration
-            targetTime = Math.min(2, video.duration * 0.1);
+          if (targetTime === null) {
+            captureWhenDecoded();
+            return;
           }
 
           video.currentTime = targetTime;
+        };
+
+        // Capture the frame the element already holds, once one is decoded.
+        // HAVE_CURRENT_DATA (2) is the point at which there is something to draw.
+        const captureWhenDecoded = () => {
+          if (video.readyState >= 2) {
+            tryCapture();
+            return;
+          }
+          video.onloadeddata = tryCapture;
         };
 
         // When the seek operation is complete
@@ -212,10 +268,19 @@ export class ThumbnailGenerator {
                   `Frame at ${video.currentTime}s appears to be black, trying another position...`
                 );
                 attemptCount++;
-                // Try next position
-                const nextPosition = positions[attemptCount] || 0.5;
-                video.currentTime = video.duration * nextPosition;
-                return; // Will trigger onseeked again
+                // Try next position. A null target means there is nowhere else
+                // to look (no usable duration), so keep the frame in hand
+                // rather than waiting on a seek that will never complete.
+                const nextTarget = this.resolveSeekTarget(
+                  video,
+                  undefined,
+                  true,
+                  positions[attemptCount] || 0.5
+                );
+                if (nextTarget !== null) {
+                  video.currentTime = nextTarget;
+                  return; // Will trigger onseeked again
+                }
               }
             }
 
@@ -241,6 +306,16 @@ export class ThumbnailGenerator {
           resolve(null);
         };
 
+        // Capture the frame the element already holds, once one is decoded.
+        // HAVE_CURRENT_DATA (2) is the point at which there is something to draw.
+        const captureWhenDecoded = () => {
+          if (video.readyState >= 2) {
+            tryCapture();
+            return;
+          }
+          video.onloadeddata = tryCapture;
+        };
+
         video.onloadedmetadata = () => {
           // Calculate scaled dimensions
           const aspectRatio = video.videoHeight / video.videoWidth;
@@ -250,18 +325,16 @@ export class ThumbnailGenerator {
           canvas.width = width;
           canvas.height = height;
 
-          // Calculate seek time
-          let targetTime: number;
+          const targetTime = this.resolveSeekTarget(
+            video,
+            seekTime,
+            useSmartFrameSelection,
+            positions[0] || 0.3
+          );
 
-          if (seekTime !== undefined) {
-            // Use provided seek time
-            targetTime = Math.min(seekTime, video.duration);
-          } else if (useSmartFrameSelection) {
-            // Use smart selection: start at 30% of video duration
-            targetTime = video.duration * (positions[0] || 0.3);
-          } else {
-            // Fallback to 2 seconds or 10% of duration
-            targetTime = Math.min(2, video.duration * 0.1);
+          if (targetTime === null) {
+            captureWhenDecoded();
+            return;
           }
 
           video.currentTime = targetTime;
