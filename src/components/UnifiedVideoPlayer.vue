@@ -167,8 +167,6 @@ const emit = defineEmits<{
   (e: 'loaded', data?: any): void;
   (e: 'video-click'): void;
   (e: 'drawing-created', drawing: DrawingData, videoContext?: string): void;
-  (e: 'drawing-updated', drawing: DrawingData, videoContext?: string): void;
-  (e: 'drawing-deleted', drawingId: string, videoContext?: string): void;
   (e: 'video-a-loaded'): void;
   (e: 'video-b-loaded'): void;
   (e: 'pose-detected', poseData: any, videoContext?: string): void;
@@ -212,14 +210,6 @@ const onSingleVideoError = (e: any) => {
 
 const handleDrawingCreated = (drawing: DrawingData, videoContext?: string) => {
   emit('drawing-created', drawing, videoContext);
-};
-
-const handleDrawingUpdated = (drawing: DrawingData, videoContext?: string) => {
-  emit('drawing-updated', drawing, videoContext);
-};
-
-const handleDrawingDeleted = (drawingId: string, videoContext?: string) => {
-  emit('drawing-deleted', drawingId, videoContext);
 };
 
 

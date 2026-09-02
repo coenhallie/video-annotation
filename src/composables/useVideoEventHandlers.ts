@@ -18,8 +18,6 @@ export interface VideoEventHandlers {
   handleTimelinePlay: () => void;
   handleTimelinePause: () => void;
   handleDrawingCreated: (drawing: DrawingCreatedEvent, videoContext?: string) => void;
-  handleDrawingUpdated: (drawing: DrawingCreatedEvent, videoContext?: string) => void;
-  handleDrawingDeleted: (drawingId: string, videoContext?: string) => void;
   handleDualVideoLoaded: () => Promise<void>;
   handleDualVideoAction: (action: string, context: string, ...args: any[]) => void;
   handleSeekVideoA: (time: number) => void;
@@ -66,8 +64,6 @@ export function useVideoEventHandlers(deps: {
   drawingCanvas: {
     currentFrame: Ref<number>;
     addDrawing: (drawing: DrawingCreatedEvent) => void;
-    updateDrawing?: (drawing: DrawingCreatedEvent) => void;
-    deleteDrawing?: (drawingId: string) => void;
   };
   drawingCanvasA: {
     currentFrame: Ref<number>;
@@ -304,27 +300,6 @@ export function useVideoEventHandlers(deps: {
     }
   };
 
-  const handleDrawingUpdated = (
-    drawing: DrawingCreatedEvent,
-    videoContext?: string,
-  ) => {
-    if (playerMode.value === 'dual') {
-      const context = videoContext || 'A';
-      (dualVideoPlayer as any).updateDrawing?.(drawing, context);
-    } else {
-      (drawingCanvas as any).updateDrawing?.(drawing);
-    }
-  };
-
-  const handleDrawingDeleted = (drawingId: string, videoContext?: string) => {
-    if (playerMode.value === 'dual') {
-      const context = videoContext || 'A';
-      (dualVideoPlayer as any).deleteDrawing?.(drawingId, context);
-    } else {
-      (drawingCanvas as any).deleteDrawing?.(drawingId);
-    }
-  };
-
   // ── Dual video action handlers ─────────────────────────────────────────────
 
   const handleDualVideoAction = (
@@ -423,8 +398,6 @@ export function useVideoEventHandlers(deps: {
     handleTimelinePlay,
     handleTimelinePause,
     handleDrawingCreated,
-    handleDrawingUpdated,
-    handleDrawingDeleted,
     handleDualVideoLoaded,
     handleDualVideoAction,
     handleSeekVideoA,

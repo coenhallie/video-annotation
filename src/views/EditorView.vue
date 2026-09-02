@@ -1156,8 +1156,6 @@ const {
   handleTimelinePlay,
   handleTimelinePause,
   handleDrawingCreated,
-  handleDrawingUpdated,
-  handleDrawingDeleted,
   handleDualVideoLoaded,
   handleSeekVideoA,
   handleSeekVideoB,
@@ -1891,8 +1889,6 @@ watch(
                 @video-a-loaded="handleDualVideoLoaded"
                 @video-b-loaded="handleDualVideoLoaded"
                 @drawing-created="handleDrawingCreated"
-                @drawing-updated="handleDrawingUpdated"
-                @drawing-deleted="handleDrawingDeleted"
                 @error="handleVideoError"
               />
             </div>

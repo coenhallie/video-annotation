@@ -61,7 +61,7 @@ export interface DualVideoPlayer {
   // UnifiedVideoPlayer. Nothing in this composable calls through them - its own
   // drawing methods use the internal refs set by setDrawingCanvases.
   //
-  // They were declared as `Ref<{ addDrawing?, updateDrawing?, deleteDrawing? }>`,
+  // They were declared as `Ref<{ addDrawing?, ... }>`,
   // which described neither what is stored (a composable object, not a ref) nor
   // what is read.
   drawingCanvasA?: DrawingCanvasApi | null;
@@ -72,12 +72,10 @@ export interface DualVideoPlayer {
     videoA: { url: string; id: string } | null,
     videoB: { url: string; id: string } | null
   ) => void;
-  setCanvasRefs?: (canvasA: { addDrawing?: (drawing: Record<string, unknown>) => void; updateDrawing?: (drawing: Record<string, unknown>) => void; deleteDrawing?: (drawingId: string) => void } | null, canvasB: { addDrawing?: (drawing: Record<string, unknown>) => void; updateDrawing?: (drawing: Record<string, unknown>) => void; deleteDrawing?: (drawingId: string) => void } | null) => void;
+  setCanvasRefs?: (canvasA: { addDrawing?: (drawing: Record<string, unknown>) => void } | null, canvasB: { addDrawing?: (drawing: Record<string, unknown>) => void } | null) => void;
 
   // Drawing methods
   addDrawing?: (drawing: Record<string, unknown>, videoContext: 'A' | 'B') => void;
-  updateDrawing?: (drawing: Record<string, unknown>, videoContext: 'A' | 'B') => void;
-  deleteDrawing?: (drawingId: string, videoContext: 'A' | 'B') => void;
 
   // Sync control
   isSyncEnabled?: Ref<boolean>;
@@ -424,11 +422,9 @@ export function useDualVideoPlayer(): DualVideoPlayer {
   // Drawing canvas references - these will be set by the parent component
   interface DrawingCanvas {
     addDrawing?: (drawing: Record<string, unknown>) => void;
-    updateDrawing?: (drawing: Record<string, unknown>) => void;
-    deleteDrawing?: (drawingId: string) => void;
   }
-  // The component instances this composable calls addDrawing/updateDrawing/
-  // deleteDrawing on, set by setCanvasRefs. Named apart from the
+  // The component instances this composable calls addDrawing on, set by
+  // setCanvasRefs. Named apart from the
   // drawingCanvasA/B slots on the returned object, which hold something else
   // entirely - the useDrawingCanvas() composables EditorView stashes there for
   // UnifiedVideoPlayer to read isDrawingMode, currentTool and allDrawings off.
@@ -479,38 +475,6 @@ export function useDualVideoPlayer(): DualVideoPlayer {
         drawing
       );
       canvas.addDrawing(drawing);
-    } else {
-      console.warn(
-        `🎨 [useDualVideoPlayer] No drawing canvas available for video ${videoContext}`
-      );
-    }
-  }
-
-  function updateDrawing(drawing: Record<string, unknown>, videoContext: 'A' | 'B') {
-    const canvas =
-      videoContext === 'A' ? canvasComponentA.value : canvasComponentB.value;
-    if (canvas && canvas.updateDrawing) {
-      console.log(
-        `🎨 [useDualVideoPlayer] Updating drawing on video ${videoContext}:`,
-        drawing
-      );
-      canvas.updateDrawing(drawing);
-    } else {
-      console.warn(
-        `🎨 [useDualVideoPlayer] No drawing canvas available for video ${videoContext}`
-      );
-    }
-  }
-
-  function deleteDrawing(drawingId: string, videoContext: 'A' | 'B') {
-    const canvas =
-      videoContext === 'A' ? canvasComponentA.value : canvasComponentB.value;
-    if (canvas && canvas.deleteDrawing) {
-      console.log(
-        `🎨 [useDualVideoPlayer] Deleting drawing from video ${videoContext}:`,
-        drawingId
-      );
-      canvas.deleteDrawing(drawingId);
     } else {
       console.warn(
         `🎨 [useDualVideoPlayer] No drawing canvas available for video ${videoContext}`
@@ -588,8 +552,6 @@ export function useDualVideoPlayer(): DualVideoPlayer {
     setCanvasRefs,
     // expose drawing methods
     addDrawing,
-    updateDrawing,
-    deleteDrawing,
     // expose sync control
     isSyncEnabled,
     isIndependentMode,
