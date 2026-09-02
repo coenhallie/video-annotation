@@ -29,8 +29,6 @@
           :existing-drawings="drawingCanvas?.allDrawings?.value ?? []"
           :is-loading-drawings="drawingCanvas?.isLoadingDrawings?.value ?? false"
           @drawing-created="handleDrawingCreated"
-          @drawing-updated="handleDrawingUpdated"
-          @drawing-deleted="handleDrawingDeleted"
         />
       </template>
 
@@ -64,8 +62,6 @@
           :existing-drawings="drawingCanvasA?.allDrawings?.value ?? []"
           :is-loading-drawings="drawingCanvasA?.isLoadingDrawings?.value ?? false"
           @drawing-created="(d) => handleDrawingCreated(d, 'A')"
-          @drawing-updated="(d) => handleDrawingUpdated(d, 'A')"
-          @drawing-deleted="(id) => handleDrawingDeleted(id, 'A')"
         />
       </template>
 

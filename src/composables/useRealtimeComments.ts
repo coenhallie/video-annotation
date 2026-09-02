@@ -9,6 +9,7 @@ import {
 } from 'vue';
 import type { Ref } from 'vue';
 import { supabase } from './useSupabase';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import type { Comment } from '../types/database';
 
 export interface RealtimeCommentEvent {
@@ -41,11 +42,11 @@ export function useRealtimeComments(annotationId: string | Ref<string>) {
   const activeUsers = ref(new Set<string>());
   const typingUsers = ref(new Map<string, CommentPresence>());
 
-  // Subscriptions
-   
-  let commentSubscription: any = null;
-   
-  let presenceChannel: any = null;
+  // Subscriptions. Typed as RealtimeChannel rather than `any`: the channel type
+  // is what gives `.on()` its per-event payload types, so an `any` here silently
+  // turned every presence and broadcast callback parameter into an implicit any.
+  let commentSubscription: RealtimeChannel | null = null;
+  let presenceChannel: RealtimeChannel | null = null;
 
   // Event handlers
   const eventHandlers = reactive({
@@ -243,11 +244,13 @@ export function useRealtimeComments(annotationId: string | Ref<string>) {
       realtimeComments.value[index] = comment;
     }
 
-    // Add to event log
+    // Add to event log. `old` is omitted rather than set to undefined: the
+    // event's `old?` means "there may have been no previous row", which is not
+    // the same as "there was one, and it is undefined".
     commentEvents.value.push({
       type: 'UPDATE',
       comment,
-      old: oldComment,
+      ...(oldComment ? { old: oldComment } : {}),
     });
 
     // Trigger event handlers
