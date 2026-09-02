@@ -51,8 +51,15 @@ export interface JsonlIndex {
   last: IndexEntry;
   /** Measured, not assumed: window sizes are derived from this. */
   meanRecordBytes: number;
-  /** Sorted by offset. Densifies as the file is used. */
-  entries: IndexEntry[];
+  /**
+   * Sorted by offset. Densifies as the file is used.
+   *
+   * Typed non-empty because it is: construction seeds it with the first record
+   * of the file and nothing ever removes an entry. Saying so here is what lets
+   * `entries[0]` be read without inventing a fallback record for a case that
+   * cannot occur.
+   */
+  entries: [IndexEntry, ...IndexEntry[]];
 }
 
 function entryFrom(record: ReplayRecord, offset: number): IndexEntry {
@@ -84,14 +91,18 @@ export async function buildIndex(
     }
     const text = await fetcher.range(0, size - 1);
     const records = parseWindow(text, { startsAtBof: true, endsAtEof: true });
-    if (!records.length) throw new Error('Pipeline data file holds no records');
+    const firstRecord = records[0];
+    const lastRecord = records[records.length - 1];
+    if (!firstRecord || !lastRecord) {
+      throw new Error('Pipeline data file holds no records');
+    }
     return {
       size,
       acceptsRanges: false,
-      first: entryFrom(records[0], 0),
-      last: entryFrom(records[records.length - 1], size),
+      first: entryFrom(firstRecord, 0),
+      last: entryFrom(lastRecord, size),
       meanRecordBytes: Math.max(1, Math.round(size / records.length)),
-      entries: [entryFrom(records[0], 0)],
+      entries: [entryFrom(firstRecord, 0)],
     };
   }
 
@@ -100,7 +111,8 @@ export async function buildIndex(
     startsAtBof: true,
     endsAtEof: size <= PROBE_BYTES,
   });
-  if (!headRecords.length) throw new Error('Pipeline data file holds no records');
+  const headFirst = headRecords[0];
+  if (!headFirst) throw new Error('Pipeline data file holds no records');
 
   // Mean record size from the head sample. Every window size derives from this
   // rather than from a fixed byte count, because per-record size scales with
@@ -118,9 +130,11 @@ export async function buildIndex(
     startsAtBof: tailStart === 0,
     endsAtEof: true,
   });
-  const lastRecord = tailRecords[tailRecords.length - 1] ?? headRecords[0];
+  // Falls back to the first head record only when the tail window parsed to
+  // nothing - the same record the old code fell back to, now provably defined.
+  const lastRecord = tailRecords[tailRecords.length - 1] ?? headFirst;
 
-  const entries: IndexEntry[] = [entryFrom(headRecords[0], 0)];
+  const entries: [IndexEntry, ...IndexEntry[]] = [entryFrom(headFirst, 0)];
 
   for (let i = 1; i <= probes; i++) {
     const at = Math.floor((size * i) / (probes + 1));
@@ -133,8 +147,9 @@ export async function buildIndex(
       startsAtBof: false,
       endsAtEof: end === size - 1,
     });
-    if (!records.length) continue;
-    insertEntryInto(entries, entryFrom(records[0], at + newlineAt + 1));
+    const probeFirst = records[0];
+    if (!probeFirst) continue;
+    insertEntryInto(entries, entryFrom(probeFirst, at + newlineAt + 1));
   }
 
   return {
@@ -147,12 +162,16 @@ export async function buildIndex(
   };
 }
 
-function insertEntryInto(entries: IndexEntry[], entry: IndexEntry): void {
+function insertEntryInto(
+  entries: [IndexEntry, ...IndexEntry[]],
+  entry: IndexEntry
+): void {
   let lo = 0;
   let hi = entries.length;
   while (lo < hi) {
     const mid = (lo + hi) >> 1;
-    if (entries[mid].offset < entry.offset) lo = mid + 1;
+    const midEntry = entries[mid];
+    if (midEntry && midEntry.offset < entry.offset) lo = mid + 1;
     else hi = mid;
   }
   if (entries[lo]?.offset === entry.offset) return;
@@ -173,11 +192,17 @@ export function insertEntry(index: JsonlIndex, entry: IndexEntry): void {
  */
 export function estimateOffset(index: JsonlIndex, t: number): number {
   const entries = index.entries;
-  if (t <= entries[0].t) return entries[0].offset;
+  const [firstEntry] = entries;
+  if (t <= firstEntry.t) return firstEntry.offset;
 
   const tail = { offset: index.last.offset, t: index.last.t };
+  // Tracks the last entry actually visited, so the fall-through return uses a
+  // real entry rather than an index the compiler cannot prove is in range.
+  let lastVisited = firstEntry;
   for (let i = 0; i < entries.length; i++) {
     const lo = entries[i];
+    if (!lo) continue;
+    lastVisited = lo;
     const hi = entries[i + 1] ?? tail;
     if (t > hi.t) continue;
     const span = hi.t - lo.t;
@@ -185,5 +210,5 @@ export function estimateOffset(index: JsonlIndex, t: number): number {
     const ratio = (t - lo.t) / span;
     return Math.round(lo.offset + ratio * (hi.offset - lo.offset));
   }
-  return entries[entries.length - 1].offset;
+  return lastVisited.offset;
 }
