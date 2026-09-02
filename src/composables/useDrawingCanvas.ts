@@ -23,6 +23,23 @@ export interface DrawingState {
   isLoadingDrawings: boolean;
 }
 
+
+/**
+ * Wrap one side's drawing for dual mode.
+ *
+ * The side with no drawing is omitted rather than set to undefined. DrawingData
+ * declares `drawingA?` / `drawingB?`, and under exactOptionalPropertyTypes an
+ * absent key and a key holding undefined are different types - only the absent
+ * one is assignable. Writing `drawingB: undefined` claimed there was a video-B
+ * drawing whose value happened to be undefined.
+ */
+function dualSide(
+  side: 'A' | 'B',
+  inner: NonNullable<DrawingData['drawingA']>
+): Pick<DrawingData, 'drawingA' | 'drawingB'> {
+  return side === 'A' ? { drawingA: inner } : { drawingB: inner };
+}
+
 export function useDrawingCanvas() {
   // State
   const state = ref<DrawingState>({
@@ -155,46 +172,33 @@ export function useDrawingCanvas() {
     // In dual mode, we need to handle the drawing structure differently
     if (videoContext) {
       // For dual mode, create a drawing with video-specific data
+      const sideDrawing = {
+        paths: drawing.paths,
+        canvasWidth: drawing.canvasWidth,
+        canvasHeight: drawing.canvasHeight,
+        frame: drawing.frame,
+      };
       const dualDrawing: DrawingData = {
         paths: [], // Empty paths at root level for dual mode
         canvasWidth: drawing.canvasWidth,
         canvasHeight: drawing.canvasHeight,
         frame: drawing.frame,
-        drawingA:
-          videoContext === 'A'
-            ? {
-                paths: drawing.paths,
-                canvasWidth: drawing.canvasWidth,
-                canvasHeight: drawing.canvasHeight,
-                frame: drawing.frame,
-              }
-            : undefined,
-        drawingB:
-          videoContext === 'B'
-            ? {
-                paths: drawing.paths,
-                canvasWidth: drawing.canvasWidth,
-                canvasHeight: drawing.canvasHeight,
-                frame: drawing.frame,
-              }
-            : undefined,
+        ...dualSide(videoContext, sideDrawing),
       };
 
       const frame = drawing.frame;
       const frameDrawings = state.value.drawings.get(frame) || [];
 
-      // Check if there's already a dual drawing for this frame and merge
-      const existingIndex = frameDrawings.findIndex(
+      // Check if there's already a dual drawing for this frame and merge.
+      // `find` rather than findIndex-then-index: the index cannot be carried to
+      // a lookup the compiler will trust, and the element is what we want.
+      const existing = frameDrawings.find(
         (d: DrawingData) => d.drawingA || d.drawingB
       );
-      if (existingIndex >= 0) {
-        // Merge with existing dual drawing
-        const existing = frameDrawings[existingIndex];
-        if (videoContext === 'A') {
-          existing.drawingA = dualDrawing.drawingA;
-        } else {
-          existing.drawingB = dualDrawing.drawingB;
-        }
+      if (existing) {
+        // Merge with existing dual drawing. Object.assign writes only the side
+        // dualSide produced, leaving the other side's drawing untouched.
+        Object.assign(existing, dualSide(videoContext, sideDrawing));
         console.log(
           `🎨 [useDrawingCanvas] Merged dual mode drawing for video ${videoContext} frame ${frame}:`,
           existing
@@ -283,24 +287,12 @@ export function useDrawingCanvas() {
         canvasWidth: drawing.canvasWidth,
         canvasHeight: drawing.canvasHeight,
         frame: drawing.frame,
-        drawingA:
-          videoContext === 'A'
-            ? {
-                paths: drawing.paths,
-                canvasWidth: drawing.canvasWidth,
-                canvasHeight: drawing.canvasHeight,
-                frame: drawing.frame,
-              }
-            : undefined,
-        drawingB:
-          videoContext === 'B'
-            ? {
-                paths: drawing.paths,
-                canvasWidth: drawing.canvasWidth,
-                canvasHeight: drawing.canvasHeight,
-                frame: drawing.frame,
-              }
-            : undefined,
+        ...dualSide(videoContext, {
+          paths: drawing.paths,
+          canvasWidth: drawing.canvasWidth,
+          canvasHeight: drawing.canvasHeight,
+          frame: drawing.frame,
+        }),
       };
     }
 
@@ -476,24 +468,12 @@ export function useDrawingCanvas() {
         canvasWidth: state.value.canvasSize.width,
         canvasHeight: state.value.canvasSize.height,
         frame: currentFrame.value,
-        drawingA:
-          videoContext === 'A'
-            ? {
-                paths: allPaths,
-                canvasWidth: state.value.canvasSize.width,
-                canvasHeight: state.value.canvasSize.height,
-                frame: currentFrame.value,
-              }
-            : undefined,
-        drawingB:
-          videoContext === 'B'
-            ? {
-                paths: allPaths,
-                canvasWidth: state.value.canvasSize.width,
-                canvasHeight: state.value.canvasSize.height,
-                frame: currentFrame.value,
-              }
-            : undefined,
+        ...dualSide(videoContext, {
+          paths: allPaths,
+          canvasWidth: state.value.canvasSize.width,
+          canvasHeight: state.value.canvasSize.height,
+          frame: currentFrame.value,
+        }),
       };
     } else {
       return {

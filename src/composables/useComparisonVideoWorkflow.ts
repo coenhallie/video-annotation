@@ -133,6 +133,10 @@ export function useComparisonVideoWorkflow() {
         id: comparisonVideo.id,
         userId: comparisonVideo.userId || '',
         title: comparisonVideo.title || '',
+        // NOT NULL DEFAULT false on comparison_videos, so a record created
+        // without it comes back false; this mirrors that rather than inventing
+        // a permission.
+        allowAnnotations: comparisonVideo.allowAnnotations ?? false,
         ...(comparisonVideo.description && {
           description: comparisonVideo.description,
         }),
@@ -334,7 +338,9 @@ export function useComparisonVideoWorkflow() {
           duration: annotation.duration || 0,
           durationFrames: annotation.durationFrames || 0,
           annotationType: annotation.annotationType,
-          drawingData: annotation.drawingData,
+          // The column is nullable and 'no drawing' is a null there, not an
+          // absent key - undefined would make PostgREST omit the column.
+          drawingData: annotation.drawingData ?? null,
         });
         videoAAnnotations.value.push(newAnnotation);
         videoAAnnotations.value.sort((a, b) => a.frame - b.frame);
@@ -355,7 +361,9 @@ export function useComparisonVideoWorkflow() {
           duration: annotation.duration || 0,
           durationFrames: annotation.durationFrames || 0,
           annotationType: annotation.annotationType,
-          drawingData: annotation.drawingData,
+          // The column is nullable and 'no drawing' is a null there, not an
+          // absent key - undefined would make PostgREST omit the column.
+          drawingData: annotation.drawingData ?? null,
         });
         videoBAnnotations.value.push(newAnnotation);
         videoBAnnotations.value.sort((a, b) => a.frame - b.frame);
