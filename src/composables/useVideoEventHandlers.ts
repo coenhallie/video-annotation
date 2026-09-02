@@ -293,11 +293,6 @@ export function useVideoEventHandlers(deps: {
     videoContext?: string,
   ) => {
     drawingCoordinator.addDrawing(drawing, videoContext);
-
-    // In dual mode the dualVideoPlayer may also need the event
-    if (playerMode.value === 'dual') {
-      (dualVideoPlayer as any).addDrawing?.(drawing, videoContext || 'A');
-    }
   };
 
   // ── Dual video action handlers ─────────────────────────────────────────────

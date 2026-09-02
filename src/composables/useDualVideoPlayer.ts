@@ -56,14 +56,12 @@ export interface DualVideoPlayer {
 
   // Drawing canvas references.
   //
-  // These are passthrough slots: EditorView assigns the useDrawingCanvas()
+  // Pure passthrough slots: EditorView assigns the useDrawingCanvas()
   // composables into them and the template reads them back out to hand to
-  // UnifiedVideoPlayer. Nothing in this composable calls through them - its own
-  // drawing methods use the internal refs set by setDrawingCanvases.
+  // UnifiedVideoPlayer. Nothing in this composable touches them.
   //
-  // They were declared as `Ref<{ addDrawing?, ... }>`,
-  // which described neither what is stored (a composable object, not a ref) nor
-  // what is read.
+  // They were declared as `Ref<{ addDrawing?, ... }>`, which described neither
+  // what is stored (a composable object, not a ref) nor what is read.
   drawingCanvasA?: DrawingCanvasApi | null;
   drawingCanvasB?: DrawingCanvasApi | null;
 
@@ -72,10 +70,6 @@ export interface DualVideoPlayer {
     videoA: { url: string; id: string } | null,
     videoB: { url: string; id: string } | null
   ) => void;
-  setCanvasRefs?: (canvasA: { addDrawing?: (drawing: Record<string, unknown>) => void } | null, canvasB: { addDrawing?: (drawing: Record<string, unknown>) => void } | null) => void;
-
-  // Drawing methods
-  addDrawing?: (drawing: Record<string, unknown>, videoContext: 'A' | 'B') => void;
 
   // Sync control
   isSyncEnabled?: Ref<boolean>;
@@ -420,19 +414,6 @@ export function useDualVideoPlayer(): DualVideoPlayer {
   }
 
   // Drawing canvas references - these will be set by the parent component
-  interface DrawingCanvas {
-    addDrawing?: (drawing: Record<string, unknown>) => void;
-  }
-  // The component instances this composable calls addDrawing on, set by
-  // setCanvasRefs. Named apart from the
-  // drawingCanvasA/B slots on the returned object, which hold something else
-  // entirely - the useDrawingCanvas() composables EditorView stashes there for
-  // UnifiedVideoPlayer to read isDrawingMode, currentTool and allDrawings off.
-  // Both used to be called drawingCanvasA, and the return exposed this one under
-  // that name for EditorView to immediately overwrite.
-  const canvasComponentA = ref<DrawingCanvas | null>(null);
-  const canvasComponentB = ref<DrawingCanvas | null>(null);
-
   // Method to set video sources
   function setVideoSources(
     videoA: { url: string; id: string } | null,
@@ -452,33 +433,6 @@ export function useDualVideoPlayer(): DualVideoPlayer {
     } else {
       videoBUrl.value = '';
       videoBId.value = 'video-b';
-    }
-  }
-
-  // Method to set canvas references
-  function setCanvasRefs(canvasA: DrawingCanvas | null, canvasB: DrawingCanvas | null) {
-    canvasComponentA.value = canvasA;
-    canvasComponentB.value = canvasB;
-    console.log('🎨 [useDualVideoPlayer] Canvas refs set:', {
-      canvasA,
-      canvasB,
-    });
-  }
-
-  // Drawing methods for dual video mode
-  function addDrawing(drawing: Record<string, unknown>, videoContext: 'A' | 'B') {
-    const canvas =
-      videoContext === 'A' ? canvasComponentA.value : canvasComponentB.value;
-    if (canvas && canvas.addDrawing) {
-      console.log(
-        `🎨 [useDualVideoPlayer] Adding drawing to video ${videoContext}:`,
-        drawing
-      );
-      canvas.addDrawing(drawing);
-    } else {
-      console.warn(
-        `🎨 [useDualVideoPlayer] No drawing canvas available for video ${videoContext}`
-      );
     }
   }
 
@@ -549,9 +503,7 @@ export function useDualVideoPlayer(): DualVideoPlayer {
     videoBId,
     // expose utility methods
     setVideoSources,
-    setCanvasRefs,
     // expose drawing methods
-    addDrawing,
     // expose sync control
     isSyncEnabled,
     isIndependentMode,
