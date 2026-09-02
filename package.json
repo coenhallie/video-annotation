@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "deploy": "vite build && netlify deploy --prod --dir=dist --functions=netlify/functions",
     "test": "vitest run",
+    "typecheck": "vue-tsc --noEmit",
     "test:watch": "vitest"
   },
   "dependencies": {
