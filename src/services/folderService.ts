@@ -36,14 +36,18 @@ export class FolderService {
   }
 
   /**
-   * Get all folders for a user
+   * Get every folder in the workspace.
+   *
+   * Folders are one shared tree: any signed-in user sees and may edit all of
+   * them. `owner_id` is retained as attribution and is deliberately not filtered
+   * on. Access is enforced in the database by the `authenticated`-scoped policies
+   * in migrations/20260819_shared_folders.sql, not here.
    */
-  static async getUserFolders(userId: string): Promise<Folder[]> {
+  static async getAllFolders(): Promise<Folder[]> {
     try {
       const { data, error } = await supabase
         .from('folders')
         .select('*')
-        .eq('owner_id', userId)
         .order('sort_order', { ascending: true });
 
       if (error) throw error;
@@ -59,8 +63,7 @@ export class FolderService {
    * Get folder with its contents (subfolders and project count)
    */
   static async getFolderWithContents(
-    folderId: string,
-    userId: string
+    folderId: string
   ): Promise<FolderWithContents> {
     try {
       // Get the folder
@@ -68,7 +71,6 @@ export class FolderService {
         .from('folders')
         .select('*')
         .eq('id', folderId)
-        .eq('owner_id', userId)
         .single();
 
       if (folderError) throw folderError;
@@ -78,7 +80,6 @@ export class FolderService {
         .from('folders')
         .select('*')
         .eq('parent_id', folderId)
-        .eq('owner_id', userId)
         .order('sort_order', { ascending: true });
 
       if (subfoldersError) throw subfoldersError;
@@ -94,7 +95,7 @@ export class FolderService {
       // Recursively get contents for subfolders
       const subfoldersWithContents = await Promise.all(
         (subfolders || []).map((subfolder) =>
-          this.getFolderWithContents(subfolder.id, userId)
+          this.getFolderWithContents(subfolder.id)
         )
       );
 
@@ -383,12 +384,18 @@ export class FolderService {
         .eq('project_id', projectId);
 
       if (deleteError) {
-        // Only log warning if it's not a "table doesn't exist" error
-        if (deleteError.code !== '42P01') {
+        if (deleteError.code === '42P01') {
+          // Table doesn't exist in this environment; tolerate and move on.
           console.warn(
             '⚠️ [FolderService] Error removing project from folders:',
             deleteError
           );
+        } else {
+          // Any other failure (e.g. RLS denies the delete) must surface. When
+          // toFolderId is null this delete is the only operation this call
+          // makes, so swallowing it here would silently no-op an "unfile"
+          // drag with no error shown to the user.
+          throw deleteError;
         }
       }
 
@@ -508,15 +515,11 @@ export class FolderService {
   /**
    * Search folders by name
    */
-  static async searchFolders(
-    userId: string,
-    searchTerm: string
-  ): Promise<Folder[]> {
+  static async searchFolders(searchTerm: string): Promise<Folder[]> {
     try {
       const { data, error } = await supabase
         .from('folders')
         .select('*')
-        .eq('owner_id', userId)
         .ilike('name', `%${searchTerm}%`)
         .order('name', { ascending: true });
 

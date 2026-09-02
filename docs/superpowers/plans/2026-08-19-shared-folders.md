@@ -214,15 +214,18 @@ print `[]`. Before the migration they print rows.
 set -a; . ./.env; set +a
 for t in folders project_folders; do
   printf "%s: " "$t"
-  curl -s "$VITE_SUPABASE_URL/rest/v1/$t?select=folder_id&limit=3" \
+  curl -s "$VITE_SUPABASE_URL/rest/v1/$t?select=*&limit=3" \
     -H "apikey: $VITE_SUPABASE_ANON_KEY" \
     -H "Authorization: Bearer $VITE_SUPABASE_ANON_KEY"
   echo
 done
 ```
 
-Expected: `[]` twice. If rows still come back, RLS did not enable; stop and report rather
-than proceeding to Task 2.
+Expected: `[]` twice. If rows still come back, RLS did not enable; stop and report.
+
+`select=*` is deliberate: `folders` has no `folder_id` column, so a per-column select returns a
+42703 error rather than an empty array, and PostgREST raises that before RLS is ever consulted.
+An error is not evidence either way; only `[]` is.
 
 - [ ] **Step 5: Verify RLS shows as enabled**
 
@@ -840,7 +843,7 @@ Do not report the feature working on unit tests alone. Every check below must be
 set -a; . ./.env; set +a
 for t in folders project_folders; do
   printf "%s: " "$t"
-  curl -s "$VITE_SUPABASE_URL/rest/v1/$t?select=folder_id&limit=3" \
+  curl -s "$VITE_SUPABASE_URL/rest/v1/$t?select=*&limit=3" \
     -H "apikey: $VITE_SUPABASE_ANON_KEY" \
     -H "Authorization: Bearer $VITE_SUPABASE_ANON_KEY"
   echo

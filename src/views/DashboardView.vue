@@ -459,7 +459,9 @@ async function onFolderDrop(node: FolderTreeNode | null, event: DragEvent) {
 function folderErrorMessage(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err);
   if (/row-level security|violates row-level/i.test(msg)) {
-    return 'You must be signed in to organize folders. (Folder changes require a real login — the local dev bypass cannot write to folders.)';
+    // Reachable once folders enforce RLS: an expired session drops the caller to
+    // the `anon` role, which the authenticated-scoped policies exclude.
+    return 'Your session has expired. Sign in again to organize folders.';
   }
   return msg;
 }
@@ -517,6 +519,12 @@ watch(user, (u) => {
             @dragover="onFolderDragOver"
             @dragleave="onFolderDragLeave"
           />
+          <p
+            v-if="dashFolders.foldersError.value"
+            class="mt-3 text-[11px] leading-relaxed text-red-600 dark:text-red-400"
+          >
+            Could not load folders: {{ dashFolders.foldersError.value }}
+          </p>
         </aside>
 
         <div class="flex-1 min-w-0">

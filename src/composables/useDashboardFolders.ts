@@ -15,18 +15,44 @@ export function useDashboardFolders(getUserId: () => string | undefined) {
   const dragOverFolderId: Ref<string | null> = ref(null);
   // null = no folder filter; a Set = restrict to these project ids.
   const folderProjectIds: Ref<Set<string> | null> = ref(null);
+  // Non-null when the last folder load failed. Rendered in the sidebar so an RLS
+  // or network failure cannot masquerade as "you have no folders".
+  const foldersError: Ref<string | null> = ref(null);
 
   async function loadFolders() {
     const uid = getUserId();
     if (!uid) return;
     try {
-      folders.value = await FolderService.getUserFolders(uid);
+      folders.value = await FolderService.getAllFolders();
       folderTree.value = FolderService.buildFolderTree(folders.value);
+      foldersError.value = null;
+      reconcileSelection();
     } catch (err) {
-      // Missing folders table etc. — degrade to no folders, never hard-fail.
+      // Missing folders table etc. - degrade to no folders, never hard-fail.
       console.warn('[useDashboardFolders] loadFolders failed', err);
       folders.value = [];
       folderTree.value = [];
+      foldersError.value =
+        err instanceof Error
+          ? err.message || 'Failed to load folders'
+          : String(err);
+    }
+  }
+
+  // A folder id restored from localStorage can name a folder that no longer
+  // exists; in a shared workspace another user deleting it is routine. Left
+  // alone it filters the grid down to nothing with no folder highlighted, which
+  // reads as a broken dashboard. Falling back to "All Projects" is enough on its
+  // own: DashboardView watches currentFolderId and reloads on the change.
+  //
+  // Only called after a successful load. Reconciling against the empty list left
+  // behind by a failed one would discard the selection on any transient blip.
+  function reconcileSelection() {
+    const id = currentFolderId.value;
+    if (id === null) return;
+    if (!folders.value.some((f) => f.id === id)) {
+      currentFolderId.value = null;
+      persist();
     }
   }
 
@@ -86,6 +112,7 @@ export function useDashboardFolders(getUserId: () => string | undefined) {
 
   return {
     folders,
+    foldersError,
     folderTree,
     currentFolderId,
     dragOverFolderId,
