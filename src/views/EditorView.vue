@@ -1532,10 +1532,12 @@ const shareModalProps = computed(() => {
 });
 
 const canShare = computed(() => {
-  return (
+  // Boolean(): the || chain otherwise evaluates to the id string or to
+  // undefined, and this feeds a boolean prop.
+  return Boolean(
     (playerMode.value === 'single' && currentVideoId.value) ||
-    (playerMode.value === 'dual' &&
-      comparisonWorkflow.currentComparison.value?.id)
+      (playerMode.value === 'dual' &&
+        comparisonWorkflow.currentComparison.value?.id)
   );
 });
 
@@ -1876,10 +1878,10 @@ watch(
                 "
                 :dual-video-player="dualVideoPlayer"
                 :project-id="
-                  comparisonWorkflow.currentComparison.value?.id || undefined
+                  comparisonWorkflow.currentComparison.value?.id || ''
                 "
                 :comparison-video-id="
-                  comparisonWorkflow.currentComparison.value?.id || undefined
+                  comparisonWorkflow.currentComparison.value?.id || ''
                 "
                 :user="user"
                 @time-update="handleTimeUpdate"

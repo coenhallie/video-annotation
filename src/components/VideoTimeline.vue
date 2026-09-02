@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, type PropType } from 'vue';
 import { logger } from '../utils/logger';
 import { formatTime, formatFrame } from '@/utils/formatters';
 import { isCommentAnnotation, isDrawingAnnotation } from '@/utils/annotationPayload';
-import type { DrawingData } from '@/types/database';
+import type { Annotation, DrawingData } from '@/types/database';
 
 /* Narrow annotation typing for the template to satisfy TS plugin */
 interface TimelineAnnotation {
@@ -46,11 +46,14 @@ const props = defineProps({
     default: 30,
   },
   annotations: {
-    type: Array,
+    type: Array as PropType<Annotation[]>,
     default: () => [],
   },
+  // PropType, because a bare `type: Object` types this as a non-null
+  // Record<string, any> - `default: null` does not widen it - and the selection
+  // is genuinely null whenever nothing is selected.
   selectedAnnotation: {
-    type: Object,
+    type: Object as PropType<Annotation | null>,
     default: null,
   },
   isPlaying: {

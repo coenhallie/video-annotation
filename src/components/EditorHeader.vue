@@ -1,9 +1,13 @@
 <script setup lang="ts">
+import type { DeepReadonly } from 'vue';
 import AppHeader from '@/components/AppHeader.vue';
 import type { User } from '@supabase/supabase-js';
 
 defineProps<{
-  user: User | null;
+  // DeepReadonly, because useAuth exposes readonly(user) and that is deep.
+  // This header only reads user.email, so it has no reason to demand a mutable
+  // session object and force the caller to launder one.
+  user: DeepReadonly<User> | null;
   isSharedVideo: boolean;
   isSharedComparison: boolean;
   canShare: boolean;
