@@ -71,6 +71,9 @@ vi.mock('@/composables/useVideoDetails', () => ({
 vi.mock('@/composables/useDashboardFolders', () => ({
   useDashboardFolders: () => ({
     folders: ref([]),
+    // DashboardView renders a load-failure message from this, so the mock has
+    // to carry it or the template dereferences undefined.
+    foldersError: ref(null),
     folderTree: ref([]),
     currentFolderId: ref(null),
     dragOverFolderId: ref(null),
