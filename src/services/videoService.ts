@@ -636,7 +636,14 @@ export class VideoService {
         if (error.code === '23505') {
           const winner = await this.findVideoByOutputVideoId(outputVideoId);
           if (!winner) {
-            // The winner's row exists but this caller cannot SELECT it: a
+            // Unreachable for aws: ids since pipeline outputs became visible to
+            // every signed-in account: a caller who loses the insert race can
+            // always read the winner back. Kept as a guard rather than deleted,
+            // because it is the only thing between a future narrowing of that
+            // policy and a raw constraint violation reaching the user.
+            //
+            // The original reasoning, still the reason the branch exists:
+            // the winner's row exists but this caller cannot SELECT it: a
             // different user claimed the id first and RLS hides their row. That
             // is the availability tradeoff the unique index deliberately
             // accepts - see docs/superpowers/specs/2026-08-19-aws-proxy-auth-design.md
@@ -682,6 +689,20 @@ export class VideoService {
         }
       }
       throw error;
+    }
+
+    // A caller who does not own this row cannot write to it: the videos UPDATE
+    // policy is owner-gated, so the update below matches zero rows and
+    // .single() raises PGRST116. Before pipeline outputs became visible to
+    // every signed-in account this was unreachable, because a non-owner never
+    // got this far - they could not see the row and took the insert path.
+    //
+    // Nothing downstream needs the url persisted. loadVideo reads it off the
+    // object it is handed, and every dashboard open of an aws: video calls
+    // refreshAwsVideoUrl first, so the stored url is a cache refetched before
+    // use rather than the source of truth.
+    if (record.ownerId !== ownerId) {
+      return { ...record, url: presignedUrl };
     }
 
     const { data, error } = await supabase
@@ -814,6 +835,17 @@ export class VideoService {
     try {
       const presignedUrl = await AwsStorageService.getVideoUrlForProject(outputVideoId);
 
+      // Deliberately unguarded, unlike the same write in
+      // findOrCreateOutputVideo. The videos UPDATE policy is owner-gated, so
+      // for a non-owner this matches zero rows - and because it does not
+      // .select(), zero rows comes back 2xx and nothing throws. It is a silent
+      // no-op, which is the correct outcome: the caller already holds the fresh
+      // url it needs, and only the owner's row-level cache goes stale.
+      //
+      // Skipping it would mean asking who the caller is, and the only honest
+      // way to do that here is supabase.auth.getUser(), a network round trip on
+      // a path that runs on every single open of an AWS video. Not worth it to
+      // avoid a write that costs nothing and fails safely.
       await supabase
         .from('videos')
         .update({ url: presignedUrl })
@@ -859,6 +891,43 @@ export class VideoService {
     if (!row) {
       const missing = new Error('set_video_qa_status returned no row');
       handleServiceError('VideoService.setQaStatus', missing);
+      throw missing;
+    }
+
+    return row as Video;
+  }
+
+  /**
+   * The only write path for a video's title.
+   *
+   * Not a plain `.update()`, for the same reason setQaStatus is not: the videos
+   * UPDATE policy is auth.uid() = "ownerId", and a pipeline output is renamed
+   * by whoever is working on it rather than by whoever followed the deep link
+   * first. The function is SECURITY DEFINER and raises when the caller cannot
+   * see the video, so a denied rename arrives here as an error rather than as a
+   * silent success.
+   *
+   * Returns the stored row rather than echoing the requested title: the
+   * function trims, so the two can differ.
+   */
+  static async renameVideo(videoId: string, title: string): Promise<Video> {
+    const { data, error } = await supabase.rpc('rename_video', {
+      p_video_id: videoId,
+      p_title: title,
+    });
+
+    if (error) {
+      handleServiceError('VideoService.renameVideo', error);
+      throw new Error(error.message);
+    }
+
+    // Same set-or-object handling as setQaStatus: PostgREST can hand a
+    // single-row RPC result back either way depending on the client version.
+    const row = Array.isArray(data) ? data[0] : data;
+
+    if (!row) {
+      const missing = new Error('rename_video returned no row');
+      handleServiceError('VideoService.renameVideo', missing);
       throw missing;
     }
 
