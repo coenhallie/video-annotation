@@ -59,6 +59,19 @@ Anyone who can see a video may rename it. For an ordinary private upload that is
 the owner and nobody else, so nothing changes there. For a pipeline output it is
 every signed-in account, because of the visibility change below.
 
+That rule is deliberately wider than pipeline outputs, and the widening was
+chosen rather than inherited. `rename_video`'s predicate mirrors the SELECT
+policies on `videos`, so it also covers a **public video and a video in a public
+comparison**: any signed-in account can rename those, whoever uploaded them.
+`set_video_qa_status` already works exactly this way, and splitting the two so
+that a video's QA status is editable by the team but its name is not would be an
+inconsistency nobody could predict from the outside. The cost is real and worth
+naming: a title is how people identify a video, so a rename by the wrong person
+is more disorienting than a QA status set by the wrong person. Two things make it
+recoverable rather than destructive - the history records the previous name and
+who changed it, and the rename takes a deliberate modal rather than a stray
+click.
+
 The security delta, stated plainly: **after this change every signed-in account
 can list, open, watch, annotate, comment on and rename every pipeline output in
 the database.** `migrations/20260820_unique_aws_video_id.sql` reasons at length
@@ -69,6 +82,15 @@ That is no longer the posture. The new posture is that a pipeline output is
 shared working material for everyone with an account, and knowing the id no
 longer gains an outsider anything the ordinary library does not already give an
 insider. The unique index stays: it still stops two rows racing for one id.
+
+The storage proxy, `netlify/functions/aws-storage.cjs`, needs no code change and
+is affected all the same. It authorizes a request for a presigned S3 URL by
+asking PostgREST, with the caller's own JWT, whether a `videos` row with that
+`aws:` id is visible to them. Its effective policy therefore moves from "has a
+session and knows the id" to "has a session": the dashboard now lists every
+pipeline output, so nobody has to know or guess an id to get a URL. That is the
+intended consequence of team visibility, but the proxy is live on perspecto.ai
+and the shift belongs written down here rather than inferred.
 
 ## Row-level security
 
@@ -359,6 +381,11 @@ nothing to seek to. `ActivityTimeline` must render that as a deliberate,
 non-interactive entry - not as a row that looks like a disabled annotation - and
 `@select-annotation` must not fire from it.
 
+The History tab itself needs no change to reach a non-owner. `showHistoryTab`
+(src/views/EditorView.vue:892) is `!!user && !isSharedVideo && !isSharedComparison`,
+gated on being signed in rather than on owning the video, so anyone who can open
+a team-visible pipeline output can already read its history.
+
 ## The presigned-URL write this breaks
 
 Visibility has a consequence inside `findOrCreateOutputVideo` that must be fixed
@@ -462,14 +489,24 @@ Unit, with Vitest, following the files already in place:
   title and notifies.
 
 Against the live database, by probe rather than automation, since RLS is not
-covered by any test in this repo:
+covered by any test in this repo. **The actor probe runs first**, before any of
+the others and before the UI is built:
 
+- A rename writes exactly one event, with the right `actorId`, `from` and `to`.
+  This is first because it is the one assumption in the design that has not been
+  probed in this database. The 2026-08-25 migration verified that `auth.uid()`
+  resolves inside a trigger fired by a direct PostgREST write; here the trigger
+  fires inside `rename_video`, which is itself SECURITY DEFINER. It should still
+  resolve, because `request.jwt.claims` is a GUC set for the request and
+  SECURITY DEFINER changes the role rather than the GUCs. If it does not, the
+  actor degrades to NULL, the feed reads "Unknown renamed ...", and everything
+  else looks like it worked - a silent failure of the one thing that was asked
+  for by name. Probe it before building on it.
 - A non-owner renames a pipeline output: succeeds.
 - A non-owner renames someone else's private non-`aws:` video: raises 42501.
 - An anonymous caller selects an `aws:` video: no rows.
 - Opening a pipeline output twice, as two different users, writes no history row
   - the url refresh must stay silent.
-- A rename writes exactly one row, with the right actor, `from` and `to`.
 
 ## Applying the migration
 
