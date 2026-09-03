@@ -25,23 +25,27 @@
       <span class="text-[13px] font-medium tracking-tight">All Projects</span>
     </div>
 
-    <!-- Folder tree items -->
+    <!-- Folder tree items. The root row above is static, so it stays painted
+         while the tree loads - only the data-dependent part is a skeleton. -->
     <div class="mt-2">
-      <FolderTreeItem
-        v-for="folder in folders"
-        :key="folder.id"
-        :folder="folder"
-        :selected-folder-id="selectedFolderId"
-        :drag-over-folder-id="dragOverFolderId"
-        :level="0"
-        @select="(folder: FolderTreeNode) => $emit('select', folder)"
-        @create="(folder: FolderTreeNode) => $emit('create', folder)"
-        @rename="(folder: FolderTreeNode, newName: string) => $emit('rename', folder, newName)"
-        @delete="(folder: FolderTreeNode) => $emit('delete', folder)"
-        @drop="(folder: FolderTreeNode, event: DragEvent) => $emit('drop', folder, event)"
-        @dragover="(folder: FolderTreeNode, event: DragEvent) => $emit('dragover', folder, event)"
-        @dragleave="() => $emit('dragleave')"
-      />
+      <FolderTreeSkeleton v-if="loading" />
+      <template v-else>
+        <FolderTreeItem
+          v-for="folder in folders"
+          :key="folder.id"
+          :folder="folder"
+          :selected-folder-id="selectedFolderId"
+          :drag-over-folder-id="dragOverFolderId"
+          :level="0"
+          @select="(folder: FolderTreeNode) => $emit('select', folder)"
+          @create="(folder: FolderTreeNode) => $emit('create', folder)"
+          @rename="(folder: FolderTreeNode, newName: string) => $emit('rename', folder, newName)"
+          @delete="(folder: FolderTreeNode) => $emit('delete', folder)"
+          @drop="(folder: FolderTreeNode, event: DragEvent) => $emit('drop', folder, event)"
+          @dragover="(folder: FolderTreeNode, event: DragEvent) => $emit('dragover', folder, event)"
+          @dragleave="() => $emit('dragleave')"
+        />
+      </template>
     </div>
   </div>
 </template>
@@ -50,12 +54,14 @@
 import { ref } from 'vue';
 import type { FolderTreeNode } from '../types/folder';
 import FolderTreeItem from './FolderTreeItem.vue';
+import FolderTreeSkeleton from './FolderTreeSkeleton.vue';
 
 // Props
 defineProps<{
   folders: FolderTreeNode[];
   selectedFolderId: string | null;
   dragOverFolderId: string | null;
+  loading?: boolean;
 }>();
 
 // Emits

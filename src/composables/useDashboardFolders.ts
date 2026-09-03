@@ -18,6 +18,14 @@ export function useDashboardFolders(getUserId: () => string | undefined) {
   // Non-null when the last folder load failed. Rendered in the sidebar so an RLS
   // or network failure cannot masquerade as "you have no folders".
   const foldersError: Ref<string | null> = ref(null);
+  // False until the first load attempt has settled, either way. The sidebar
+  // renders a skeleton while it is false, which covers the pre-auth window
+  // too: DashboardView calls loadFolders() on mount and again when `user`
+  // resolves, and the first call returns early with no uid. Latched rather
+  // than toggled per load, so a later reload (a token refresh reassigns
+  // `user`) swaps the tree in place instead of flashing the skeleton over
+  // folders that are already on screen.
+  const foldersLoaded: Ref<boolean> = ref(false);
 
   async function loadFolders() {
     const uid = getUserId();
@@ -26,6 +34,7 @@ export function useDashboardFolders(getUserId: () => string | undefined) {
       folders.value = await FolderService.getAllFolders();
       folderTree.value = FolderService.buildFolderTree(folders.value);
       foldersError.value = null;
+      foldersLoaded.value = true;
       reconcileSelection();
     } catch (err) {
       // Missing folders table etc. - degrade to no folders, never hard-fail.
@@ -36,6 +45,7 @@ export function useDashboardFolders(getUserId: () => string | undefined) {
         err instanceof Error
           ? err.message || 'Failed to load folders'
           : String(err);
+      foldersLoaded.value = true;
     }
   }
 
@@ -113,6 +123,7 @@ export function useDashboardFolders(getUserId: () => string | undefined) {
   return {
     folders,
     foldersError,
+    foldersLoaded,
     folderTree,
     currentFolderId,
     dragOverFolderId,

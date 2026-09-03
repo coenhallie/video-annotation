@@ -122,4 +122,35 @@ describe('useDashboardFolders.loadFolders - error reporting', () => {
     await f.loadFolders();
     expect(f.foldersError.value).toBeNull();
   });
+
+  // Drives the sidebar skeleton. The catch case is the load-bearing one: miss
+  // it and a failed folder load pulses placeholders forever behind the error
+  // message the tests above cover.
+  it('latches foldersLoaded once the first load settles, success or failure', async () => {
+    const { useDashboardFolders } = await import('@/composables/useDashboardFolders');
+
+    const ok = useDashboardFolders(() => 'u1');
+    expect(ok.foldersLoaded.value).toBe(false);
+    getAllFolders.mockResolvedValue([folder('f1')]);
+    await ok.loadFolders();
+    expect(ok.foldersLoaded.value).toBe(true);
+
+    getAllFolders.mockReset();
+    getAllFolders.mockRejectedValue(new Error('boom'));
+    const failed = useDashboardFolders(() => 'u1');
+    expect(failed.foldersLoaded.value).toBe(false);
+    await failed.loadFolders();
+    expect(failed.foldersLoaded.value).toBe(true);
+  });
+
+  // No uid yet: DashboardView calls loadFolders() on mount before the session
+  // resolves, and the skeleton has to stay up until the user watcher reloads.
+  it('leaves foldersLoaded false when there is no user yet', async () => {
+    const { useDashboardFolders } = await import('@/composables/useDashboardFolders');
+    const f = useDashboardFolders(() => undefined);
+
+    await f.loadFolders();
+
+    expect(f.foldersLoaded.value).toBe(false);
+  });
 });

@@ -25,6 +25,7 @@ import AppHeader from '@/components/AppHeader.vue';
 import ProjectListItem from '@/components/ProjectListItem.vue';
 import CreateComparisonModal from '@/components/CreateComparisonModal.vue';
 import FolderTree from '@/components/FolderTree.vue';
+import ProjectListSkeleton from '@/components/ProjectListSkeleton.vue';
 import NewFolderDialog from '@/components/NewFolderDialog.vue';
 import DeleteConfirmationDialog from '@/components/DeleteConfirmationDialog.vue';
 import VideoDetailsPanel from '@/components/VideoDetailsPanel.vue';
@@ -65,7 +66,10 @@ const scope = ref<'mine' | 'all'>(
   (localStorage.getItem('dashboardScope') as 'mine' | 'all') || 'all'
 );
 const searchQuery = ref('');
-const isLoading = ref(false);
+// Starts true so the very first paint is the skeleton, not a one-frame
+// "No videos found." Also covers the pre-auth window: loadData() returns
+// early with no user, and the watcher at the bottom reloads once it resolves.
+const isLoading = ref(true);
 const projects = ref<Project[]>([]);
 const annotationCounts = ref<Record<string, number>>({});
 const commentCounts = ref<Record<string, number>>({});
@@ -543,6 +547,7 @@ watch(user, (u) => {
           </button>
           <FolderTree
             :folders="dashFolders.folderTree.value"
+            :loading="!dashFolders.foldersLoaded.value"
             :selected-folder-id="dashFolders.currentFolderId.value"
             :drag-over-folder-id="dashFolders.dragOverFolderId.value"
             @select="dashFolders.selectFolder"
@@ -765,12 +770,10 @@ watch(user, (u) => {
             </div>
           </div>
 
-          <div
-            v-if="isLoading"
-            class="px-4 py-12 text-center text-[12px] text-gray-600 dark:text-gray-400"
-          >
-            Loading…
-          </div>
+          <!-- Skeleton only on a cold list, matching AnnotationPanel: a
+               refetch that already has rows on screen swaps them in place
+               rather than flashing placeholders over them. -->
+          <ProjectListSkeleton v-if="isLoading && projects.length === 0" />
           <div
             v-else-if="paginatedProjects.length === 0"
             class="px-4 py-12 text-center text-[12px] text-gray-600 dark:text-gray-400"
