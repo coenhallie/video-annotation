@@ -63,6 +63,15 @@ export function recordingCtx() {
     drawImage() {
       ctx.snap('drawImage');
     },
+    // The renderer clears and sets the view matrix at the top of every frame.
+    // Recorded rather than ignored so tests can assert the transform actually
+    // applied.
+    setTransform(...args: unknown[]) {
+      ctx.snap('setTransform', args);
+    },
+    clearRect(...args: unknown[]) {
+      ctx.snap('clearRect', args);
+    },
   };
   return { ctx, ops };
 }

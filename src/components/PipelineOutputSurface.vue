@@ -27,9 +27,29 @@ let panOriginY = 0;
 
 const stageRef = ref<HTMLElement | null>(null);
 
-const canvasTransform = computed(
-  () => `translate(calc(-50% + ${panX.value}px), calc(-50% + ${panY.value}px)) scale(${zoom.value})`
-);
+/**
+ * Zoom and pan are handed to the renderer instead of being applied as a CSS
+ * transform on the canvas element.
+ *
+ * The element has to stay unscaled and unmoved so the drawing layer above it
+ * shares its coordinate system: Fabric derives pointer positions from its own
+ * element box, so a CSS scale it cannot see would offset every stroke by the
+ * zoom factor.
+ */
+function pushView(): void {
+  renderer?.setView({
+    zoom: zoom.value,
+    panX: panX.value,
+    panY: panY.value,
+    renderedWidth: canvasRef.value?.getBoundingClientRect().width ?? 0,
+  });
+  // The replay can be paused, so a view change has to repaint by itself rather
+  // than waiting for the next frame.
+  const frame = props.replay.frame.value;
+  if (frame) renderer?.renderFrame(frame);
+}
+
+watch([zoom, panX, panY], pushView, { flush: 'post' });
 
 function onWheel(e: WheelEvent) {
   const stage = stageRef.value;
@@ -151,6 +171,7 @@ function ensureRenderer() {
   canvas.width = FRAME_W;
   canvas.height = FRAME_H;
   renderer = useRenderer2D(canvas);
+  pushView();
 }
 
 // flush: 'post' is load-bearing. Vue's default pre-flush timing runs the
@@ -267,9 +288,8 @@ onUnmounted(() => {
           data-testid="pipeline-canvas"
           :width="FRAME_W"
           :height="FRAME_H"
-          class="absolute left-1/2 top-1/2 max-h-full max-w-full object-contain"
+          class="absolute left-1/2 top-1/2 max-h-full max-w-full -translate-x-1/2 -translate-y-1/2 object-contain"
           style="aspect-ratio: 1280 / 720"
-          :style="{ transform: canvasTransform }"
         />
       </div>
 

@@ -2,10 +2,12 @@
 // minimal so the two copies stay diffable. Deliberate differences from the
 // vendored copy:
 //  - the unused FRAME_W import was dropped, because it lints as an error here.
-//  - draw2DOverlay no longer draws the frame-count label. It was drawn onto
-//    the canvas bitmap, which PipelineOutputSurface.vue applies a CSS
-//    zoom/pan transform to, so the label slid off-screen under zoom.
-//    PipelineOutputSurface.vue draws its own fixed frame label instead.
+//  - draw2DOverlay no longer draws the frame-count label. It is drawn onto the
+//    canvas bitmap, which is zoomed and panned, so the label slid off-screen
+//    under zoom. PipelineOutputSurface.vue draws its own fixed frame label.
+//  - zoom/pan is applied here via setView() rather than as a CSS transform on
+//    the canvas element. The element has to stay unscaled so a drawing layer
+//    can share its coordinate system; see viewTransform.ts.
 
 // ---------------------------------------------------------------------------
 // 2D canvas rendering composable.
@@ -20,6 +22,12 @@ import type { Player, Ball, TeamColors, Frame, Transform2D } from './types'
 import { FRAME_H, PLAYER_RADIUS } from './constants'
 import { build2DTransform, worldToPx, buildPitchCache } from './pitchGeometry'
 import { resolveTeamColors } from './useColorResolver'
+import {
+  computeViewMatrix,
+  IDENTITY_VIEW,
+  type PipelineView,
+  type ViewMatrix,
+} from './viewTransform'
 
 /**
  * Create a 2D renderer bound to a specific canvas element.
@@ -31,6 +39,11 @@ import { resolveTeamColors } from './useColorResolver'
  */
 export function useRenderer2D(canvas: HTMLCanvasElement) {
   const ctx = canvas.getContext('2d')!
+
+  // Zoom and pan live here rather than as a CSS transform on the canvas
+  // element. The element has to stay unscaled so a drawing layer can sit over it
+  // in the same coordinate system - see viewTransform.ts.
+  let view: ViewMatrix = IDENTITY_VIEW
 
   // Internal (non-reactive) caches — rebuilt lazily on first render or after
   // invalidateCache().
@@ -51,6 +64,13 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     // Lazily build / cache transform and pitch image
     if (!transform2d) transform2d = build2DTransform(pd)
     if (!pitchCache) pitchCache = buildPitchCache(pd, transform2d)
+
+    // Cleared to transparent, not filled: panning used to slide the canvas
+    // element and reveal the stage behind it, and letting the stage show
+    // through here keeps that looking the same.
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    ctx.setTransform(view.a, view.b, view.c, view.d, view.e, view.f)
 
     // Blit the pre-rendered pitch
     ctx.drawImage(pitchCache, 0, 0)
@@ -229,5 +249,13 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     }
   }
 
-  return { renderFrame, invalidateCache }
+  /**
+   * Set the zoom/pan applied to every subsequent frame. Takes the surface's raw
+   * view - screen-pixel pan included - and resolves it into canvas space.
+   */
+  function setView(next: PipelineView): void {
+    view = computeViewMatrix(next)
+  }
+
+  return { renderFrame, invalidateCache, setView }
 }
