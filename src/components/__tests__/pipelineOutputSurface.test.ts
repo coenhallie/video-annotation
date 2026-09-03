@@ -105,6 +105,40 @@ describe('PipelineOutputSurface', () => {
     m.unmount();
   });
 
+  /**
+   * The overlay is where the drawing layer mounts, and strokes only land on the
+   * right pitch positions if it covers exactly the canvas's rendered rect. Both
+   * are absolutely positioned and letterboxed, and what makes them coincide is
+   * carrying the same clamps - so that is what is pinned here. jsdom does no
+   * layout, so comparing rects would compare two zeroes.
+   */
+  it('sizes the overlay with the same clamps as the canvas', async () => {
+    const m = mount(fakeReplay('ready'));
+    await nextTick();
+
+    const overlay = at(m.root, 'pipeline-overlay');
+    expect(overlay).not.toBeNull();
+    const cls = overlay!.className;
+    for (const clamp of ['aspect-video', 'max-h-full', 'max-w-full', 'w-[1280px]']) {
+      expect(cls).toContain(clamp);
+    }
+
+    m.unmount();
+  });
+
+  // Zoom and pan live in the renderer now. A transform on the element would put
+  // the drawing layer in a different coordinate system from the pitch.
+  it('leaves the canvas element free of a zoom or pan transform', async () => {
+    const m = mount(fakeReplay('ready'));
+    await nextTick();
+
+    const canvas = at(m.root, 'pipeline-canvas');
+    expect(canvas).not.toBeNull();
+    expect(canvas!.getAttribute('style') ?? '').not.toContain('scale(');
+
+    m.unmount();
+  });
+
   it('shows the canvas when ready', async () => {
     const m = mount(fakeReplay('ready'));
     await nextTick();
