@@ -26,6 +26,7 @@ let panOriginX = 0;
 let panOriginY = 0;
 
 const stageRef = ref<HTMLElement | null>(null);
+const overlayRef = ref<HTMLElement | null>(null);
 
 /**
  * Zoom and pan are handed to the renderer instead of being applied as a CSS
@@ -291,6 +292,28 @@ onUnmounted(() => {
           class="absolute left-1/2 top-1/2 max-h-full max-w-full -translate-x-1/2 -translate-y-1/2 object-contain"
           style="aspect-ratio: 1280 / 720"
         />
+
+        <!--
+          Overlay slot, sized to the canvas's rendered rect by the same width
+          cap, aspect ratio and max-* clamps the canvas carries. A drawing layer
+          mounted here shares the canvas's coordinate system exactly, which is
+          what the zoom/pan move into the renderer made possible.
+
+          pointer-events-none by default so panning and zooming still work
+          through it; the drawing layer turns them back on for itself only while
+          drawing mode is active.
+        -->
+        <div
+          class="pointer-events-none absolute inset-0 flex items-center justify-center"
+        >
+          <div
+            ref="overlayRef"
+            data-testid="pipeline-overlay"
+            class="relative aspect-video max-h-full w-[1280px] max-w-full"
+          >
+            <slot name="overlay" :current-frame="props.replay.currentFrame.value" />
+          </div>
+        </div>
       </div>
 
       <!--

@@ -12,6 +12,14 @@ export interface DrawingCoordinatorOptions {
   singleCanvas: UseDrawingCanvas;
   canvasA: UseDrawingCanvas;
   canvasB: UseDrawingCanvas;
+  /**
+   * Which editor surface is on screen. The pipeline replay is a single canvas
+   * over a single stage, so it takes the same path as single-video mode with
+   * its own canvas swapped in - it is never dual, whatever the player is doing
+   * behind the hidden video tab.
+   */
+  surface?: Ref<'video' | 'pipeline'>;
+  pipelineCanvas?: UseDrawingCanvas;
 }
 
 /** The DrawingCanvas component instances, as EditorView holds them. */
@@ -22,9 +30,22 @@ export interface DrawingCanvasRefs {
 }
 
 export function useDrawingCoordinator(options: DrawingCoordinatorOptions) {
-  const { playerMode, singleCanvas, canvasA, canvasB } = options;
+  const { playerMode, singleCanvas, canvasA, canvasB, surface, pipelineCanvas } =
+    options;
 
-  const isDual = () => playerMode.value === 'dual';
+  const isPipeline = () =>
+    surface?.value === 'pipeline' && pipelineCanvas !== undefined;
+
+  /**
+   * The one canvas the single-surface paths act on. On the pipeline tab that is
+   * the replay's own canvas; everywhere else it is the video's.
+   */
+  const primary = () =>
+    isPipeline() ? (pipelineCanvas as UseDrawingCanvas) : singleCanvas;
+
+  // Dual is a property of the video surface. The pipeline replay has one stage,
+  // so it must not fan out to canvases that are not on screen.
+  const isDual = () => !isPipeline() && playerMode.value === 'dual';
 
   // --------------------------------------------------------------------------
   // Unified drawing-mode control
@@ -35,7 +56,7 @@ export function useDrawingCoordinator(options: DrawingCoordinatorOptions) {
       canvasA.enableDrawingMode();
       canvasB.enableDrawingMode();
     } else {
-      singleCanvas.enableDrawingMode();
+      primary().enableDrawingMode();
     }
   }
 
@@ -44,7 +65,7 @@ export function useDrawingCoordinator(options: DrawingCoordinatorOptions) {
       canvasA.disableDrawingMode();
       canvasB.disableDrawingMode();
     } else {
-      singleCanvas.disableDrawingMode();
+      primary().disableDrawingMode();
     }
   }
 
@@ -59,7 +80,7 @@ export function useDrawingCoordinator(options: DrawingCoordinatorOptions) {
         canvasB.enableDrawingMode();
       }
     } else {
-      singleCanvas.toggleDrawingMode();
+      primary().toggleDrawingMode();
     }
   }
 
@@ -67,7 +88,7 @@ export function useDrawingCoordinator(options: DrawingCoordinatorOptions) {
     if (isDual()) {
       return canvasA.isDrawingMode.value || canvasB.isDrawingMode.value;
     }
-    return singleCanvas.isDrawingMode.value;
+    return primary().isDrawingMode.value;
   });
 
   // --------------------------------------------------------------------------
@@ -79,7 +100,7 @@ export function useDrawingCoordinator(options: DrawingCoordinatorOptions) {
       canvasA.clearAllDrawings();
       canvasB.clearAllDrawings();
     } else {
-      singleCanvas.clearAllDrawings();
+      primary().clearAllDrawings();
     }
   }
 
@@ -88,7 +109,7 @@ export function useDrawingCoordinator(options: DrawingCoordinatorOptions) {
       canvasA.clearCurrentFrameDrawings();
       canvasB.clearCurrentFrameDrawings();
     } else {
-      singleCanvas.clearCurrentFrameDrawings();
+      primary().clearCurrentFrameDrawings();
     }
   }
 
@@ -108,8 +129,8 @@ export function useDrawingCoordinator(options: DrawingCoordinatorOptions) {
       canvasRefs.a?.clearDrawings?.();
       canvasRefs.b?.clearDrawings?.();
     } else {
-      singleCanvas.disableDrawingMode();
-      singleCanvas.clearCurrentFrameDrawings();
+      primary().disableDrawingMode();
+      primary().clearCurrentFrameDrawings();
       canvasRefs.single?.clearDrawings?.();
     }
   }
@@ -127,7 +148,7 @@ export function useDrawingCoordinator(options: DrawingCoordinatorOptions) {
       canvasA.currentFrame.value = videoAFrame ?? frame;
       canvasB.currentFrame.value = videoBFrame ?? frame;
     } else {
-      singleCanvas.currentFrame.value = frame;
+      primary().currentFrame.value = frame;
     }
   }
 
@@ -171,8 +192,8 @@ export function useDrawingCoordinator(options: DrawingCoordinatorOptions) {
         }
       }
 
-      if (singleCanvas.getCurrentFrameDrawing) {
-        const frameDrawing = singleCanvas.getCurrentFrameDrawing();
+      if (primary().getCurrentFrameDrawing) {
+        const frameDrawing = primary().getCurrentFrameDrawing();
         if (
           frameDrawing &&
           frameDrawing.paths &&
@@ -216,9 +237,9 @@ export function useDrawingCoordinator(options: DrawingCoordinatorOptions) {
         });
       }
     } else {
-      singleCanvas.clearCurrentFrameDrawings();
+      primary().clearCurrentFrameDrawings();
       if (annotation.drawingData) {
-        singleCanvas.addDrawing(annotation.drawingData);
+        primary().addDrawing(annotation.drawingData);
       }
     }
   }
@@ -240,7 +261,7 @@ export function useDrawingCoordinator(options: DrawingCoordinatorOptions) {
     }
     return (
       (canvasRefs?.single?.hasDrawingsOnCurrentFrame?.() ?? false) ||
-      singleCanvas.hasDrawingsOnCurrentFrame()
+      primary().hasDrawingsOnCurrentFrame()
     );
   }
 
@@ -256,7 +277,7 @@ export function useDrawingCoordinator(options: DrawingCoordinatorOptions) {
       const context = videoContext || 'A';
       canvasA.addDrawing(drawing, context as 'A' | 'B');
     } else {
-      singleCanvas.addDrawing(drawing);
+      primary().addDrawing(drawing);
     }
   }
 
@@ -269,7 +290,7 @@ export function useDrawingCoordinator(options: DrawingCoordinatorOptions) {
       canvasA.setCustomColor(color);
       canvasB.setCustomColor(color);
     } else {
-      singleCanvas.setCustomColor(color);
+      primary().setCustomColor(color);
     }
   }
 
@@ -278,7 +299,7 @@ export function useDrawingCoordinator(options: DrawingCoordinatorOptions) {
       canvasA.clearCustomColor();
       canvasB.clearCustomColor();
     } else {
-      singleCanvas.clearCustomColor();
+      primary().clearCustomColor();
     }
   }
 
@@ -287,7 +308,7 @@ export function useDrawingCoordinator(options: DrawingCoordinatorOptions) {
       canvasA.setStrokeWidth(width);
       canvasB.setStrokeWidth(width);
     } else {
-      singleCanvas.setStrokeWidth(width);
+      primary().setStrokeWidth(width);
     }
   }
 
@@ -300,7 +321,7 @@ export function useDrawingCoordinator(options: DrawingCoordinatorOptions) {
       canvasA.loadDrawingsFromAnnotations(annotations, 'A');
       canvasB.loadDrawingsFromAnnotations(annotations, 'B');
     } else {
-      singleCanvas.loadDrawingsFromAnnotations(annotations);
+      primary().loadDrawingsFromAnnotations(annotations);
     }
   }
 
@@ -309,7 +330,11 @@ export function useDrawingCoordinator(options: DrawingCoordinatorOptions) {
   // --------------------------------------------------------------------------
 
   function cleanup() {
-    for (const canvas of [singleCanvas, canvasA, canvasB]) {
+    // Every canvas, including the pipeline one: a project switch must not leave
+    // the previous replay's strokes on the pipeline tab.
+    const all = [singleCanvas, canvasA, canvasB];
+    if (pipelineCanvas) all.push(pipelineCanvas);
+    for (const canvas of all) {
       canvas.clearAllDrawings();
       canvas.disableDrawingMode();
       if (canvas.state) {
@@ -320,10 +345,12 @@ export function useDrawingCoordinator(options: DrawingCoordinatorOptions) {
   }
 
   /**
-   * The "primary" canvas: in single mode it is singleCanvas; in dual mode
-   * it falls back to canvasA (used for tool state like stroke width, color).
+   * The "primary" canvas: on the pipeline tab it is the replay's canvas; in
+   * single mode it is singleCanvas; in dual mode it falls back to canvasA (used
+   * for tool state like stroke width, color).
    */
   const primaryCanvas = computed(() => {
+    if (isPipeline()) return pipelineCanvas as UseDrawingCanvas;
     return isDual() ? canvasA : singleCanvas;
   });
 
@@ -409,7 +436,7 @@ export function useDrawingCoordinator(options: DrawingCoordinatorOptions) {
       if (drawingData.drawingA) canvasA.addDrawing(drawingData.drawingA, 'A');
       if (drawingData.drawingB) canvasB.addDrawing(drawingData.drawingB, 'B');
     } else {
-      singleCanvas.addDrawing(drawingData);
+      primary().addDrawing(drawingData);
     }
   }
 

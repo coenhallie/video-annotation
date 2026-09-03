@@ -80,3 +80,39 @@ describe('draw2DPlayer colour fidelity', () => {
     expect(fills).toContain('rgba(20,20,20,0.55)');
   });
 });
+
+
+describe('view transform', () => {
+  const viewOps = (ops: Op[]) =>
+    ops.filter((o) => o.op === 'setTransform').map((o) => o.args);
+
+  // Fit is the overwhelmingly common case and has to be byte-identical to the
+  // untransformed render this replaced.
+  it('draws through the identity when no view has been set', () => {
+    const { canvas, ops } = fakeCanvas();
+    useRenderer2D(canvas).renderFrame(frameWith({}));
+
+    // Reset-then-apply: the second is the view actually drawn through.
+    expect(viewOps(ops)[1]).toEqual([1, 0, 0, 1, 0, 0]);
+  });
+
+  it('clears before applying the view, so a pan cannot smear the last frame', () => {
+    const { canvas, ops } = fakeCanvas();
+    useRenderer2D(canvas).renderFrame(frameWith({}));
+
+    const clearAt = ops.findIndex((o) => o.op === 'clearRect');
+    const drawAt = ops.findIndex((o) => o.op === 'drawImage');
+    expect(clearAt).toBeGreaterThanOrEqual(0);
+    expect(clearAt).toBeLessThan(drawAt);
+  });
+
+  it('draws through the matrix a set view resolves to', () => {
+    const { canvas, ops } = fakeCanvas();
+    const renderer = useRenderer2D(canvas);
+    renderer.setView({ zoom: 2, panX: 0, panY: 0, renderedWidth: 1280 });
+    renderer.renderFrame(frameWith({}));
+
+    // Scaling about the frame centre: e = cx - zoom*cx = 640 - 1280 = -640.
+    expect(viewOps(ops)[1]).toEqual([2, 0, 0, 2, -640, -360]);
+  });
+});

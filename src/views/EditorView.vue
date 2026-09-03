@@ -24,11 +24,13 @@ import DashboardModals from '@/components/DashboardModals.vue';
 import AnnotationQuickPick from '@/components/AnnotationQuickPick.vue';
 import EditorSurfaceTabs from '@/components/EditorSurfaceTabs.vue';
 import PipelineOutputSurface from '@/components/PipelineOutputSurface.vue';
+import DrawingCanvas from '@/components/DrawingCanvas.vue';
 import { usePipelineReplay } from '@/composables/usePipelineReplay';
 import { httpRangeFetcher } from '@/lib/pipelineData/rangeFetcher';
 import { AwsStorageService } from '@/services/awsStorageService';
 import { useLabelCatalog } from '@/composables/useLabelCatalog';
 import { buildAnnotationPayload, stampSnapshotFrame } from '@/utils/annotationPayload';
+import type { DrawingCanvasExpose } from '@/types/component-interfaces';
 import { resolveAnnotationDeepLink } from '@/utils/annotationDeepLink';
 import { canCreateAnnotations } from '@/utils/annotationPermissions';
 import { isPipelineSurfaceVisible } from '@/utils/pipelineSurface';
@@ -192,10 +194,19 @@ const isLoading = computed(() => {
 // Removed local videoState reactive object
 
 
+// Which editor tab is on screen. Declared here rather than with the rest of the
+// surface code below because the drawing coordinator needs it: the surface
+// decides which canvas a stroke belongs to.
+const activeSurface = ref<AnnotationSurface>('video');
+
 // Drawing functionality
 const drawingCanvas = useDrawingCanvas();
 const drawingCanvasA = useDrawingCanvas();
 const drawingCanvasB = useDrawingCanvas();
+// The pipeline replay draws onto its own canvas, so it needs its own state:
+// its strokes belong to pipeline-surface annotations and must not appear over
+// the video.
+const drawingCanvasPipeline = useDrawingCanvas();
 
 // Unified drawing coordinator (eliminates single/dual branching in consumers)
 const drawingCoordinator = useDrawingCoordinator({
@@ -203,6 +214,8 @@ const drawingCoordinator = useDrawingCoordinator({
   singleCanvas: drawingCanvas,
   canvasA: drawingCanvasA,
   canvasB: drawingCanvasB,
+  surface: activeSurface,
+  pipelineCanvas: drawingCanvasPipeline,
 });
 
 // Dual video player state
@@ -262,7 +275,6 @@ const canAnnotate = computed(() => {
 
 // ── Editor surface (Video / Pipeline output tabs) ────────────────────────────
 
-const activeSurface = ref<AnnotationSurface>('video');
 
 // The replay reads the pipeline's JSONL for this project. `openFetcher` returns
 // null for anything that is not an AWS pipeline video, which is most projects,
@@ -590,8 +602,15 @@ const drawingSaving = ref(false);
 let preDrawToolSnapshot: { strokeWidth: number; customColor?: string | undefined } | null = null;
 
 /** The DrawingCanvas instances, exposed by UnifiedVideoPlayer. */
+const pipelineDrawingRef = ref<DrawingCanvasExpose | null>(null);
+
 const drawingCanvasRefs = () => ({
-  single: (unifiedVideoPlayerRef.value as any)?.singleDrawingCanvasRef ?? null,
+  // On the pipeline tab the replay's own canvas is the single surface, so it
+  // takes the `single` slot the coordinator's single-surface paths read.
+  single:
+    activeSurface.value === 'pipeline'
+      ? pipelineDrawingRef.value
+      : ((unifiedVideoPlayerRef.value as any)?.singleDrawingCanvasRef ?? null),
   a: (unifiedVideoPlayerRef.value as any)?.drawingCanvasARef ?? null,
   b: (unifiedVideoPlayerRef.value as any)?.drawingCanvasBRef ?? null,
 });
@@ -1894,7 +1913,39 @@ watch(
               <PipelineOutputSurface
                 :replay="pipelineReplay"
                 @context-menu="openQuickPick"
-              />
+              >
+                <!--
+                  The drawing layer sits in the surface's overlay slot, which is
+                  sized to the replay canvas's rendered rect. Strokes are stored
+                  normalised to that rect, so they land on the same pitch
+                  positions at any editor size.
+
+                  pointer-events are off unless drawing mode is on, so zoom and
+                  pan keep working through the layer the rest of the time.
+                -->
+                <template #overlay="{ currentFrame: pipelineFrame }">
+                  <DrawingCanvas
+                    ref="pipelineDrawingRef"
+                    class="absolute inset-0"
+                    :class="
+                      drawingCanvasPipeline.isDrawingMode.value
+                        ? 'pointer-events-auto'
+                        : 'pointer-events-none'
+                    "
+                    :current-frame="pipelineFrame"
+                    :is-drawing-mode="drawingCanvasPipeline.isDrawingMode.value"
+                    :stroke-width="
+                      drawingCanvasPipeline.currentTool.value.strokeWidth
+                    "
+                    :severity="drawingCanvasPipeline.currentTool.value.severity"
+                    :existing-drawings="drawingCanvasPipeline.allDrawings.value"
+                    :is-loading-drawings="
+                      drawingCanvasPipeline.isLoadingDrawings.value
+                    "
+                    @drawing-created="(d) => handleDrawingCreated(d)"
+                  />
+                </template>
+              </PipelineOutputSurface>
             </div>
           </div>
         </div>
@@ -1977,7 +2028,7 @@ watch(
         :fps="quickPickSnapshot?.fps ?? 30"
         :draw-color="quickPickDrawColor"
         :draw-width="quickPickDrawWidth"
-        :allow-drawing="activeSurface === 'video'"
+        :allow-drawing="true"
         @select="handleQuickPickSelect"
         @comment="handleQuickPickComment"
         @comment-mode="handleQuickPickCommentMode"
