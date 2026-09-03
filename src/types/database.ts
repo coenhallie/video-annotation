@@ -207,7 +207,7 @@ export interface DatabaseProjectOpen {
 }
 
 // Activity log interfaces
-export type ActivityEntityType = 'annotation' | 'comment';
+export type ActivityEntityType = 'annotation' | 'comment' | 'video';
 export type ActivityAction = 'created' | 'updated' | 'deleted';
 
 /**
@@ -228,6 +228,12 @@ export interface ActivitySummary {
    * as "video".
    */
   surface?: AnnotationSurface;
+  /**
+   * A rename, from the video event written by log_video_rename_activity.
+   * `from` is null when the row being renamed had no title at all.
+   */
+  from?: string | null;
+  to?: string | null;
 }
 
 export interface DatabaseActivityEvent {

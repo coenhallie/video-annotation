@@ -5,6 +5,8 @@ import {
   activityVerb,
   activitySubject,
   activityExcerpt,
+  activityIsSeekable,
+  activityIsDefunct,
   groupActivityByDay,
 } from '@/utils/activityPhrasing';
 import { formatTime } from '@/utils/formatters';
@@ -83,7 +85,7 @@ const annotationIdOf = (entry: ActivityEntry) =>
     : (entry.summary.annotationId ?? '');
 
 const onEntryClick = (entry: ActivityEntry) => {
-  if (!entry.live) return;
+  if (!activityIsSeekable(entry)) return;
   const id = annotationIdOf(entry);
   if (!id) return;
   emit('select-annotation', id, entry.summary.timestamp ?? 0, entry.summary.surface);
@@ -139,38 +141,40 @@ const onEntryClick = (entry: ActivityEntry) => {
               <span
                 class="absolute -left-[17px] top-[13px] h-1.5 w-1.5 rounded-full"
                 :class="
-                  entry.live
-                    ? 'bg-gray-400 dark:bg-gray-500'
-                    : 'bg-gray-300 dark:bg-gray-700'
+                  activityIsDefunct(entry)
+                    ? 'bg-gray-300 dark:bg-gray-700'
+                    : 'bg-gray-400 dark:bg-gray-500'
                 "
               />
 
               <!-- A dead entry is a div, never a button: a control that does
                    nothing when clicked is worse than plain text. It must not
-                   take focus and must not show a pointer cursor. -->
+                   take focus and must not show a pointer cursor. A rename is a
+                   div for the same reason and greyed for none - there is
+                   nothing to seek to, but nothing is gone either, which is why
+                   seekable and defunct are two questions and not one. -->
               <component
-                :is="entry.live ? 'button' : 'div'"
-                :type="entry.live ? 'button' : undefined"
+                :is="activityIsSeekable(entry) ? 'button' : 'div'"
+                :type="activityIsSeekable(entry) ? 'button' : undefined"
                 data-testid="activity-entry"
                 class="block w-full text-left"
-                :class="
-                  entry.live
-                    ? 'cursor-pointer'
-                    : 'cursor-default text-gray-400 dark:text-gray-600'
-                "
+                :class="[
+                  activityIsSeekable(entry) ? 'cursor-pointer' : 'cursor-default',
+                  activityIsDefunct(entry) && 'text-gray-400 dark:text-gray-600',
+                ]"
                 @click="onEntryClick(entry)"
               >
                 <span
                   class="text-[13px]"
                   :class="
-                    entry.live
-                      ? 'text-gray-900 dark:text-gray-200'
-                      : 'text-gray-400 dark:text-gray-600'
+                    activityIsDefunct(entry)
+                      ? 'text-gray-400 dark:text-gray-600'
+                      : 'text-gray-900 dark:text-gray-200'
                   "
                 >
                   <span class="font-semibold">{{ entry.actor }}</span>
                   {{ ' ' }}{{ activityVerb(entry) }}{{ ' ' }}
-                  <span :class="entry.live ? '' : 'line-through'">
+                  <span :class="activityIsDefunct(entry) ? 'line-through' : ''">
                     {{ activitySubject(entry) }}
                   </span>
                 </span>
@@ -178,8 +182,12 @@ const onEntryClick = (entry: ActivityEntry) => {
                 <span
                   class="ml-2 font-mono text-[10px] tracking-wider text-gray-500 dark:text-gray-400"
                 >
-                  {{ formatTime(entry.summary.timestamp ?? 0) }}
-                  ·
+                  <!-- A rename happened to the video, not at a position in it.
+                       Printing 0:00 would invite a click that seeks nowhere. -->
+                  <template v-if="entry.entityType !== 'video'">
+                    {{ formatTime(entry.summary.timestamp ?? 0) }}
+                    ·
+                  </template>
                   <span data-testid="activity-time">{{
                     formatClockTime(entry.createdAt)
                   }}</span>

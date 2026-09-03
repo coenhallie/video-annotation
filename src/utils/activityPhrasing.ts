@@ -9,6 +9,7 @@ import type {
 export const UNKNOWN_ACTOR = 'Unknown';
 
 const FALLBACK_SUBJECT = 'an annotation';
+const FALLBACK_VIDEO_SUBJECT = 'this video';
 
 /**
  * The verb table. Keyed "entityType:action" because the two dimensions do not
@@ -25,6 +26,9 @@ const VERBS: Record<string, string> = {
   // Unreachable today: the comment trigger has no UPDATE branch. Present so
   // that adding one later degrades to a readable sentence rather than a blank.
   'comment:updated': 'changed a comment on',
+  // A video event is about the video itself. Only a rename writes one today,
+  // which is why 'updated' can be spelled with the specific verb.
+  'video:updated': 'renamed',
 };
 
 const verbKey = (t: ActivityEntityType, a: ActivityAction) => `${t}:${a}`;
@@ -39,6 +43,13 @@ export function activityVerb(entry: ActivityEntry): string {
  * annotations and comment bodies alternating.
  */
 export function activitySubject(entry: ActivityEntry): string {
+  // A video event names the title the video is moving away from, not the one it
+  // has now. The new name goes in the excerpt, so the sentence reads in the
+  // order the change happened.
+  if (entry.entityType === 'video') {
+    const from = entry.summary.from ?? '';
+    return from.length > 0 ? from : FALLBACK_VIDEO_SUBJECT;
+  }
   const title =
     entry.entityType === 'comment'
       ? entry.summary.annotationTitle
@@ -46,10 +57,36 @@ export function activitySubject(entry: ActivityEntry): string {
   return title && title.length > 0 ? title : FALLBACK_SUBJECT;
 }
 
-/** The comment body, shown under the sentence. Empty for annotations. */
+/**
+ * The second line, under the sentence: a comment's body, or a rename's new
+ * name. Empty for annotations.
+ */
 export function activityExcerpt(entry: ActivityEntry): string {
+  if (entry.entityType === 'video') {
+    const to = entry.summary.to ?? '';
+    return to.length > 0 ? `Now "${to}"` : '';
+  }
   if (entry.entityType !== 'comment') return '';
   return entry.summary.excerpt ?? '';
+}
+
+/**
+ * Clicking this entry seeks somewhere. Only an entry naming a surviving
+ * annotation does.
+ */
+export function activityIsSeekable(entry: ActivityEntry): boolean {
+  return entry.entityType !== 'video' && entry.live;
+}
+
+/**
+ * The thing this entry names is gone, so the timeline strikes it through.
+ *
+ * Deliberately not the negation of activityIsSeekable. A video event is not
+ * live - there is no annotation behind it to be live - but the video it names
+ * is very much still there, and striking it through would say otherwise.
+ */
+export function activityIsDefunct(entry: ActivityEntry): boolean {
+  return entry.entityType !== 'video' && !entry.live;
 }
 
 /**

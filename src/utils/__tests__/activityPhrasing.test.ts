@@ -3,6 +3,8 @@ import {
   activityVerb,
   activitySubject,
   activityExcerpt,
+  activityIsSeekable,
+  activityIsDefunct,
   activityDayKey,
   activityDayLabel,
   groupActivityByDay,
@@ -202,5 +204,61 @@ describe('groupActivityByDay', () => {
 describe('UNKNOWN_ACTOR', () => {
   it('is the single spelling of an unresolvable actor', () => {
     expect(UNKNOWN_ACTOR).toBe('Unknown');
+  });
+});
+
+describe('a video rename', () => {
+  const rename = (over: Partial<ActivityEntry> = {}) =>
+    entry({
+      entityType: 'video',
+      action: 'updated',
+      entityId: 'v1',
+      summary: { from: 'Pipeline Output - 1b30b3cc', to: 'Serve trial 3' },
+      // A video event points at the video itself, so there is no annotation to
+      // look up and getActivity always resolves it as not live.
+      live: false,
+      ...over,
+    });
+
+  it('reads as "renamed"', () => {
+    expect(activityVerb(rename())).toBe('renamed');
+  });
+
+  // The old name in the sentence and the new one below it, so the feed reads
+  // chronologically instead of asking the reader to work backwards from the
+  // name the video has now.
+  it('names the old title in the sentence', () => {
+    expect(activitySubject(rename())).toBe('Pipeline Output - 1b30b3cc');
+  });
+
+  it('puts the new title in the excerpt', () => {
+    expect(activityExcerpt(rename())).toBe('Now "Serve trial 3"');
+  });
+
+  it('falls back when there was no previous title', () => {
+    expect(activitySubject(rename({ summary: { from: null, to: 'Named' } }))).toBe(
+      'this video'
+    );
+  });
+
+  it('is never seekable', () => {
+    expect(activityIsSeekable(rename())).toBe(false);
+  });
+
+  // The distinction this pair exists for: `live: false` on an annotation means
+  // the annotation was deleted, and the timeline strikes it through. A video
+  // event is not live either, and striking it through would say the video was
+  // deleted.
+  it('is not defunct even though it is not live', () => {
+    expect(activityIsDefunct(rename())).toBe(false);
+  });
+
+  it('a dead annotation is still defunct', () => {
+    expect(activityIsDefunct(entry({ live: false }))).toBe(true);
+  });
+
+  it('a live annotation is seekable and not defunct', () => {
+    expect(activityIsSeekable(entry({ live: true }))).toBe(true);
+    expect(activityIsDefunct(entry({ live: true }))).toBe(false);
   });
 });
