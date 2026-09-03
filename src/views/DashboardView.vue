@@ -229,16 +229,30 @@ async function loadData() {
   try {
     const effectiveScope =
       dashFolders.currentFolderId.value !== null ? 'all' : scope.value;
-    projects.value = await ProjectService.getAllProjects({
-      scope: effectiveScope,
-      userId: user.value.id,
-    });
-    await dashFolders.refreshFolderContents();
-    const [counts, opens] = await Promise.all([
-      ProjectService.getProjectCountsBatched(projects.value),
+    // Everything that decides which rows are shown and in what order is
+    // fetched before any of it is published. Recency ordering (recentOpens)
+    // and the folder filter (refreshFolderContents) are both independent of
+    // the project list, so batching them here costs no wall-clock; awaiting
+    // them after assigning `projects` is what made the list paint in
+    // created-date order and then visibly resort itself half a second later.
+    //
+    // Neither of the two rejects - getRecentOpens and refreshFolderContents
+    // both swallow their own failures - so this Promise.all fails only where
+    // getAllProjects already did.
+    const [fetched, opens] = await Promise.all([
+      ProjectService.getAllProjects({
+        scope: effectiveScope,
+        userId: user.value.id,
+      }),
       getRecentOpens(user.value.id),
+      dashFolders.refreshFolderContents(),
     ]);
+    // Assigned in one tick, so the list's first paint is already final: Vue
+    // flushes both refs into a single render.
     recentOpens.value = opens;
+    projects.value = fetched;
+
+    const counts = await ProjectService.getProjectCountsBatched(projects.value);
     annotationCounts.value = counts.annotationCounts;
     commentCounts.value = counts.commentCounts;
     const videoIds = projects.value
