@@ -417,10 +417,14 @@ and every dashboard open of an `aws:` video calls `refreshAwsVideoUrl` first
 (src/views/EditorView.vue:1397-1401), so the stored `url` is a cache that is refetched
 before use, not the source of truth.
 
-`refreshAwsVideoUrl` gets the same treatment. Its write is already a silent no-op
-for a non-owner - it does not `.select()`, so zero rows returns 2xx - but firing
-a write that can never land on every open of someone else's video is noise, and
-the skip documents why it can be skipped.
+`refreshAwsVideoUrl` is deliberately **not** given the same treatment, which is a
+correction to an earlier draft of this section. Its write is already a silent
+no-op for a non-owner - it does not `.select()`, so zero rows returns 2xx and
+nothing throws - and the only honest way to skip it is to ask who the caller is.
+That means `supabase.auth.getUser()`, a network round trip, on a path that runs
+on every single open of an AWS video. Paying that to avoid a write which costs
+nothing and fails safely is the worse trade. The write stays, with a comment
+saying why.
 
 One path becomes unreachable as a result: the `!winner` case inside the `23505`
 branch, which raises *"already claimed by another account"*. With `aws:` rows
