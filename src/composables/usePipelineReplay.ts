@@ -41,6 +41,27 @@ const DEFAULT_LRU = 4;
  *  one is fetched. Without this the pitch freezes at every window boundary
  *  while the range request is in flight. */
 const PREFETCH_SECONDS = 8;
+/**
+ * Bytes read to learn the time at one point in the file.
+ *
+ * A read that exists only to narrow a seek's bounds has to yield a single
+ * whole record and nothing more, so it is deliberately far smaller than a
+ * window. That is what makes halving the bounds cheap enough to be the answer
+ * to a missed estimate rather than a last resort.
+ */
+const SEEK_PROBE_BYTES = 65536;
+
+/**
+ * Reads one seek may make before giving up.
+ *
+ * A log2 budget, not a linear one: every read that misses halves the bytes
+ * still in question, so what a file needs is the log of its size over one
+ * window - eight reads for a gigabyte narrowed to a 5 MB window. Set well
+ * above that because the reads doing the narrowing are small and a seek that
+ * runs out of them shows nothing at all. In practice a seek takes one read,
+ * or a handful in a region the index has not learned yet.
+ */
+const MAX_SEEK_READS = 32;
 
 /**
  * Replay the pipeline's frame JSONL on its own clock.
@@ -123,6 +144,60 @@ export function usePipelineReplay(opts: {
     windows = [win, ...windows.filter((w) => w !== win)].slice(0, lruSize);
   }
 
+  /**
+   * Read one byte range and turn it into a cached window.
+   *
+   * `start` is the byte the window should BEGIN at, which is not the byte
+   * requested. A non-BOF range always has its first line discarded as a
+   * partial, so a range beginning exactly on a record boundary would throw a
+   * whole record away and that record would be unreachable. Backing up one
+   * byte puts the preceding newline first, which makes the discarded fragment
+   * provably empty - the invariant parseWindow documents.
+   *
+   * `firstOffset` is where the window's first whole record actually starts,
+   * which is what makes it usable as a seek bound: it is a real record start,
+   * not an arbitrary byte.
+   */
+  async function readWindow(
+    start: number,
+    bytes: number,
+    startEpoch: number
+  ): Promise<{
+    from: number;
+    end: number;
+    first: ReplayRecord;
+    last: ReplayRecord;
+    firstOffset: number;
+    win: LoadedWindow;
+  } | null> {
+    if (!index || !fetcher) return null;
+    const from = start <= 0 ? 0 : start - 1;
+    const end = Math.min(index.size, from + bytes) - 1;
+    const text = await fetcher.range(from, end);
+    // A dispose (or a fresh load) happened while this range was in flight.
+    // `index`/`fetcher` may already be null, so bail before touching them.
+    if (startEpoch !== epoch || !index) return null;
+    const records = parseWindow(text, {
+      startsAtBof: from === 0,
+      endsAtEof: end === index.size - 1,
+    });
+    const first = records[0];
+    const last = records[records.length - 1];
+    if (!first || !last) return null;
+
+    const firstOffset = from === 0 ? 0 : from + text.indexOf('\n') + 1;
+    // Feed the true offset back so the next estimate in this region is better.
+    insertEntry(index, {
+      offset: firstOffset,
+      frameCount: first.frameCount,
+      t: first.t,
+    });
+
+    const win: LoadedWindow = { startOffset: from, records };
+    touch(win);
+    return { from, end, first, last, firstOffset, win };
+  }
+
   async function recordAt(target: number, startEpoch: number): Promise<ReplayRecord | null> {
     if (!index || !fetcher || startEpoch !== epoch) return null;
 
@@ -135,6 +210,8 @@ export function usePipelineReplay(opts: {
     }
 
     const span = windowBytes();
+    const probeBytes = Math.max(SEEK_PROBE_BYTES, index.meanRecordBytes * 2);
+
     // Start a quarter of a window before the estimate. Two reasons, and the
     // second one is load-bearing rather than an optimisation:
     //
@@ -146,49 +223,65 @@ export function usePipelineReplay(opts: {
     //     off means the window still ENDS at EOF and therefore still contains
     //     that record. Remove this backoff and the final frame silently
     //     disappears from the replay.
-    let start = Math.max(0, estimateOffset(index, target) - Math.round(span / 4));
-    for (let attempt = 0; attempt < 3; attempt++) {
-      // Upholds the invariant parseWindow documents. A non-BOF range always has
-      // its first line discarded as a partial, so a range beginning exactly on a
-      // record boundary would throw a whole record away and that record would be
-      // unreachable. Backing up one byte puts the preceding newline first, which
-      // makes the discarded fragment provably empty. Applied here rather than at
-      // the estimate because the retry branches below reassign `start` too.
-      const from = start === 0 ? 0 : start - 1;
-      const end = Math.min(index.size, from + span) - 1;
-      const text = await fetcher.range(from, end);
-      // A dispose (or a fresh load) happened while this range was in flight.
-      // `index`/`fetcher` may already be null, so bail before touching them.
-      if (startEpoch !== epoch || !index) return null;
-      const records = parseWindow(text, {
-        startsAtBof: from === 0,
-        endsAtEof: end === index.size - 1,
-      });
-      const windowFirst = records[0];
-      const windowLast = records[records.length - 1];
-      if (!windowFirst || !windowLast) return null;
+    const estimate = Math.max(
+      0,
+      estimateOffset(index, target) - Math.round(span / 4)
+    );
 
-      // Feed the true offset back so the next estimate in this region is better.
-      const firstNewline = from === 0 ? -1 : text.indexOf('\n');
-      insertEntry(index, {
-        offset: from === 0 ? 0 : from + firstNewline + 1,
-        frameCount: windowFirst.frameCount,
-        t: windowFirst.t,
-      });
+    // Byte bounds proven to bracket the target: its record starts at or after
+    // `lo` and before `hi`. They begin as the whole file and narrow with every
+    // read that turns out not to hold it.
+    let lo = 0;
+    let hi = index.size;
 
-      const win: LoadedWindow = { startOffset: from, records };
-      touch(win);
+    for (let attempt = 0; attempt < MAX_SEEK_READS; attempt++) {
+      // Once the bounds are closer together than a window, a window read at
+      // `lo` must contain the target, so that is the read to make. Until then
+      // the bounds are halved by reading the byte halfway between them, and
+      // that read only has to yield the TIME there - one whole record - so it
+      // is a small one rather than a window.
+      //
+      // What this replaces stepped one window along on a miss and gave up
+      // after three, which could only ever correct an error of about a window.
+      // Time per byte is nowhere near uniform across a real export - on a
+      // 918 MB one, equal 102 MB spans covered anywhere between 576 and 1598
+      // seconds, because stretches holding fewer detections pack far more
+      // records into their share of the bytes. An estimate interpolated across
+      // such a stretch is out by megabytes, and a scrub to one of those spots
+      // simply returned null. Nothing was drawn, so the pitch sat on its
+      // previous frame while the timeline's playhead moved on without it.
+      const narrowed = hi - lo < span;
+      const at =
+        attempt === 0 ? estimate : narrowed ? lo : Math.floor((lo + hi) / 2);
+      // The closing read is given a record's worth of slack beyond the window
+      // it needs, so a record straddling the far end of the bounds is read
+      // whole rather than discarded as a trailing partial.
+      const bytes =
+        attempt === 0 ? span : narrowed ? span + probeBytes : probeBytes;
 
-      const hit = findIn(win, target);
+      const read = await readWindow(at, bytes, startEpoch);
+      if (!read) return null;
+
+      const hit = findIn(read.win, target);
       if (hit) return hit;
 
-      if (target < windowFirst.t) {
-        if (start === 0) return windowFirst;
-        start = Math.max(0, start - span);
+      if (target < read.first.t) {
+        // Nothing earlier exists to look at, so the file's first record is the
+        // closest thing to the target there is.
+        if (read.from === 0) return read.first;
+        // Every record starting at or after `at` begins at or after this
+        // read's first whole record, and that record is already past the
+        // target - so the one being looked for starts before `at`.
+        hi = at;
       } else {
-        const next = start + span;
-        if (next >= index.size) return windowLast;
-        start = next;
+        if (read.end >= index.size - 1) return read.last;
+        // A closing read that cannot advance its own lower bound would ask for
+        // the same bytes again on every remaining attempt. It takes a record
+        // longer than the slack above for that to happen, which is not a shape
+        // this format produces - but repeating a window-sized read until the
+        // budget runs out is an expensive way to fail, so stop instead.
+        if (narrowed && read.firstOffset <= lo) return null;
+        lo = read.firstOffset;
       }
     }
     return null;

@@ -114,14 +114,25 @@ export async function buildIndex(
   const headFirst = headRecords[0];
   if (!headFirst) throw new Error('Pipeline data file holds no records');
 
-  // Mean record size from the head sample. Every window size derives from this
-  // rather than from a fixed byte count, because per-record size scales with
-  // how many players a frame holds.
+  // Mean record size, sampled at the head AND at every probe below, then taken
+  // at its largest. Window sizes derive from this rather than from a fixed byte
+  // count, because per-record size scales with how many players a frame holds.
+  //
+  // Measured in several places rather than one because the head is the least
+  // representative part of the file. A match starts with hardly anything
+  // detected and with the rolling `frame_uuid` window still filling, so its
+  // records are a fraction of the size the rest of the file settles at - on a
+  // real 918 MB export, 1.1 kB at the head against 7.5 kB everywhere after the
+  // first few percent. Sizing every window off the head alone made each one
+  // cover about a sixth of the seconds it was supposed to, so playback ran off
+  // the end of its window every few seconds and had to fetch the next one.
+  //
+  // The largest sample wins rather than the mean of them, because this number
+  // only ever decides how many bytes to read for a window, and the two
+  // directions are not symmetric: too large reads more than it needed, too
+  // small produces a window shorter than the seconds it is supposed to hold.
   const headBytes = size <= PROBE_BYTES ? size : head.lastIndexOf('\n') + 1;
-  const meanRecordBytes = Math.max(
-    1,
-    Math.round(headBytes / headRecords.length)
-  );
+  const sampledMeans = [headBytes / headRecords.length];
 
   const tailStart = Math.max(0, size - PROBE_BYTES);
   const tail =
@@ -150,6 +161,17 @@ export async function buildIndex(
     const probeFirst = records[0];
     if (!probeFirst) continue;
     insertEntryInto(entries, entryFrom(probeFirst, at + newlineAt + 1));
+
+    // The bytes this probe's complete records actually occupy: from the first
+    // newline (the leading fragment parseWindow discarded) to the last one,
+    // or to the end of the text when the probe reached EOF and the final
+    // record has no trailing newline of its own.
+    const bodyStart = newlineAt + 1;
+    const bodyEnd =
+      end === size - 1 ? text.length : text.lastIndexOf('\n') + 1;
+    if (bodyEnd > bodyStart) {
+      sampledMeans.push((bodyEnd - bodyStart) / records.length);
+    }
   }
 
   return {
@@ -157,7 +179,7 @@ export async function buildIndex(
     acceptsRanges: true,
     first: entries[0],
     last: entryFrom(lastRecord, size),
-    meanRecordBytes,
+    meanRecordBytes: Math.max(1, Math.round(Math.max(...sampledMeans))),
     entries,
   };
 }

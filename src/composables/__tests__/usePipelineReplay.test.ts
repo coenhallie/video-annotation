@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { usePipelineReplay } from '@/composables/usePipelineReplay';
 import type { RangeFetcher } from '@/lib/pipelineData/jsonlIndex';
+import {
+  bandedFile,
+  recordAtTime,
+  fetcherFor,
+} from '@/lib/pipelineData/__tests__/taperedFixture';
 
 const RECORD_BYTES = 400;
 
@@ -505,5 +510,74 @@ describe('usePipelineReplay', () => {
 
     expect(madeFetchers.length).toBeGreaterThan(0);
     expect(madeFetchers.every((name) => name === 'fresh')).toBe(true);
+  });
+});
+
+describe('usePipelineReplay seeking a file with uneven time per byte', () => {
+  /**
+   * The bug this covers: the timeline's playhead moved but the pitch did not.
+   *
+   * A seek estimates a byte offset by interpolating between the handful of
+   * (offset, time) entries the index probes built. That interpolation is only
+   * as good as the assumption that time runs evenly through the file's bytes,
+   * and on a real export it does not - stretches with far fewer detections
+   * pack many more records, and therefore many more seconds, into their share
+   * of the bytes. The estimate then lands megabytes away from the target.
+   *
+   * The loop used to answer that by stepping exactly one window along, three
+   * times, and then returning null. A null record shows nothing, so the pitch
+   * kept displaying whatever frame it already had while `currentTime` - and
+   * with it the timeline's playhead - moved on without it.
+   */
+  const BANDS = {
+    bands: 18,
+    bandBytes: 1_500_000,
+    narrowBytes: 200,
+    wideBytes: 8000,
+  };
+  // Built once: it is a 27 MB string, which is the point. The estimate is
+  // exact on a small or uniform file, so neither can show this failing.
+  const text = bandedFile(BANDS);
+
+  it('draws the record the seek asked for, at every position in the file', async () => {
+    const r = usePipelineReplay({ openFetcher: async () => fetcherFor(text) });
+    await r.load();
+    expect(r.state.value).toBe('ready');
+    const count = r.totalFrames.value;
+
+    for (const fraction of [0.05, 0.25, 0.45, 0.55, 0.75, 0.95]) {
+      const time = r.duration.value * fraction;
+      await r.seek(time);
+      expect(r.currentFrame.value).toBe(457 + recordAtTime(time, { count }));
+    }
+  });
+
+  it('lands on the same record whichever position it arrives from', async () => {
+    const r = usePipelineReplay({ openFetcher: async () => fetcherFor(text) });
+    await r.load();
+    const count = r.totalFrames.value;
+    const half = r.duration.value * 0.5;
+
+    await r.seek(r.duration.value * 0.95);
+    await r.seek(half);
+    const fromAhead = r.currentFrame.value;
+
+    await r.seek(0);
+    await r.seek(half);
+    expect(r.currentFrame.value).toBe(fromAhead);
+    expect(fromAhead).toBe(457 + recordAtTime(half, { count }));
+  });
+
+  it('converges on a far seek instead of crawling a window at a time', async () => {
+    const { fetcher, calls } = counting(text);
+    const r = usePipelineReplay({ openFetcher: async () => fetcher });
+    await r.load();
+
+    calls.length = 0;
+    await r.seek(r.duration.value * 0.55);
+    // Re-estimating from what the previous read observed narrows the target
+    // fast. The composable's read bound is a backstop against a pathological
+    // file, not a budget a normal seek is expected to spend.
+    expect(calls.length).toBeLessThanOrEqual(6);
   });
 });

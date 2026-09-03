@@ -7,6 +7,7 @@ import {
   type RangeFetcher,
   type JsonlIndex,
 } from '@/lib/pipelineData/jsonlIndex';
+import { taperedFile } from './taperedFixture';
 
 /** A file of `count` records, each padded to a fixed width so offsets are exact. */
 function fakeFile(count: number, startFrame = 457, t0 = 1208.4, dt = 0.04) {
@@ -152,5 +153,27 @@ describe('insertEntry', () => {
     const before = index.entries.length;
     insertEntry(index, { ...index.first });
     expect(index.entries.length).toBe(before);
+  });
+});
+
+describe('buildIndex on a file whose records grow', () => {
+  it('measures the mean from the whole file, not just the small-record head', async () => {
+    const text = taperedFile({ count: 4000, fromBytes: 400, toBytes: 8000 });
+    const index = await buildIndex(fetcherFor(text));
+
+    // The head sample covers only the narrowest records in the file, so a
+    // head-only measurement lands near 400. Every window size derives from
+    // this number, and one sized off 400 holds a fraction of the seconds it
+    // is supposed to - which is what left a scrub to the middle of a real
+    // export with nothing to draw.
+    expect(index.meanRecordBytes).toBeGreaterThan(3000);
+  });
+
+  it('still measures a fixed-width file at its true record size', async () => {
+    const index = await buildIndex(
+      fetcherFor(taperedFile({ count: 2000, fromBytes: 900, toBytes: 900 }))
+    );
+    expect(index.meanRecordBytes).toBeGreaterThan(850);
+    expect(index.meanRecordBytes).toBeLessThan(950);
   });
 });
