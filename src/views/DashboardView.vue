@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import { useAuth } from '@/composables/useAuth';
 import { useNotifications } from '@/composables/useNotifications';
 import { ProjectService } from '@/services/projectService';
+import { VideoService } from '@/services/videoService';
 import { LabelService } from '@/services/labelService';
 import type { Project } from '@/types/project';
 import type { Label } from '@/types/labels';
@@ -27,6 +28,7 @@ import FolderTree from '@/components/FolderTree.vue';
 import NewFolderDialog from '@/components/NewFolderDialog.vue';
 import DeleteConfirmationDialog from '@/components/DeleteConfirmationDialog.vue';
 import VideoDetailsPanel from '@/components/VideoDetailsPanel.vue';
+import RenameVideoDialog from '@/components/RenameVideoDialog.vue';
 import ShareModal from '@/components/ShareModal.vue';
 import ChangelogModal from '@/components/ChangelogModal.vue';
 import {
@@ -40,6 +42,7 @@ import { getMergedRangesForVideos } from '@/services/watchProgressService';
 import { percentFromRanges } from '@/utils/watchedRanges';
 import { getRecentOpens } from '@/services/recentOpensService';
 import { sortByRecentOpens } from '@/utils/projectOrdering';
+import { applyVideoRename } from '@/utils/projectRename';
 
 const router = useRouter();
 const { user, signOut } = useAuth();
@@ -51,6 +54,8 @@ const showComparisonModal = ref(false);
 const showNewFolder = ref(false);
 const newFolderParent = ref<Folder | null>(null);
 const pendingDeleteFolder = ref<FolderTreeNode | null>(null);
+const renameTarget = ref<Project | null>(null);
+const renameBusy = ref(false);
 
 function onComparisonCreated(comparison: ComparisonCreatedEvent) {
   showComparisonModal.value = false;
@@ -156,6 +161,35 @@ function onProjectQaStatusUpdated(project: Project, updated: Video) {
       `Marked ${qaStatusLabel(updated.qaStatus).toLowerCase()}`,
       'Hidden by the current filter.'
     );
+  }
+}
+
+function openRename(project: Project) {
+  if (project.projectType !== 'single') return;
+  renameTarget.value = project;
+}
+
+async function onRenameVideo(title: string) {
+  const project = renameTarget.value;
+  if (!project || project.projectType !== 'single') return;
+
+  renameBusy.value = true;
+  try {
+    // The function trims, so the stored title and the typed one can differ.
+    // Taking the response rather than the input is what keeps the list honest.
+    const updated = await VideoService.renameVideo(project.video.id, title);
+    applyVideoRename(project, updated);
+    renameTarget.value = null;
+  } catch (err) {
+    // The old name stays on screen. A rename that silently did nothing is the
+    // failure rename_video's IF NOT FOUND guard exists to make visible, so it
+    // must not be swallowed here either.
+    notifyError(
+      'Could not rename video',
+      err instanceof Error ? err.message : 'Please try again.'
+    );
+  } finally {
+    renameBusy.value = false;
   }
 }
 
@@ -762,6 +796,7 @@ watch(user, (u) => {
               @inspect="inspectProject"
               @dragstart="onCardDragStart"
               @qa-status-updated="onProjectQaStatusUpdated"
+              @rename="openRename"
             />
           </div>
 
@@ -808,6 +843,7 @@ watch(user, (u) => {
             @share="(p) => (shareTarget = p)"
             @annotation-click="openAnnotation"
             @qa-status-updated="onProjectQaStatusUpdated"
+            @rename="openRename"
           />
         </aside>
       </div>
@@ -819,6 +855,13 @@ watch(user, (u) => {
       @comparison-created="onComparisonCreated"
     />
 
+    <RenameVideoDialog
+      v-if="renameTarget"
+      :current-title="renameTarget.title"
+      :busy="renameBusy"
+      @rename="onRenameVideo"
+      @close="renameTarget = null"
+    />
     <NewFolderDialog
       v-if="showNewFolder"
       :parent-folder="newFolderParent"
@@ -856,6 +899,7 @@ watch(user, (u) => {
               @share="(p) => (shareTarget = p)"
               @annotation-click="openAnnotation"
               @qa-status-updated="onProjectQaStatusUpdated"
+              @rename="openRename"
             />
           </div>
         </div>

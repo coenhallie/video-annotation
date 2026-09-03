@@ -46,9 +46,40 @@
          same token style the annotation rows use - so the row has a single
          reading order instead of pills competing along both edges. -->
     <div class="min-w-0 flex-1">
-      <h3 class="truncate text-[13px] font-medium tracking-tight text-gray-900 dark:text-white">
-        {{ project.title }}
-      </h3>
+      <div class="flex min-w-0 items-center gap-1">
+        <h3 class="truncate text-[13px] font-medium tracking-tight text-gray-900 dark:text-white">
+          {{ project.title }}
+        </h3>
+        <!-- Beside the title rather than at the end of the row: the QA pill is
+             deliberately last and fixed width so its edges line up across
+             rows, and a button after it would break that column.
+
+             Hover-revealed, because a rename is deliberate but infrequent and
+             a permanently visible button competes with the title it is
+             attached to. shrink-0 so it never squeezes the truncating
+             heading. -->
+        <button
+          v-if="project.projectType === 'single'"
+          type="button"
+          class="shrink-0 rounded p-1 text-gray-400 opacity-0 transition-opacity hover:text-gray-900 focus:opacity-100 group-hover:opacity-100 dark:text-gray-500 dark:hover:text-gray-200"
+          title="Rename"
+          @click.stop="emit('rename', project)"
+        >
+          <svg
+            class="h-3.5 w-3.5"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+            />
+          </svg>
+        </button>
+      </div>
       <div
         class="mt-1 flex flex-wrap items-center gap-2 font-mono text-[10px] tracking-wider text-gray-500 dark:text-gray-400"
       >
@@ -144,6 +175,7 @@ const emit = defineEmits<{
   dragstart: [project: Project, event: DragEvent];
   dragend: [event: DragEvent];
   'qa-status-updated': [project: Project, updated: Video];
+  rename: [project: Project];
 }>();
 
 /**

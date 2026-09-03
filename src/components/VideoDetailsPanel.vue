@@ -8,6 +8,29 @@
         <h2 class="truncate text-[13px] font-semibold tracking-tight text-gray-900 dark:text-white">
           {{ project.title }}
         </h2>
+        <!-- Single projects only. A dual project's title lives on
+             comparison_videos and rename_video cannot touch it. -->
+        <button
+          v-if="project.projectType === 'single'"
+          type="button"
+          class="ml-auto shrink-0 rounded p-1 text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
+          title="Rename"
+          @click="emit('rename', project)"
+        >
+          <svg
+            class="h-3.5 w-3.5"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+            />
+          </svg>
+        </button>
         <button
           type="button"
           class="shrink-0 rounded p-1 text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
@@ -259,6 +282,7 @@ const emit = defineEmits<{
   share: [project: Project];
   'annotation-click': [project: Project, annotation: PanelAnnotation];
   'qa-status-updated': [project: Project, updated: Video];
+  rename: [project: Project];
 }>();
 
 // fetchOwners guarantees an entry for every requested id, filling unresolved
