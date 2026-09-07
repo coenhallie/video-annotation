@@ -74,6 +74,10 @@ const emit = defineEmits([
   'pause-video-b',
   'frame-step-video-a',
   'frame-step-video-b',
+  // A plain click on either bar, forwarded from VideoTimeline with the side
+  // it landed on added, so the editor can open the annotation quick pick the
+  // way it does for a single video.
+  'open-quick-pick',
 ]);
 
 // Timeline selection state
@@ -93,6 +97,19 @@ const handleSeekVideoA = (time) => {
 const handleSeekVideoB = (time) => {
   selectTimeline('B');
   emit('seek-video-b', time);
+};
+
+// Each bar's VideoTimeline decides what counts as a click rather than a
+// scrub, and hands over the time under the pointer. The click also selects
+// that bar, the same as a seek on it does, so the keyboard follows the mouse.
+const handleOpenQuickPickA = (payload) => {
+  selectTimeline('A');
+  emit('open-quick-pick', { ...payload, video: 'A' });
+};
+
+const handleOpenQuickPickB = (payload) => {
+  selectTimeline('B');
+  emit('open-quick-pick', { ...payload, video: 'B' });
 };
 
 // Handle annotation clicks
@@ -270,6 +287,7 @@ const timelineBClasses = computed(() => ({
           @annotation-click="handleAnnotationClick"
           @play="handlePlayVideoA"
           @pause="handlePauseVideoA"
+          @open-quick-pick="handleOpenQuickPickA"
         />
       </div>
     </div>
@@ -337,6 +355,7 @@ const timelineBClasses = computed(() => ({
           @annotation-click="handleAnnotationClick"
           @play="handlePlayVideoB"
           @pause="handlePauseVideoB"
+          @open-quick-pick="handleOpenQuickPickB"
         />
       </div>
     </div>

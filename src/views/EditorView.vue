@@ -482,15 +482,46 @@ const openQuickPick = (event: MouseEvent) => {
  * is one gesture. VideoTimeline suppresses this while dragging, so a scrub never
  * pops the menu, and it hands over the time under the pointer rather than the
  * player's current frame, which the asynchronous seek has not reached yet.
+ *
+ * In a comparison each bar is its own VideoTimeline and DualTimeline tags the
+ * click with the side it landed on. The clicked video takes the pointer time,
+ * for the same reason as above; the other video did not move, so it keeps
+ * its current frame - which is what the right-click path snapshots for both.
  */
 const openQuickPickAtTime = (payload: {
   time: number;
   clientX: number;
   clientY: number;
+  video?: 'A' | 'B';
 }) => {
   if (quickPickReadOnly()) return;
   if (!user.value) return;
   if (drawingCoordinator?.isDrawingMode?.value) return;
+
+  if (playerMode.value === 'dual' && payload.video) {
+    const fpsA = dualVideoPlayer?.videoAState?.fps || 30;
+    const fpsB = dualVideoPlayer?.videoBState?.fps || 30;
+    const clickedFps = payload.video === 'A' ? fpsA : fpsB;
+    const clickedFrame = Math.round(payload.time * clickedFps);
+    quickPickSnapshot.value = {
+      frame: clickedFrame,
+      fps: clickedFps,
+      dual: {
+        videoAFrame:
+          payload.video === 'A'
+            ? clickedFrame
+            : dualVideoPlayer?.videoACurrentFrame?.value ?? 0,
+        videoBFrame:
+          payload.video === 'B'
+            ? clickedFrame
+            : dualVideoPlayer?.videoBCurrentFrame?.value ?? 0,
+      },
+    };
+    quickPickX.value = payload.clientX;
+    quickPickY.value = payload.clientY;
+    quickPickOpen.value = true;
+    return;
+  }
 
   // `payload.time` is on the active surface's timebase, so the fps used to turn
   // it into a frame number has to come from the same surface.
@@ -2037,6 +2068,7 @@ watch(
             @pause-video-b="handlePauseVideoB"
             @frame-step-video-a="handleFrameStepVideoA"
             @frame-step-video-b="handleFrameStepVideoB"
+            @open-quick-pick="openQuickPickAtTime"
           />
         </div>
       </section>
