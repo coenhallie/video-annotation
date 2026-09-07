@@ -105,6 +105,25 @@ const closeModal = () => {
 // Add new entries to the TOP of this array
 const changelogEntries = ref([
   {
+    version: 'Beta v3.10',
+    date: 'September 7, 2026',
+    changes: [
+      'Share links now open with both the Video and Pipeline output tabs, each listing its own annotations',
+      'Pipeline output tab: replay the 2D pitch output of an AWS pipeline video with transport controls and timeline scrubbing, and keep its annotations and drawings separate from the video\'s',
+      'Pipeline outputs are visible to the whole team, who can annotate and comment on them, instead of only to whoever opened them first',
+      'Rename a video from the dashboard row or the details panel; renames show up in the video history',
+      'History tab in the editor sidebar: who annotated, commented, renamed or changed status on the video, and when',
+      'QA status per video: set it from the dashboard row, the details panel or the editor rail, and filter the dashboard by it',
+      'Faster annotating: left-click the timeline or right-click the video for a keyboard quick pick, with comment and drawing modes, undo while drawing, and distinct timeline markers for comments and drawings',
+      'Any signed-in user who can see a video can annotate it, and a comment is no longer required on an annotation',
+      'Folders are a shared team workspace: everyone sees every folder and can file videos into them',
+      'Dashboard ordered by the projects you opened most recently, with when you last opened each one in the meta line',
+      'Skeleton loaders while the library and folders load, and the list paints in its final order and folder from the first frame',
+      'Local video upload has been removed; videos arrive from the pipeline',
+      'Security: pipeline videos are fetched through a proxy that checks the caller can see the video, and every table is now covered by row-level security',
+    ],
+  },
+  {
     version: 'Beta v3.9',
     date: 'July 9, 2026',
     changes: [

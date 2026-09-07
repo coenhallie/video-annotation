@@ -38,7 +38,7 @@ defineEmits<{
       title="What's new"
       @click="$emit('open-changelog')"
     >
-      BETA v3.9
+      BETA v3.10
     </button>
 
     <div class="ml-auto flex items-center gap-4">
