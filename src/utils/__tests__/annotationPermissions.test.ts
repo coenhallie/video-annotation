@@ -40,4 +40,35 @@ describe('canCreateAnnotations', () => {
   it('treats a missing isPublic flag as not public', () => {
     expect(canCreateAnnotations({ ownerId: someoneElse }, me)).toBe(false);
   });
+
+  // Since 20260903_rename_video.sql every signed-in account can see and
+  // annotate pipeline outputs, public or not. The rule here used to stop at
+  // isPublic || owner, so a teammate opening one saw "View only" while the
+  // database would have taken their annotation.
+  it('lets a signed-in non-owner annotate a private pipeline output', () => {
+    expect(
+      canCreateAnnotations(
+        { ownerId: someoneElse, isPublic: false, videoId: 'aws:1b30b3cc' },
+        me
+      )
+    ).toBe(true);
+  });
+
+  it('still refuses anonymous visitors on a pipeline output', () => {
+    expect(
+      canCreateAnnotations(
+        { ownerId: someoneElse, isPublic: false, videoId: 'aws:1b30b3cc' },
+        null
+      )
+    ).toBe(false);
+  });
+
+  it('does not mistake an ordinary upload id for a pipeline output', () => {
+    expect(
+      canCreateAnnotations(
+        { ownerId: someoneElse, isPublic: false, videoId: 'upload_1770221101010' },
+        me
+      )
+    ).toBe(false);
+  });
 });
