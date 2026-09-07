@@ -217,8 +217,14 @@ export function useVideoAnnotations(
       );
       try {
         const { ShareService } = await import('../services/shareService');
+        // Scoped to the active surface like the signed-in path below, so the
+        // Video and Pipeline output tabs of a share view each list their own
+        // annotations rather than both listing everything.
         const shareData =
-          await ShareService.getSharedVideoWithCommentPermissions(shareId);
+          await ShareService.getSharedVideoWithCommentPermissions(
+            shareId,
+            toValue(surface)
+          );
 
         logger.debug('[useVideoAnnotations] shared video data loaded', {
           count: shareData.annotations?.length ?? 0,

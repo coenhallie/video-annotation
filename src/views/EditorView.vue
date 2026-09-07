@@ -1587,14 +1587,10 @@ const {
   comparisonWorkflow,
 });
 
-// See isPipelineSurfaceVisible for why dual mode, share views and a stale
-// videoStore isAwsVideo ref are each excluded.
+// See isPipelineSurfaceVisible for why dual mode is excluded and why share
+// views and the videoStore isAwsVideo ref are deliberately not consulted.
 const hasPipelineSurface = computed(() =>
-  isPipelineSurfaceVisible(
-    currentVideoObject.value,
-    playerMode.value,
-    isSharedVideo.value
-  )
+  isPipelineSurfaceVisible(currentVideoObject.value, playerMode.value)
 );
 
 // A project without the pipeline surface must never sit on the pipeline tab:

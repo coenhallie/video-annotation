@@ -23,6 +23,14 @@ vi.mock('@/services/annotationService', () => ({
   },
 }));
 
+const getSharedVideoWithCommentPermissions = vi.fn();
+vi.mock('@/services/shareService', () => ({
+  ShareService: {
+    getSharedVideoWithCommentPermissions: (...a: unknown[]) =>
+      getSharedVideoWithCommentPermissions(...a),
+  },
+}));
+
 vi.mock('@/services/annotationLabelService', () => ({
   AnnotationLabelService: {
     addLabelsToAnnotation: vi.fn(),
@@ -88,6 +96,9 @@ beforeEach(() => {
   getVideoAnnotations.mockResolvedValue([]);
   createAnnotation.mockReset();
   createAnnotation.mockResolvedValue(row('created'));
+  getSharedVideoWithCommentPermissions.mockReset();
+  getSharedVideoWithCommentPermissions.mockResolvedValue({ annotations: [] });
+  window.history.replaceState({}, '', '/');
 });
 
 describe('useVideoAnnotations surface stamping on create', () => {
@@ -204,5 +215,38 @@ describe('useVideoAnnotations surface switching', () => {
 
     expect(createAnnotation).toHaveBeenCalledTimes(1);
     expect(api.annotations.value).toEqual([]);
+  });
+});
+
+describe('useVideoAnnotations on a share view', () => {
+  // The share branch takes its list from ShareService rather than
+  // AnnotationService. Before it learned about surfaces it fetched every
+  // annotation, so the Video and Pipeline output tabs of a share view would
+  // both have listed everything - which is why the tab bar was hidden there.
+  it('scopes the share-view load to the active surface', async () => {
+    window.history.replaceState({}, '', '/video/v1?share=v1');
+    getSharedVideoWithCommentPermissions.mockResolvedValue({
+      annotations: [row('v-1')],
+    });
+    const { api, activeSurface } = await setup('video');
+
+    expect(getSharedVideoWithCommentPermissions).toHaveBeenLastCalledWith(
+      'v1',
+      'video'
+    );
+    expect(ids(api.annotations.value)).toEqual(['v-1']);
+    expect(getVideoAnnotations).not.toHaveBeenCalled();
+
+    getSharedVideoWithCommentPermissions.mockResolvedValue({
+      annotations: [row('p-1')],
+    });
+    activeSurface.value = 'pipeline';
+    await flush();
+
+    expect(getSharedVideoWithCommentPermissions).toHaveBeenLastCalledWith(
+      'v1',
+      'pipeline'
+    );
+    expect(ids(api.annotations.value)).toEqual(['p-1']);
   });
 });

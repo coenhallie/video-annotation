@@ -2,6 +2,7 @@ import { supabase } from '../composables/useSupabase';
 import { CommentService } from './commentService';
 import { AnnotationService } from './annotationService';
 import type {
+  AnnotationSurface,
   AnonymousSession,
   SharedComparisonVideoWithCommentPermissions,
   SharedVideoWithCommentPermissions,
@@ -72,9 +73,16 @@ export class ShareService {
     }
   }
 
-  // Get shared video data with comment permissions (public videos only)
+  // Get shared video data with comment permissions (public videos only).
+  //
+  // `surface` scopes the returned annotations to one editor surface, the way
+  // AnnotationService.getVideoAnnotations does. Omitted means every surface:
+  // the share-view initialisers only need the video row and permissions, and
+  // the annotation list they get back is not what the editor displays - that
+  // comes from useVideoAnnotations, which passes the active surface.
   static async getSharedVideoWithCommentPermissions(
-    videoId: string
+    videoId: string,
+    surface?: AnnotationSurface
   ): Promise<SharedVideoWithCommentPermissions> {
     try {
       // Get the video (must be public)
@@ -106,7 +114,8 @@ export class ShareService {
         mappedAnnotations = await AnnotationService.getVideoAnnotations(
           videoId,
           videoId, // Use videoId as projectId for shared videos
-          true // includeCommentCounts
+          true, // includeCommentCounts
+          surface
         );
       } catch (annotationsError) {
         console.error(
@@ -114,11 +123,14 @@ export class ShareService {
           annotationsError
         );
         // Fallback to basic annotation fetch without comment counts
-        const { data: annotations } = await supabase
+        let fallback = supabase
           .from('annotations')
           .select('*')
-          .eq('videoId', videoId)
-          .order('timestamp', { ascending: true });
+          .eq('videoId', videoId);
+        if (surface) fallback = fallback.eq('surface', surface);
+        const { data: annotations } = await fallback.order('timestamp', {
+          ascending: true,
+        });
 
         mappedAnnotations = annotations || [];
       }
@@ -133,6 +145,7 @@ export class ShareService {
         url: video.url,
         filePath: video.filePath,
         videoType: video.videoType,
+        videoId: video.videoId,
         ownerId: video.ownerId,
         isPublic: video.isPublic,
         canComment: canComment,

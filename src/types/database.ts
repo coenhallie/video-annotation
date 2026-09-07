@@ -397,6 +397,12 @@ export interface SharedVideoWithCommentPermissions {
   url?: string;
   filePath?: string;
   videoType: string;
+  /**
+   * `videos.videoId`. Carried so a share view can tell an AWS pipeline video
+   * (`aws:<outputVideoId>`) from a plain upload: the pipeline output tab and
+   * the presigned-URL refresh both key off that prefix.
+   */
+  videoId?: string;
   /** `videos.ownerId` - needed to tell an owner from a share visitor. */
   ownerId?: string;
   isPublic: boolean;

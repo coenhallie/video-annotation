@@ -27,6 +27,34 @@ export interface SharedContentState {
   handleUserLogin: () => void;
 }
 
+/**
+ * The video object the editor works from for a share view.
+ *
+ * `ownerId`, `isPublic` and `allowAnnotations` are carried so the editor can
+ * tell whether this visitor may annotate; without them every share link looks
+ * view-only. `videoId` and `videoType` are carried so an AWS pipeline video
+ * (`videoId` of `aws:<outputVideoId>`) is recognised as one: that is what
+ * makes the Pipeline output tab load the project's pipeline data and lets the
+ * player renew an expired presigned URL in place. Optional fields are spread
+ * in only when present, because under exactOptionalPropertyTypes an absent key
+ * and a key holding undefined are different types.
+ */
+export function sharedVideoForEditor(
+  shareData: SharedVideoData,
+): Partial<Video> & { id: string; url: string } {
+  return {
+    id: shareData.id,
+    url: shareData.url || '',
+    ...(shareData.videoId ? { videoId: shareData.videoId } : {}),
+    ...(shareData.videoType
+      ? { videoType: shareData.videoType as Video['videoType'] }
+      : {}),
+    ...(shareData.ownerId ? { ownerId: shareData.ownerId } : {}),
+    isPublic: shareData.isPublic,
+    allowAnnotations: shareData.allowAnnotations,
+  };
+}
+
 export function useSharedContent(deps: {
   user: Ref<{ id: string; email?: string } | null>;
   currentVideoId: Ref<string | null>;
@@ -109,18 +137,7 @@ export function useSharedContent(deps: {
     sharedVideoData.value = shareData;
     currentVideoId.value = shareData.id;
 
-    loadVideo(
-      {
-        id: shareData.id,
-        url: shareData.url || '',
-        // Carried through so the editor can tell whether this visitor may
-        // annotate; without them every share link looks view-only.
-        ...(shareData.ownerId ? { ownerId: shareData.ownerId } : {}),
-        isPublic: shareData.isPublic,
-        allowAnnotations: shareData.allowAnnotations,
-      },
-      'shared',
-    );
+    loadVideo(sharedVideoForEditor(shareData), 'shared');
   };
 
   const loadSharedComparisonReadOnly = async (
@@ -166,16 +183,7 @@ export function useSharedContent(deps: {
       sharedVideoData.value = freshShareData;
       currentVideoId.value = freshShareData.id;
 
-      loadVideo(
-        {
-          id: freshShareData.id,
-          url: freshShareData.url || '',
-          ...(freshShareData.ownerId ? { ownerId: freshShareData.ownerId } : {}),
-          isPublic: freshShareData.isPublic,
-          allowAnnotations: freshShareData.allowAnnotations,
-        },
-        'shared',
-      );
+      loadVideo(sharedVideoForEditor(freshShareData), 'shared');
 
       // Start the video session with proper permissions
       if (currentVideoId.value) {
