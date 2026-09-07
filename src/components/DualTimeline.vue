@@ -83,6 +83,47 @@ const emit = defineEmits([
 // Timeline selection state
 const selectedTimeline = ref('A'); // 'A' or 'B'
 
+/**
+ * What each bar shows, positioned on that video's own clock.
+ *
+ * An annotation made in a comparison is stored with videoContext
+ * 'comparison' and a frame per video (videoAFrame / videoBFrame), and the
+ * two videos' own annotations arrive tagged 'video_a' / 'video_b' by
+ * annotationService. A comparison annotation belongs on both bars, each at
+ * its own video's frame - which is also where clicking its marker seeks each
+ * video to - while a per-video one belongs on its bar alone. Its stored
+ * `timestamp` is only right for the video it was made on, so the marker's
+ * time is derived from the per-video frame whenever one is present.
+ *
+ * The bare 'A' / 'B' values and an absent context are kept for anything
+ * older, and land on bar A as they always did.
+ */
+const isForA = (ann) =>
+  ann.videoContext === 'comparison' ||
+  ann.videoContext === 'video_a' ||
+  ann.videoContext === 'A' ||
+  !ann.videoContext;
+
+const isForB = (ann) =>
+  ann.videoContext === 'video_b' ||
+  ann.videoContext === 'B' ||
+  (ann.videoContext === 'comparison' && typeof ann.videoBFrame === 'number');
+
+const onOwnClock = (ann, frame, fps) =>
+  typeof frame === 'number' && fps > 0 ? { ...ann, timestamp: frame / fps } : ann;
+
+const annotationsForA = computed(() =>
+  props.annotations
+    .filter(isForA)
+    .map((ann) => onOwnClock(ann, ann.videoAFrame, props.videoAFps))
+);
+
+const annotationsForB = computed(() =>
+  props.annotations
+    .filter(isForB)
+    .map((ann) => onOwnClock(ann, ann.videoBFrame, props.videoBFps))
+);
+
 // Handle timeline selection
 const selectTimeline = (timeline) => {
   selectedTimeline.value = timeline;
@@ -275,11 +316,7 @@ const timelineBClasses = computed(() => ({
           :current-frame="videoACurrentFrame"
           :total-frames="videoATotalFrames"
           :fps="videoAFps"
-          :annotations="
-            annotations.filter(
-              (ann) => ann.videoContext === 'A' || !ann.videoContext
-            )
-          "
+          :annotations="annotationsForA"
           :selected-annotation="selectedAnnotation"
           :is-playing="videoAPlaying"
           :player-mode="'single'"
@@ -347,7 +384,7 @@ const timelineBClasses = computed(() => ({
           :current-frame="videoBCurrentFrame"
           :total-frames="videoBTotalFrames"
           :fps="videoBFps"
-          :annotations="annotations.filter((ann) => ann.videoContext === 'B')"
+          :annotations="annotationsForB"
           :selected-annotation="selectedAnnotation"
           :is-playing="videoBPlaying"
           :player-mode="'single'"
