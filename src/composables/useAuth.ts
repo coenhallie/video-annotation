@@ -15,37 +15,50 @@ const isLoading = ref(true);
 // Signs in with a real credential (VITE_DEV_AUTH_EMAIL / VITE_DEV_AUTH_PASSWORD)
 // rather than mocking the user client-side: the database enforces RLS policies keyed
 // on auth.uid(), so writes only work with a genuine Supabase session.
-let devSignInAttempted = false;
-async function applyDevAuthBypass() {
+//
+// Resolves with the session it signed in with, or null when it did nothing, so
+// initAuth can wait for it: the editor loads its route as soon as initAuth
+// settles, and a route that mounts with `user` still null loads nothing.
+//
+// Single-flight, not once-only. initAuth has more than one caller on a page
+// (App.vue and EditorView both call it on mount), and with a plain "already
+// attempted" flag the second caller found nothing to wait for and carried on
+// signed out while the first caller's sign-in was still in flight. Every caller
+// now awaits the same promise.
+let devSignIn: Promise<Session | null> | null = null;
+function applyDevAuthBypass(): Promise<Session | null> {
   if (
     !import.meta.env.DEV ||
     import.meta.env.VITE_DEV_AUTH_BYPASS !== 'true' ||
-    session.value ||
-    devSignInAttempted
+    session.value
   ) {
-    return;
+    return Promise.resolve(null);
   }
-  devSignInAttempted = true;
+  devSignIn ??= devSignInWithPassword();
+  return devSignIn;
+}
 
+async function devSignInWithPassword(): Promise<Session | null> {
   const email = import.meta.env.VITE_DEV_AUTH_EMAIL;
   const password = import.meta.env.VITE_DEV_AUTH_PASSWORD;
   if (!email || !password) {
     console.warn(
       '🔓 [useAuth] DEV AUTH BYPASS enabled but VITE_DEV_AUTH_EMAIL / VITE_DEV_AUTH_PASSWORD are not set in .env'
     );
-    return;
+    return null;
   }
 
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) {
     console.warn('🔓 [useAuth] DEV AUTH BYPASS sign-in failed:', error.message);
-    return;
+    return null;
   }
   console.warn(
     '🔓 [useAuth] DEV AUTH BYPASS active — signed in as',
     email,
     '(never runs in production)'
   );
+  return data.session;
 }
 
 export function useAuth() {
@@ -116,9 +129,17 @@ export function useAuth() {
 
       session.value = currentSession;
       user.value = currentSession?.user ?? null;
-      // Fire-and-forget: signInWithPassword triggers a SIGNED_IN event, which the
-      // onAuthStateChange listener below turns into session/user state.
-      void applyDevAuthBypass();
+
+      // Awaited, and applied here rather than left to the SIGNED_IN event: the
+      // editor's onMounted awaits initAuth and then loads its route, and with
+      // the sign-in still in flight it saw `user` as null, loaded nothing, and
+      // sat on "Loading video..." while the header filled in with the email a
+      // moment later. A no-op outside a dev build with the flag set.
+      const devSession = await applyDevAuthBypass();
+      if (devSession) {
+        session.value = devSession;
+        user.value = devSession.user;
+      }
 
       // Listen for auth changes
       supabase.auth.onAuthStateChange((event, newSession) => {
