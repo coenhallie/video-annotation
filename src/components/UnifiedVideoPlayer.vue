@@ -6,6 +6,7 @@
       v-if="mode === 'single'"
       ref="singlePlayerRef"
       :video-url="videoUrl ?? ''"
+      :refresh-url="refreshUrl ?? undefined"
       :poster="posterAttr"
       :autoplay="autoplayAttr"
       :controls="controlsAttr"
@@ -79,6 +80,7 @@ import SingleVideoPlayer from './video/SingleVideoPlayer.vue';
 import DualVideoPlayer from './video/DualVideoPlayer.vue';
 import DrawingCanvas from './DrawingCanvas.vue';
 import type { DualVideoPlayer as DualVideoPlayerType, DualVideoPlayerState } from '../composables/useDualVideoPlayer';
+import type { RefreshVideoUrl } from '@/services/fragmentedMp4Source';
 import type { SeverityLevel } from '../types/database';
 
 // Types
@@ -111,6 +113,10 @@ interface Props {
   mode?: 'single' | 'dual';
   videoUrl?: string; // Single video props
   videoId?: string;
+  // Passed through to SingleVideoPlayer; see its refreshUrl prop. Dual mode
+  // carries the equivalent on the dualVideoPlayer instance instead. Null, not
+  // undefined, for the same withDefaults reason as the canvas props below.
+  refreshUrl?: RefreshVideoUrl | null;
   autoplay?: boolean;
   controls?: boolean;
   poster?: string;
@@ -137,6 +143,7 @@ const props = withDefaults(defineProps<Props>(), {
   mode: 'single',
   videoUrl: '',
   videoId: 'default-video',
+  refreshUrl: null,
   autoplay: false,
   controls: true,
   poster: '',

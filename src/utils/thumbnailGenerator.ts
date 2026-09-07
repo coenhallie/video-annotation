@@ -1,8 +1,40 @@
 /**
  * Utility for generating video thumbnails
  */
+import { openFragmentedMp4 } from '@/services/fragmentedMp4Source';
 
 export class ThumbnailGenerator {
+  /**
+   * Point a (detached) capture element at a URL and return a disposer.
+   *
+   * A fragmented pipeline mp4 is streamed through MSE, exactly as the player
+   * does it, so generating a thumbnail reads the init segment, the mfra and the
+   * couple of fragments around the seek target - not the whole multi-gigabyte
+   * object, which a plain `video.src` would walk end to end before the first
+   * `seeked` (see fragmentedMp4Source.ts). Any other URL, including ordinary
+   * uploads, falls back to `video.src` after a single 64 KB probe.
+   *
+   * The element keeps its own onloadedmetadata / onseeked / onerror handlers;
+   * this only decides how bytes reach it.
+   */
+  private static async attachCaptureSource(
+    video: HTMLVideoElement,
+    url: string,
+    onFatal: () => void
+  ): Promise<() => void> {
+    try {
+      const source = await openFragmentedMp4(video, url, { onError: onFatal });
+      if (source) {
+        source.attach();
+        return () => source.destroy();
+      }
+    } catch {
+      // fall back to native loading below
+    }
+    video.src = url;
+    video.load();
+    return () => {};
+  }
   /**
    * Check if an image is mostly black
    * @param ctx - Canvas 2D context
@@ -123,10 +155,22 @@ export class ThumbnailGenerator {
         // Define positions to try (as percentages of video duration)
         const positions = [0.3, 0.5, 0.7, 0.1, 0.9];
 
+        // Releases the MSE source when one is in use; a no-op for native loads.
+        let disposeSource = () => {};
+        let settled = false;
+        const finish = (result: string | null) => {
+          if (settled) return;
+          settled = true;
+          disposeSource();
+          video.remove();
+          canvas.remove();
+          resolve(result);
+        };
+
         // Handle video load error
         video.onerror = () => {
           console.error('Failed to load video for thumbnail generation');
-          resolve(null);
+          finish(null);
         };
 
         // Function to try capturing a frame
@@ -161,17 +205,13 @@ export class ThumbnailGenerator {
             // Convert to base64 with reduced quality for smaller size
             const thumbnailUrl = canvas.toDataURL('image/jpeg', 0.7);
 
-            // Clean up
-            video.remove();
-            canvas.remove();
-
             console.log(
               `Thumbnail generated successfully at ${video.currentTime}s`
             );
-            resolve(thumbnailUrl);
+            finish(thumbnailUrl);
           } catch (error) {
             console.error('Error generating thumbnail:', error);
-            resolve(null);
+            finish(null);
           }
         };
 
@@ -209,9 +249,13 @@ export class ThumbnailGenerator {
         // When the seek operation is complete
         video.onseeked = tryCapture;
 
-        // Set the video source
-        video.src = videoUrl;
-        video.load();
+        // Set the video source (MSE for fragmented pipeline mp4, else native).
+        void this.attachCaptureSource(video, videoUrl, () => finish(null)).then(
+          (dispose) => {
+            if (settled) dispose();
+            else disposeSource = dispose;
+          }
+        );
       } catch (error) {
         console.error('Error in thumbnail generation:', error);
         resolve(null);
@@ -255,6 +299,18 @@ export class ThumbnailGenerator {
         // Define positions to try (as percentages of video duration)
         const positions = [0.3, 0.5, 0.7, 0.1, 0.9];
 
+        // Releases the MSE source when one is in use; a no-op for native loads.
+        let disposeSource = () => {};
+        let settled = false;
+        const finish = (result: string | null) => {
+          if (settled) return;
+          settled = true;
+          disposeSource();
+          video.remove();
+          canvas.remove();
+          resolve(result);
+        };
+
         // Function to try capturing a frame
         const tryCapture = () => {
           try {
@@ -287,23 +343,19 @@ export class ThumbnailGenerator {
             // Convert to base64 with compression
             const thumbnailUrl = canvas.toDataURL('image/jpeg', 0.6);
 
-            // Clean up
-            video.remove();
-            canvas.remove();
-
             console.log(
               `Small thumbnail generated successfully at ${video.currentTime}s`
             );
-            resolve(thumbnailUrl);
+            finish(thumbnailUrl);
           } catch (error) {
             console.error('Error generating thumbnail:', error);
-            resolve(null);
+            finish(null);
           }
         };
 
         video.onerror = () => {
           console.error('Failed to load video for thumbnail generation');
-          resolve(null);
+          finish(null);
         };
 
         // Capture the frame the element already holds, once one is decoded.
@@ -342,8 +394,13 @@ export class ThumbnailGenerator {
 
         video.onseeked = tryCapture;
 
-        video.src = videoUrl;
-        video.load();
+        // Set the video source (MSE for fragmented pipeline mp4, else native).
+        void this.attachCaptureSource(video, videoUrl, () => finish(null)).then(
+          (dispose) => {
+            if (settled) dispose();
+            else disposeSource = dispose;
+          }
+        );
       } catch (error) {
         console.error('Error in thumbnail generation:', error);
         resolve(null);

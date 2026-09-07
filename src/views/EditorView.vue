@@ -42,6 +42,7 @@ import {
 } from '@/utils/timelineBinding';
 import { ShareService } from '@/services/shareService';
 import { VideoService } from '@/services/videoService';
+import type { RefreshVideoUrl } from '@/services/fragmentedMp4Source';
 import { ComparisonVideoService } from '@/services/comparisonVideoService';
 import { useAuth } from '@/composables/useAuth';
 import { useVideoAnnotations } from '@/composables/useVideoAnnotations';
@@ -1056,8 +1057,16 @@ watch(
 
     if (dualVideoPlayer.setVideoSources) {
       dualVideoPlayer.setVideoSources(
-        { url: aUrl, id: videoA.id || comp.videoAId || 'video-a' },
-        { url: bUrl, id: videoB.id || comp.videoBId || 'video-b' }
+        {
+          url: aUrl,
+          id: videoA.id || comp.videoAId || 'video-a',
+          refreshUrl: presignedUrlRefresher(videoA),
+        },
+        {
+          url: bUrl,
+          id: videoB.id || comp.videoBId || 'video-b',
+          refreshUrl: presignedUrlRefresher(videoB),
+        }
       );
     } else {
       if (dualVideoPlayer.videoAUrl) dualVideoPlayer.videoAUrl.value = aUrl;
@@ -1162,6 +1171,22 @@ watch(selectedAnnotation, (newAnnotation, oldAnnotation) => {
 });
 
 
+
+// ── Presigned URL refresh for streaming playback ─────────────────────────────
+//
+// An AWS video's presigned URL lasts 900 s and the videos run for hours. The
+// player streams them fragment by fragment, so instead of the old error ->
+// reload cycle it asks for a replacement URL in place and keeps playing. Only
+// AWS sources get a refresher; for the rest the player has nothing to renew.
+const presignedUrlRefresher = (
+  video: Partial<Video> | null | undefined
+): RefreshVideoUrl | undefined => {
+  if (!video || !VideoService.isAwsVideo(video as Record<string, unknown>)) return undefined;
+  return () => VideoService.refreshAwsVideoUrl(video as Video);
+};
+
+const refreshCurrentVideoUrl: RefreshVideoUrl = (staleUrl) =>
+  presignedUrlRefresher(currentVideoObject.value)?.(staleUrl) ?? Promise.resolve(null);
 
 // ── Video event handlers (extracted composable) ──────────────────────────────
 const {
@@ -1862,6 +1887,7 @@ watch(
                 ref="unifiedVideoPlayerRef"
                 :mode="playerMode"
                 :video-url="videoUrl"
+                :refresh-url="refreshCurrentVideoUrl"
                 :video-id="videoId"
                 :drawing-canvas="drawingCanvas"
                 :video-a-url="dualVideoPlayer?.videoAUrl?.value || ''"

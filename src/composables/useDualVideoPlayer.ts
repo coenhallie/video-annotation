@@ -5,6 +5,15 @@
  */
 import { ref, reactive, onMounted, onUnmounted, watch, type Ref } from 'vue';
 import type { useDrawingCanvas } from './useDrawingCanvas';
+import type { RefreshVideoUrl } from '@/services/fragmentedMp4Source';
+
+/** One side of a comparison as handed to setVideoSources. */
+export interface DualVideoSource {
+  url: string;
+  id: string;
+  /** See SingleVideoPlayer's refreshUrl prop. Absent for sources that never expire. */
+  refreshUrl?: RefreshVideoUrl | undefined;
+}
 
 /**
  * What EditorView stashes in the drawingCanvasA / drawingCanvasB slots below:
@@ -65,10 +74,15 @@ export interface DualVideoPlayer {
   drawingCanvasA?: DrawingCanvasApi | null;
   drawingCanvasB?: DrawingCanvasApi | null;
 
+  // Per-video URL refresh, handed to each SingleVideoPlayer so an expired
+  // presigned URL is replaced mid-stream. Null when the source has none.
+  videoARefreshUrl?: Ref<RefreshVideoUrl | null>;
+  videoBRefreshUrl?: Ref<RefreshVideoUrl | null>;
+
   // Method to set video sources
   setVideoSources?: (
-    videoA: { url: string; id: string } | null,
-    videoB: { url: string; id: string } | null
+    videoA: DualVideoSource | null,
+    videoB: DualVideoSource | null
   ) => void;
 
   // Sync control
@@ -96,6 +110,8 @@ export function useDualVideoPlayer(): DualVideoPlayer {
   const videoBUrl = ref<string>('');
   const videoAId = ref<string>('video-a');
   const videoBId = ref<string>('video-b');
+  const videoARefreshUrl = ref<RefreshVideoUrl | null>(null);
+  const videoBRefreshUrl = ref<RefreshVideoUrl | null>(null);
 
   const videoAState = reactive<DualVideoPlayerState>({
     duration: 0,
@@ -416,23 +432,27 @@ export function useDualVideoPlayer(): DualVideoPlayer {
   // Drawing canvas references - these will be set by the parent component
   // Method to set video sources
   function setVideoSources(
-    videoA: { url: string; id: string } | null,
-    videoB: { url: string; id: string } | null
+    videoA: DualVideoSource | null,
+    videoB: DualVideoSource | null
   ) {
     if (videoA) {
       videoAUrl.value = videoA.url;
       videoAId.value = videoA.id;
+      videoARefreshUrl.value = videoA.refreshUrl ?? null;
     } else {
       videoAUrl.value = '';
       videoAId.value = 'video-a';
+      videoARefreshUrl.value = null;
     }
 
     if (videoB) {
       videoBUrl.value = videoB.url;
       videoBId.value = videoB.id;
+      videoBRefreshUrl.value = videoB.refreshUrl ?? null;
     } else {
       videoBUrl.value = '';
       videoBId.value = 'video-b';
+      videoBRefreshUrl.value = null;
     }
   }
 
@@ -496,6 +516,8 @@ export function useDualVideoPlayer(): DualVideoPlayer {
     videoBCurrentFrame,
     videoAState,
     videoBState,
+    videoARefreshUrl,
+    videoBRefreshUrl,
     // expose video URLs and IDs
     videoAUrl,
     videoBUrl,

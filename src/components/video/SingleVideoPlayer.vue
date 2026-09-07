@@ -32,10 +32,10 @@
     </div>
 
     <!-- Video Element -->
+    <!-- No :src binding: the source is attached in script, see attachSource. -->
     <video
       ref="videoRef"
       class="video-element"
-      :src="videoUrl"
       v-bind="poster ? { poster } : {}"
       crossorigin="anonymous"
       preload="auto"
@@ -94,13 +94,24 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue';
+import { ref, watch, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useVideoStore } from '@/stores/video';
 import VideoControls from './VideoControls.vue';
 import { storeToRefs } from 'pinia';
+import {
+  openFragmentedMp4,
+  type FragmentedMp4Source,
+  type RefreshVideoUrl,
+} from '@/services/fragmentedMp4Source';
+import { sameObject } from '@/utils/fragmentedMp4';
 
 const props = defineProps<{
   videoUrl: string;
+  // Replaces an expired presigned URL for the same object while a fragmented
+  // MP4 is streaming, without restarting playback. Without it, the expiry
+  // surfaces as an error like any other source. `| undefined` so parents can
+  // pass through an unset value under exactOptionalPropertyTypes.
+  refreshUrl?: RefreshVideoUrl | undefined;
   poster?: string;
   autoplay?: boolean;
   controls?: boolean;
@@ -363,11 +374,62 @@ const onPause = () => {
 };
 
 
-const onError = (e: Event) => {
+const onError = (e: Event | Error) => {
   isLoading.value = false;
   error.value = "Failed to load video.";
   emit('error', e);
 };
+
+// Source attachment.
+//
+// `src` is not bound in the template. A fragmented MP4 (the pipeline's
+// output) streams through MSE via fragmentedMp4Source, because Chrome's
+// native demuxer reads the whole file before it will paint one; anything
+// else gets the URL assigned directly. Both end in the same <video>, so
+// nothing downstream - store sync, overlays, dual-player binding - can tell.
+let source: FragmentedMp4Source | null = null;
+let attachGeneration = 0;
+
+const attachSource = async (url: string) => {
+  const video = videoRef.value;
+  if (!video) return;
+  const generation = ++attachGeneration;
+  source?.destroy();
+  source = null;
+
+  if (!url) {
+    video.removeAttribute('src');
+    video.load();
+    return;
+  }
+
+  const opened = await openFragmentedMp4(video, url, {
+    refreshUrl: props.refreshUrl,
+    onError,
+  });
+  // The URL moved on while we were probing.
+  if (generation !== attachGeneration) {
+    opened?.destroy();
+    return;
+  }
+  if (opened) {
+    source = opened;
+    video.dataset.source = 'mse';
+    opened.attach();
+  } else {
+    video.dataset.source = 'native';
+    video.src = url;
+  }
+};
+
+onMounted(() => {
+  void attachSource(props.videoUrl);
+});
+
+onBeforeUnmount(() => {
+  source?.destroy();
+  source = null;
+});
 
 // Expose ref for parent components if needed
 defineExpose({
@@ -377,9 +439,16 @@ defineExpose({
 });
 
 // Watchers
-watch(() => props.videoUrl, () => {
+watch(() => props.videoUrl, (url) => {
+  // A refreshed presigned URL names the same object: hand the running
+  // source the new credentials rather than reloading from the top.
+  if (source?.alive && sameObject(source.url, url)) {
+    source.setUrl(url);
+    return;
+  }
   isLoading.value = true;
   error.value = null;
+  void attachSource(url);
 });
 
 // Sync store state changes back to video element if they change externally (e.g. timeline click)

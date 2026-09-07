@@ -7,6 +7,7 @@
         <SingleVideoPlayer
           ref="singlePlayerA"
           :video-url="videoAUrl"
+          :refresh-url="videoARefreshUrl ?? undefined"
           :controls="false"
           :disable-global-store="true"
           :is-playing="videoAIsPlaying"
@@ -34,6 +35,7 @@
         <SingleVideoPlayer
           ref="singlePlayerB"
           :video-url="videoBUrl"
+          :refresh-url="videoBRefreshUrl ?? undefined"
           :controls="false"
           :disable-global-store="true"
           :is-playing="videoBIsPlaying"
@@ -118,6 +120,8 @@ const {
   seek, // Use seek for synchronized seeking
   setPlaybackRate: setDualPlaybackRate,
   videoAState,
+  videoARefreshUrl,
+  videoBRefreshUrl,
   setVideoSources
 } = dualPlayer;
 
