@@ -108,6 +108,7 @@ const changelogEntries = ref([
     version: 'Beta v3.10',
     date: 'September 7, 2026',
     changes: [
+      'Pipeline videos start playing straight away in Chrome instead of loading for minutes: the player now streams them fragment by fragment, and seeking anywhere in a two-hour video takes under a second',
       'Share links now open with both the Video and Pipeline output tabs, each listing its own annotations',
       'Pipeline output tab: replay the 2D pitch output of an AWS pipeline video with transport controls and timeline scrubbing, and keep its annotations and drawings separate from the video\'s',
       'Pipeline outputs are visible to the whole team, who can annotate and comment on them, instead of only to whoever opened them first',
