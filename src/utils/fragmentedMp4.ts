@@ -292,6 +292,26 @@ export function fragmentDuration(
   return sawTrun ? total / timescale : null;
 }
 
+/**
+ * Number of samples in a `moof`: the sum of its `trun` sample counts. Null
+ * when there is no `trun`. With fragmentDuration this gives the frame rate
+ * the container declares - samples over seconds - which is exact where a
+ * measurement of presented frames is only an estimate.
+ */
+export function fragmentSampleCount(moof: ArrayBuffer): number | null {
+  const traf = findBox(moof, ['moof', 'traf']);
+  if (!traf) return null;
+  const view = new DataView(moof);
+  let total = 0;
+  let sawTrun = false;
+  for (const box of readBoxes(moof, payloadStart(traf), traf.start + traf.size)) {
+    if (box.type !== 'trun') continue;
+    sawTrun = true;
+    total += view.getUint32(box.start + 12);
+  }
+  return sawTrun ? total : null;
+}
+
 /** Index of the fragment containing `time`: the last one starting at or before it. */
 export function findFragment(index: readonly FragmentIndexEntry[], time: number): number {
   let lo = 0;

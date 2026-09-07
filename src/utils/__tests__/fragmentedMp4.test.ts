@@ -7,6 +7,7 @@ import {
   parseMfra,
   buildFragmentIndex,
   fragmentDuration,
+  fragmentSampleCount,
   findFragment,
   sameObject,
 } from '../fragmentedMp4';
@@ -221,5 +222,26 @@ describe('sameObject', () => {
     expect(sameObject(a, a.replace('/x/', '/y/'))).toBe(false);
     expect(sameObject(a, a.replace('b.s3', 'c.s3'))).toBe(false);
     expect(sameObject(a, 'not a url')).toBe(false);
+  });
+});
+
+describe('fragmentSampleCount', () => {
+  const moofWith = (trunFlags: number, samples: number[][]) => {
+    const tfhd = full('tfhd', 0, 0x020038, u32(1), u32(512), u32(0), u32(0));
+    const trun = full('trun', 0, trunFlags, u32(samples.length), trunFlags & 1 ? u32(1112) : [], samples.flat());
+    return bytes(box('moof', full('mfhd', 0, 0, u32(1)), box('traf', tfhd, trun)));
+  };
+
+  // The pipeline's real files: 250 samples per 10 s fragment, so with
+  // fragmentDuration this is the exact 25 fps the container declares.
+  it('counts the samples a trun declares', () => {
+    const moof = moofWith(0x000205, zeros(250).map(() => u32(100)));
+    expect(fragmentSampleCount(moof)).toBe(250);
+    expect(fragmentDuration(moof, 0, TIMESCALE)).toBe(10);
+  });
+
+  it('is null without a trun', () => {
+    const tfhd = full('tfhd', 0, 0x020000, u32(1));
+    expect(fragmentSampleCount(bytes(box('moof', box('traf', tfhd))))).toBeNull();
   });
 });

@@ -104,6 +104,7 @@ import {
   type RefreshVideoUrl,
 } from '@/services/fragmentedMp4Source';
 import { sameObject } from '@/utils/fragmentedMp4';
+import { frameRateFromMediaTimes } from '@/utils/frameRate';
 
 const props = defineProps<{
   videoUrl: string;
@@ -245,87 +246,60 @@ const onLoadedMetadata = (e: Event) => {
   }
 };
 
-const detectFPS = (video: HTMLVideoElement) => {
-  // If requestVideoFrameCallback is supported (Chrome, Edge, Firefox).
-  // Declared as an optional method in types/videoFrameCallback.d.ts, so this
-  // narrows without collapsing the fallback branch to never.
-  const requestFrame = video.requestVideoFrameCallback?.bind(video);
-  if (requestFrame) {
-    let frameCount = 0;
-    let startTime = 0;
-    const maxFrames = 30; // Sample 30 frames
-    
-    // Play briefly to capture frames if paused
-    // Play briefly to capture frames if paused
-    // We need the video to be playing or seeking to get callbacks
-    // If it's paused, we can't reliably get callbacks without playing
-    // For now, let's rely on playback. If not playing, we might delay detection until play
-    
-    const frameCallback = (now: number) => {
-      if (!startTime) startTime = now;
-      frameCount++;
-      
-      if (frameCount < maxFrames) {
-        requestFrame(frameCallback);
-      } else {
-        const duration = now - startTime;
-        const avgFps = Math.round((frameCount / duration) * 1000);
-        
-        // Sanity check common frame rates
-        const commonRates = [24, 25, 30, 48, 50, 60, 120];
-        const closest = commonRates.reduce((prev, curr) => 
-          Math.abs(curr - avgFps) < Math.abs(prev - avgFps) ? curr : prev
-        );
-        
-        // If calculated FPS is close to a common rate (within 5%), use common rate
-        const finalFps = Math.abs(avgFps - closest) / closest < 0.05 ? closest : avgFps;
-        
-        // Emit detected FPS
-        // Use default emit since we can't easily access the typed emit inside this callback if defined outside
-        // But we can use the 'emit' variable from setup
-        const totalFrames = Math.floor(video.duration * finalFps);
-        
-        if (!props.disableGlobalStore) {
-             videoStore.setFrameData(
-                 storeRefs!.currentFrame.value, 
-                 totalFrames, 
-                 finalFps
-             );
-        }
-        emit('fps-detected', { fps: finalFps, totalFrames });
-      }
-    };
-    
-    // Initialize with default FPS (30) immediately to allow frame calculation before playback
-    // This fixes the issue where scrubbing before playing results in frame 0
-    const defaultFps = 30;
-    const initialTotalFrames = Math.floor(video.duration * defaultFps);
-    if (!props.disableGlobalStore) {
-      if (videoStore.fps <= 0) {
-        videoStore.setFrameData(
-             storeRefs!.currentFrame.value, 
-             initialTotalFrames, 
-             defaultFps
-        );
-      }
-    }
-    
-    requestFrame(frameCallback);
-  } else {
-    // Fallback for Safari/others: Assume 30 or try to parse from metadata if possible (complex)
-    // Default to 30
-    const defaultFps = 30;
-    const totalFrames = Math.floor(video.duration * defaultFps);
-    
-    if (!props.disableGlobalStore) {
-         videoStore.setFrameData(
-             storeRefs!.currentFrame.value, 
-             totalFrames, 
-             defaultFps
-         );
-    }
-    emit('fps-detected', { fps: defaultFps, totalFrames });
+/**
+ * Publish a frame rate: the store, if this player owns it, and the parent.
+ * `totalFrames` follows from it and the duration.
+ */
+const publishFps = (video: HTMLVideoElement, fps: number) => {
+  const totalFrames = Math.floor(video.duration * fps);
+  if (!props.disableGlobalStore) {
+    videoStore.setFrameData(storeRefs!.currentFrame.value, totalFrames, fps);
   }
+  emit('fps-detected', { fps, totalFrames });
+};
+
+/**
+ * Find the frame rate. Nothing on the element exposes it and the database's
+ * `fps` column is a placeholder, so:
+ *
+ * 1. A fragmented mp4 streaming through MSE declares it in the container,
+ *    exactly. That is every pipeline video.
+ * 2. Otherwise it is measured from the `mediaTime` of frames the element
+ *    presents, which advances by exactly one frame per presented frame however
+ *    the wall clock stutters (see utils/frameRate.ts). The previous estimator
+ *    counted callbacks against wall-clock time and, under load, settled on 24
+ *    for a 25 fps stream - and that number then stamped every annotation.
+ *
+ * Until either answers, 30 is published so scrubbing before playback still
+ * produces frame numbers; presented frames only arrive once the video plays.
+ */
+const detectFPS = (video: HTMLVideoElement) => {
+  if (source?.fps) {
+    publishFps(video, source.fps);
+    return;
+  }
+
+  publishFps(video, 30);
+
+  // Declared as an optional method in types/videoFrameCallback.d.ts, so this
+  // narrows without collapsing the fallback branch to never. Safari before
+  // 15.4 has no such callback and keeps the 30 published above.
+  const requestFrame = video.requestVideoFrameCallback?.bind(video);
+  if (!requestFrame) return;
+
+  const mediaTimes: number[] = [];
+  const maxSamples = 31; // MIN_FRAME_DELTAS deltas even with a few drops
+  const onFrame = (_now: number, metadata: VideoFrameCallbackMetadata) => {
+    if (videoRef.value !== video) return; // the element moved on
+    mediaTimes.push(metadata.mediaTime);
+    if (mediaTimes.length < maxSamples) {
+      requestFrame(onFrame);
+      return;
+    }
+    const fps = frameRateFromMediaTimes(mediaTimes);
+    if (fps) publishFps(video, fps);
+  };
+  requestFrame(onFrame);
 };
 
 const onTimeUpdate = () => {

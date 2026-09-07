@@ -20,12 +20,14 @@ import {
   buildFragmentIndex,
   findFragment,
   fragmentDuration,
+  fragmentSampleCount,
   mfraSizeFromMfro,
   parseInitSegment,
   parseMfra,
   sameObject,
   type FragmentIndexEntry,
 } from '@/utils/fragmentedMp4';
+import { snapFrameRate } from '@/utils/frameRate';
 
 /** Returns a fresh URL for the same object as `staleUrl`, or null to give up. */
 export type RefreshVideoUrl = (staleUrl: string) => Promise<string | null>;
@@ -46,6 +48,12 @@ export interface FragmentedMp4Source {
   readonly alive: boolean;
   readonly duration: number;
   readonly fragmentCount: number;
+  /**
+   * Frame rate the container declares - samples over seconds in a fragment -
+   * or null when the probed fragment did not say. Exact, unlike anything
+   * measured from presented frames, so the player prefers it.
+   */
+  readonly fps: number | null;
   /** Swap credentials for the same object; see `sameObject`. */
   setUrl(url: string): void;
   /**
@@ -169,6 +177,7 @@ export async function openFragmentedMp4(
   const last = index[index.length - 1] as FragmentIndexEntry;
   const prev = index[index.length - 2];
   let duration = last.time + (prev ? last.time - prev.time : 10);
+  let fps: number | null = null;
   try {
     let moof = (await client.fetch(last.start, Math.min(last.start + PROBE_BYTES - 1, last.end))).data;
     const moofSize = new DataView(moof).getUint32(0);
@@ -177,11 +186,24 @@ export async function openFragmentedMp4(
     }
     const lastDuration = fragmentDuration(moof, init.defaultSampleDuration, init.timescale);
     if (lastDuration !== null) duration = last.time + lastDuration;
+    // The same moof also says how many samples it holds; even a partial last
+    // fragment keeps the samples-per-second ratio of the whole stream.
+    const samples = fragmentSampleCount(moof);
+    if (lastDuration && samples) fps = snapFrameRate(samples / lastDuration);
   } catch {
     // keep the estimate
   }
 
-  return new Source(video, client, head.data.slice(0, init.initLength), mime, index, duration, options);
+  return new Source(
+    video,
+    client,
+    head.data.slice(0, init.initLength),
+    mime,
+    index,
+    duration,
+    fps,
+    options
+  );
 }
 
 class Source implements FragmentedMp4Source {
@@ -205,6 +227,7 @@ class Source implements FragmentedMp4Source {
     private readonly mime: string,
     private readonly index: FragmentIndexEntry[],
     public duration: number,
+    public readonly fps: number | null,
     private readonly options: FragmentedMp4SourceOptions
   ) {
     this.lookahead = options.lookahead ?? DEFAULT_LOOKAHEAD;

@@ -85,6 +85,12 @@ export interface DualVideoPlayer {
     videoB: DualVideoSource | null
   ) => void;
 
+  /**
+   * Record the frame rate one side's player found (see SingleVideoPlayer's
+   * fps-detected). Until this is called a side counts frames at 30.
+   */
+  setFps?: (side: 'A' | 'B', fps: number) => void;
+
   // Sync control
   isSyncEnabled?: Ref<boolean>;
   isIndependentMode?: Ref<boolean>;
@@ -112,6 +118,20 @@ export function useDualVideoPlayer(): DualVideoPlayer {
   const videoBId = ref<string>('video-b');
   const videoARefreshUrl = ref<RefreshVideoUrl | null>(null);
   const videoBRefreshUrl = ref<RefreshVideoUrl | null>(null);
+
+  // Whether each side's player has reported a real frame rate yet; before it
+  // does, loadedmetadata seeds 30 so frame numbers exist during scrubbing.
+  let fpsKnownA = false;
+  let fpsKnownB = false;
+
+  function setFps(side: 'A' | 'B', fps: number) {
+    if (!(fps > 0)) return;
+    const state = side === 'A' ? videoAState : videoBState;
+    if (side === 'A') fpsKnownA = true;
+    else fpsKnownB = true;
+    state.fps = fps;
+    if (state.duration > 0) state.totalFrames = Math.round(state.duration * fps);
+  }
 
   const videoAState = reactive<DualVideoPlayerState>({
     duration: 0,
@@ -234,11 +254,13 @@ export function useDualVideoPlayer(): DualVideoPlayer {
       videoBIsPlaying.value = false;
     };
 
+    // The player may report the real rate (setFps) during the same
+    // loadedmetadata turn, before or after this listener runs, so the default
+    // must not overwrite a rate that has already been found.
     const onLoadedMetadataA = () => {
       videoAState.duration = a.duration;
       videoAState.isLoaded = true;
-      // Set a reasonable default FPS for video playback
-      videoAState.fps = 30; // Default to 30fps
+      if (!fpsKnownA) videoAState.fps = 30;
       if (a.duration > 0) {
         videoAState.totalFrames = Math.round(a.duration * videoAState.fps);
       }
@@ -247,8 +269,7 @@ export function useDualVideoPlayer(): DualVideoPlayer {
     const onLoadedMetadataB = () => {
       videoBState.duration = b.duration;
       videoBState.isLoaded = true;
-      // Set a reasonable default FPS for video playback
-      videoBState.fps = 30; // Default to 30fps
+      if (!fpsKnownB) videoBState.fps = 30;
       if (b.duration > 0) {
         videoBState.totalFrames = Math.round(b.duration * videoBState.fps);
       }
@@ -435,6 +456,10 @@ export function useDualVideoPlayer(): DualVideoPlayer {
     videoA: DualVideoSource | null,
     videoB: DualVideoSource | null
   ) {
+    // New sources, new rates: the seeded 30 applies again until each player
+    // reports.
+    fpsKnownA = false;
+    fpsKnownB = false;
     if (videoA) {
       videoAUrl.value = videoA.url;
       videoAId.value = videoA.id;
@@ -525,6 +550,7 @@ export function useDualVideoPlayer(): DualVideoPlayer {
     videoBId,
     // expose utility methods
     setVideoSources,
+    setFps,
     // expose drawing methods
     // expose sync control
     isSyncEnabled,

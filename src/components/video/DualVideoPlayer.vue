@@ -16,6 +16,7 @@
           :volume="volume"
           :is-muted="isMuted"
           @loaded="(e) => onVideoLoaded('A', e)"
+          @fps-detected="(d) => setFps?.('A', d.fps)"
           @error="(e) => onError('A', e)"
         >
           <template #overlays="{ currentTime, currentFrame, videoElement }">
@@ -44,6 +45,7 @@
           :volume="volume"
           :is-muted="isMuted"
           @loaded="(e) => onVideoLoaded('B', e)"
+          @fps-detected="(d) => setFps?.('B', d.fps)"
           @error="(e) => onError('B', e)"
         >
           <template #overlays="{ currentTime, currentFrame, videoElement }">
@@ -122,7 +124,8 @@ const {
   videoAState,
   videoARefreshUrl,
   videoBRefreshUrl,
-  setVideoSources
+  setVideoSources,
+  setFps
 } = dualPlayer;
 
 // We need to bind the internal video elements to the composable refs
