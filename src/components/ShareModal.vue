@@ -5,6 +5,7 @@
     @click="closeModal"
   >
     <div
+      ref="dialogPanel"
       role="dialog"
       aria-modal="true"
       :aria-label="modalTitle"
@@ -199,6 +200,7 @@
 import { logger } from '../utils/logger';
 import { ref, computed } from 'vue';
 import { useEscapeToClose } from '../composables/useEscapeToClose';
+import { useFocusTrap } from '../composables/useFocusTrap';
 // normalize TS import without extension to avoid TS plugin confusion
 import { ShareService } from '../services/shareService.ts';
 
@@ -257,6 +259,9 @@ const closeModal = () => {
   copied.value = false;
   allowAnnotations.value = false;
 };
+
+const dialogPanel = ref<HTMLElement | null>(null);
+useFocusTrap(dialogPanel, () => props.isVisible);
 
 useEscapeToClose(() => props.isVisible, closeModal);
 

@@ -5,6 +5,7 @@
     @click="closeModal"
   >
     <div
+      ref="dialogPanel"
       role="dialog"
       aria-modal="true"
       aria-label="Changelog"
@@ -89,6 +90,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { useEscapeToClose } from '../composables/useEscapeToClose';
+import { useFocusTrap } from '../composables/useFocusTrap';
 
 // Props
 const props = defineProps({
@@ -105,6 +107,9 @@ const emit = defineEmits(['close']);
 const closeModal = () => {
   emit('close');
 };
+
+const dialogPanel = ref<HTMLElement | null>(null);
+useFocusTrap(dialogPanel, () => props.isVisible);
 
 useEscapeToClose(() => props.isVisible, closeModal);
 

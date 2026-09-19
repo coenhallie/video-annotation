@@ -9,6 +9,7 @@
     <div class="flex min-h-screen items-center justify-center px-4 py-10">
       <!-- Modal panel -->
       <div
+        ref="dialogPanel"
         role="alertdialog"
         aria-modal="true"
         :aria-label="getTitle()"
@@ -61,8 +62,9 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue';
+import { onMounted, onUnmounted, ref } from 'vue';
 import { useEscapeToClose } from '../composables/useEscapeToClose';
+import { useFocusTrap } from '../composables/useFocusTrap';
 
 // Props
 const props = defineProps<{
@@ -81,6 +83,9 @@ const emit = defineEmits<{
 }>();
 
 // Rendered with v-if by its parents, so mounted means open.
+const dialogPanel = ref<HTMLElement | null>(null);
+useFocusTrap(dialogPanel, () => true);
+
 useEscapeToClose(() => true, () => emit('cancel'));
 
 // Lifecycle

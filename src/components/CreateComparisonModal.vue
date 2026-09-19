@@ -14,6 +14,7 @@
         <!-- Modal Container -->
         <div class="absolute inset-0 flex items-center justify-center p-4">
           <div
+            ref="dialogPanel"
             role="dialog"
             aria-modal="true"
             aria-label="New comparison"
@@ -313,6 +314,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue';
 import { useEscapeToClose } from '../composables/useEscapeToClose';
+import { useFocusTrap } from '../composables/useFocusTrap';
 import { VideoService } from '../services/videoService';
 import { ComparisonVideoService } from '../services/comparisonVideoService';
 import ComparisonVideoUpload from './ComparisonVideoUpload.vue';
@@ -404,6 +406,9 @@ const filteredVideosForB = computed(() => {
 // Methods
 // Was @keydown.esc on a non-focusable div, so it only fired once focus was
 // inside an input.
+const dialogPanel = ref<HTMLElement | null>(null);
+useFocusTrap(dialogPanel, () => props.isVisible);
+
 useEscapeToClose(
   () => props.isVisible,
   () => {

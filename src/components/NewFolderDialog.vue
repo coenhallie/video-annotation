@@ -12,6 +12,7 @@
         <!-- Modal panel. Same floating surface as the annotation form's label
              picker and the dashboard's filter card. -->
         <div
+          ref="dialogPanel"
           role="dialog"
           aria-modal="true"
           aria-label="New folder"
@@ -76,6 +77,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useEscapeToClose } from '../composables/useEscapeToClose';
+import { useFocusTrap } from '../composables/useFocusTrap';
 import type { Folder } from '../types/folder';
 
 // Props
@@ -94,6 +96,9 @@ const emit = defineEmits<{
 
 // Anywhere in the dialog, not only while the input has focus - and without
 // the key press also closing the details panel behind it.
+const dialogPanel = ref<HTMLElement | null>(null);
+useFocusTrap(dialogPanel, () => true);
+
 useEscapeToClose(() => true, () => emit('close'));
 
 // State

@@ -12,6 +12,7 @@
         <!-- Modal panel. Same floating surface as NewFolderDialog, so a rename
              is the same object as every other dialog in the app. -->
         <div
+          ref="dialogPanel"
           role="dialog"
           aria-modal="true"
           aria-label="Rename video"
@@ -77,6 +78,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue';
 import { useEscapeToClose } from '../composables/useEscapeToClose';
+import { useFocusTrap } from '../composables/useFocusTrap';
 
 const props = defineProps<{
   currentTitle: string;
@@ -87,6 +89,9 @@ const emit = defineEmits<{
   rename: [title: string];
   close: [];
 }>();
+
+const dialogPanel = ref<HTMLElement | null>(null);
+useFocusTrap(dialogPanel, () => true);
 
 useEscapeToClose(() => true, () => emit('close'));
 
