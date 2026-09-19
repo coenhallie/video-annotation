@@ -116,3 +116,33 @@ describe('ShareService propagates database errors on share/revoke updates', () =
     ).rejects.toBeTruthy();
   });
 });
+
+// An UPDATE that RLS filters down to nothing is a 2xx with zero rows and no
+// error. For a non-owner that meant "share" handed back a link to a video that
+// was still private, and "revoke" reported success on a link that still worked.
+describe('ShareService treats a zero-row update as a failure', () => {
+  const zeroRows = { data: [], error: null };
+  const oneRow = { data: [{ id: 'x1' }], error: null };
+
+  it.each([
+    ['createShareableLink', (S: any) => S.createShareableLink('v1', true)],
+    ['createComparisonShareableLink', (S: any) => S.createComparisonShareableLink('c1', true)],
+    ['makeVideoPrivate', (S: any) => S.makeVideoPrivate('v1')],
+    ['makeComparisonVideoPrivate', (S: any) => S.makeComparisonVideoPrivate('c1')],
+    ['updateSharePermissions', (S: any) => S.updateSharePermissions('v1', 'video', true)],
+  ])('%s rejects when no row was updated', async (_name, call) => {
+    const { ShareService } = await import('@/services/shareService');
+    queryResult = zeroRows;
+
+    await expect(call(ShareService)).rejects.toThrow(/permission|not found/i);
+  });
+
+  it('createShareableLink still returns the link when the row was updated', async () => {
+    const { ShareService } = await import('@/services/shareService');
+    queryResult = oneRow;
+
+    await expect(ShareService.createShareableLink('v1', true)).resolves.toBe(
+      'http://localhost?share=v1'
+    );
+  });
+});

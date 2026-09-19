@@ -47,6 +47,20 @@ export interface CommentPermissionContext {
   reason?: string;
 }
 
+/**
+ * An UPDATE that RLS filters down to nothing answers 2xx with zero rows and no
+ * error, so "did it work" has to be read off the returned rows. Without this a
+ * non-owner's share returned a link to a still-private video, and a revoke
+ * reported success on a link that still worked.
+ */
+function assertRowUpdated(rows: unknown, what: string): void {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    throw new Error(
+      `${what} was not found, or you do not have permission to change its sharing.`
+    );
+  }
+}
+
 export class ShareService {
   // Generate a shareable link for a video
   static async createShareableLink(
@@ -55,12 +69,14 @@ export class ShareService {
   ): Promise<string> {
     try {
       // Make the video public and set annotation permissions
-      const { error } = await supabase
+      const { data: updatedRows, error } = await supabase
         .from('videos')
         .update({ isPublic: true, allowAnnotations })
-        .eq('id', videoId);
+        .eq('id', videoId)
+        .select('id');
 
       if (error) throw error;
+      assertRowUpdated(updatedRows, 'This video');
 
       // Generate the shareable URL with video ID
       const baseUrl = window.location.origin;
@@ -183,12 +199,14 @@ export class ShareService {
   // Make a video private again
   static async makeVideoPrivate(videoId: string): Promise<void> {
     try {
-      const { error } = await supabase
+      const { data: updatedRows, error } = await supabase
         .from('videos')
         .update({ isPublic: false })
-        .eq('id', videoId);
+        .eq('id', videoId)
+        .select('id');
 
       if (error) throw error;
+      assertRowUpdated(updatedRows, 'This video');
     } catch (error) {
       console.error('❌ [ShareService] Error making video private:', error);
       throw error;
@@ -238,12 +256,14 @@ export class ShareService {
   ): Promise<string> {
     try {
       // Make the comparison video public and set annotation permissions
-      const { error } = await supabase
+      const { data: updatedRows, error } = await supabase
         .from('comparison_videos')
         .update({ isPublic: true, allowAnnotations })
-        .eq('id', comparisonId);
+        .eq('id', comparisonId)
+        .select('id');
 
       if (error) throw error;
+      assertRowUpdated(updatedRows, 'This comparison');
 
       // Generate the shareable URL
       const baseUrl = window.location.origin;
@@ -531,12 +551,14 @@ export class ShareService {
    */
   static async makeComparisonVideoPrivate(comparisonId: string): Promise<void> {
     try {
-      const { error } = await supabase
+      const { data: updatedRows, error } = await supabase
         .from('comparison_videos')
         .update({ isPublic: false })
-        .eq('id', comparisonId);
+        .eq('id', comparisonId)
+        .select('id');
 
       if (error) throw error;
+      assertRowUpdated(updatedRows, 'This comparison');
     } catch (error) {
       console.error(
         '❌ [ShareService] Error making comparison video private:',
@@ -1062,15 +1084,20 @@ export class ShareService {
     try {
       const table = type === 'video' ? 'videos' : 'comparison_videos';
       
-      const { error } = await supabase
+      const { data: updatedRows, error } = await supabase
         .from(table)
         .update({ allowAnnotations })
-        .eq('id', id);
+        .eq('id', id)
+        .select('id');
 
       if (error) {
         console.error('❌ [ShareService] Error updating share permissions:', error);
         throw error;
       }
+      assertRowUpdated(
+        updatedRows,
+        type === 'video' ? 'This video' : 'This comparison'
+      );
     } catch (error) {
       console.error('❌ [ShareService] Error updating share permissions:', error);
       throw error;

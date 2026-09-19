@@ -253,6 +253,14 @@ const closeModal = () => {
   allowAnnotations.value = false;
 };
 
+// A permission refusal is not something retrying fixes, so it is shown as the
+// service worded it. Anything else (a raw PostgREST or network error) keeps the
+// generic wording.
+const shareErrorMessage = (err: unknown, fallback: string): string =>
+  err instanceof Error && /permission/i.test(err.message)
+    ? err.message
+    : fallback;
+
 const generateShareLink = async () => {
   if (props.shareType === 'comparison') {
     if (!props.comparisonId) {
@@ -270,8 +278,10 @@ const generateShareLink = async () => {
       );
       shareUrl.value = url;
     } catch (err) {
-      error.value =
-        'Failed to generate comparison share link. Please try again.';
+      error.value = shareErrorMessage(
+        err,
+        'Failed to generate comparison share link. Please try again.'
+      );
     } finally {
       isGenerating.value = false;
     }
@@ -291,7 +301,10 @@ const generateShareLink = async () => {
       );
       shareUrl.value = url;
     } catch (err) {
-      error.value = 'Failed to generate share link. Please try again.';
+      error.value = shareErrorMessage(
+        err,
+        'Failed to generate share link. Please try again.'
+      );
     } finally {
       isGenerating.value = false;
     }
