@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   timelineNumbersFor,
   annotationStampFor,
+  videoTimelineNumbersFor,
   type TimelineNumbers,
 } from '@/utils/timelineBinding';
 
@@ -81,5 +82,38 @@ describe('annotationStampFor', () => {
     const stamp = annotationStampFor('pipeline', VIDEO, REPLAY);
     expect(stamp.frame).not.toBe(VIDEO.currentFrame);
     expect(stamp.fps).not.toBe(VIDEO.fps);
+  });
+});
+
+describe('videoTimelineNumbersFor', () => {
+  // Dual players run with the global store disabled, so after a project switch
+  // the store sits at frame 0 for the whole session.
+  const IDLE_STORE: TimelineNumbers = {
+    currentTime: 0,
+    duration: 0,
+    currentFrame: 0,
+    totalFrames: 0,
+    fps: 30,
+    isPlaying: false,
+  };
+  const VIDEO_A: TimelineNumbers = {
+    currentTime: 95,
+    duration: 600,
+    currentFrame: 2375,
+    totalFrames: 15000,
+    fps: 25,
+    isPlaying: false,
+  };
+
+  it('is the store in single mode', () => {
+    expect(videoTimelineNumbersFor('single', VIDEO, VIDEO_A)).toBe(VIDEO);
+  });
+
+  it('is video A in dual mode, so a right-click stamps where A actually is', () => {
+    const numbers = videoTimelineNumbersFor('dual', IDLE_STORE, VIDEO_A);
+    expect(annotationStampFor('video', numbers, REPLAY)).toEqual({
+      frame: 2375,
+      fps: 25,
+    });
   });
 });

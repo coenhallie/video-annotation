@@ -38,6 +38,7 @@ import { planHistorySelection } from '@/utils/historySelection';
 import {
   timelineNumbersFor,
   annotationStampFor,
+  videoTimelineNumbersFor,
   type TimelineNumbers,
 } from '@/utils/timelineBinding';
 import { ShareService } from '@/services/shareService';
@@ -310,7 +311,7 @@ const pipelineEverOpened = ref(false);
 // The two raw sources `timeline` and `annotationStampFor` both read from.
 // Named separately so a new annotation's stamp can be derived from the same
 // numbers the timeline itself is drawing, rather than re-reading the refs.
-const videoTimelineNumbers = computed<TimelineNumbers>(() => ({
+const storeTimelineNumbers = computed<TimelineNumbers>(() => ({
   currentTime: currentTime.value,
   duration: duration.value,
   currentFrame: currentFrame.value,
@@ -318,6 +319,23 @@ const videoTimelineNumbers = computed<TimelineNumbers>(() => ({
   fps: fps.value,
   isPlaying: isPlaying.value,
 }));
+
+const videoATimelineNumbers = computed<TimelineNumbers>(() => ({
+  currentTime: dualVideoPlayer?.videoACurrentTime?.value ?? 0,
+  duration: dualVideoPlayer?.videoAState?.duration ?? 0,
+  currentFrame: dualVideoPlayer?.videoACurrentFrame?.value ?? 0,
+  totalFrames: dualVideoPlayer?.videoAState?.totalFrames ?? 0,
+  fps: dualVideoPlayer?.videoAState?.fps || 30,
+  isPlaying: dualVideoPlayer?.videoAIsPlaying?.value ?? false,
+}));
+
+const videoTimelineNumbers = computed<TimelineNumbers>(() =>
+  videoTimelineNumbersFor(
+    playerMode.value,
+    storeTimelineNumbers.value,
+    videoATimelineNumbers.value
+  )
+);
 
 const replayTimelineNumbers = computed<TimelineNumbers>(() => ({
   currentTime: pipelineReplay.currentTime.value,

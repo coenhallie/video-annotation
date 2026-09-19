@@ -11,6 +11,22 @@ export interface TimelineNumbers {
 }
 
 /**
+ * The video surface's numbers for the current player mode.
+ *
+ * In a comparison the two players run with the global video store disabled, so
+ * the store never moves off frame 0. Video A is the comparison's reference
+ * clock - it is what annotations' `frame` and `timestamp` are stamped from on
+ * the timeline-click path - so it stands in for the store there.
+ */
+export function videoTimelineNumbersFor(
+  mode: 'single' | 'dual',
+  store: TimelineNumbers,
+  videoA: TimelineNumbers
+): TimelineNumbers {
+  return mode === 'dual' ? videoA : store;
+}
+
+/**
  * Pick which playback source the timeline shows.
  *
  * VideoTimeline is purely presentational, so a tab switch changes only which
