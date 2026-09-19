@@ -5,10 +5,12 @@ vi.mock('@/services/videoService', () => ({
   VideoService: {
     isAwsVideo: () => isAws,
     refreshAwsVideoUrl: vi.fn(async () => 'https://example.test/fresh.mp4'),
+    storeMediaInfo: (...a: unknown[]) => storeMediaInfo(...a),
   },
 }));
 
 let isAws = false;
+const storeMediaInfo = vi.fn(async (..._a: unknown[]) => {});
 
 import { useVideoEventHandlers } from '@/composables/useVideoEventHandlers';
 
@@ -16,6 +18,7 @@ function setup(annotationVideoId: string | null, aws = false) {
   isAws = aws;
   const seekTo = vi.fn();
   const currentTime = ref(0);
+  const duration = ref(0);
   const initializeVideo = vi.fn(async () => {});
   const loadAnnotations = vi.fn(async () => {});
   const handlers = useVideoEventHandlers({
@@ -28,7 +31,7 @@ function setup(annotationVideoId: string | null, aws = false) {
     },
     currentTime,
     unifiedVideoPlayerRef: ref({ seekTo }),
-    duration: ref(0),
+    duration,
     currentFrame: ref(0),
     totalFrames: ref(0),
     fps: ref(30),
@@ -44,7 +47,7 @@ function setup(annotationVideoId: string | null, aws = false) {
     initializeVideo,
     loadAnnotations,
   } as unknown as Parameters<typeof useVideoEventHandlers>[0]);
-  return { handlers, initializeVideo, loadAnnotations, seekTo, currentTime };
+  return { handlers, initializeVideo, loadAnnotations, seekTo, currentTime, duration };
 }
 
 // The project loader now gives the annotation list its video straight from the
@@ -87,5 +90,21 @@ describe('AWS URL refresh keeps the playback position', () => {
     const s = setup('v1', true);
     await s.handlers.handleLoaded(new Event('loadedmetadata') as never);
     expect(s.seekTo).not.toHaveBeenCalled();
+  });
+});
+
+describe('measured frame rate', () => {
+  // The player is the first thing that knows a pipeline video's real length.
+  it('hands the measured duration and frame rate over to be stored', () => {
+    storeMediaInfo.mockClear();
+    const s = setup('v1', true);
+    s.duration.value = 5412.4;
+
+    s.handlers.handleFPSDetected({ fps: 25, totalFrames: 135310 });
+
+    expect(storeMediaInfo).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'v1' }),
+      { duration: 5412.4, fps: 25 }
+    );
   });
 });

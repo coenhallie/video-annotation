@@ -173,6 +173,15 @@ export function useVideoEventHandlers(deps: {
         if (typeof data.totalFrames === 'number') {
           totalFrames.value = data.totalFrames;
         }
+        // The player is the first thing that knows a pipeline video's real
+        // length and frame rate; its row was created with placeholders. A
+        // no-op for any other video, and for one already measured.
+        if (typeof data.fps === 'number') {
+          void VideoService.storeMediaInfo(currentVideoObject.value, {
+            duration: duration.value,
+            fps: data.fps,
+          });
+        }
       }
     } catch (error) {
       console.error('Error in handleFPSDetected:', error);

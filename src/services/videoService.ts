@@ -840,6 +840,47 @@ export class VideoService {
     }
   }
 
+  /** The duration every pipeline row is created with, before anything plays it. */
+  static readonly PLACEHOLDER_DURATION = 1;
+
+  /**
+   * Store a pipeline video's real duration and frame rate, once.
+   *
+   * findOrCreateOutputVideo has to create the row before the file can even be
+   * requested, so it writes a placeholder (1s at 30fps). Nothing replaced it:
+   * the library read "0:01" for every pipeline output, and watch coverage,
+   * which is measured against the stored duration, read 100% after the first
+   * second of a two-hour match.
+   *
+   * The first player to measure the file calls this. Like the thumbnail, it
+   * goes through a function (`set_video_media_info`) because the `videos`
+   * UPDATE policy is owner-gated and pipeline outputs are opened by the whole
+   * team; the function only ever fills in a placeholder.
+   *
+   * Never rejects: this is housekeeping on a path whose job is playing the video.
+   */
+  static async storeMediaInfo(
+    video: { id?: string; videoId?: string; duration?: number } | null | undefined,
+    measured: { duration: number; fps: number }
+  ): Promise<void> {
+    try {
+      if (!video?.id || !this.isAwsVideo(video as Record<string, unknown>)) return;
+      if ((video.duration ?? 0) > this.PLACEHOLDER_DURATION) return;
+      const { duration, fps } = measured;
+      if (!Number.isFinite(duration) || duration <= this.PLACEHOLDER_DURATION) return;
+      if (!Number.isFinite(fps) || fps <= 0) return;
+
+      const { error } = await supabase.rpc('set_video_media_info', {
+        p_video_id: video.id,
+        p_duration: duration,
+        p_fps: fps,
+      });
+      if (error) handleServiceError('VideoService.storeMediaInfo', error);
+    } catch (error) {
+      handleServiceError('VideoService.storeMediaInfo', error);
+    }
+  }
+
   /**
    * Refresh the presigned URL for an AWS video.
    * Extracts the project ID from videoId (format: "aws:{projectId}").
