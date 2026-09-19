@@ -1,7 +1,8 @@
 import { onMounted, onBeforeUnmount, type Ref } from 'vue';
+import type { Transport } from '@/utils/surfaceTransport';
 
 /**
- * Composable that sets up global keyboard shortcuts for the dashboard.
+ * Composable that sets up global keyboard shortcuts for the editor.
  *
  * Handles:
  * - Space: toggle play/pause
@@ -12,26 +13,17 @@ import { onMounted, onBeforeUnmount, type Ref } from 'vue';
  * video. Handling them here as well stepped twice, and the second step seeks
  * both videos to A's time, destroying a manual alignment.
  *
- * This is a side-effect composable — it returns nothing.
+ * Playback goes through `transport` rather than a player ref so that the keys
+ * reach whichever surface is on screen (see surfaceTransport).
+ *
+ * This is a side-effect composable - it returns nothing.
  */
 export function useDashboardKeyboard(deps: {
   /** Current player mode ('single' | 'dual'). */
   playerMode: Ref<'single' | 'dual'>;
-  /** Whether the single-mode video is currently playing. */
-  isPlaying: Ref<boolean>;
-  /** Dual video player instance (for checking play state). */
-  dualVideoPlayer: {
-    videoAIsPlaying?: Ref<boolean>;
-    videoBIsPlaying?: Ref<boolean>;
-  } | null;
-  /** The unified video player ref (must expose play, pause, stepFrame). */
-  unifiedVideoPlayerRef: Ref<{
-    play?: () => void;
-    pause?: () => void;
-    stepFrame?: (frames: number) => void;
-  } | null>;
+  transport: Transport;
 }): void {
-  const { playerMode, isPlaying, dualVideoPlayer, unifiedVideoPlayerRef } = deps;
+  const { playerMode, transport } = deps;
 
   const handleKeydown = (e: KeyboardEvent) => {
     // Ignore if user is typing in an input or textarea
@@ -50,28 +42,14 @@ export function useDashboardKeyboard(deps: {
 
     if (e.key === 'ArrowRight' && ownsArrows) {
       e.preventDefault();
-      unifiedVideoPlayerRef.value?.stepFrame?.(1);
+      transport.step(1);
     } else if (e.key === 'ArrowLeft' && ownsArrows) {
       e.preventDefault();
-      unifiedVideoPlayerRef.value?.stepFrame?.(-1);
+      transport.step(-1);
     } else if (e.key === ' ' || e.code === 'Space') {
       e.preventDefault();
-
-      let isCurrentlyPlaying = false;
-      if (playerMode.value === 'single') {
-        isCurrentlyPlaying = isPlaying.value;
-      } else if (playerMode.value === 'dual' && dualVideoPlayer) {
-        isCurrentlyPlaying =
-          dualVideoPlayer.videoAIsPlaying?.value ||
-          dualVideoPlayer.videoBIsPlaying?.value ||
-          false;
-      }
-
-      if (isCurrentlyPlaying) {
-        unifiedVideoPlayerRef.value?.pause?.();
-      } else {
-        unifiedVideoPlayerRef.value?.play?.();
-      }
+      if (transport.isPlaying()) transport.pause();
+      else transport.play();
     }
   };
 

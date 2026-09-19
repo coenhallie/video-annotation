@@ -8,7 +8,6 @@ import {
   onBeforeUnmount,
   nextTick,
   type ComponentPublicInstance,
-  type Ref,
 } from 'vue';
 import DualTimeline from '@/components/DualTimeline.vue';
 import VideoTimeline from '@/components/VideoTimeline.vue';
@@ -55,6 +54,7 @@ import { useComparisonVideoWorkflow } from '@/composables/useComparisonVideoWork
 import { useDualVideoPlayer } from '@/composables/useDualVideoPlayer';
 import { useSessionCleanup } from '@/composables/useSessionCleanup';
 import { useNotifications } from '@/composables/useNotifications';
+import { surfaceTransport, replayStepTarget } from '@/utils/surfaceTransport';
 import { useDashboardKeyboard } from '@/composables/useDashboardKeyboard';
 import { useSharedContent } from '@/composables/useSharedContent';
 import { useVideoEventHandlers } from '@/composables/useVideoEventHandlers';
@@ -129,27 +129,10 @@ const getVideoUrl = (video: Partial<Video> & { url?: string; videoType?: string;
 
 type VideoSourceLike = Partial<Video> & { id: string };
 
-type UnifiedVideoPlayerExpose = {
-  seekTo: (time: number) => void;
-  play: () => void;
-  pause: () => void;
-  togglePlayPause: () => void;
-  performVideoFadeTransition: (fn: () => void) => Promise<void>;
-  singleVideoElement: Ref<HTMLVideoElement | null>;
-  videoAElement: Ref<HTMLVideoElement | null>;
-  videoBElement: Ref<HTMLVideoElement | null>;
-  singleDrawingCanvasRef: Ref<unknown>;
-  drawingCanvasARef: Ref<unknown>;
-  drawingCanvasBRef: Ref<unknown>;
-  getCalibrationState: () => unknown;
-  getCurrentVideoElement: () => HTMLVideoElement | null;
-  getCurrentVideoContainer: () => HTMLElement | null;
-};
-
-type UnifiedVideoPlayerInstance = ComponentPublicInstance<
-  Record<string, never>,
-  UnifiedVideoPlayerExpose
->;
+// The component's own instance type, not a hand-written copy: the copy had
+// drifted (members the player never exposed, no stepFrame), and with optional
+// chaining a missing member is a silent no-op rather than a type error.
+type UnifiedVideoPlayerInstance = InstanceType<typeof UnifiedVideoPlayer>;
 
 // Error handling state
 const hasError = ref(false);
@@ -611,19 +594,42 @@ const isPlaybackRunning = () =>
       )
     : isPlaying.value;
 
+// Everything outside the players that controls playback - Space, the arrow
+// keys, the pause on entering comment or draw mode - goes through this, so it
+// always reaches the surface on screen. See surfaceTransport.
+const transport = surfaceTransport(
+  () => onPipeline.value,
+  {
+    isPlaying: isPlaybackRunning,
+    play: () => unifiedVideoPlayerRef.value?.play(),
+    pause: () => unifiedVideoPlayerRef.value?.pause(),
+    step: (frames) => unifiedVideoPlayerRef.value?.stepFrame(frames),
+  },
+  {
+    isPlaying: () => pipelineReplay.isPlaying.value,
+    play: () => pipelineReplay.play(),
+    pause: () => pipelineReplay.pause(),
+    step: (frames) =>
+      void pipelineReplay.seek(
+        replayStepTarget(
+          {
+            currentTime: pipelineReplay.currentTime.value,
+            fps: pipelineReplay.fps.value,
+            duration: pipelineReplay.duration.value,
+          },
+          frames
+        )
+      ),
+  }
+);
+
 const handleQuickPickCommentMode = (active: boolean) => {
   if (active) {
-    commentModeWasPlaying.value = onPipeline.value
-      ? pipelineReplay.isPlaying.value
-      : isPlaybackRunning();
-    if (onPipeline.value) pipelineReplay.pause();
-    else unifiedVideoPlayerRef.value?.pause();
+    commentModeWasPlaying.value = transport.isPlaying();
+    transport.pause();
     return;
   }
-  if (commentModeWasPlaying.value) {
-    if (onPipeline.value) pipelineReplay.play();
-    else unifiedVideoPlayerRef.value?.play();
-  }
+  if (commentModeWasPlaying.value) transport.play();
   commentModeWasPlaying.value = false;
 };
 
@@ -667,8 +673,11 @@ const drawingCanvasRefs = () => ({
 
 const handleQuickPickDrawMode = (active: boolean) => {
   if (active) {
-    drawModeWasPlaying.value = isPlaybackRunning();
-    unifiedVideoPlayerRef.value?.pause();
+    // Through the transport: on the pipeline tab this used to pause the hidden
+    // video and leave the replay running, and DrawingCanvas clears itself on
+    // every frame change, so each stroke vanished as the replay ticked on.
+    drawModeWasPlaying.value = transport.isPlaying();
+    transport.pause();
     preDrawToolSnapshot = { ...drawingCoordinator.primaryCanvas.value.currentTool.value };
     drawingCoordinator.setCustomColor(quickPickDrawColor.value);
     drawingCoordinator.setStrokeWidth(quickPickDrawWidth.value);
@@ -698,7 +707,7 @@ const handleQuickPickDrawMode = (active: boolean) => {
     preDrawToolSnapshot = null;
   }
 
-  if (drawModeWasPlaying.value) unifiedVideoPlayerRef.value?.play();
+  if (drawModeWasPlaying.value) transport.play();
   drawModeWasPlaying.value = false;
 };
 
@@ -1706,12 +1715,7 @@ watch(activeSurface, (surface, previous) => {
 });
 
 // ── Keyboard shortcuts (extracted composable) ────────────────────────────────
-useDashboardKeyboard({
-  playerMode,
-  isPlaying,
-  dualVideoPlayer,
-  unifiedVideoPlayerRef,
-});
+useDashboardKeyboard({ playerMode, transport });
 
 const loadOutputVideo = async (outputVideoId: string) => {
   if (!user.value) {

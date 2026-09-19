@@ -3,15 +3,15 @@ import { describe, it, expect, vi } from 'vitest';
 import { createApp, defineComponent, ref } from 'vue';
 import { useDashboardKeyboard } from '@/composables/useDashboardKeyboard';
 
-function mountKeyboard(mode: 'single' | 'dual') {
+function mountKeyboard(mode: 'single' | 'dual', playing = false) {
   const stepFrame = vi.fn();
+  const play = vi.fn();
+  const pause = vi.fn();
   const Host = defineComponent({
     setup() {
       useDashboardKeyboard({
         playerMode: ref(mode),
-        isPlaying: ref(false),
-        dualVideoPlayer: null,
-        unifiedVideoPlayerRef: ref({ stepFrame, play: vi.fn(), pause: vi.fn() }),
+        transport: { isPlaying: () => playing, play, pause, step: stepFrame },
       });
       return () => null;
     },
@@ -19,7 +19,7 @@ function mountKeyboard(mode: 'single' | 'dual') {
   const root = document.createElement('div');
   const app = createApp(Host);
   app.mount(root);
-  return { stepFrame, unmount: () => app.unmount() };
+  return { stepFrame, play, pause, unmount: () => app.unmount() };
 }
 
 function press(init: KeyboardEventInit) {
@@ -51,5 +51,19 @@ describe('useDashboardKeyboard', () => {
     expect(stepFrame).not.toHaveBeenCalled();
     expect(event.defaultPrevented).toBe(false);
     unmount();
+  });
+
+  // The transport is surface-aware, so Space reaches whichever of the video and
+  // the pipeline replay is on screen rather than always the video.
+  it('toggles playback through the transport on Space', () => {
+    const paused = mountKeyboard('single', false);
+    press({ key: ' ', code: 'Space' });
+    expect(paused.play).toHaveBeenCalledTimes(1);
+    paused.unmount();
+
+    const running = mountKeyboard('single', true);
+    press({ key: ' ', code: 'Space' });
+    expect(running.pause).toHaveBeenCalledTimes(1);
+    running.unmount();
   });
 });
