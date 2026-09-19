@@ -25,6 +25,8 @@ vi.mock('@/utils/thumbnailGenerator', () => ({
 class FakeXhr {
   static instances: FakeXhr[] = [];
   static status = 200;
+  /** When true the request stays in flight until abort() or finish(). */
+  static hold = false;
   method = '';
   url = '';
   body: unknown = null;
@@ -44,12 +46,16 @@ class FakeXhr {
     this.method = method;
     this.url = url;
   }
+  abort() {
+    this.listeners.abort?.();
+  }
   setRequestHeader(k: string, v: string) {
     this.headers[k] = v;
   }
   send(body: unknown) {
     this.body = body;
     FakeXhr.instances.push(this);
+    if (FakeXhr.hold) return;
     queueMicrotask(() => {
       this.uploadListeners.progress?.({
         lengthComputable: true,
@@ -73,6 +79,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   FakeXhr.instances = [];
   FakeXhr.status = 200;
+  FakeXhr.hold = false;
   vi.stubGlobal('XMLHttpRequest', FakeXhr);
   vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
   storage.createSignedUploadUrl.mockResolvedValue({
@@ -100,7 +107,7 @@ describe('VideoUploadService.validateVideoFile', () => {
     );
     expect(r).toEqual({
       valid: false,
-      error: 'Unsupported file type. Upload an MP4, WebM, OGG, MOV or AVI file.',
+      error: 'Unsupported file type. Upload an MP4, WebM, OGG or MOV file.',
     });
   });
 
@@ -128,7 +135,7 @@ describe('VideoUploadService.validateVideoCompatibility', () => {
     expect(r).toEqual({
       valid: false,
       error:
-        'HEVC (H.265) video does not play in Safari. Convert it to H.264 before uploading.',
+        'HEVC (H.265) video does not play in every browser. Convert it to H.264 before uploading.',
     });
   });
 
@@ -239,5 +246,74 @@ describe('VideoUploadService.uploadVideoComplete', () => {
       )
     ).rejects.toThrow('Unsupported file type');
     expect(storage.createSignedUploadUrl).not.toHaveBeenCalled();
+  });
+});
+
+describe('VideoUploadService hardening', () => {
+  const ascii = (text: string) => [...text].map((c) => c.charCodeAt(0));
+  /** A top-level MP4 box: 4-byte big-endian size, 4-byte type, payload. */
+  const box = (type: string, payload: number[]) => {
+    const size = 8 + payload.length;
+    return [(size >>> 24) & 255, (size >>> 16) & 255, (size >>> 8) & 255, size & 255, ...ascii(type), ...payload];
+  };
+
+  // No browser decodes AVI, so an accepted AVI always died later in metadata
+  // extraction with "the file may be corrupt".
+  it('does not accept AVI', async () => {
+    const { VideoUploadService } = await import('@/services/videoUploadService');
+    const avi = new File(['x'], 'clip.avi', { type: 'video/x-msvideo' });
+    expect(VideoUploadService.validateVideoFile(avi).valid).toBe(false);
+  });
+
+  // Phone recordings put `moov`, and with it the codec tag, at the END of the
+  // file. Scanning only the first 64 KB let the commonest HEVC source through.
+  it('finds an HEVC tag in a moov box at the end of the file', async () => {
+    const { VideoUploadService } = await import('@/services/videoUploadService');
+    const bytes = [
+      ...box('ftyp', ascii('mp42....')),
+      ...box('mdat', new Array(100 * 1024).fill(0)),
+      ...box('moov', ascii('....trak....stsd....hvc1....')),
+    ];
+    const r = await VideoUploadService.validateVideoCompatibility(mp4('phone.mov', bytes));
+    expect(r.valid).toBe(false);
+  });
+
+  it('does not mistake media bytes that happen to spell hvc1 for a codec tag', async () => {
+    const { VideoUploadService } = await import('@/services/videoUploadService');
+    const bytes = [
+      ...box('ftyp', ascii('mp42....')),
+      ...box('mdat', [...new Array(100 * 1024).fill(0), ...ascii('hvc1')]),
+      ...box('moov', ascii('....trak....stsd....avc1....')),
+    ];
+    const r = await VideoUploadService.validateVideoCompatibility(mp4('h264.mp4', bytes));
+    expect(r).toEqual({ valid: true });
+  });
+
+  // A MediaRecorder WebM reports Infinity. That serialises to null and the row
+  // insert failed - after the whole file had been uploaded.
+  it('rejects a video with no readable duration before touching storage', async () => {
+    const { VideoUploadService } = await import('@/services/videoUploadService');
+    const noDuration = vi.fn(async () => ({ ...metadata, duration: Infinity, totalFrames: Infinity }));
+
+    await expect(
+      VideoUploadService.uploadVideoComplete(mp4(), 'u1', { readMetadata: noDuration })
+    ).rejects.toThrow(/duration/i);
+    expect(storage.createSignedUploadUrl).not.toHaveBeenCalled();
+  });
+
+  it('stops the transfer and creates no row when the upload is cancelled', async () => {
+    const { VideoUploadService } = await import('@/services/videoUploadService');
+    FakeXhr.hold = true;
+    const controller = new AbortController();
+    const pending = VideoUploadService.uploadVideoComplete(mp4(), 'u1', {
+      readMetadata,
+      signal: controller.signal,
+    });
+    await vi.waitFor(() => expect(FakeXhr.instances).toHaveLength(1));
+
+    controller.abort();
+
+    await expect(pending).rejects.toThrow(/cancelled/i);
+    expect(createVideo).not.toHaveBeenCalled();
   });
 });

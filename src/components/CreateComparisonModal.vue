@@ -4,7 +4,6 @@
       <div
         v-if="isVisible"
         class="fixed inset-0 z-50 overflow-hidden"
-        @keydown.esc="handleEscape"
       >
         <!-- Backdrop -->
         <div
@@ -15,6 +14,9 @@
         <!-- Modal Container -->
         <div class="absolute inset-0 flex items-center justify-center p-4">
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="New comparison"
             class="relative flex max-h-[85vh] w-full max-w-2xl flex-col rounded border border-gray-200 bg-white shadow-xl dark:border-white/10 dark:bg-gray-900"
             @click.stop
           >
@@ -42,6 +44,7 @@
               </div>
               <button
                 type="button"
+                aria-label="Close"
                 class="shrink-0 rounded p-1 text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
                 @click="closeModal"
               >
@@ -98,14 +101,18 @@
                   class="mb-2 w-full rounded border border-gray-200 bg-transparent px-2.5 py-1.5 text-[12px] leading-snug text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-400 dark:border-white/10 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-white/25"
                 >
 
-                <ComparisonVideoUpload @uploaded="onUploaded" />
+                <ComparisonVideoUpload
+                  @uploaded="onUploaded"
+                  @busy="(busy: boolean) => (isUploading = busy)"
+                />
 
                 <!-- Same row shape as the dashboard's video list. -->
                 <button
                   v-for="video in filteredVideosForA"
                   :key="video.id"
                   type="button"
-                  class="flex w-full items-center gap-3 rounded px-2 py-2 text-left transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]"
+                  :disabled="isUploading"
+                  class="flex w-full items-center gap-3 rounded px-2 py-2 text-left transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent dark:hover:bg-white/[0.03]"
                   @click="selectVideoA(video)"
                 >
                   <span class="h-9 w-16 shrink-0 overflow-hidden rounded bg-gray-100 dark:bg-white/5">
@@ -151,13 +158,17 @@
                   class="mb-2 w-full rounded border border-gray-200 bg-transparent px-2.5 py-1.5 text-[12px] leading-snug text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-400 dark:border-white/10 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-white/25"
                 >
 
-                <ComparisonVideoUpload @uploaded="onUploaded" />
+                <ComparisonVideoUpload
+                  @uploaded="onUploaded"
+                  @busy="(busy: boolean) => (isUploading = busy)"
+                />
 
                 <button
                   v-for="video in filteredVideosForB"
                   :key="video.id"
                   type="button"
-                  class="flex w-full items-center gap-3 rounded px-2 py-2 text-left transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]"
+                  :disabled="isUploading"
+                  class="flex w-full items-center gap-3 rounded px-2 py-2 text-left transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent dark:hover:bg-white/[0.03]"
                   @click="selectVideoB(video)"
                 >
                   <span class="h-9 w-16 shrink-0 overflow-hidden rounded bg-gray-100 dark:bg-white/5">
@@ -301,6 +312,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue';
+import { useEscapeToClose } from '../composables/useEscapeToClose';
 import { VideoService } from '../services/videoService';
 import { ComparisonVideoService } from '../services/comparisonVideoService';
 import ComparisonVideoUpload from './ComparisonVideoUpload.vue';
@@ -332,6 +344,10 @@ const comparisonDescription = ref('');
 const searchQuery = ref('');
 const isLoading = ref(false);
 const isCreating = ref(false);
+// Picking a video advances the step, which unmounts the uploader and so
+// cancels it. While it works the lists are disabled, so a stray click cannot
+// throw away an upload in flight. Closing the wizard still cancels it.
+const isUploading = ref(false);
 const error = ref<string | null>(null);
 const availableVideos = ref<any[]>([]);
 
@@ -386,14 +402,23 @@ const filteredVideosForB = computed(() => {
 });
 
 // Methods
-const handleEscape = () => {
-  if (!isCreating.value) {
-    closeModal();
+// Was @keydown.esc on a non-focusable div, so it only fired once focus was
+// inside an input.
+useEscapeToClose(
+  () => props.isVisible,
+  () => {
+    if (!isCreating.value) closeModal();
   }
-};
+);
+
+// Bumped whenever the wizard's selection is reset or stepped back, so an
+// await that started before it can tell it has been overtaken.
+let selectionEpoch = 0;
 
 const closeModal = () => {
   // Reset state
+  selectionEpoch++;
+  isUploading.value = false;
   currentStep.value = 'select-video-a';
   selectedVideoA.value = null;
   selectedVideoB.value = null;
@@ -428,6 +453,9 @@ const selectVideoA = (video: any) => {
 };
 
 const selectVideoB = async (video: any) => {
+  const epoch = ++selectionEpoch;
+  const videoA = selectedVideoA.value;
+  if (!videoA) return;
   selectedVideoB.value = video;
   searchQuery.value = '';
 
@@ -435,10 +463,13 @@ const selectVideoB = async (video: any) => {
   if (user.value) {
     try {
       const existing = await ComparisonVideoService.findExistingComparison(
-        selectedVideoA.value.id,
+        videoA.id,
         video.id,
         user.value.id
       );
+      // Closed, stepped back, or another video picked while that was in
+      // flight: this pick no longer describes the wizard.
+      if (epoch !== selectionEpoch) return;
 
       if (existing) {
         // Show warning but still allow them to proceed (they might want different title/description)
@@ -452,6 +483,7 @@ const selectVideoB = async (video: any) => {
     } catch (err) {
       console.warn('Error checking for existing comparison:', err);
       // Don't block the user if the check fails
+      if (epoch !== selectionEpoch) return;
     }
   }
 
@@ -459,7 +491,7 @@ const selectVideoB = async (video: any) => {
 
   // Auto-generate title if empty
   if (!comparisonTitle.value) {
-    comparisonTitle.value = `${selectedVideoA.value.title} vs ${selectedVideoB.value.title}`;
+    comparisonTitle.value = `${videoA.title} vs ${video.title}`;
   }
 };
 
@@ -475,6 +507,7 @@ const onUploaded = (video: Video) => {
 };
 
 const goBack = () => {
+  selectionEpoch++;
   if (currentStep.value === 'select-video-b') {
     currentStep.value = 'select-video-a';
     selectedVideoB.value = null;

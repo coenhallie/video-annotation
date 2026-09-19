@@ -5,6 +5,9 @@
     @click="closeModal"
   >
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Changelog"
       class="flex max-h-[85vh] w-full max-w-lg flex-col rounded border border-gray-200 bg-white shadow-xl dark:border-white/10 dark:bg-gray-900"
       @click.stop
     >
@@ -17,6 +20,7 @@
         </h2>
         <button
           type="button"
+          aria-label="Close"
           class="rounded p-1 text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
           @click="closeModal"
         >
@@ -84,9 +88,10 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useEscapeToClose } from '../composables/useEscapeToClose';
 
 // Props
-defineProps({
+const props = defineProps({
   isVisible: {
     type: Boolean,
     default: false,
@@ -100,6 +105,8 @@ const emit = defineEmits(['close']);
 const closeModal = () => {
   emit('close');
 };
+
+useEscapeToClose(() => props.isVisible, closeModal);
 
 // --- MANUAL CHANGELOG ENTRIES ---
 // Add new entries to the TOP of this array

@@ -20,10 +20,13 @@ vi.mock('@/composables/useNotifications', () => ({
 // The upload row is tested on its own. Here it is a button that emits one
 // fixed video, so the wizard's reaction to an upload can be driven directly.
 let nextUploadedId = 'up-1';
+/** Drives the stub's busy event, as the real uploader does while it works. */
+let setBusy: (busy: boolean) => void = () => {};
 vi.mock('@/components/ComparisonVideoUpload.vue', () => ({
   default: defineComponent({
-    emits: ['uploaded'],
+    emits: ['uploaded', 'busy'],
     setup(_, { emit }) {
+      setBusy = (b: boolean) => emit('busy', b);
       return () =>
         h(
           'button',
@@ -52,13 +55,22 @@ const flush = async () => {
 
 const video = (id: string) => ({ id, title: `video ${id}`, duration: 10, fps: 30 });
 
-async function mount() {
+let initialStep: string | undefined;
+
+async function mount(
+  onError?: (e: unknown) => void,
+  onClose?: () => void
+) {
   const { default: C } = await import('@/components/CreateComparisonModal.vue');
   const root = document.createElement('div');
   document.body.appendChild(root);
-  const app = createApp({ render: () => h(C, { isVisible: true }) });
+  const app = createApp({ render: () => h(C, { isVisible: true, ...(onClose ? { onClose } : {}) }) });
+  if (onError) app.config.errorHandler = onError;
   app.mount(root);
   await flush();
+  initialStep = document.body
+    .querySelector('[data-testid="comparison-step"]')
+    ?.textContent?.trim();
   // The modal teleports to body.
   const q = <T extends Element>(sel: string) => document.body.querySelector<T>(sel);
   const qa = (sel: string) => [...document.body.querySelectorAll(sel)];
@@ -141,6 +153,61 @@ describe('CreateComparisonModal upload', () => {
     expect(m.text()).not.toContain('at least two videos');
     expect(m.text()).toContain('video a');
     expect(m.uploadStubs()).toHaveLength(1);
+    m.unmount();
+  });
+
+  // Picking a video advances the step, which unmounts the uploader and so
+  // cancels it. A stray click must not throw away a gigabyte in flight.
+  it('does not let a video be picked while an upload is running', async () => {
+    getUserVideos.mockResolvedValue([video('a'), video('b')]);
+    const m = await mount();
+    setBusy(true);
+    await flush();
+
+    await m.clickVideo('video a');
+    expect(m.step()).toBe(initialStep);
+
+    setBusy(false);
+    await flush();
+    await m.clickVideo('video a');
+    expect(m.step()).not.toBe(initialStep);
+    m.unmount();
+  });
+
+  // selectVideoB awaits a lookup and then wrote state unconditionally. Closing
+  // or going back during that await left the wizard on the details step with a
+  // blank side A, or threw on a null selection.
+  it('ignores the existing-comparison lookup of a wizard that was closed meanwhile', async () => {
+    getUserVideos.mockResolvedValue([video('a'), video('b')]);
+    let finishLookup!: (v: null) => void;
+    findExistingComparison.mockImplementationOnce(
+      () => new Promise<null>((resolve) => (finishLookup = resolve))
+    );
+    const errors: unknown[] = [];
+    const m = await mount((e) => errors.push(e));
+    await m.clickVideo('video a');
+    await m.clickVideo('video b');
+
+    (m.q<HTMLButtonElement>('button[aria-label="Close"]'))!.click();
+    await flush();
+    finishLookup(null);
+    await flush();
+
+    expect(errors).toEqual([]);
+    expect(m.step()).toBe(initialStep);
+    m.unmount();
+  });
+
+  it('closes on Escape from anywhere in the dialog, with dialog semantics', async () => {
+    getUserVideos.mockResolvedValue([video('a')]);
+    const closed: number[] = [];
+    const m = await mount(undefined, () => closed.push(1));
+    expect(m.q('[role="dialog"][aria-modal="true"]')).not.toBeNull();
+
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await flush();
+
+    expect(closed).toEqual([1]);
     m.unmount();
   });
 });

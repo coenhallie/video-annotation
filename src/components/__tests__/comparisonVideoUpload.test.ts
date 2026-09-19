@@ -23,14 +23,20 @@ async function mount() {
   const root = document.createElement('div');
   document.body.appendChild(root);
   const uploaded: Video[] = [];
+  const busy: boolean[] = [];
   const app = createApp({
-    render: () => h(C, { onUploaded: (v: Video) => uploaded.push(v) }),
+    render: () =>
+      h(C, {
+        onUploaded: (v: Video) => uploaded.push(v),
+        onBusy: (b: boolean) => busy.push(b),
+      }),
   });
   app.mount(root);
   const input = () => root.querySelector<HTMLInputElement>('input[type="file"]')!;
   return {
     root,
     uploaded,
+    busy,
     input,
     text: () => root.textContent?.replace(/\s+/g, ' ').trim() ?? '',
     pick: async (file: File) => {
@@ -69,8 +75,9 @@ describe('ComparisonVideoUpload', () => {
   it('offers a file picker limited to the supported video types', async () => {
     const m = await mount();
     expect(m.input().accept).toBe(
-      'video/mp4,video/webm,video/ogg,video/quicktime,video/x-msvideo'
+      'video/mp4,video/webm,video/ogg,video/quicktime'
     );
+    expect(m.text()).not.toMatch(/AVI/);
     expect(
       m.root.querySelector('[data-testid="comparison-upload-button"]')?.textContent ?? ''
     ).toMatch(/upload a video/i);
@@ -135,6 +142,54 @@ describe('ComparisonVideoUpload', () => {
     await m.pick(mp4());
     expect(m.uploaded).toHaveLength(1);
     expect(m.text()).not.toContain('policy says no');
+    m.unmount();
+  });
+
+  /** An upload that stays in flight until its signal aborts. */
+  const holdUpload = () => {
+    let signal: AbortSignal | undefined;
+    uploadVideoComplete.mockImplementation(
+      (_file, _userId, options) =>
+        new Promise<Video>((_resolve, reject) => {
+          signal = options?.signal;
+          signal?.addEventListener('abort', () => reject(new Error('Upload was cancelled.')));
+        })
+    );
+    return () => signal;
+  };
+
+  // An upload can be a gigabyte. There was no way to stop one.
+  it('can be cancelled, and goes back to the picker without an error', async () => {
+    const signal = holdUpload();
+    const m = await mount();
+    await m.pick(mp4());
+
+    [...m.root.querySelectorAll('button')].find((b) => /cancel/i.test(b.textContent ?? ''))!.click();
+    await flush();
+
+    expect(signal()?.aborted).toBe(true);
+    expect(m.root.querySelector('[data-testid="comparison-upload-button"]')).not.toBeNull();
+    expect(m.text()).not.toMatch(/failed|cancelled/i);
+    m.unmount();
+  });
+
+  // Vue drops emits from an unmounted instance, so an upload that outlived the
+  // component finished, inserted its row, and was never selected or listed.
+  it('stops the upload when the component goes away', async () => {
+    const signal = holdUpload();
+    const m = await mount();
+    await m.pick(mp4());
+
+    m.unmount();
+
+    expect(signal()?.aborted).toBe(true);
+  });
+
+  // The host disables everything that would unmount this while it works.
+  it('tells its host when it starts and stops working', async () => {
+    const m = await mount();
+    await m.pick(mp4());
+    expect(m.busy).toEqual([true, false]);
     m.unmount();
   });
 });
