@@ -248,7 +248,8 @@ const timelineBClasses = computed(() => ({
     <!-- Instructions -->
     <div class="px-6 pt-4 pb-2">
       <div class="flex items-center justify-between text-xs text-gray-400">
-        <div class="flex items-center space-x-4">
+        <!-- Keyboard hints: hidden where there is no keyboard to use them. -->
+        <div class="hidden items-center space-x-4 lg:flex">
           <span>Use ↑/↓ to select timeline</span>
           <span>Use ←/→ to step frames</span>
         </div>

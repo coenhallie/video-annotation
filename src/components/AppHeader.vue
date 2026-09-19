@@ -20,7 +20,7 @@ defineEmits<{
        white / gray-900), so the nav reads as the top of one sheet rather than a
        separate bar stacked on the app. -->
   <header
-    class="flex h-12 shrink-0 items-center gap-3 border-b border-gray-200 bg-white px-6 dark:border-white/10 dark:bg-gray-900"
+    class="flex h-12 shrink-0 items-center gap-3 whitespace-nowrap border-b border-gray-200 bg-white px-4 sm:px-6 dark:border-white/10 dark:bg-gray-900"
   >
     <router-link
       to="/"
@@ -35,13 +35,16 @@ defineEmits<{
     <button
       type="button"
       class="font-mono text-[10px] tracking-wider text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
+      aria-label="What's new: version 3.10"
       title="What's new"
       @click="$emit('open-changelog')"
     >
-      BETA v3.10
+      <!-- The word is dropped first on a narrow screen; the number is the part
+           that carries information. -->
+      <span class="hidden sm:inline">BETA </span>v3.10
     </button>
 
-    <div class="ml-auto flex items-center gap-4">
+    <div class="ml-auto flex min-w-0 items-center gap-3 sm:gap-4">
       <slot />
       <template v-if="showUserControls">
         <ThemeToggle />

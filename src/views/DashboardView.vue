@@ -580,13 +580,17 @@ watch(user, (u) => {
         class="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
         @click="showComparisonModal = true"
       >
-        Create comparison
+        <span class="sm:hidden">Compare</span>
+        <span class="hidden sm:inline">Create comparison</span>
       </button>
     </AppHeader>
 
-    <main class="max-w-7xl mx-auto p-6">
-      <div class="flex gap-6">
-        <aside class="w-60 shrink-0">
+    <main class="max-w-7xl mx-auto p-4 sm:p-6">
+      <!-- Side by side from lg up; stacked below it. A fixed 240px sidebar next
+           to the list left the list about 100px on a phone, which squeezed the
+           titles out entirely and overflowed the page sideways. -->
+      <div class="flex flex-col gap-6 lg:flex-row">
+        <aside class="w-full shrink-0 lg:w-60">
           <button
             type="button"
             class="mb-3 w-full rounded px-2 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-300"

@@ -1955,15 +1955,18 @@ watch(
       min-h-0 is what lets this flex row be shorter than its content; the
       sidebar scrolls inside itself.
     -->
-    <main class="flex-1 flex min-h-0 overflow-hidden">
+    <main class="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
       <!-- Main App Content -->
       <!-- Video Section -->
-      <section class="flex-1 flex flex-col bg-black min-w-0 overflow-hidden">
+      <!-- Below lg the two panes stack: the video takes a fixed share of the
+           screen and the annotation list scrolls in the rest. Side by side, a
+           384px sidebar left a phone about six pixels of video. -->
+      <section class="flex h-[50dvh] min-w-0 shrink-0 flex-col overflow-y-auto overflow-x-hidden bg-black lg:h-auto lg:flex-1 lg:shrink lg:overflow-hidden">
         <EditorSurfaceTabs
           v-if="hasPipelineSurface"
           v-model="activeSurface"
         />
-        <div class="flex-1 flex items-center justify-center p-6">
+        <div class="flex min-h-0 flex-1 items-center justify-center p-2 lg:p-6">
           <div class="w-full h-full flex flex-col items-center justify-center">
             <!--
               The player stays mounted with v-show rather than v-if: v-if would
@@ -2158,7 +2161,7 @@ watch(
 
       <!-- Sidebar with Calibration and Annotation Panel -->
       <aside
-        class="w-96 min-w-96 max-w-96 flex-shrink-0 bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-white/10 flex flex-col overflow-hidden"
+        class="flex min-h-0 w-full flex-1 flex-col overflow-hidden border-t border-gray-200 bg-white dark:border-white/10 dark:bg-gray-900 lg:w-96 lg:min-w-96 lg:max-w-96 lg:flex-none lg:flex-shrink-0 lg:border-l lg:border-t-0"
       >
         <!-- Own watch-coverage hint (informational, never blocks annotating) -->
         <div

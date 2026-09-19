@@ -41,7 +41,7 @@ defineEmits<{
     <template v-else-if="user">
       <!-- Who you are is meta, not a labelled field: no icon, no chrome. -->
       <span
-        class="max-w-[16rem] truncate font-mono text-[10px] tracking-wider text-gray-500 dark:text-gray-400"
+        class="hidden max-w-[16rem] truncate font-mono text-[10px] tracking-wider text-gray-500 sm:inline dark:text-gray-400"
         :title="user.email || ''"
       >
         {{ user.email || 'Loading...' }}
