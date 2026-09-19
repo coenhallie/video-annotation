@@ -267,14 +267,19 @@ const cancelCommentForm = () => {
   editingComment.value = null;
 };
 
+// Rejects on failure: CommentForm awaits this and keeps the draft, and shows
+// the reason, when it does.
 const handleCommentSubmit = async (commentData) => {
+  // Captured before the first await: a successful update closes the form, which
+  // nulls editingComment.
+  const editing = editingComment.value;
   try {
     let result;
 
-    if (editingComment.value) {
+    if (editing) {
       // Update existing comment with optimistic update
       const optimisticComment = {
-        ...editingComment.value,
+        ...editing,
         content: commentData.content,
         updatedAt: new Date().toISOString(),
       };
@@ -284,7 +289,7 @@ const handleCommentSubmit = async (commentData) => {
 
       try {
         result = await CommentService.updateCommentWithRealtime(
-          editingComment.value.id,
+          editing.id,
           { content: commentData.content },
           anonymousSession.value?.sessionId
         );
@@ -294,7 +299,7 @@ const handleCommentSubmit = async (commentData) => {
 
         // Update comment in local array
         const index = comments.value.findIndex(
-          (c) => c.id === editingComment.value.id
+          (c) => c.id === editing.id
         );
         if (index !== -1) {
           comments.value[index] = result;
@@ -386,7 +391,9 @@ const handleCommentSubmit = async (commentData) => {
     cancelCommentForm();
   } catch (err) {
     console.error('❌ [CommentSection] Error submitting comment:', err);
-    error.value = err.message || 'Failed to submit comment';
+    throw err instanceof Error
+      ? err
+      : new Error('Failed to submit comment');
   }
 };
 
@@ -736,7 +743,7 @@ defineExpose({
             :editing-comment="editingComment"
             :is-anonymous="isAnonymous"
             :anonymous-session="anonymousSession"
-            @submit="handleCommentSubmit"
+            :save="handleCommentSubmit"
             @cancel="cancelCommentForm"
             @typing="handleFormTyping"
             @stop-typing="handleFormStopTyping"
@@ -766,7 +773,7 @@ defineExpose({
         :editing-comment="null"
         :is-anonymous="isAnonymous"
         :anonymous-session="anonymousSession"
-        @submit="handleCommentSubmit"
+        :save="handleCommentSubmit"
         @cancel="cancelCommentForm"
         @typing="handleFormTyping"
         @stop-typing="handleFormStopTyping"

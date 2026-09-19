@@ -18,9 +18,17 @@ const props = defineProps({
     type: Object,
     default: null,
   },
+  // Performs the save and rejects when it fails. A prop rather than an emit
+  // because an emit returns before the parent's request has answered: the form
+  // cleared the draft and re-enabled the button while the save was still in
+  // flight, so a failed comment lost its text and a second click sent it twice.
+  save: {
+    type: Function,
+    required: true,
+  },
 });
 
-const emit = defineEmits(['submit', 'cancel', 'typing', 'stop-typing']);
+const emit = defineEmits(['cancel', 'typing', 'stop-typing']);
 
 // State
 const content = ref('');
@@ -125,7 +133,7 @@ const handleSubmit = async () => {
       // For now, we'll let the parent handle this
     }
 
-    emit('submit', submitData);
+    await props.save(submitData);
 
     // Reset form if not editing
     if (!props.editingComment) {
