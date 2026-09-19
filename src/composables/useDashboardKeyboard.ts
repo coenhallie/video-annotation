@@ -5,8 +5,12 @@ import { onMounted, onBeforeUnmount, type Ref } from 'vue';
  *
  * Handles:
  * - Space: toggle play/pause
- * - ArrowRight: step forward one frame
- * - ArrowLeft: step backward one frame
+ * - ArrowRight: step forward one frame (single mode)
+ * - ArrowLeft: step backward one frame (single mode)
+ *
+ * In dual mode the arrow keys belong to DualTimeline, which steps the selected
+ * video. Handling them here as well stepped twice, and the second step seeks
+ * both videos to A's time, destroying a manual alignment.
  *
  * This is a side-effect composable — it returns nothing.
  */
@@ -39,10 +43,15 @@ export function useDashboardKeyboard(deps: {
       return;
     }
 
-    if (e.key === 'ArrowRight') {
+    // Cmd/Ctrl/Alt + key is a browser or OS shortcut (Cmd+ArrowLeft is Back).
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+    const ownsArrows = playerMode.value === 'single';
+
+    if (e.key === 'ArrowRight' && ownsArrows) {
       e.preventDefault();
       unifiedVideoPlayerRef.value?.stepFrame?.(1);
-    } else if (e.key === 'ArrowLeft') {
+    } else if (e.key === 'ArrowLeft' && ownsArrows) {
       e.preventDefault();
       unifiedVideoPlayerRef.value?.stepFrame?.(-1);
     } else if (e.key === ' ' || e.code === 'Space') {

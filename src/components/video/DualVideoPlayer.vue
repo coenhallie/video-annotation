@@ -123,9 +123,9 @@ const {
   videoBIsPlaying,
   play,
   pause,
-  seek, // Use seek for synchronized seeking
+  stepFrameVideoA,
+  stepFrameVideoB,
   setPlaybackRate: setDualPlaybackRate,
-  videoAState,
   videoARefreshUrl,
   videoBRefreshUrl,
   setVideoSources,
@@ -183,14 +183,12 @@ const togglePlay = () => {
   }
 };
 
+// Each video advances by its own frame from its own position. Seeking both to
+// A's time instead (what `seek` does) throws away a manual A/B alignment, and
+// steps B by A's frame duration when the two frame rates differ.
 const seekFrame = (frames: number) => {
-  // We need to get current time and add frames
-  const fps = videoAState?.fps || 30;
-  const timeStep = frames / fps;
-  // Use seek to sync-seek both
-  if (videoARef.value) {
-      seek(videoARef.value.currentTime + timeStep);
-  }
+  stepFrameVideoA?.(frames);
+  stepFrameVideoB?.(frames);
 };
 
 const toggleMute = () => {
