@@ -176,7 +176,7 @@ export type Database = {
           duration: number
           durationFrames: number
           endFrame: number | null
-          frame: number | null
+          frame: number
           id: string
           metadata: Json | null
           projectId: string | null
@@ -205,7 +205,7 @@ export type Database = {
           duration?: number
           durationFrames?: number
           endFrame?: number | null
-          frame?: number | null
+          frame: number
           id?: string
           metadata?: Json | null
           projectId?: string | null
@@ -234,7 +234,7 @@ export type Database = {
           duration?: number
           durationFrames?: number
           endFrame?: number | null
-          frame?: number | null
+          frame?: number
           id?: string
           metadata?: Json | null
           projectId?: string | null

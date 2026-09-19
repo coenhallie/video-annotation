@@ -1,10 +1,7 @@
 -- annotations.frame: backfill three legacy rows, then NOT NULL (2026-09-20)
 --
--- NOT APPLIED YET. Apply with:
---   supabase db query --linked -f migrations/20260920_annotations_frame_not_null.sql
---   npm run gen:types
--- and then delete the temporary `frame: number` line from ColumnOverrides in
--- src/types/supabase.ts (it is marked with this file's name).
+-- Applied to production 2026-09-20 and verified (is_nullable = NO, 0 nulls);
+-- types regenerated and the temporary override removed the same day.
 --
 -- Why: every code path treats an annotation's frame as a number - the timeline
 -- sorts on it, and the drawing canvas matches drawings on strict frame

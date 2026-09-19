@@ -1,7 +1,6 @@
 -- Server-side limits for uploads, and a visibility check on thumbnails (2026-09-19)
 --
--- NOT APPLIED YET. Apply with:
---   supabase db query --linked -f migrations/20260919_harden_uploads_and_thumbnails.sql
+-- Applied to production 2026-09-20 and verified read-only afterwards.
 --
 -- 1. Upload limits on the `videos` bucket.
 --

@@ -117,9 +117,7 @@ export interface DatabaseAnnotation {
   severity: SeverityLevel;
   color: string;
   timestamp: number;
-  // NOT NULL once 20260920_annotations_frame_not_null.sql is applied; every
-  // consumer has always treated it as a number.
-  frame?: number;
+  frame: number; // NOT NULL, no default: every insert supplies it
   startFrame: number;
   endFrame?: number | null;
   duration: number;

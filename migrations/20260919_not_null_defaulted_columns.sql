@@ -1,9 +1,6 @@
 -- Make always-present columns NOT NULL (2026-09-19)
 --
--- NOT APPLIED YET. Apply with:
---   supabase db query --linked -f migrations/20260919_not_null_defaulted_columns.sql
--- then regenerate the schema types:
---   npm run gen:types
+-- Applied to production 2026-09-20 and verified read-only afterwards.
 --
 -- Why: these 21 columns all have a DEFAULT but were created without NOT NULL,
 -- so the schema says they may be null. No row holds a null in any of them

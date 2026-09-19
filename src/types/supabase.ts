@@ -36,10 +36,6 @@ type ColumnOverrides = {
     videoContext: VideoContext | null; // annotations_video_context_check
     drawingData: DrawingData | null; // jsonb
     metadata: Record<string, unknown> | null; // jsonb
-    // TEMPORARY - the one line here that runs ahead of the database. Delete it
-    // once migrations/20260920_annotations_frame_not_null.sql is applied and
-    // the types are regenerated; the generated type is then `number` itself.
-    frame: number;
   };
 };
 
