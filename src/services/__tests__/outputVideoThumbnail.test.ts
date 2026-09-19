@@ -518,6 +518,23 @@ describe('findOrCreateOutputVideo losing the insert race', () => {
     expect(result.id).toBe('v1');
   });
 
+  it("does not delete the winner's row when the presigned URL fetch then fails", async () => {
+    state.insertError = { code: '23505', message: 'duplicate key value' };
+    state.existingOnRetry = {
+      id: 'winner-1',
+      videoId: 'aws:proj-123',
+      ownerId: 'user-1',
+      url: '',
+      thumbnailUrl: null,
+    };
+    getVideoUrlForProject.mockRejectedValue(new Error('502 Bad Gateway'));
+
+    await expect(callFindOrCreate()).rejects.toThrow('502');
+
+    // The other tab created that row and is still using it.
+    expect(state.deleted).toBeNull();
+  });
+
   it('explains the conflict when RLS hides the winner row', async () => {
     state.insertError = { code: '23505', message: 'duplicate key value' };
     state.existingOnRetry = null;

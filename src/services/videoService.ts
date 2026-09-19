@@ -602,7 +602,10 @@ export class VideoService {
     // does not exist yet is visible to nobody, so fetching first would 403 the
     // first ingest of every project. Created with an empty url, filled in below.
     const existing = await this.findVideoByOutputVideoId(outputVideoId);
-    const createdHere = !existing;
+    // Whether the row is this call's to clean up if a later step fails. Only a
+    // successful insert makes it so: losing the insert race hands back a row
+    // another client created and is using.
+    let createdHere = false;
 
     let record: Video;
     if (existing) {
@@ -662,6 +665,7 @@ export class VideoService {
         throw new Error('Insert returned no row');
       } else {
         record = data;
+        createdHere = true;
       }
     }
 
