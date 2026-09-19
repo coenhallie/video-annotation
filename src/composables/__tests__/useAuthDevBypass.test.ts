@@ -9,9 +9,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 const getSession = vi.fn();
 const signInWithPassword = vi.fn();
 const onAuthStateChange = vi.fn();
+const signInWithOAuth = vi.fn(async () => ({ data: {}, error: null }));
 
 vi.mock('@/composables/useSupabase', () => ({
-  supabase: { auth: { getSession, signInWithPassword, onAuthStateChange } },
+  supabase: {
+    auth: { getSession, signInWithPassword, onAuthStateChange, signInWithOAuth },
+  },
 }));
 vi.mock('@/composables/useNotifications', () => ({
   useNotifications: () => ({ error: vi.fn() }),
@@ -141,5 +144,46 @@ describe('initAuth auth-state listener', () => {
     await auth.initAuth();
 
     expect(onAuthStateChange).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('signInWithSSO', () => {
+  // A share-link visitor who signs in to annotate leaves through Keycloak and
+  // comes back to the site root. Without this they landed on the dashboard
+  // with the share link gone.
+  it('remembers the page the visitor signed in from', async () => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal('sessionStorage', {
+      getItem: (k: string) => storage.get(k) ?? null,
+      setItem: (k: string, v: string) => void storage.set(k, v),
+      removeItem: (k: string) => void storage.delete(k),
+    });
+    vi.stubGlobal('window', {
+      location: { origin: 'https://app.test', pathname: '/video/v1', search: '?share=v1' },
+    });
+    const auth = await load();
+
+    await auth.signInWithSSO();
+
+    expect(storage.get('postLoginPath')).toBe('/video/v1?share=v1');
+    vi.unstubAllGlobals();
+  });
+
+  it('does not overwrite the page the router already remembered', async () => {
+    const storage = new Map<string, string>([['postLoginPath', '/comparison/c1']]);
+    vi.stubGlobal('sessionStorage', {
+      getItem: (k: string) => storage.get(k) ?? null,
+      setItem: (k: string, v: string) => void storage.set(k, v),
+      removeItem: (k: string) => void storage.delete(k),
+    });
+    vi.stubGlobal('window', {
+      location: { origin: 'https://app.test', pathname: '/login', search: '' },
+    });
+    const auth = await load();
+
+    await auth.signInWithSSO();
+
+    expect(storage.get('postLoginPath')).toBe('/comparison/c1');
+    vi.unstubAllGlobals();
   });
 });

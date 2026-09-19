@@ -67,6 +67,23 @@ router.beforeEach(async (to, from, next) => {
     sessionStorage.setItem('pendingOutputVideo', outputVideo);
   }
 
+  // Where a signed-out visitor was heading when they were sent to login. The
+  // Keycloak round trip is a full page load that always returns to the site
+  // root, so this rides in sessionStorage, like pendingOutputVideo above, and
+  // is followed exactly once. Only a same-site path is ever followed.
+  const POST_LOGIN_PATH = 'postLoginPath';
+  if (isAuthenticated) {
+    const stored = sessionStorage.getItem(POST_LOGIN_PATH);
+    if (stored !== null) {
+      sessionStorage.removeItem(POST_LOGIN_PATH);
+      const isSameSitePath = stored.startsWith('/') && !stored.startsWith('//');
+      if (isSameSitePath && to.name === 'dashboard' && stored !== to.fullPath) {
+        next(stored);
+        return;
+      }
+    }
+  }
+
   if (to.name === 'login') {
     if (isAuthenticated) {
       next({ name: 'dashboard' });
@@ -111,6 +128,7 @@ router.beforeEach(async (to, from, next) => {
   if (isAuthenticated || isSharedLink) {
     next();
   } else {
+    sessionStorage.setItem(POST_LOGIN_PATH, to.fullPath);
     next({ name: 'login' });
   }
 });

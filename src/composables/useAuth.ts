@@ -72,6 +72,19 @@ export function useAuth() {
 
   const signInWithSSO = async () => {
     try {
+      // Keycloak returns to the site root. Remember where the visitor signed in
+      // from so the router guard can bring them back (a share-link visitor who
+      // signs in to annotate used to land on the dashboard with the link gone).
+      // The router sets this itself when it sends someone to /login, and that
+      // value wins: from /login, "here" is not where they were going.
+      const here = `${window.location.pathname}${window.location.search}`;
+      if (
+        window.location.pathname !== '/login' &&
+        sessionStorage.getItem('postLoginPath') === null
+      ) {
+        sessionStorage.setItem('postLoginPath', here);
+      }
+
       // Preserve outputVideo param through the OAuth redirect
       let redirectTo = window.location.origin;
       const pendingOutputVideo = sessionStorage.getItem('pendingOutputVideo');
