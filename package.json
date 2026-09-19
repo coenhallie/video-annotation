@@ -7,9 +7,11 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "deploy": "vite build && netlify deploy --prod --dir=dist --functions=netlify/functions",
+    "deploy": "npm run check && vite build && netlify deploy --prod --dir=dist --functions=netlify/functions",
     "test": "vitest run",
     "typecheck": "vue-tsc --noEmit",
+    "lint": "eslint .",
+    "check": "npm run typecheck && npm run lint && npm test",
     "test:watch": "vitest"
   },
   "dependencies": {
