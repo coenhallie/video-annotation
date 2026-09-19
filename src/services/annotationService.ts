@@ -428,43 +428,4 @@ export class AnnotationService {
     return data;
   }
 
-  /**
-   * Get annotations at frame for comparison video
-   */
-  static async getComparisonAnnotationsAtFrame(
-    comparisonVideoId: string,
-    frame: number,
-    videoAId: string,
-    videoBId: string
-  ) {
-    // Use the database function if available, otherwise fall back to individual queries
-    try {
-      const { data, error } = await supabase.rpc(
-        'get_comparison_annotations_at_frame',
-        {
-          p_comparison_video_id: comparisonVideoId,
-          p_frame: frame,
-          p_video_a_id: videoAId,
-          p_video_b_id: videoBId,
-        }
-      );
-
-      if (error) throw error;
-      return data;
-    } catch {
-      // Fallback: Get annotations individually
-      const [comparisonAnnotations, videoAAnnotations, videoBAnnotations] =
-        await Promise.all([
-          this.getAnnotationsAtFrame(comparisonVideoId, frame),
-          this.getAnnotationsAtFrame(videoAId, frame),
-          this.getAnnotationsAtFrame(videoBId, frame),
-        ]);
-
-      return {
-        comparison: comparisonAnnotations,
-        videoA: videoAAnnotations,
-        videoB: videoBAnnotations,
-      };
-    }
-  }
 }

@@ -22,7 +22,15 @@ export default [
   // Global ignores. This only works as an object with no other keys: an
   // `ignores` next to `files` scopes that one block and ignores nothing globally,
   // which is how build output and agent worktrees ended up being linted.
-  { ignores: ['dist/**', 'node_modules/**', '.claude/**', '.netlify/**'] },
+  {
+    ignores: [
+      'dist/**',
+      'node_modules/**',
+      '.claude/**',
+      '.netlify/**',
+      'src/types/generated/**',
+    ],
+  },
   // Vue recommended flat config first to ensure SFC parsing
   ...vue.configs['flat/recommended'],
   {

@@ -71,7 +71,7 @@ export class CommentService {
       // Set session context for anonymous users
       if (params.sessionId) {
         await supabase.rpc('set_session_context', {
-          sessionId: params.sessionId,
+          session_id: params.sessionId,
         });
       }
 
@@ -232,7 +232,7 @@ export class CommentService {
     try {
       // Set session context for anonymous users
       if (sessionId) {
-        await supabase.rpc('set_session_context', { sessionId: sessionId });
+        await supabase.rpc('set_session_context', { session_id: sessionId });
       }
 
       const { data: deleted, error } = await supabase
@@ -331,7 +331,7 @@ export class CommentService {
   ): Promise<void> {
     try {
       // Set session context
-      await supabase.rpc('set_session_context', { sessionId: sessionId });
+      await supabase.rpc('set_session_context', { session_id: sessionId });
 
       const { error } = await supabase
         .from('anonymous_sessions')
