@@ -1,14 +1,19 @@
 <template>
   <div
     :class="[
-      'group flex cursor-pointer items-center gap-3 rounded px-3 py-2.5 transition-colors',
+      'group flex cursor-pointer items-center gap-3 rounded px-3 py-2.5 outline-none transition-colors focus-visible:ring-1 focus-visible:ring-gray-400 dark:focus-visible:ring-white/40',
       isSelected || isInspected
         ? 'bg-gray-100 dark:bg-white/[0.06]'
         : 'hover:bg-gray-50 dark:hover:bg-white/[0.03]',
       isDragging && 'opacity-50',
     ]"
     draggable="true"
+    role="button"
+    tabindex="0"
+    :aria-pressed="(isSelected || isInspected) === true"
     @click="handleClick"
+    @keydown.self.enter.prevent="emit('inspect', project)"
+    @keydown.self.space.prevent="emit('inspect', project)"
     @dragstart="handleDragStart"
     @dragend="handleDragEnd"
   >

@@ -57,7 +57,11 @@ const singleProject: Project = {
   video: makeVideo({ id: 'video-single', qaStatus: 'staging' }),
 };
 
-function mountItem(project: Project, watchPercent: number) {
+function mountItem(
+  project: Project,
+  watchPercent: number,
+  listeners: Record<string, unknown> = {}
+) {
   const root = document.createElement('div');
   document.body.appendChild(root);
   const app = createApp(
@@ -68,6 +72,7 @@ function mountItem(project: Project, watchPercent: number) {
           isSelected: false,
           isDragging: false,
           watchPercent,
+          ...listeners,
         }),
     })
   );
@@ -117,5 +122,42 @@ describe('ProjectListItem QA status slot', () => {
     ).toBeNull();
 
     harness.unmount();
+  });
+});
+
+// The row is the only way to the details panel, which holds the Open button, so
+// a keyboard user could not open any video from the dashboard.
+describe('ProjectListItem keyboard', () => {
+  const row = (root: HTMLElement) =>
+    root.querySelector<HTMLElement>('[role="button"][tabindex="0"]');
+
+  it('is focusable and opens the details panel on Enter and Space', () => {
+    const inspected: Project[] = [];
+    const m = mountItem(singleProject, 0, {
+      onInspect: (p: Project) => inspected.push(p),
+    });
+    const el = row(m.root);
+    expect(el).not.toBeNull();
+
+    for (const key of ['Enter', ' ']) {
+      el!.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+    }
+
+    expect(inspected.map((p) => p.id)).toEqual(['project-2', 'project-2']);
+    m.unmount();
+  });
+
+  it('leaves keys pressed on a control inside the row to that control', () => {
+    const inspected: Project[] = [];
+    const m = mountItem(singleProject, 0, {
+      onInspect: (p: Project) => inspected.push(p),
+    });
+    const inner = m.root.querySelector('button, select')!;
+    const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+    inner.dispatchEvent(event);
+
+    expect(inspected).toEqual([]);
+    expect(event.defaultPrevented).toBe(false);
+    m.unmount();
   });
 });

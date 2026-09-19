@@ -2,7 +2,7 @@
   <div class="folder-tree-item">
     <div
       :class="[
-        'folder-item group flex cursor-pointer items-center gap-1 rounded px-2 py-1.5 transition-colors',
+        'folder-item group flex cursor-pointer items-center gap-1 rounded px-2 py-1.5 transition-colors outline-none focus-visible:ring-1 focus-visible:ring-gray-400 dark:focus-visible:ring-white/40',
         selectedFolderId === folder.id
           ? 'bg-gray-100 text-gray-900 dark:bg-white/[0.06] dark:text-white'
           : 'text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-white/[0.03]',
@@ -10,7 +10,12 @@
           'bg-gray-100 ring-1 ring-gray-400 dark:bg-white/[0.08] dark:ring-white/30',
       ]"
       :style="{ paddingLeft: `${level * 20 + 8}px` }"
+      role="button"
+      tabindex="0"
+      :aria-pressed="selectedFolderId === folder.id"
       @click="handleClick"
+      @keydown.self.enter.prevent="handleClick"
+      @keydown.self.space.prevent="handleClick"
       @dragover.prevent="handleDragOver"
       @drop="handleDrop"
       @dragleave="handleDragLeave"

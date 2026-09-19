@@ -3,12 +3,17 @@
     <!-- Root folder -->
     <div
       :class="[
-        'folder-item flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 transition-colors',
+        'folder-item flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 transition-colors outline-none focus-visible:ring-1 focus-visible:ring-gray-400 dark:focus-visible:ring-white/40',
         selectedFolderId === null
           ? 'bg-gray-100 text-gray-900 dark:bg-white/[0.06] dark:text-white'
           : 'text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-white/[0.03]',
       ]"
+      role="button"
+      tabindex="0"
+      :aria-pressed="selectedFolderId === null"
       @click="$emit('select', null)"
+      @keydown.self.enter.prevent="$emit('select', null)"
+      @keydown.self.space.prevent="$emit('select', null)"
       @dragover.prevent="handleRootDragOver"
       @drop="handleRootDrop"
       @dragleave="handleRootDragLeave"
