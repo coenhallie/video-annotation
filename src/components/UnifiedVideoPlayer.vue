@@ -66,6 +66,22 @@
         />
       </template>
 
+      <!-- Overlays for Video B -->
+      <template #overlays-b="{ currentFrame }">
+        <DrawingCanvas
+          v-if="videoBUrl && drawingCanvasB"
+          ref="drawingCanvasBRef"
+          :current-frame="currentFrame"
+          :is-drawing-mode="drawingCanvasB?.isDrawingMode?.value ?? false"
+          :stroke-width="drawingCanvasB?.currentTool?.value?.strokeWidth ?? 3"
+          :severity="drawingCanvasB?.currentTool?.value?.severity ?? defaultSeverity"
+          :current-color="resolveCanvasColor(drawingCanvasB) ?? '#ef4444'"
+          :existing-drawings="drawingCanvasB?.allDrawings?.value ?? []"
+          :is-loading-drawings="drawingCanvasB?.isLoadingDrawings?.value ?? false"
+          @drawing-created="(d) => handleDrawingCreated(d, 'B')"
+        />
+      </template>
+
       <template #controls-right>
         <slot name="controls-right" />
       </template>

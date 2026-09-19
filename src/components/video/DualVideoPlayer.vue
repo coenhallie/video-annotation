@@ -12,6 +12,7 @@
           :disable-global-store="true"
           :is-playing="videoAIsPlaying"
           :current-time="videoACurrentTime"
+          :current-frame="videoACurrentFrame"
           :playback-rate="playbackRate"
           :volume="volume"
           :is-muted="isMuted"
@@ -41,6 +42,7 @@
           :disable-global-store="true"
           :is-playing="videoBIsPlaying"
           :current-time="videoBCurrentTime"
+          :current-frame="videoBCurrentFrame"
           :playback-rate="playbackRate"
           :volume="volume"
           :is-muted="isMuted"
@@ -115,6 +117,8 @@ const {
   videoBRef,
   videoACurrentTime,
   videoBCurrentTime,
+  videoACurrentFrame,
+  videoBCurrentFrame,
   videoAIsPlaying,
   videoBIsPlaying,
   play,

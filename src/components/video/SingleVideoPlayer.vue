@@ -121,6 +121,10 @@ const props = defineProps<{
   
   // Props for controlled mode (when disableGlobalStore is true)
   currentTime?: number;
+  // The owner's frame number for currentTime. Controlled mode has no frame rate
+  // of its own, so the frame has to come from whoever converts time to frames
+  // for saved drawings - the overlay matches drawings on strict frame equality.
+  currentFrame?: number;
   isPlaying?: boolean;
   volume?: number;
   isMuted?: boolean;
@@ -156,7 +160,7 @@ const currentTime = computed(() => props.disableGlobalStore ? (props.currentTime
 const volume = computed(() => props.disableGlobalStore ? (props.volume ?? localVolume.value) : storeRefs!.volume.value);
 const isMuted = computed(() => props.disableGlobalStore ? (props.isMuted ?? localIsMuted.value) : storeRefs!.isMuted.value);
 const playbackRate = computed(() => props.disableGlobalStore ? (props.playbackRate ?? localPlaybackRate.value) : storeRefs!.playbackRate.value);
-const currentFrame = computed(() => props.disableGlobalStore ? (props.currentTime ? Math.floor(props.currentTime * 30) : localCurrentFrame.value) : storeRefs!.currentFrame.value);
+const currentFrame = computed(() => props.disableGlobalStore ? (props.currentFrame ?? localCurrentFrame.value) : storeRefs!.currentFrame.value);
 
 const videoRef = ref<HTMLVideoElement | null>(null);
 const containerRef = ref<HTMLElement | null>(null);
