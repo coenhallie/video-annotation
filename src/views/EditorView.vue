@@ -54,6 +54,7 @@ import { useComparisonVideoWorkflow } from '@/composables/useComparisonVideoWork
 import { useDualVideoPlayer } from '@/composables/useDualVideoPlayer';
 import { useSessionCleanup } from '@/composables/useSessionCleanup';
 import { useNotifications } from '@/composables/useNotifications';
+import { createLatestQueue } from '@/utils/latestQueue';
 import { surfaceTransport, replayStepTarget } from '@/utils/surfaceTransport';
 import { useDashboardKeyboard } from '@/composables/useDashboardKeyboard';
 import { useSharedContent } from '@/composables/useSharedContent';
@@ -1527,7 +1528,14 @@ const handleProjectSelected = async (project: ProjectSelection) => {
 // the existing handleProjectSelected entry point. The route-name check also
 // acts as the guard for landing on '/' (name 'dashboard') → no-op, so it never
 // collides with the AWS/share branches handled in onMounted.
-async function loadFromRoute() {
+// One project load at a time, newest wins. Back/Forward across editor URLs
+// fired these concurrently: an older project's fetch could finish last and
+// overwrite the newer one, or its switch cleanup could wipe the newer state
+// (runProjectSwitchCleanups skips, rather than waits, when one is in flight).
+const projectLoads = createLatestQueue();
+const loadFromRoute = () => projectLoads.run(loadRouteProject);
+
+async function loadRouteProject() {
   const params = new URLSearchParams(window.location.search);
   if (params.get('outputVideo') || ShareService.parseShareUrl().id) return; // handled by AWS/share branch
   try {
