@@ -352,7 +352,7 @@ export class LabelService {
         }
 
         // Get last used date within the project
-        const { data: lastUsedData, error: lastUsedError } = await supabase
+        const { data: lastUsedData } = await supabase
           .from('annotation_labels')
           .select('createdAt, annotations!inner(projectId)')
           .eq('labelId', label.id)
@@ -377,7 +377,7 @@ export class LabelService {
         }
 
         // Get last used date
-        const { data: lastUsedData, error: lastUsedError } = await supabase
+        const { data: lastUsedData } = await supabase
           .from('annotation_labels')
           .select('createdAt')
           .eq('labelId', label.id)
@@ -432,57 +432,6 @@ export class LabelService {
     }
 
     return data || [];
-  }
-
-  /**
-   * Get annotations by label filter
-   */
-  static async getAnnotationsByLabels(
-    labelIds: string[],
-    logic: 'OR' | 'AND' = 'OR',
-    videoId?: string,
-    projectId?: string
-  ): Promise<string[]> {
-    if (labelIds.length === 0) {
-      return [];
-    }
-
-    if (logic === 'OR') {
-      // Get annotations that have ANY of the specified labels
-      const { data, error } = await supabase
-        .from('annotation_labels')
-        .select('annotationId')
-        .in('labelId', labelIds);
-
-      if (error) {
-        throw error;
-      }
-
-      return [...new Set(data?.map((item) => item.annotationId) || [])];
-    } else {
-      // Get annotations that have ALL of the specified labels
-      const annotationCounts: Record<string, number> = {};
-
-      const { data, error } = await supabase
-        .from('annotation_labels')
-        .select('annotationId')
-        .in('labelId', labelIds);
-
-      if (error) {
-        throw error;
-      }
-
-      // Count how many of the required labels each annotation has
-      data?.forEach((item) => {
-        annotationCounts[item.annotationId] =
-          (annotationCounts[item.annotationId] || 0) + 1;
-      });
-
-      // Return only annotations that have all required labels
-      return Object.keys(annotationCounts).filter(
-        (annotationId) => annotationCounts[annotationId] === labelIds.length
-      );
-    }
   }
 
   /**

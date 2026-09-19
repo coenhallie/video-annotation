@@ -131,7 +131,7 @@
                     <span
                       class="mt-1 block font-mono text-[10px] tracking-wider text-gray-500 dark:text-gray-400"
                     >
-                      {{ formatDuration(video.duration) }} {{ video.fps || '—' }}FPS
+                      {{ formatDuration(video.duration) }} {{ video.fps > 0 ? video.fps : '—' }}FPS
                     </span>
                   </span>
                 </button>
@@ -187,7 +187,7 @@
                     <span
                       class="mt-1 block font-mono text-[10px] tracking-wider text-gray-500 dark:text-gray-400"
                     >
-                      {{ formatDuration(video.duration) }} {{ video.fps || '—' }}FPS
+                      {{ formatDuration(video.duration) }} {{ video.fps > 0 ? video.fps : '—' }}FPS
                     </span>
                   </span>
                 </button>
@@ -224,7 +224,7 @@
                     </p>
                     <p class="mt-1 font-mono text-[10px] tracking-wider text-gray-500 dark:text-gray-400">
                       {{ formatDuration(side.video?.duration || 0) }}
-                      {{ side.video?.fps || '—' }}FPS
+                      {{ (side.video?.fps ?? 0) > 0 ? side.video?.fps : '—' }}FPS
                     </p>
                   </div>
                 </div>

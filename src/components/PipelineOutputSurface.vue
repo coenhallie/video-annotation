@@ -236,8 +236,10 @@ onUnmounted(() => {
     >
       <div
         class="mb-3 h-6 w-6 animate-spin rounded-full border-2 border-gray-700 border-t-gray-300"
-      ></div>
-      <p class="text-[12px] text-gray-400">Loading pipeline data</p>
+      />
+      <p class="text-[12px] text-gray-400">
+        Loading pipeline data
+      </p>
     </div>
 
     <div
@@ -259,7 +261,9 @@ onUnmounted(() => {
           d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"
         />
       </svg>
-      <p class="text-[12px] text-gray-400">No pipeline data for this project</p>
+      <p class="text-[12px] text-gray-400">
+        No pipeline data for this project
+      </p>
       <p class="mt-1 text-[11px] text-gray-600">
         Annotations you add here stay separate from the video's.
       </p>
@@ -270,8 +274,12 @@ onUnmounted(() => {
       data-testid="pipeline-error"
       class="flex max-w-sm flex-col items-center text-center"
     >
-      <p class="text-[12px] text-gray-300">Could not load pipeline data</p>
-      <p class="mt-1 text-[11px] text-gray-500">{{ replay.error.value }}</p>
+      <p class="text-[12px] text-gray-300">
+        Could not load pipeline data
+      </p>
+      <p class="mt-1 text-[11px] text-gray-500">
+        {{ replay.error.value }}
+      </p>
       <button
         type="button"
         class="mt-3 rounded border border-white/15 px-3 py-1 text-[11px] text-gray-300 hover:bg-white/5"
@@ -324,7 +332,10 @@ onUnmounted(() => {
               which does not start at zero, while drawings are stamped with the
               zero-based frame for the replay's time. See replayDrawingFrame.
             -->
-            <slot name="overlay" :current-frame="overlayFrame" />
+            <slot
+              name="overlay"
+              :current-frame="overlayFrame"
+            />
           </div>
         </div>
       </div>

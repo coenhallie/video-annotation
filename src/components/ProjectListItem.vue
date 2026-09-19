@@ -90,7 +90,9 @@
       >
         <span v-if="project.projectType === 'dual'">DUAL</span>
         <span>{{ formatDuration(getDuration()) }}</span>
-        <span v-if="project.projectType === 'single' && project.video.fps">
+        <!-- > 0, not truthy: a row with a bad frame rate (-1) is truthy too and
+             read "-1FPS". -->
+        <span v-if="project.projectType === 'single' && project.video.fps > 0">
           {{ project.video.fps }}FPS
         </span>
         <span>{{ formatDate(project.createdAt) }}</span>

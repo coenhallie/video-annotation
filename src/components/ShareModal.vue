@@ -332,7 +332,7 @@ const copyShareUrl = async () => {
     setTimeout(() => {
       copied.value = false;
     }, 2000);
-  } catch (err) {
+  } catch {
     // Fallback: select the text for manual copying
     if (shareUrlInput.value) {
       shareUrlInput.value.select();

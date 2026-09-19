@@ -41,7 +41,7 @@
 import { ref } from 'vue';
 import type { CSSProperties } from 'vue';
 
-const props = defineProps({
+defineProps({
   description: {
     type: String,
     required: true,

@@ -166,9 +166,9 @@ export function useGlobalComments() {
    */
   const handleGlobalCommentUpdate = (
     dbComment: unknown,
-    dbOldComment?: unknown,
-    currentUserId?: string,
-    videoId?: string
+    _dbOldComment?: unknown,
+    _currentUserId?: string,
+    _videoId?: string
   ) => {
     try {
       const comment = dbComment as Comment;
@@ -190,8 +190,8 @@ export function useGlobalComments() {
    */
   const handleGlobalCommentDelete = (
     dbComment: unknown,
-    currentUserId?: string,
-    videoId?: string
+    _currentUserId?: string,
+    _videoId?: string
   ) => {
     try {
       const comment = dbComment as Comment;

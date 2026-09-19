@@ -532,7 +532,7 @@ const handleRealtimeCommentInsert = (comment) => {
   }
 };
 
-const handleRealtimeCommentUpdate = (comment, oldComment) => {
+const handleRealtimeCommentUpdate = (comment) => {
   console.log('📝 [CommentSection] Real-time comment update:', comment);
 
   // Update comment in local array

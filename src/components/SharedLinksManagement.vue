@@ -194,6 +194,7 @@
           </h3>
           <button
             type="button"
+            aria-label="Close"
             class="rounded p-1 text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
             @click="closeConfirmDialog"
           >
@@ -432,13 +433,9 @@ const copyLink = async (url: string) => {
         copiedId.value = null;
       }, 2000);
     }
-  } catch (err) {
+  } catch {
     showNotification('Failed to copy link', 'error');
   }
-};
-
-const openLink = (url: string) => {
-  window.open(url, '_blank');
 };
 
 const selectLink = (event: Event) => {
@@ -449,29 +446,6 @@ const selectLink = (event: Event) => {
 const clearFilters = () => {
   searchQuery.value = '';
   permissionFilter.value = 'all';
-};
-
-const formatDate = (dateString: string) => {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 60) {
-    return `${diffMins} min${diffMins !== 1 ? 's' : ''} ago`;
-  } else if (diffHours < 24) {
-    return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
-  } else if (diffDays < 7) {
-    return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
-  } else {
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-  }
 };
 
 // The dialog stays open while its action runs, so a second click on the

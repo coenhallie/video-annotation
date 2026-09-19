@@ -17,6 +17,7 @@
         </h2>
         <button
           type="button"
+          aria-label="Close"
           class="rounded p-1 text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
           @click="handleDeclineAuth"
         >

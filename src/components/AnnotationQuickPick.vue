@@ -490,7 +490,10 @@ onBeforeUnmount(() => {
       </header>
 
       <!-- Comment screen -->
-      <div v-if="mode === 'comment'" class="px-4 py-4">
+      <div
+        v-if="mode === 'comment'"
+        class="px-4 py-4"
+      >
         <label
           for="quick-pick-comment"
           class="mb-2 block text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400"
@@ -507,7 +510,7 @@ onBeforeUnmount(() => {
           placeholder="What happened on this frame?"
           class="w-full rounded border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-900 outline-none placeholder:text-gray-400 focus:border-orange-500 dark:border-white/10 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-500"
           @keydown.enter.prevent="commitComment"
-        />
+        >
       </div>
 
       <!-- Draw screen: a toolbar, because the surface being annotated is the
@@ -582,12 +585,18 @@ onBeforeUnmount(() => {
       </div>
 
       <!-- Pick screen -->
-      <div v-else class="flex min-h-[220px]">
+      <div
+        v-else
+        class="flex min-h-[220px]"
+      >
         <div
           class="flex w-[46%] shrink-0 flex-col border-r border-gray-200 dark:border-white/10"
         >
           <!-- Categories -->
-          <ul v-if="categories.length" class="flex-1 py-1.5">
+          <ul
+            v-if="categories.length"
+            class="flex-1 py-1.5"
+          >
             <li
               v-for="group in categories"
               :key="group.key"
@@ -680,7 +689,10 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- Labels of the active category -->
-        <ul v-if="labelRows.length" class="flex-1 py-1.5">
+        <ul
+          v-if="labelRows.length"
+          class="flex-1 py-1.5"
+        >
           <li
             v-for="row in labelRows"
             :key="row.label.id"

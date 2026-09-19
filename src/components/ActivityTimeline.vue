@@ -124,7 +124,11 @@ const onEntryClick = (entry: ActivityEntry) => {
       </p>
 
       <template v-else>
-        <section v-for="group in groups" :key="group.key" class="mb-4">
+        <section
+          v-for="group in groups"
+          :key="group.key"
+          class="mb-4"
+        >
           <h3
             data-testid="activity-day"
             class="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400"
@@ -135,7 +139,11 @@ const onEntryClick = (entry: ActivityEntry) => {
           <!-- The rule is a border on the list, not a pseudo-element per row,
                so it stays continuous through entries of different heights. -->
           <ul class="border-l border-gray-200 pl-3 dark:border-white/10">
-            <li v-for="entry in group.entries" :key="entry.id" class="relative py-1.5">
+            <li
+              v-for="entry in group.entries"
+              :key="entry.id"
+              class="relative py-1.5"
+            >
               <!-- The dot sits on the rule, 1px of overlap on each side so it
                    reads as a node rather than a bullet floating beside it. -->
               <span

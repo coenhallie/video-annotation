@@ -9,7 +9,7 @@ import type { PipelineReplay, ReplayState } from '@/composables/usePipelineRepla
  * and plain const declarations would still be in their temporal dead zone
  * when the factory runs (see drawingCanvas.test.ts for the same pattern).
  */
-const { renderFrame, setView, useRenderer2D } = vi.hoisted(() => {
+const { renderFrame, useRenderer2D } = vi.hoisted(() => {
   const renderFrame = vi.fn();
   const invalidateCache = vi.fn();
   // Zoom and pan go through the renderer now, not a CSS transform on the

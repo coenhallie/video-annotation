@@ -182,6 +182,9 @@ export function useAuth() {
         user.value = newSession?.user ?? null;
       });
     } catch (error) {
+      // Signed out is the safe state, but say why: this used to be silent, so
+      // a failed session lookup looked like an ordinary logged-out visit.
+      console.error('[useAuth] Could not initialise the session:', error);
       session.value = null;
       user.value = null;
     } finally {
