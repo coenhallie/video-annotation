@@ -229,7 +229,8 @@
           </button>
           <button
             type="button"
-            class="rounded px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white transition-colors"
+            :disabled="confirmBusy"
+            class="rounded px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40"
             :class="
               confirmDialog.type === 'danger'
                 ? 'bg-red-600 hover:bg-red-700'
@@ -473,11 +474,20 @@ const formatDate = (dateString: string) => {
   }
 };
 
+// The dialog stays open while its action runs, so a second click on the
+// confirm button would revoke or update twice.
+const confirmBusy = ref(false);
 const confirmAction = async () => {
-  if (confirmDialog.value.action) {
-    await confirmDialog.value.action();
+  if (confirmBusy.value) return;
+  confirmBusy.value = true;
+  try {
+    if (confirmDialog.value.action) {
+      await confirmDialog.value.action();
+    }
+  } finally {
+    confirmBusy.value = false;
+    closeConfirmDialog();
   }
-  closeConfirmDialog();
 };
 
 const closeConfirmDialog = () => {

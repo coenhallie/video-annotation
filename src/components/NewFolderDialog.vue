@@ -58,11 +58,11 @@
             </button>
             <button
               type="button"
-              :disabled="!folderName.trim()"
+              :disabled="busy === true || !folderName.trim()"
               class="rounded bg-gray-900 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white transition-colors hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-gray-700 dark:hover:bg-gray-600"
               @click="createFolder"
             >
-              Create
+              {{ busy ? 'Creating' : 'Create' }}
             </button>
           </div>
         </div>
@@ -78,6 +78,9 @@ import type { Folder } from '../types/folder';
 // Props
 const props = defineProps<{
   parentFolder: Folder | null;
+  // True while the parent's create request runs. The dialog stays open for
+  // that long, so without it Enter twice made two identically named folders.
+  busy?: boolean;
 }>();
 
 // Emits
@@ -92,6 +95,7 @@ const nameInput = ref<HTMLInputElement | null>(null);
 
 // Methods
 const createFolder = () => {
+  if (props.busy) return;
   if (folderName.value.trim()) {
     emit('create', folderName.value.trim(), props.parentFolder?.id || null);
   }

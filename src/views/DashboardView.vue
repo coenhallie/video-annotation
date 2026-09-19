@@ -467,12 +467,17 @@ function openNewFolder(parent: FolderTreeNode | null) {
     : null;
   showNewFolder.value = true;
 }
+const folderCreateBusy = ref(false);
 async function onCreateFolder(name: string, parentId: string | null) {
+  if (folderCreateBusy.value) return;
+  folderCreateBusy.value = true;
   try {
     await dashFolders.createFolder(name, parentId);
     showNewFolder.value = false;
   } catch (err) {
     notifyError('Could not create folder', folderErrorMessage(err));
+  } finally {
+    folderCreateBusy.value = false;
   }
 }
 async function onRenameFolder(node: FolderTreeNode, newName: string) {
@@ -485,15 +490,18 @@ async function onRenameFolder(node: FolderTreeNode, newName: string) {
 function requestDeleteFolder(node: FolderTreeNode) {
   pendingDeleteFolder.value = node;
 }
+const folderDeleteBusy = ref(false);
 async function confirmDeleteFolder() {
-  if (pendingDeleteFolder.value) {
-    try {
-      await dashFolders.deleteFolder(pendingDeleteFolder.value);
-      pendingDeleteFolder.value = null;
-      await loadData();
-    } catch (err) {
-      notifyError('Could not delete folder', folderErrorMessage(err));
-    }
+  if (!pendingDeleteFolder.value || folderDeleteBusy.value) return;
+  folderDeleteBusy.value = true;
+  try {
+    await dashFolders.deleteFolder(pendingDeleteFolder.value);
+    pendingDeleteFolder.value = null;
+    await loadData();
+  } catch (err) {
+    notifyError('Could not delete folder', folderErrorMessage(err));
+  } finally {
+    folderDeleteBusy.value = false;
   }
 }
 
@@ -915,6 +923,7 @@ watch(user, (u) => {
     <NewFolderDialog
       v-if="showNewFolder"
       :parent-folder="newFolderParent"
+      :busy="folderCreateBusy"
       @create="onCreateFolder"
       @close="showNewFolder = false"
     />
@@ -923,6 +932,7 @@ watch(user, (u) => {
       item-type="folder"
       :item-name="pendingDeleteFolder.name"
       :item-count="0"
+      :busy="folderDeleteBusy"
       @confirm="confirmDeleteFolder"
       @cancel="pendingDeleteFolder = null"
     />

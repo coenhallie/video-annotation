@@ -45,10 +45,11 @@
           </button>
           <button
             type="button"
-            class="rounded bg-red-600 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white transition-colors hover:bg-red-700"
+            :disabled="busy === true"
+            class="rounded bg-red-600 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-40"
             @click="$emit('confirm')"
           >
-            Delete
+            {{ busy ? 'Deleting' : 'Delete' }}
           </button>
         </div>
       </div>
@@ -64,6 +65,9 @@ const props = defineProps<{
   itemType: 'project' | 'folder' | 'projects' | 'annotation';
   itemName: string;
   itemCount: number;
+  // True while the parent's delete request runs; a second confirm would fire
+  // the delete again and fail on the row the first one removed.
+  busy?: boolean;
 }>();
 
 // Emits
