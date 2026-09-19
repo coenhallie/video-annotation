@@ -41,6 +41,17 @@
       </div>
     </div>
 
+    <!-- Failures. Rendered above the list rather than in place of it: a refused
+         save or delete leaves the list valid, and the reason still has to be
+         seen. -->
+    <p
+      v-if="error"
+      role="alert"
+      class="border-b border-gray-200 px-4 py-2.5 text-[12px] leading-relaxed text-red-600 dark:border-white/10 dark:text-red-400"
+    >
+      {{ error }}
+    </p>
+
     <!-- Loading State -->
     <p
       v-if="loading"
@@ -327,6 +338,7 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import { LabelService } from '../services/labelService';
 import { useAuth } from '../composables/useAuth';
+import { errorMessage } from '../utils/errorHandler';
 import LabelInfoTooltip from './LabelInfoTooltip.vue';
 import type { Label, LabelStats } from '../types/labels';
 import { LABEL_COLORS, DEFAULT_LABELS } from '../types/labels';
@@ -461,16 +473,12 @@ const loadLabels = async () => {
         }
       });
     }
-  } catch (err: any) {
+  } catch (err) {
     console.error('Failed to load labels:', err);
-    error.value = err?.message || 'Failed to load labels';
-    // Show default labels as fallback
-    labels.value = DEFAULT_LABELS.map((label, index) => ({
-      ...label,
-      id: `fallback-${index}`,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    }));
+    error.value = `Could not load labels: ${errorMessage(err)}`;
+    // No stand-in rows: made-up "fallback" labels looked real, and every edit
+    // to one failed because no such row exists.
+    labels.value = [];
     labelStats.value = {};
   } finally {
     loading.value = false;
@@ -532,8 +540,9 @@ const saveLabel = async () => {
 
     closeForm();
     await loadLabels(); // Refresh to get updated stats
-  } catch (error) {
-    console.error('Failed to save label:', error);
+  } catch (err) {
+    console.error('Failed to save label:', err);
+    error.value = `Could not save the label: ${errorMessage(err)}`;
   } finally {
     saving.value = false;
   }
@@ -569,8 +578,10 @@ const deleteLabel = async () => {
 
     emit('label-deleted', labelToDelete.value);
     labelToDelete.value = null;
-  } catch (error) {
-    console.error('Failed to delete label:', error);
+  } catch (err) {
+    console.error('Failed to delete label:', err);
+    error.value = `Could not delete the label: ${errorMessage(err)}`;
+    labelToDelete.value = null;
   } finally {
     deleting.value = false;
   }
@@ -586,8 +597,9 @@ const toggleLabelActive = async (label: Label) => {
     if (index !== -1) {
       labels.value[index] = updated;
     }
-  } catch (error) {
-    console.error('Failed to toggle label active state:', error);
+  } catch (err) {
+    console.error('Failed to toggle label active state:', err);
+    error.value = `Could not update the label: ${errorMessage(err)}`;
   }
 };
 
