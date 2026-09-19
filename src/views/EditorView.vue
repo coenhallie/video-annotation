@@ -1738,7 +1738,6 @@ const loadOutputVideo = async (outputVideoId: string) => {
   }
 };
 
-let authSubscription: { unsubscribe: () => void } | null = null;
 
 onMounted(async () => {
   try {
@@ -1779,8 +1778,6 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
-  authSubscription?.unsubscribe();
-  authSubscription = null;
 });
 
 watch(playerMode, (newMode) => {

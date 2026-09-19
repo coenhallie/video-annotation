@@ -127,3 +127,19 @@ describe('initAuth with the dev auth bypass', () => {
     expect(auth.user.value).toBeNull();
   });
 });
+
+describe('initAuth auth-state listener', () => {
+  // App.vue and every EditorView mount call initAuth. One listener per call
+  // meant N editor opens ran N+1 handlers on each token refresh, each of them
+  // reassigning `user` and re-triggering everything that watches it.
+  it('subscribes once however many times it is called', async () => {
+    vi.stubEnv('VITE_DEV_AUTH_BYPASS', 'false');
+    const auth = await load();
+
+    await auth.initAuth();
+    await auth.initAuth();
+    await auth.initAuth();
+
+    expect(onAuthStateChange).toHaveBeenCalledTimes(1);
+  });
+});

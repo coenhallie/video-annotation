@@ -8,6 +8,11 @@ const user: Ref<User | null> = ref(null);
 const session: Ref<Session | null> = ref(null);
 const isLoading = ref(true);
 
+// The auth-state listener lives for the life of the page, like the state it
+// feeds. initAuth has several callers (App.vue, every EditorView mount), and
+// subscribing per call stacked one more handler each time.
+let authListenerRegistered = false;
+
 // DEV-ONLY auth bypass so the app is usable on localhost without the Keycloak/SSO
 // redirect. Double-gated: `import.meta.env.DEV` is compile-time false in `vite build`
 // (so this is tree-shaken out of any production bundle), AND it requires the explicit
@@ -142,6 +147,8 @@ export function useAuth() {
       }
 
       // Listen for auth changes
+      if (authListenerRegistered) return;
+      authListenerRegistered = true;
       supabase.auth.onAuthStateChange((event, newSession) => {
         console.log('🔐 [useAuth] Auth state change:', {
           event,
