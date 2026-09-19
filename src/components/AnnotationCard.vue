@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, type PropType } from 'vue';
+import { computed, ref, type PropType } from 'vue';
 import { formatFrameCompact, formatTime } from '@/utils/formatters';
 import CommentSection from './CommentSection.vue';
+import DeleteConfirmationDialog from './DeleteConfirmationDialog.vue';
 import type { Comment } from '../types/database';
 import type { Label } from '../types/labels';
 import type { PanelAnnotation, LabelColorMap } from '../types/component-interfaces';
@@ -119,6 +120,15 @@ const note = computed(() => {
 });
 
 const select = () => emit('select');
+
+// Deleting hard-deletes the annotation, its drawing and its comment thread, and
+// the trash icon only appears on hover where the timecode was, so it is easy to
+// hit by accident. The same dialog a project or folder delete gets.
+const confirmingDelete = ref(false);
+const confirmDelete = () => {
+  confirmingDelete.value = false;
+  emit('delete');
+};
 </script>
 
 <template>
@@ -250,7 +260,7 @@ const select = () => emit('select');
             type="button"
             class="rounded p-1 text-gray-500 transition-colors hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400"
             title="Delete annotation"
-            @click.stop="emit('delete')"
+            @click.stop="confirmingDelete = true"
           >
             <svg
               class="h-3.5 w-3.5"
@@ -268,6 +278,17 @@ const select = () => emit('select');
         </div>
       </div>
     </div>
+
+    <Teleport to="body">
+      <DeleteConfirmationDialog
+        v-if="confirmingDelete"
+        item-type="annotation"
+        :item-name="title"
+        :item-count="1"
+        @confirm="confirmDelete"
+        @cancel="confirmingDelete = false"
+      />
+    </Teleport>
 
     <!-- v-if, not v-show: CommentSection fetches on mount, so keeping every
          row's section alive would query comments for the whole video at once.

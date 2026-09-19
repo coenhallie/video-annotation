@@ -61,7 +61,7 @@ import { onMounted, onUnmounted } from 'vue';
 
 // Props
 const props = defineProps<{
-  itemType: 'project' | 'folder' | 'projects';
+  itemType: 'project' | 'folder' | 'projects' | 'annotation';
   itemName: string;
   itemCount: number;
 }>();
@@ -94,6 +94,8 @@ const getTitle = () => {
       return 'Delete Folder';
     case 'projects':
       return 'Delete Projects';
+    case 'annotation':
+      return 'Delete Annotation';
     default:
       return 'Confirm Delete';
   }
@@ -107,6 +109,8 @@ const getMessage = () => {
       return `Are you sure you want to delete the folder "${props.itemName}"? This action cannot be undone.`;
     case 'projects':
       return `Are you sure you want to delete ${props.itemCount} selected projects? This action cannot be undone and will permanently remove all selected projects and their annotations.`;
+    case 'annotation':
+      return `Are you sure you want to delete "${props.itemName}"? This action cannot be undone and will permanently remove the annotation with its drawing and comments.`;
     default:
       return 'Are you sure you want to delete this item? This action cannot be undone.';
   }
