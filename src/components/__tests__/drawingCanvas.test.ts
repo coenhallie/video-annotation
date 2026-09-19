@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeAll, vi } from 'vitest';
-import { createApp, defineComponent, h, nextTick, ref } from 'vue';
+import { createApp, defineComponent, h, nextTick, ref, unref, type Ref } from 'vue';
 import DrawingCanvas from '@/components/DrawingCanvas.vue';
 import type { DrawingData } from '@/types/database';
 
@@ -85,7 +85,9 @@ const fabricPathEvent = () => ({
   },
 });
 
-function mountCanvas(existingDrawings: DrawingData[] = []) {
+function mountCanvas(
+  existingDrawings: DrawingData[] | Ref<DrawingData[]> = []
+) {
   FakeCanvas.instances = [];
   const root = document.createElement('div');
   document.body.appendChild(root);
@@ -102,7 +104,7 @@ function mountCanvas(existingDrawings: DrawingData[] = []) {
             isDrawingMode: true,
             strokeWidth: 4,
             severity: 'medium',
-            existingDrawings,
+            existingDrawings: unref(existingDrawings),
           });
       },
     })
@@ -276,6 +278,48 @@ describe('DrawingCanvas discardCurrentSession', () => {
     expect(harness.component.getCurrentDrawingSession()).toBeNull();
     // Exactly the persisted stroke, re-rendered: not the empty canvas that
     // clearDrawings would leave behind.
+    expect(harness.canvas.getObjects()).toHaveLength(1);
+    harness.unmount();
+  });
+});
+
+describe('DrawingCanvas reload during a drawing session', () => {
+  // Any change to the annotations list - a teammate's realtime insert, a local
+  // edit - rebuilds existingDrawings, and the reload clears the canvas. The
+  // session kept its paths but the strokes vanished from the screen, so Enter
+  // saved strokes the user could no longer see.
+  const otherFrameDrawing = {
+    frame: 10,
+    paths: [],
+    canvasWidth: 100,
+    canvasHeight: 100,
+  } as unknown as DrawingData;
+
+  it('keeps the unsaved strokes on screen', async () => {
+    const drawings = ref<DrawingData[]>([]);
+    const harness = mountCanvas(drawings);
+    await ready();
+    await draw(harness);
+    await draw(harness);
+
+    drawings.value = [otherFrameDrawing];
+    await ready();
+
+    expect(harness.canvas.getObjects()).toHaveLength(2);
+    harness.unmount();
+  });
+
+  it('can still undo a stroke after the reload', async () => {
+    const drawings = ref<DrawingData[]>([]);
+    const harness = mountCanvas(drawings);
+    await ready();
+    await draw(harness);
+    await draw(harness);
+    drawings.value = [otherFrameDrawing];
+    await ready();
+
+    harness.component.undoLastStroke();
+
     expect(harness.canvas.getObjects()).toHaveLength(1);
     harness.unmount();
   });

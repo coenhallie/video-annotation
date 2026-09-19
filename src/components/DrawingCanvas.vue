@@ -359,6 +359,18 @@ const loadDrawingsForFrame = async (skipTransition: boolean = false) => {
       }
     });
 
+    // The clear above also took the unsaved strokes of a session in progress
+    // off the screen, while the session kept them - so Enter saved strokes the
+    // user could no longer see. Reloads happen for reasons the person drawing
+    // cannot see (a teammate's realtime edit), so put the session back, and
+    // re-point undo at the objects that now represent it.
+    const session = currentDrawingSession.value;
+    if (session && session.frame === props.currentFrame) {
+      sessionFabricObjects = session.paths
+        .map((path) => renderDrawingPath(path))
+        .filter((object): object is fabric.FabricObject => object !== null);
+    }
+
     canvas.value.renderAll(); // Force canvas to render immediately
 
     // Restore full opacity. Needed unconditionally, not just after the fade-out
@@ -373,8 +385,10 @@ const loadDrawingsForFrame = async (skipTransition: boolean = false) => {
 };
 
 // Render a drawing path on canvas
-const renderDrawingPath = (drawingPath: DrawingPath) => {
-  if (!canvas.value || canvas.value.disposed) return;
+const renderDrawingPath = (
+  drawingPath: DrawingPath
+): fabric.FabricObject | null => {
+  if (!canvas.value || canvas.value.disposed) return null;
 
   try {
     const points = drawingPath.points.map((point) => ({
@@ -383,7 +397,7 @@ const renderDrawingPath = (drawingPath: DrawingPath) => {
     }));
 
     const [startPoint, ...restPoints] = points;
-    if (!startPoint || restPoints.length < 1) return;
+    if (!startPoint || restPoints.length < 1) return null;
 
     // Built by walking the points rather than indexing them: a length check
     // does not narrow an index read, and iterating says the same thing.
@@ -400,8 +414,10 @@ const renderDrawingPath = (drawingPath: DrawingPath) => {
       evented: false,
     });
     canvas.value.add(fabricPath);
+    return fabricPath;
   } catch (error) {
     console.warn('🎨 [DrawingCanvas] Error rendering drawing path:', error);
+    return null;
   }
 };
 
@@ -567,12 +583,12 @@ onUnmounted(() => {
  * Undo owns the objects this session put on the canvas, tracked by identity
  * rather than by position or by frame. The canvas gets cleared and rebuilt
  * from persisted drawings any time it reloads - a seek, a resize, a realtime
- * update to someone else's drawing - and none of those reloads tell the
- * session about it. So once a reload has happened, the session's own objects
- * are simply no longer on the canvas: undoLastStroke still pops the session's
- * bookkeeping (so redrawing on this frame starts clean), but finds nothing of
- * its own left to remove and leaves the canvas alone rather than reaching for
- * whatever object now happens to be last.
+ * update to someone else's drawing. A reload on the session's own frame
+ * re-renders the session and re-points this list at the new objects (see
+ * loadDrawingsForFrame), so undo keeps working across it. A reload on another
+ * frame does not, and there undoLastStroke still pops the session's
+ * bookkeeping but finds nothing of its own on the canvas and leaves it alone,
+ * rather than reaching for whatever object now happens to be last.
  */
 const undoLastStroke = () => {
   const session = currentDrawingSession.value;
