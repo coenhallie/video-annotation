@@ -117,6 +117,33 @@ useEscapeToClose(() => props.isVisible, closeModal);
 // Add new entries to the TOP of this array
 const changelogEntries = ref([
   {
+    version: 'Beta v3.11',
+    date: 'September 20, 2026',
+    changes: [
+      'Comparison view: you can now draw on video B as well as video A, and drawings appear at the right moment on videos that are not 30 fps',
+      'Comparison view: an arrow key steps the selected video by exactly one frame, and the step buttons keep the offset you lined the two videos up with',
+      'Comparison view: right-clicking to annotate saves the real position instead of 0:00',
+      'Drawings stay on the same part of the picture whatever the window size or layout, including drawings made before this release',
+      'Strokes you are still drawing no longer vanish when a teammate adds or edits an annotation',
+      'Pipeline output tab: saved drawings show up again, the space bar and arrow keys control the replay instead of the hidden video, and drawing pauses the replay',
+      'The timeline stays on screen on videos with many annotations instead of being pushed below the fold',
+      'The dashboard and the editor now work on a phone: folders sit above the list, and the video sits above the annotations',
+      'Annotations load even when the video itself fails to load, and the editor no longer loads them twice',
+      'Deleting an annotation asks for confirmation first, since it also removes its drawing and comments',
+      'A comment that fails to save keeps its text, and a failed label change no longer wipes the labels that were already there',
+      'Saves that the server refuses now say so: deleting, sharing, revoking a link, changing labels and editing labels no longer fail silently',
+      'Sharing a video you do not own explains why it cannot be shared instead of handing out a link that does not work',
+      'After signing in you land on the page you were trying to open, including share links, instead of the dashboard',
+      'Going back to the dashboard works after opening a share link or a pipeline link',
+      'Pipeline videos show their real length in the library once someone has played them, so watch coverage is no longer 100% after the first second',
+      'Dashboard counts and label filters stay correct in large libraries, and a failed load says so with a retry instead of showing an empty library',
+      'Keyboard and screen reader support: dashboard rows, folder rows and annotation card buttons work from the keyboard, dialogs close with Escape and keep focus inside, and icon buttons are labelled',
+      'New comparison: uploads can be cancelled, the file size and type limits are enforced on the server, AVI is no longer offered because browsers cannot play it, and HEVC phone recordings are recognised before uploading',
+      'Faster editor loading: comment counts arrive with the annotations instead of one request per annotation',
+      'A failed video shows a Try Again button that works, a pipeline video keeps its place if its link has to be refreshed, and a broken video stops retrying forever',
+    ],
+  },
+  {
     version: 'Beta v3.10',
     date: 'September 7, 2026',
     changes: [

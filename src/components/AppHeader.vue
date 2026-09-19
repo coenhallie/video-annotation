@@ -35,13 +35,13 @@ defineEmits<{
     <button
       type="button"
       class="font-mono text-[10px] tracking-wider text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
-      aria-label="What's new: version 3.10"
+      aria-label="What's new: version 3.11"
       title="What's new"
       @click="$emit('open-changelog')"
     >
       <!-- The word is dropped first on a narrow screen; the number is the part
            that carries information. -->
-      <span class="hidden sm:inline">BETA </span>v3.10
+      <span class="hidden sm:inline">BETA </span>v3.11
     </button>
 
     <div class="ml-auto flex min-w-0 items-center gap-3 sm:gap-4">
