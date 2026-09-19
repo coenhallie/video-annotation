@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { errorMessage } from '@/utils/errorHandler';
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuth } from '@/composables/useAuth';
@@ -311,7 +312,7 @@ async function loadData() {
     if (!isCurrent()) return;
     // Without this the rejection went unhandled and the page fell through to
     // "No videos found.", indistinguishable from an empty library.
-    loadError.value = err instanceof Error ? err.message : String(err);
+    loadError.value = errorMessage(err);
   } finally {
     if (isCurrent()) isLoading.value = false;
   }

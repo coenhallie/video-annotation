@@ -168,4 +168,14 @@ describe('DashboardView load races and failures', () => {
     expect(d.root.textContent).not.toContain('No videos found.');
     d.unmount();
   });
+
+  // PostgREST errors are plain objects with a `message`, not Error instances.
+  it('shows the message of a plain-object database error', async () => {
+    getAllProjects.mockRejectedValue({ message: 'upstream unavailable', code: '500' });
+    const d = await mountDashboard();
+    await d.settle();
+
+    expect(d.root.textContent).toContain('Could not load videos: upstream unavailable');
+    d.unmount();
+  });
 });

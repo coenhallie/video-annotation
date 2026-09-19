@@ -3,6 +3,25 @@
  */
 
 /**
+ * A displayable message for anything that can be thrown. Supabase/PostgREST
+ * errors are plain objects with a `message`, not Error instances, and String()
+ * on one is "[object Object]".
+ */
+export function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof (error as { message: unknown }).message === 'string'
+  ) {
+    return (error as { message: string }).message;
+  }
+  return 'Unknown error';
+}
+
+/**
  * Handles service-level errors with consistent logging.
  * Returns a user-friendly error message string, or empty string for aborted requests.
  */
@@ -12,7 +31,7 @@ export function handleServiceError(context: string, error: unknown): string {
     return '';
   }
 
-  const message = error instanceof Error ? error.message : String(error);
+  const message = errorMessage(error);
   console.error(`[${context}] ${message}`, error);
   return message;
 }
