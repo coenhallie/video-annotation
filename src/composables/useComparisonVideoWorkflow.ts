@@ -116,6 +116,12 @@ export function useComparisonVideoWorkflow() {
         throw new Error('Comparison title is required');
       }
 
+      // The row needs an owner (userId is NOT NULL); an insert without one was
+      // always rejected by the database, with a constraint error for a message.
+      if (!user.value) {
+        throw new Error('You must be signed in to create a comparison');
+      }
+
       // Create comparison video
       const comparisonVideo =
         await ComparisonVideoService.createComparisonVideo({
@@ -123,7 +129,7 @@ export function useComparisonVideoWorkflow() {
           description: comparisonDescription.value.trim() || null,
           videoAId: selectedVideoA.value!.id,
           videoBId: selectedVideoB.value!.id,
-          userId: user.value?.id || null,
+          userId: user.value.id,
           videoA: selectedVideoA.value!,
           videoB: selectedVideoB.value!,
         });

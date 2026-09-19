@@ -60,19 +60,19 @@ export interface DatabaseVideo {
   fps: number;
   duration: number;
   totalFrames: number;
-  thumbnailUrl?: string;
+  thumbnailUrl?: string | null;
   metadata?: Record<string, unknown>;
   isPublic: boolean;
   allowAnnotations: boolean; // When true, requires authentication and allows annotations
   videoType: 'url' | 'upload';
-  filePath?: string;
-  fileSize?: number;
-  originalFilename?: string;
+  filePath?: string | null;
+  fileSize?: number | null;
+  originalFilename?: string | null;
   createdAt: string;
   updatedAt: string;
   qaStatus: QaStatus;
-  qaStatusUpdatedAt?: string;
-  qaStatusUpdatedBy?: string;
+  qaStatusUpdatedAt?: string | null;
+  qaStatusUpdatedBy?: string | null;
 }
 
 /**
@@ -117,7 +117,9 @@ export interface DatabaseAnnotation {
   severity: SeverityLevel;
   color: string;
   timestamp: number;
-  frame?: number | null;
+  // NOT NULL once 20260920_annotations_frame_not_null.sql is applied; every
+  // consumer has always treated it as a number.
+  frame?: number;
   startFrame: number;
   endFrame?: number | null;
   duration: number;
@@ -281,16 +283,16 @@ export interface Annotation {
   // raised the error count, because a lot of consuming code treats an absent
   // frame or timestamp as a number. Those are worth a separate pass.
   drawingData?: DrawingData | null;
-  projectId?: string;
-  comparisonVideoId?: string;
-  synchronizedFrame?: number;
+  projectId?: string | null;
+  comparisonVideoId?: string | null;
+  synchronizedFrame?: number | null;
   startFrame?: number;
-  endFrame?: number;
-  videoAFrame?: number;
-  videoBFrame?: number;
-  videoATimestamp?: number;
-  videoBTimestamp?: number;
-  videoContext?: VideoContext;
+  endFrame?: number | null;
+  videoAFrame?: number | null;
+  videoBFrame?: number | null;
+  videoATimestamp?: number | null;
+  videoBTimestamp?: number | null;
+  videoContext?: VideoContext | null;
   metadata?: Record<string, unknown> | null;
   userId?: string;
   createdAt?: string;
@@ -317,19 +319,19 @@ export interface Video {
   fps: number;
   duration: number;
   totalFrames: number;
-  thumbnailUrl?: string;
+  thumbnailUrl?: string | null;
   isPublic: boolean;
   allowAnnotations: boolean; // When true, requires authentication and allows annotations
   ownerId: string;
   videoType: 'url' | 'upload';
-  filePath?: string;
-  fileSize?: number;
-  originalFilename?: string;
+  filePath?: string | null;
+  fileSize?: number | null;
+  originalFilename?: string | null;
   createdAt: string;
   updatedAt: string;
   qaStatus: QaStatus;
-  qaStatusUpdatedAt?: string;
-  qaStatusUpdatedBy?: string;
+  qaStatusUpdatedAt?: string | null;
+  qaStatusUpdatedBy?: string | null;
 }
 
 // Application interface for comparison videos
@@ -337,22 +339,23 @@ export interface ComparisonVideo {
   id: string;
   userId: string;
   title: string;
-  description?: string;
+  description?: string | null;
   videoAId: string;
   videoBId: string;
   duration?: number;
   fps?: number;
   totalFrames?: number;
-  thumbnailUrl?: string;
-  thumbnailLayout?: string;
+  thumbnailUrl?: string | null;
+  thumbnailLayout?: string | null;
   isPublic: boolean;
   allowAnnotations: boolean; // When true, requires authentication and allows annotations
   createdAt: string;
   updatedAt: string;
 
-  // Populated video references
-  videoA?: Video;
-  videoB?: Video;
+  // Populated video references. Null when the referenced row is not visible
+  // to the caller: an embed the policy filters out comes back as null.
+  videoA?: Video | null;
+  videoB?: Video | null;
 
   // Computed properties
   annotationCount?: number;
@@ -363,8 +366,8 @@ export interface ComparisonVideo {
 export interface CommentUser {
   id: string;
   email: string;
-  fullName?: string;
-  avatarUrl?: string;
+  fullName?: string | null;
+  avatarUrl?: string | null;
 }
 
 export interface Comment {
@@ -377,7 +380,8 @@ export interface Comment {
   isAnonymous: boolean;
   createdAt: string;
   updatedAt: string;
-  user?: CommentUser;
+  // Null for an anonymous comment, and for one whose author row is not visible.
+  user?: CommentUser | null;
 }
 
 export interface AnonymousSession {
@@ -408,13 +412,15 @@ export interface SharedVideoWithCommentPermissions {
   isPublic: boolean;
   canComment: boolean;
   allowAnnotations: boolean;
-  annotations: Record<string, unknown>[];
+  // Annotation rows as the services hydrate them. `Record<string, unknown>`
+  // demanded an index signature no real annotation type has.
+  annotations: Array<Annotation | Record<string, unknown>>;
 }
 
 export interface SharedComparisonVideoWithCommentPermissions {
   id: string;
   title: string;
-  description?: string;
+  description?: string | null;
   /** `comparison_videos.userId` - needed to tell an owner from a share visitor. */
   ownerId?: string;
   videoA: SharedVideoWithCommentPermissions | null;
@@ -422,17 +428,19 @@ export interface SharedComparisonVideoWithCommentPermissions {
   isPublic: boolean;
   canComment: boolean;
   allowAnnotations: boolean;
-  annotations: Record<string, unknown>[];
-  thumbnailUrl?: string;
-  duration?: number;
-  fps?: number;
-  totalFrames?: number;
+  // Annotation rows as the services hydrate them. `Record<string, unknown>`
+  // demanded an index signature no real annotation type has.
+  annotations: Array<Annotation | Record<string, unknown>>;
+  thumbnailUrl?: string | null;
 }
 
 // Union type for mixed video lists (individual + comparison)
 export type VideoEntity = Video | ComparisonVideo;
 
-// Supabase client types
+// Hand-written schema shape. The Supabase client is NOT built with this any
+// more - it uses the generated types in ./supabase. This remains only as the
+// source of the Insert/Update helper types below; moving those onto the
+// generated types is the remaining step.
 export interface Database {
   public: {
     Tables: {

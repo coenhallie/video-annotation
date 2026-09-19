@@ -2,6 +2,7 @@
  * comparisonVideoService.ts
  * Service to encapsulate access to comparisonVideos table.
  */
+import type { Database } from '../types/supabase';
 import { assertRowsAffected } from '@/utils/assertRowsAffected';
 import { supabase } from '../composables/useSupabase';
 import { ThumbnailGenerator } from '../utils/thumbnailGenerator';
@@ -92,7 +93,8 @@ export const ComparisonVideoService = {
     description?: string | null;
     videoAId: string;
     videoBId: string;
-    userId?: string | null;
+    /** Required: comparison_videos.userId is NOT NULL with no default. */
+    userId: string;
     videoA?: Video;
     videoB?: Video;
   }): Promise<ComparisonVideoRecord> {
@@ -119,14 +121,14 @@ export const ComparisonVideoService = {
       }
     }
 
-    const payload: Record<string, unknown> = {
+    const payload: Database['public']['Tables']['comparison_videos']['Insert'] = {
       title: params.title,
       description: params.description ?? null,
       videoAId: params.videoAId,
       videoBId: params.videoBId,
+      userId: params.userId,
       ...(thumbnailUrl && { thumbnailUrl }),
     };
-    if (params.userId) payload.userId = params.userId;
 
     const { data, error } = await supabase
       .from('comparison_videos')

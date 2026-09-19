@@ -114,7 +114,8 @@ export function qaStatusPillClass(status: QaStatus | null | undefined): string {
 export interface QaStatusTarget {
   id: string;
   qaStatus: QaStatus;
-  qaStatusUpdatedAt?: string;
+  // Null until the status is first set: the column is nullable.
+  qaStatusUpdatedAt?: string | null;
 }
 
 /**

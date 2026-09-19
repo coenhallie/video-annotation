@@ -115,34 +115,9 @@ export class AnnotationService {
     annotationId: string,
     updates: AnnotationUpdate
   ) {
-    const updatesAny = updates as Record<string, unknown>;
-
-    // Ensure dual video frame data and annotationType are included in updates if provided
-    const finalUpdates = {
-      ...updatesAny,
-      ...(updatesAny.videoAFrame !== undefined && {
-        videoAFrame: updatesAny.videoAFrame,
-      }),
-      ...(updatesAny.videoBFrame !== undefined && {
-        videoBFrame: updatesAny.videoBFrame,
-      }),
-      ...(updatesAny.videoATimestamp !== undefined && {
-        videoATimestamp: updatesAny.videoATimestamp,
-      }),
-      ...(updatesAny.videoBTimestamp !== undefined && {
-        videoBTimestamp: updatesAny.videoBTimestamp,
-      }),
-      ...(updatesAny.annotationType !== undefined && {
-        annotationType: updatesAny.annotationType,
-      }),
-      ...(updatesAny.drawingData !== undefined && {
-        drawingData: updatesAny.drawingData,
-      }),
-    };
-
     const { data, error } = await supabase
       .from('annotations')
-      .update(finalUpdates)
+      .update(updates)
       .eq('id', annotationId)
       .select()
       .single();
@@ -383,7 +358,9 @@ export class AnnotationService {
       severity: annotation.severity || 'medium',
       color: annotation.color || '#6b7280',
       timestamp: Math.max(annotation.timestamp || 0, 0), // Ensure non-negative timestamp
-      frame: annotation.frame != null ? Math.max(annotation.frame, 0) : null, // Ensure non-negative frame
+      // Never null: the column is NOT NULL, and startFrame below already
+      // defaults a missing frame to 0 the same way.
+      frame: Math.max(annotation.frame ?? 0, 0),
       startFrame: Math.max(annotation.frame || 0, 0), // Ensure non-negative startFrame
       endFrame: annotation.frame != null ? Math.max(annotation.frame, 0) : null, // Ensure non-negative endFrame
       duration: Math.max(annotation.duration || 1 / 30, 1 / 30), // Ensure positive duration

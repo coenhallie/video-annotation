@@ -105,7 +105,7 @@ export interface PanelAnnotation {
   timestamp: number;
   frame?: number;
   startFrame?: number;
-  endFrame?: number;
+  endFrame?: number | null;
   duration?: number;
   durationFrames?: number;
   // These three were undeclared or loosely typed, so they resolved through the
@@ -116,10 +116,10 @@ export interface PanelAnnotation {
   annotationType?: AnnotationType;
   metadata?: Record<string, unknown> | null;
   drawingData?: DrawingData | null;
-  videoAFrame?: number;
-  videoBFrame?: number;
-  videoATimestamp?: number;
-  videoBTimestamp?: number;
+  videoAFrame?: number | null;
+  videoBFrame?: number | null;
+  videoATimestamp?: number | null;
+  videoBTimestamp?: number | null;
   commentCount?: number;
   labels?: string[];
 }

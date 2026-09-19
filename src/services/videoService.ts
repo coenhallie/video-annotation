@@ -417,8 +417,12 @@ export class VideoService {
       const comparisonVideos =
         comparisonData?.map((item) => ({
           ...item,
-          videoA: item.videoA,
-          videoB: item.videoB,
+          // An FK-hinted embed from the child side is one row (or null), and
+          // that is what PostgREST returns. The client's type inference reads
+          // the hinted form as one-to-many and types it as an array, so the
+          // shape is stated here.
+          videoA: item.videoA as unknown as Video | null,
+          videoB: item.videoB as unknown as Video | null,
         })) || [];
 
       // Deduplicate individual videos (in case of duplicates)

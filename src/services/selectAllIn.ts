@@ -1,4 +1,5 @@
 import { supabase } from '../composables/useSupabase';
+import type { TableName } from '../types/supabase';
 
 /** Ids per request. ~37 bytes per uuid keeps the URL near 2 KB. */
 export const IN_CHUNK_SIZE = 50;
@@ -15,9 +16,12 @@ const PAGE_SIZE = 1000;
  * would be shown as a wrong number, not as a failure.
  *
  * Rows are ordered by `id` so that paging is stable; `select` must include it.
+ *
+ * `select` is a runtime string, so the client cannot infer the row shape from
+ * it; the caller states it as `Row`.
  */
 export async function selectAllIn<Row = Record<string, unknown>>(
-  table: string,
+  table: TableName,
   select: string,
   column: string,
   ids: readonly string[]
@@ -33,7 +37,7 @@ export async function selectAllIn<Row = Record<string, unknown>>(
         .order('id', { ascending: true })
         .range(from, from + PAGE_SIZE - 1);
       if (error) throw error;
-      const page = (data ?? []) as Row[];
+      const page = (data ?? []) as unknown as Row[];
       rows.push(...page);
       if (page.length < PAGE_SIZE) break;
     }

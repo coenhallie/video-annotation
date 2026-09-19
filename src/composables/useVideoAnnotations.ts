@@ -502,7 +502,8 @@ export function useVideoAnnotations(
           severity: annotationWithoutLabels.severity || 'medium',
           color: annotationWithoutLabels.color || '#6b7280',
           timestamp: Math.max(annotationWithoutLabels.timestamp || 0, 0),
-          frame: annotationWithoutLabels.frame ?? null,
+          // Never null: the column is NOT NULL.
+          frame: Math.max(annotationWithoutLabels.frame ?? 0, 0),
           startFrame: _start,
           endFrame: Math.max(_end, _start),
           duration: Math.max(annotationWithoutLabels.duration || 1 / 30, 1 / 30),
@@ -658,19 +659,19 @@ export function useVideoAnnotations(
         dbUpdates.drawingData = updatesWithoutLabels.drawingData;
       }
       // Include dual video frame data if present
-      if (updatesWithoutLabels.videoAFrame !== undefined) {
+      if (updatesWithoutLabels.videoAFrame != null) {
         dbUpdates.videoAFrame = Math.max(updatesWithoutLabels.videoAFrame, 0);
       }
-      if (updatesWithoutLabels.videoBFrame !== undefined) {
+      if (updatesWithoutLabels.videoBFrame != null) {
         dbUpdates.videoBFrame = Math.max(updatesWithoutLabels.videoBFrame, 0);
       }
-      if (updatesWithoutLabels.videoATimestamp !== undefined) {
+      if (updatesWithoutLabels.videoATimestamp != null) {
         dbUpdates.videoATimestamp = Math.max(
           updatesWithoutLabels.videoATimestamp,
           0.001
         );
       }
-      if (updatesWithoutLabels.videoBTimestamp !== undefined) {
+      if (updatesWithoutLabels.videoBTimestamp != null) {
         dbUpdates.videoBTimestamp = Math.max(
           updatesWithoutLabels.videoBTimestamp,
           0.001

@@ -275,8 +275,8 @@ interface SharedVideo {
   allowAnnotations: boolean;
   isPublic: boolean;
   createdAt: string;
-  thumbnailUrl?: string;
-  description?: string;
+  thumbnailUrl?: string | null;
+  description?: string | null;
 }
 
 // State

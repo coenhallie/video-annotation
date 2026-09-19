@@ -22,7 +22,7 @@ export function useQaStatusWrite(
   onUpdated: (video: Video) => void
 ): {
   current: Ref<QaStatus>;
-  updatedAt: Ref<string | undefined>;
+  updatedAt: Ref<string | null | undefined>;
   saving: Ref<boolean>;
   change: (next: QaStatus) => Promise<void>;
 } {
@@ -32,7 +32,7 @@ export function useQaStatusWrite(
   // qaStatus migration lands carries undefined, which would leave the select
   // on no option at all rather than on a word.
   const current = ref<QaStatus>(toQaStatus(target().qaStatus));
-  const updatedAt = ref<string | undefined>(target().qaStatusUpdatedAt);
+  const updatedAt = ref<string | null | undefined>(target().qaStatusUpdatedAt);
   const saving = ref(false);
 
   // Follows the target's value, not just its identity: a caller that mutates

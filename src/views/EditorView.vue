@@ -115,7 +115,9 @@ const {
 
 
 // Helper function to get the correct video URL
-const getVideoUrl = (video: Partial<Video> & { url?: string; videoType?: string; filePath?: string }) => {
+const getVideoUrl = (
+  video: Partial<Video> & { url?: string; videoType?: string; filePath?: string | null }
+) => {
   if (video.url && video.url.trim() !== '') {
     return video.url;
   }
@@ -1237,8 +1239,8 @@ watch(selectedAnnotation, (newAnnotation, oldAnnotation) => {
     // Update the current frame for all relevant drawing canvases via coordinator
     drawingCoordinator.setCurrentFrame(
       newAnnotation.frame,
-      newAnnotation.videoAFrame,
-      newAnnotation.videoBFrame,
+      newAnnotation.videoAFrame ?? undefined,
+      newAnnotation.videoBFrame ?? undefined,
     );
 
     // Also keep the single canvas frame in sync (used by handleFrameUpdate)

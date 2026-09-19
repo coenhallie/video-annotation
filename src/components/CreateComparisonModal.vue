@@ -530,6 +530,13 @@ const createComparison = async () => {
     return;
   }
 
+  // The row needs an owner: comparison_videos.userId is NOT NULL.
+  if (!user.value) {
+    error.value = 'You must be signed in to create a comparison';
+    return;
+  }
+  const ownerId = user.value.id;
+
   isCreating.value = true;
   currentStep.value = 'creating';
 
@@ -539,7 +546,7 @@ const createComparison = async () => {
       description: comparisonDescription.value.trim() || null,
       videoAId: selectedVideoA.value.id,
       videoBId: selectedVideoB.value.id,
-      userId: user.value?.id || null,
+      userId: ownerId,
       videoA: selectedVideoA.value,
       videoB: selectedVideoB.value,
     });

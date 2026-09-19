@@ -2,12 +2,14 @@
 export interface Label {
   id: string;
   name: string;
-  description?: string;
+  // Nullable columns are `?: T | null`: PostgREST returns an explicit null for
+  // an empty one, never an absent key (see the note in types/database.ts).
+  description?: string | null;
   color: string;
   isDefault: boolean;
   isActive: boolean;
-  userId?: string; // null for system labels, user ID for custom labels
-  projectId?: string; // null for global labels, project ID for project-specific labels
+  userId?: string | null; // null for system labels, user ID for custom labels
+  projectId?: string | null; // null for global labels, project ID for project-specific labels
   usageCount?: number;
   createdAt: string;
   updatedAt: string;
@@ -25,8 +27,8 @@ export interface LabelInsert {
 
 export interface LabelUpdate {
   name?: string;
-  description?: string | undefined;
-  color?: string | undefined;
+  description?: string | null;
+  color?: string;
   isActive?: boolean;
 }
 
@@ -82,7 +84,7 @@ export interface LabelStats {
   label: Label;
   usageCount: number;
   annotationCount: number;
-  lastUsed?: string;
+  lastUsed?: string | undefined;
 }
 
 // Bulk operations

@@ -1,3 +1,4 @@
+import type { Row } from '../types/supabase';
 import { assertRowsAffected } from '@/utils/assertRowsAffected';
 import { supabase } from '../composables/useSupabase';
 import { CommentService } from './commentService';
@@ -15,29 +16,23 @@ import type {
 export type { SharedVideoWithCommentPermissions };
 
 /**
- * Spread the three optional passthrough fields, omitting any that are absent.
+ * Spread the optional passthrough fields, omitting any that are absent.
  *
- * `description`, `url` and `filePath` are nullable on `videos` and optional on
+ * `filePath` is nullable on `videos`, and both fields are optional on
  * SharedVideoWithCommentPermissions. Under exactOptionalPropertyTypes "key
  * absent" and "key present holding undefined" are different types and only the
- * former is assignable, so assigning `description: video.description` straight
- * through fails whenever the column is empty. Spreading nothing is how an absent
- * optional is expressed.
+ * former is assignable, so an empty column is expressed by spreading nothing.
+ *
+ * There is no `description` here: `videos` has no such column. The code used to
+ * read one, which only ever produced undefined.
  */
 function optionalVideoFields(video: {
-  description?: string | undefined;
-  url?: string | undefined;
-  filePath?: string | undefined;
-}): Pick<
-  SharedVideoWithCommentPermissions,
-  'description' | 'url' | 'filePath'
-> {
+  url?: string | null | undefined;
+  filePath?: string | null | undefined;
+}): Pick<SharedVideoWithCommentPermissions, 'url' | 'filePath'> {
   return {
-    ...(video.description !== undefined
-      ? { description: video.description }
-      : {}),
-    ...(video.url !== undefined ? { url: video.url } : {}),
-    ...(video.filePath !== undefined ? { filePath: video.filePath } : {}),
+    ...(video.url != null ? { url: video.url } : {}),
+    ...(video.filePath != null ? { filePath: video.filePath } : {}),
   };
 }
 
@@ -144,9 +139,7 @@ export class ShareService {
       const result = {
         id: video.id,
         title: video.title,
-        description: video.description,
-        url: video.url,
-        filePath: video.filePath,
+        ...optionalVideoFields(video),
         videoType: video.videoType,
         videoId: video.videoId,
         ownerId: video.ownerId,
@@ -419,9 +412,6 @@ export class ShareService {
         allowAnnotations: comparison.allowAnnotations || false,
         annotations: mappedAnnotations,
         thumbnailUrl: comparison.thumbnailUrl,
-        duration: comparison.duration,
-        fps: comparison.fps,
-        totalFrames: comparison.totalFrames,
       };
 
       return result;
@@ -438,7 +428,16 @@ export class ShareService {
    * Create video data for comparison sharing (allows private videos)
    */
   private static createVideoForComparison(
-    videoResult: { data: { id: string; title: string; description?: string; url?: string; filePath?: string; videoType: string; isPublic: boolean; allowAnnotations?: boolean } | null; error: unknown },
+    videoResult: {
+      data:
+        | Pick<
+            Row<'videos'>,
+            'id' | 'title' | 'url' | 'filePath' | 'videoType' | 'isPublic' | 'allowAnnotations'
+          >
+        | null
+        | undefined;
+      error: unknown;
+    },
     fallbackTitle: string
   ): SharedVideoWithCommentPermissions | null {
     const { data: video, error } = videoResult;
@@ -984,8 +983,8 @@ export class ShareService {
       allowAnnotations: boolean;
       isPublic: boolean;
       createdAt: string;
-      thumbnailUrl?: string;
-      description?: string;
+      thumbnailUrl?: string | null;
+      description?: string | null;
     }>;
   }> {
     try {

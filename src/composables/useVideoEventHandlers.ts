@@ -96,7 +96,7 @@ export function useVideoEventHandlers(deps: {
   annotationVideoId: () => string | null;
 
   /** Annotation composable methods. */
-  initializeVideo: (data: any) => Promise<void>;
+  initializeVideo: (data: any) => Promise<unknown>;
   loadAnnotations: () => Promise<void>;
 }): VideoEventHandlers {
   const {
@@ -384,16 +384,19 @@ export function useVideoEventHandlers(deps: {
     if (annotation.frame !== undefined) {
       drawingCoordinator.setCurrentFrame(
         annotation.frame,
-        annotation.videoAFrame,
-        annotation.videoBFrame,
+        annotation.videoAFrame ?? undefined,
+        annotation.videoBFrame ?? undefined,
       );
     }
 
     // Seek to the annotation's timestamp
     if (playerMode.value === 'dual' && dualVideoPlayer) {
       if (
-        annotation.videoAFrame !== undefined &&
-        annotation.videoBFrame !== undefined
+        // `!= null`, not `!== undefined`: these columns are nullable, and the
+        // database hands back an explicit null. null / fps is 0, so an
+        // annotation without per-video frames seeked both videos to 0:00.
+        annotation.videoAFrame != null &&
+        annotation.videoBFrame != null
       ) {
         const videoATime =
           annotation.videoATimestamp ||
