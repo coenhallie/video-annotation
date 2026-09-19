@@ -712,11 +712,16 @@ export function useVideoAnnotations(
         }
       }
 
-      const appAnnotation = updatedAnnotation as Annotation;
-
       const index = annotations.value.findIndex(
         (a) => a.id === actualAnnotationId
       );
+      // Merged over the existing entry, never swapped for it: the service
+      // returns the bare table row, and the entry carries fields hydrated from
+      // other tables (labels, commentCount) that a swap silently dropped.
+      const appAnnotation = {
+        ...(index !== -1 ? annotations.value[index] : {}),
+        ...updatedAnnotation,
+      } as Annotation;
       if (index !== -1) {
         annotations.value[index] = appAnnotation;
       }

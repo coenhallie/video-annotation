@@ -11,6 +11,7 @@ import type { Annotation, AnnotationSurface } from '@/types/database';
 
 const getVideoAnnotations = vi.fn();
 const createAnnotation = vi.fn();
+const updateAnnotationRow = vi.fn();
 
 vi.mock('@/services/annotationService', () => ({
   AnnotationService: {
@@ -18,7 +19,7 @@ vi.mock('@/services/annotationService', () => ({
     createAnnotation: (...a: unknown[]) => createAnnotation(...a),
     getAllComparisonVideoAnnotations: vi.fn(),
     createComparisonAnnotation: vi.fn(),
-    updateAnnotation: vi.fn(),
+    updateAnnotation: (...a: unknown[]) => updateAnnotationRow(...a),
     deleteAnnotation: vi.fn(),
   },
 }));
@@ -248,5 +249,32 @@ describe('useVideoAnnotations on a share view', () => {
       'pipeline'
     );
     expect(ids(api.annotations.value)).toEqual(['p-1']);
+  });
+});
+
+describe('useVideoAnnotations update keeps hydrated fields', () => {
+  // AnnotationService.updateAnnotation returns the bare table row. Replacing the
+  // list entry with it dropped `labels`, so retiming or editing a labelled
+  // annotation turned its card into a grey "Annotation" until reload.
+  it('keeps labels and commentCount when an update does not touch labels', async () => {
+    getVideoAnnotations.mockResolvedValue([
+      {
+        ...row('a1'),
+        content: 'before',
+        labels: [{ id: 'l1', name: 'Smash' }],
+        commentCount: 2,
+      },
+    ]);
+    const { api } = await setup('video');
+    await flush();
+    updateAnnotationRow.mockResolvedValue({ ...row('a1'), content: 'after' });
+
+    await api.updateAnnotation('a1', { content: 'after' });
+
+    expect(api.annotations.value[0]).toMatchObject({
+      content: 'after',
+      labels: [{ id: 'l1', name: 'Smash' }],
+      commentCount: 2,
+    });
   });
 });

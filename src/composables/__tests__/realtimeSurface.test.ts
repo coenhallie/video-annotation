@@ -81,3 +81,31 @@ describe('useRealtimeAnnotations surface guard', () => {
     expect(annotations.value.map((a) => a.id)).toEqual(['a3']);
   });
 });
+
+describe('useRealtimeAnnotations update merge', () => {
+  // A realtime payload is the bare table row. `labels` and `commentCount` are
+  // hydrated client-side from other tables, and the card derives its title,
+  // dot colour and category filter from `labels`.
+  it('keeps client-hydrated fields when the row is updated', async () => {
+    const { useRealtimeAnnotations } = await import(
+      '@/composables/useRealtimeAnnotations'
+    );
+    const hydrated = {
+      ...row('a1', 'video'),
+      content: 'before',
+      labels: [{ id: 'l1', name: 'Smash' }],
+      commentCount: 3,
+    } as unknown as Annotation;
+    const annotations = ref<Annotation[]>([hydrated]);
+
+    useRealtimeAnnotations(ref('video-1'), annotations, ref('video'));
+    const update = handlers.find((h) => h.event === 'UPDATE')!.handler;
+    update({ new: { ...row('a1', 'video'), content: 'after' } });
+
+    expect(annotations.value[0]).toMatchObject({
+      content: 'after',
+      labels: [{ id: 'l1', name: 'Smash' }],
+      commentCount: 3,
+    });
+  });
+});

@@ -74,7 +74,13 @@ export function useRealtimeAnnotations(
             (a) => a.id === updatedAnnotation.id
           );
           if (index !== -1) {
-            annotations.value[index] = updatedAnnotation;
+            // Merge, never replace: the payload is the bare table row, and the
+            // entry carries fields hydrated from other tables (labels,
+            // commentCount) that a replace would silently drop.
+            annotations.value[index] = {
+              ...annotations.value[index],
+              ...updatedAnnotation,
+            };
           }
         }
       )
