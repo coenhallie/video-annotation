@@ -110,6 +110,7 @@ const changelogEntries = ref([
     changes: [
       'Pipeline videos start playing straight away in Chrome instead of loading for minutes: the player now streams them fragment by fragment, and seeking anywhere in a two-hour video takes under a second',
       'Share links now open with both the Video and Pipeline output tabs, each listing its own annotations',
+      'New comparison: upload a video file straight from the picker for either side, so a comparison no longer depends on the pipeline having processed both videos',
       'Comparison view: clicking either timeline opens the label picker, the same as for a single video',
       'Comparison view: annotations now show as markers on both timelines, each at its own video\'s frame',
       'Teammates can annotate each other\'s pipeline outputs; the sidebar no longer shows them as view only',

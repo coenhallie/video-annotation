@@ -30,6 +30,7 @@
                   </h2>
                   <span
                     v-if="currentStep !== 'creating'"
+                    data-testid="comparison-step"
                     class="font-mono text-[10px] tracking-wider text-gray-500 dark:text-gray-500"
                   >
                     {{ currentStepIndex + 1 }} / {{ steps.length }}
@@ -87,28 +88,17 @@
                 </button>
               </div>
 
-              <!-- Empty State -->
-              <div
-                v-else-if="availableVideos.length === 0"
-                class="py-10 text-center"
-              >
-                <p class="text-[12px] text-gray-600 dark:text-gray-400">
-                  No videos available
-                </p>
-                <p class="mx-auto mt-1.5 max-w-xs text-[11px] text-gray-500 dark:text-gray-500">
-                  You need at least two videos to create a comparison. Videos appear
-                  here once they have been processed by the pipeline.
-                </p>
-              </div>
-
               <!-- Step 1: Select Video A -->
               <div v-else-if="currentStep === 'select-video-a'">
                 <input
+                  v-if="availableVideos.length > 0"
                   v-model="searchQuery"
                   type="text"
                   placeholder="Search videos…"
                   class="mb-2 w-full rounded border border-gray-200 bg-transparent px-2.5 py-1.5 text-[12px] leading-snug text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-400 dark:border-white/10 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-white/25"
                 >
+
+                <ComparisonVideoUpload @uploaded="onUploaded" />
 
                 <!-- Same row shape as the dashboard's video list. -->
                 <button
@@ -154,11 +144,14 @@
                 </div>
 
                 <input
+                  v-if="filteredVideosForB.length > 0 || searchQuery"
                   v-model="searchQuery"
                   type="text"
                   placeholder="Search videos…"
                   class="mb-2 w-full rounded border border-gray-200 bg-transparent px-2.5 py-1.5 text-[12px] leading-snug text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-400 dark:border-white/10 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-white/25"
                 >
+
+                <ComparisonVideoUpload @uploaded="onUploaded" />
 
                 <button
                   v-for="video in filteredVideosForB"
@@ -310,6 +303,8 @@
 import { ref, computed, watch, onMounted } from 'vue';
 import { VideoService } from '../services/videoService';
 import { ComparisonVideoService } from '../services/comparisonVideoService';
+import ComparisonVideoUpload from './ComparisonVideoUpload.vue';
+import type { Video } from '../types/database';
 import { useAuth } from '../composables/useAuth';
 import { useNotifications } from '../composables/useNotifications';
 
@@ -418,10 +413,6 @@ const loadVideos = async () => {
   try {
     const videos = await VideoService.getUserVideos(user.value.id);
     availableVideos.value = videos || [];
-
-    if (availableVideos.value.length < 2) {
-      error.value = 'You need at least two videos to create a comparison.';
-    }
   } catch (err: any) {
     console.error('Error loading videos:', err);
     error.value = err.message || 'Failed to load videos';
@@ -469,6 +460,17 @@ const selectVideoB = async (video: any) => {
   // Auto-generate title if empty
   if (!comparisonTitle.value) {
     comparisonTitle.value = `${selectedVideoA.value.title} vs ${selectedVideoB.value.title}`;
+  }
+};
+
+// An upload lands in the list like any other video and is picked for the
+// side that was being chosen, so two uploads in a row reach the details step.
+const onUploaded = (video: Video) => {
+  availableVideos.value = [video, ...availableVideos.value];
+  if (currentStep.value === 'select-video-a') {
+    selectVideoA(video);
+  } else if (currentStep.value === 'select-video-b') {
+    void selectVideoB(video);
   }
 };
 
