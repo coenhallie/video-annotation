@@ -1931,7 +1931,7 @@ watch(
   <!-- Main app when user is authenticated OR when viewing shared video/comparison OR showing auth prompt -->
   <div
     v-else
-    class="min-h-screen bg-white dark:bg-gray-900 flex flex-col"
+    class="h-dvh bg-white dark:bg-gray-900 flex flex-col overflow-hidden"
   >
     <!-- Header -->
     <EditorHeader
@@ -1948,7 +1948,14 @@ watch(
     />
 
     <!-- Main Content -->
-    <main class="flex-1 flex overflow-hidden">
+    <!--
+      The editor is one screen tall, never taller. With a min-height root the
+      row grew to fit the annotation list, so a video with a dozen annotations
+      pushed the timeline below the fold and made the whole page scroll.
+      min-h-0 is what lets this flex row be shorter than its content; the
+      sidebar scrolls inside itself.
+    -->
+    <main class="flex-1 flex min-h-0 overflow-hidden">
       <!-- Main App Content -->
       <!-- Video Section -->
       <section class="flex-1 flex flex-col bg-black min-w-0 overflow-hidden">
