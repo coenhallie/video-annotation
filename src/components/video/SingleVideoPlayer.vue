@@ -25,7 +25,7 @@
       </p>
       <button
         class="retry-button"
-        @click="$emit('retry')"
+        @click="retry"
       >
         Try Again
       </button>
@@ -403,6 +403,16 @@ const attachSource = async (url: string) => {
 onMounted(() => {
   void attachSource(props.videoUrl);
 });
+
+// The overlay's Try Again. It used to only emit `retry`, which no parent has
+// ever handled, so the one recovery control on a failed video did nothing.
+// The emit stays for a parent that wants to do more (refresh a URL, say).
+const retry = () => {
+  error.value = null;
+  isLoading.value = true;
+  emit('retry');
+  void attachSource(props.videoUrl);
+};
 
 onBeforeUnmount(() => {
   source?.destroy();
