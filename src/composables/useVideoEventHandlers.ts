@@ -41,6 +41,8 @@ export function useVideoEventHandlers(deps: {
     setVideo: (url: string, id: string) => void;
   };
   /** Store refs for video state. */
+  /** The single player's position, in seconds. */
+  currentTime: Ref<number>;
   duration: Ref<number>;
   currentFrame: Ref<number>;
   totalFrames: Ref<number>;
@@ -99,6 +101,7 @@ export function useVideoEventHandlers(deps: {
 }): VideoEventHandlers {
   const {
     videoStore,
+    currentTime,
     duration,
     currentFrame,
     totalFrames,
@@ -184,6 +187,11 @@ export function useVideoEventHandlers(deps: {
       }
 
       videoLoaded.value = true;
+      if (resumeAt !== null) {
+        const time = resumeAt;
+        resumeAt = null;
+        unifiedVideoPlayerRef.value?.seekTo?.(time);
+      }
       if (currentVideoObject.value?.id) {
         awsRefreshBudget.reset(String(currentVideoObject.value.id));
       }
@@ -234,6 +242,11 @@ export function useVideoEventHandlers(deps: {
   // the budget back.
   const awsRefreshBudget = createRetryBudget(3);
 
+  // Where playback was when a refresh reloaded the player. setVideo starts the
+  // new source at 0:00, so without this one network hiccup two hours into a
+  // pipeline video sent the viewer back to the start.
+  let resumeAt: number | null = null;
+
   const handleVideoError = async (_error: Error | Event) => {
     // If this is an AWS video, the presigned URL may have expired - try refreshing
     if (
@@ -252,6 +265,7 @@ export function useVideoEventHandlers(deps: {
         currentVideoObject.value as Video,
       );
       if (freshUrl) {
+        if (currentTime.value > 0) resumeAt = currentTime.value;
         currentVideoObject.value = { ...currentVideoObject.value, url: freshUrl };
         videoStore.setVideo(freshUrl, currentVideoObject.value.id || '');
       }

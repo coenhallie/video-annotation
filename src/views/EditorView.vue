@@ -1271,6 +1271,7 @@ const {
   handleFrameStepVideoB,
   handleAnnotationClick,
 } = useVideoEventHandlers({
+  currentTime,
   videoStore,
   duration,
   currentFrame,
