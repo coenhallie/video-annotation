@@ -1,3 +1,4 @@
+import { assertRowsAffected } from '@/utils/assertRowsAffected';
 import { supabase } from '../composables/useSupabase';
 import type {
   AnnotationInsert,
@@ -163,12 +164,14 @@ export class AnnotationService {
     // The database has ON DELETE CASCADE which will automatically
     // delete all associated comments when the annotation is deleted
 
-    const { error } = await supabase
+    const { data: deleted, error } = await supabase
       .from('annotations')
       .delete()
-      .eq('id', annotationId);
+      .eq('id', annotationId)
+      .select('id');
 
     if (error) throw error;
+    assertRowsAffected(deleted, 'This annotation', 'delete it');
   }
 
   static async getAnnotationsAtFrame(

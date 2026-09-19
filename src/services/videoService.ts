@@ -1,3 +1,4 @@
+import { assertRowsAffected } from '@/utils/assertRowsAffected';
 import { supabase, getOptimizedSession } from '../composables/useSupabase';
 import type {
   VideoInsert,
@@ -366,8 +367,15 @@ export class VideoService {
 
     if (fetchError) throw fetchError;
 
-    const { error } = await supabase.from('videos').delete().eq('id', videoId);
+    const { data: deleted, error } = await supabase
+      .from('videos')
+      .delete()
+      .eq('id', videoId)
+      .select('id');
     if (error) throw error;
+    // Also what keeps the storage cleanup below honest: removing the file of a
+    // row that was never deleted would leave a video that cannot play.
+    assertRowsAffected(deleted, 'This video', 'delete it');
 
     // Legacy uploaded videos also own a storage object. Manual upload is gone, but
     // existing objects still need removing when their row is deleted. Best effort:

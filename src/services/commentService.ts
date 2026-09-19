@@ -1,3 +1,4 @@
+import { assertRowsAffected } from '@/utils/assertRowsAffected';
 import { supabase } from '../composables/useSupabase';
 import type {
   Comment,
@@ -234,15 +235,14 @@ export class CommentService {
         await supabase.rpc('set_session_context', { sessionId: sessionId });
       }
 
-      const { error } = await supabase
+      const { data: deleted, error } = await supabase
         .from('annotation_comments')
         .delete()
-        .eq('id', commentId);
+        .eq('id', commentId)
+        .select('id');
 
-      if (error) {
-        handleServiceError('CommentService.deleteComment', error);
-        throw error;
-      }
+      if (error) throw error;
+      assertRowsAffected(deleted, 'This comment', 'delete it');
     } catch (error) {
       handleServiceError('CommentService.deleteComment', error);
       throw error;

@@ -2,6 +2,7 @@
  * comparisonVideoService.ts
  * Service to encapsulate access to comparisonVideos table.
  */
+import { assertRowsAffected } from '@/utils/assertRowsAffected';
 import { supabase } from '../composables/useSupabase';
 import { ThumbnailGenerator } from '../utils/thumbnailGenerator';
 import type { Video } from '../types/database';
@@ -215,10 +216,12 @@ export const ComparisonVideoService = {
    * Delete a comparison video record by id.
    */
   async deleteComparisonVideo(id: string): Promise<void> {
-    const { error } = await supabase
+    const { data: deleted, error } = await supabase
       .from('comparison_videos')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .select('id');
     if (error) throw error;
+    assertRowsAffected(deleted, 'This comparison', 'delete it');
   },
 };

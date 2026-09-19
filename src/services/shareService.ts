@@ -1,3 +1,4 @@
+import { assertRowsAffected } from '@/utils/assertRowsAffected';
 import { supabase } from '../composables/useSupabase';
 import { CommentService } from './commentService';
 import { AnnotationService } from './annotationService';
@@ -47,20 +48,6 @@ export interface CommentPermissionContext {
   reason?: string;
 }
 
-/**
- * An UPDATE that RLS filters down to nothing answers 2xx with zero rows and no
- * error, so "did it work" has to be read off the returned rows. Without this a
- * non-owner's share returned a link to a still-private video, and a revoke
- * reported success on a link that still worked.
- */
-function assertRowUpdated(rows: unknown, what: string): void {
-  if (!Array.isArray(rows) || rows.length === 0) {
-    throw new Error(
-      `${what} was not found, or you do not have permission to change its sharing.`
-    );
-  }
-}
-
 export class ShareService {
   // Generate a shareable link for a video
   static async createShareableLink(
@@ -76,7 +63,7 @@ export class ShareService {
         .select('id');
 
       if (error) throw error;
-      assertRowUpdated(updatedRows, 'This video');
+      assertRowsAffected(updatedRows, 'This video', 'change its sharing');
 
       // Generate the shareable URL with video ID
       const baseUrl = window.location.origin;
@@ -206,7 +193,7 @@ export class ShareService {
         .select('id');
 
       if (error) throw error;
-      assertRowUpdated(updatedRows, 'This video');
+      assertRowsAffected(updatedRows, 'This video', 'change its sharing');
     } catch (error) {
       console.error('❌ [ShareService] Error making video private:', error);
       throw error;
@@ -263,7 +250,7 @@ export class ShareService {
         .select('id');
 
       if (error) throw error;
-      assertRowUpdated(updatedRows, 'This comparison');
+      assertRowsAffected(updatedRows, 'This comparison', 'change its sharing');
 
       // Generate the shareable URL
       const baseUrl = window.location.origin;
@@ -558,7 +545,7 @@ export class ShareService {
         .select('id');
 
       if (error) throw error;
-      assertRowUpdated(updatedRows, 'This comparison');
+      assertRowsAffected(updatedRows, 'This comparison', 'change its sharing');
     } catch (error) {
       console.error(
         '❌ [ShareService] Error making comparison video private:',
@@ -1094,9 +1081,10 @@ export class ShareService {
         console.error('❌ [ShareService] Error updating share permissions:', error);
         throw error;
       }
-      assertRowUpdated(
+      assertRowsAffected(
         updatedRows,
-        type === 'video' ? 'This video' : 'This comparison'
+        type === 'video' ? 'This video' : 'This comparison',
+        'change its sharing'
       );
     } catch (error) {
       console.error('❌ [ShareService] Error updating share permissions:', error);
