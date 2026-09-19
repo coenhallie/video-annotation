@@ -333,28 +333,22 @@ export class ShareService {
         // Fetch annotations with comment counts using AnnotationService
         const [comparisonAnnotations, videoAAnnotations, videoBAnnotations] =
           await Promise.all([
-            // For comparison-specific annotations, we need to fetch them directly
-            // then add comment counts separately
+            // Comparison-specific annotations, with each row's comment count
+            // embedded in the one query rather than fetched per annotation.
             (async () => {
               const { data } = await supabase
                 .from('annotations')
-                .select('*')
+                .select('*, annotation_comments ( count )')
                 .eq('comparisonVideoId', comparisonId)
                 .order('timestamp', { ascending: true });
 
-              if (data && data.length > 0) {
-                // Add comment counts to comparison annotations
-                const annotationIds = data.map((annotation) => annotation.id);
-                const commentCounts = await Promise.all(
-                  annotationIds.map((id) => CommentService.getCommentCount(id))
-                );
-
-                return data.map((annotation, index) => ({
-                  ...annotation,
-                  commentCount: commentCounts[index] || 0,
-                }));
-              }
-              return [];
+              return (data ?? []).map((annotation) => ({
+                ...annotation,
+                commentCount:
+                  (annotation.annotation_comments as
+                    | Array<{ count: number }>
+                    | undefined)?.[0]?.count ?? 0,
+              }));
             })(),
             // Use AnnotationService for individual video annotations
             AnnotationService.getVideoAnnotations(

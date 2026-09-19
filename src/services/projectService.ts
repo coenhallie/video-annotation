@@ -1,7 +1,5 @@
 import { VideoService } from './videoService';
 import { ComparisonVideoService } from './comparisonVideoService';
-import { AnnotationService } from './annotationService';
-import { CommentService } from './commentService';
 import { supabase } from '@/composables/useSupabase';
 import { fetchOwners } from './ownerEnrichmentService';
 import type { Project } from '../types/project';
@@ -237,120 +235,8 @@ export class ProjectService {
   }
 
   /**
-   * Get annotation count for a project
-   */
-  static async getProjectAnnotationCount(project: Project): Promise<number> {
-    try {
-      if (project.projectType === 'single') {
-        // For single video projects, get annotations for the video
-        const annotations = await AnnotationService.getVideoAnnotations(
-          project.video.id,
-          project.id
-        );
-        return annotations.length;
-      } else {
-        // For dual video projects, get comparison annotations
-        const annotations =
-          await AnnotationService.getComparisonVideoAnnotations(
-            project.comparisonVideo.id
-          );
-        return annotations.length;
-      }
-    } catch (error) {
-      console.error(
-        '❌ [ProjectService] Error getting annotation count:',
-        error
-      );
-      return 0;
-    }
-  }
-
-  /**
-   * Get comment count for a project
-   */
-  static async getProjectCommentCount(project: Project): Promise<number> {
-    try {
-      if (project.projectType === 'single') {
-        // For single video projects, get all annotations and count their comments
-        const annotations = await AnnotationService.getVideoAnnotations(
-          project.video.id,
-          project.id
-        );
-
-        if (annotations.length === 0) return 0;
-
-        const commentCounts = await Promise.all(
-          annotations.map((annotation) =>
-            CommentService.getCommentCount(annotation.id)
-          )
-        );
-
-        return commentCounts.reduce((total, count) => total + count, 0);
-      } else {
-        // For dual video projects, get comparison annotations and count their comments
-        const annotations =
-          await AnnotationService.getComparisonVideoAnnotations(
-            project.comparisonVideo.id
-          );
-
-        if (annotations.length === 0) return 0;
-
-        const commentCounts = await Promise.all(
-          annotations.map((annotation) =>
-            CommentService.getCommentCount(annotation.id)
-          )
-        );
-
-        return commentCounts.reduce((total, count) => total + count, 0);
-      }
-    } catch (error) {
-      console.error('❌ [ProjectService] Error getting comment count:', error);
-      return 0;
-    }
-  }
-
-  /**
-   * Get annotation and comment counts for multiple projects
-   */
-  static async getProjectCounts(projects: Project[]): Promise<{
-    annotationCounts: Record<string, number>;
-    commentCounts: Record<string, number>;
-  }> {
-    try {
-      const annotationCounts: Record<string, number> = {};
-      const commentCounts: Record<string, number> = {};
-
-      // Get counts for all projects in parallel
-      const countPromises = projects.map(async (project) => {
-        const [annotationCount, commentCount] = await Promise.all([
-          this.getProjectAnnotationCount(project),
-          this.getProjectCommentCount(project),
-        ]);
-
-        return {
-          projectId: project.id,
-          annotationCount,
-          commentCount,
-        };
-      });
-
-      const results = await Promise.all(countPromises);
-
-      results.forEach(({ projectId, annotationCount, commentCount }) => {
-        annotationCounts[projectId] = annotationCount;
-        commentCounts[projectId] = commentCount;
-      });
-
-      return { annotationCounts, commentCounts };
-    } catch (error) {
-      console.error('❌ [ProjectService] Error getting project counts:', error);
-      return { annotationCounts: {}, commentCounts: {} };
-    }
-  }
-
-  /**
    * Batched counts for a page of projects — bounded number of grouped
-   * queries total, replacing the per-project N+1 in getProjectCounts.
+   * queries total, rather than a pair of queries per project.
    *
    * PostgREST can't express a cross-column OR in a single `.in(...)`, so
    * the annotation read is split into two column-filtered queries (one for

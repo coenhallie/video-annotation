@@ -10,6 +10,43 @@ import type {
 import { CommentService, type CommentPermissions } from './commentService';
 import { handleServiceError } from '../utils/errorHandler';
 
+/**
+ * The annotations select, with each row's comment count riding along as an
+ * embedded aggregate when asked for. Counting used to be one HEAD request per
+ * annotation after the list had loaded.
+ */
+const annotationSelect = (withCommentCounts: boolean | undefined) =>
+  withCommentCounts
+    ? '*, annotation_labels ( labelId ), annotation_comments ( count )'
+    : '*, annotation_labels ( labelId )';
+
+/** Flattens the two embeds into the `labels` and `commentCount` the app uses. */
+function hydrateAnnotationRows(
+  data: unknown[] | null,
+  withCommentCounts: boolean | undefined
+): Array<Annotation & { labels: string[]; commentCount?: number }> {
+  return (data ?? []).map((raw) => {
+    const annotation = raw as Record<string, unknown>;
+    const hydrated: Record<string, unknown> = {
+      ...annotation,
+      labels:
+        (annotation.annotation_labels as Array<{ labelId: string }> | undefined)?.map(
+          (al) => al.labelId
+        ) || [],
+    };
+    if (withCommentCounts) {
+      const embedded = annotation.annotation_comments as
+        | Array<{ count: number }>
+        | undefined;
+      hydrated.commentCount = embedded?.[0]?.count ?? 0;
+    }
+    return hydrated as unknown as Annotation & {
+      labels: string[];
+      commentCount?: number;
+    };
+  });
+}
+
 export class AnnotationService {
   static async createAnnotation(annotationData: AnnotationInsert) {
     // Add validation warning
@@ -45,14 +82,7 @@ export class AnnotationService {
 
     let query = supabase
       .from('annotations')
-      .select(
-        `
-        *,
-        annotation_labels (
-          labelId
-        )
-      `
-      )
+      .select(annotationSelect(includeCommentCounts))
       .eq('videoId', videoId);
 
     // CRITICAL CHANGE: Filter by projectId
@@ -78,42 +108,7 @@ export class AnnotationService {
       throw error;
     }
 
-    // Transform the data to include labels array
-    const annotationsWithLabels = (data?.map(
-      (annotation: Record<string, unknown>) => ({
-        ...annotation,
-        labels:
-          (annotation.annotation_labels as Array<{ labelId: string }> | undefined)?.map((al) => al.labelId) || [],
-      })
-    ) || []) as unknown as Array<Annotation & { labels: string[] }>;
-
-    // If comment counts are requested, fetch them for all annotations
-    if (
-      includeCommentCounts &&
-      annotationsWithLabels &&
-      annotationsWithLabels.length > 0
-    ) {
-      try {
-        const annotationIds = annotationsWithLabels.map(
-          (annotation) => annotation.id as string
-        );
-        const commentCounts = await Promise.all(
-          annotationIds.map((id) => CommentService.getCommentCount(id))
-        );
-
-        // Add comment counts to annotations
-        return annotationsWithLabels.map((annotation, index) => ({
-          ...annotation,
-          commentCount: commentCounts[index] || 0,
-        }));
-      } catch (commentError) {
-        // Return annotations without comment counts if comment service fails
-        handleServiceError('AnnotationService.getVideoAnnotations', commentError);
-        return annotationsWithLabels;
-      }
-    }
-
-    return annotationsWithLabels;
+    return hydrateAnnotationRows(data, includeCommentCounts);
   }
 
   static async updateAnnotation(
@@ -325,14 +320,7 @@ export class AnnotationService {
 
     const { data, error } = await supabase
       .from('annotations')
-      .select(
-        `
-        *,
-        annotation_labels (
-          labelId
-        )
-      `
-      )
+      .select(annotationSelect(includeCommentCounts))
       .eq('comparisonVideoId', comparisonVideoId)
       .order('timestamp', { ascending: true });
 
@@ -340,42 +328,7 @@ export class AnnotationService {
       throw error;
     }
 
-    // Transform the data to include labels array
-    const annotationsWithLabels = (data?.map(
-      (annotation: Record<string, unknown>) => ({
-        ...annotation,
-        labels:
-          (annotation.annotation_labels as Array<{ labelId: string }> | undefined)?.map((al) => al.labelId) || [],
-      })
-    ) || []) as unknown as Array<Annotation & { labels: string[] }>;
-
-    // If comment counts are requested, fetch them for all annotations
-    if (
-      includeCommentCounts &&
-      annotationsWithLabels &&
-      annotationsWithLabels.length > 0
-    ) {
-      try {
-        const annotationIds = annotationsWithLabels.map(
-          (annotation) => annotation.id as string
-        );
-        const commentCounts = await Promise.all(
-          annotationIds.map((id: string) => CommentService.getCommentCount(id))
-        );
-
-        // Add comment counts to annotations
-        return annotationsWithLabels.map((annotation, index: number) => ({
-          ...annotation,
-          commentCount: commentCounts[index] || 0,
-        }));
-      } catch (commentError) {
-        // Return annotations without comment counts if comment service fails
-        handleServiceError('AnnotationService.getComparisonVideoAnnotations', commentError);
-        return annotationsWithLabels;
-      }
-    }
-
-    return annotationsWithLabels;
+    return hydrateAnnotationRows(data, includeCommentCounts);
   }
 
   /**
@@ -513,18 +466,5 @@ export class AnnotationService {
         videoB: videoBAnnotations,
       };
     }
-  }
-
-  /**
-   * Get annotation count for comparison video
-   */
-  static async getComparisonVideoAnnotationCount(comparisonVideoId: string) {
-    const { count, error } = await supabase
-      .from('annotations')
-      .select('*', { count: 'exact', head: true })
-      .eq('videoId', comparisonVideoId);
-
-    if (error) throw error;
-    return count || 0;
   }
 }
