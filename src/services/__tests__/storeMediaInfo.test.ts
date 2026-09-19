@@ -1,14 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+let session: { user: { id: string } } | null = { user: { id: 'u1' } };
 const rpc = vi.fn(async () => ({ data: true, error: null }));
 vi.mock('@/composables/useSupabase', () => ({
   supabase: { rpc: (...a: unknown[]) => rpc(...(a as [])) },
-  getOptimizedSession: async () => ({ user: { id: 'u1' } }),
+  getOptimizedSession: async () => session,
 }));
 vi.mock('@/utils/thumbnailGenerator', () => ({ ThumbnailGenerator: {} }));
 vi.mock('@/services/awsStorageService', () => ({ AwsStorageService: {} }));
 
 beforeEach(() => {
+  session = { user: { id: 'u1' } };
   rpc.mockClear();
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
@@ -55,5 +57,15 @@ describe('VideoService.storeMediaInfo', () => {
     await expect(
       VideoService.storeMediaInfo(pipelineVideo(1), { duration: 600, fps: 25 })
     ).resolves.toBeUndefined();
+  });
+
+  // The function refuses anonymous callers, so for a share-link visitor the
+  // call was a guaranteed 401 and a console error on every view. Seen on the
+  // live site right after the first deploy.
+  it('does not try for a signed-out visitor', async () => {
+    const { VideoService } = await import('@/services/videoService');
+    session = null;
+    await VideoService.storeMediaInfo(pipelineVideo(1), { duration: 600, fps: 25 });
+    expect(rpc).not.toHaveBeenCalled();
   });
 });

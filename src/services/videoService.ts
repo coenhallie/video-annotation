@@ -870,6 +870,11 @@ export class VideoService {
       if (!Number.isFinite(duration) || duration <= this.PLACEHOLDER_DURATION) return;
       if (!Number.isFinite(fps) || fps <= 0) return;
 
+      // The function refuses anonymous callers, as the thumbnail one does, so
+      // for a share-link visitor this would be a guaranteed 401 on every view.
+      const session = await getOptimizedSession();
+      if (!session?.user) return;
+
       const { error } = await supabase.rpc('set_video_media_info', {
         p_video_id: video.id,
         p_duration: duration,
