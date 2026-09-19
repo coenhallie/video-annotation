@@ -223,9 +223,18 @@ function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape' && selectedProjectId.value) closeDetails();
 }
 
+// loadData runs from several triggers (mount, scope, folder, user, folder
+// delete) and they overlap. Only the newest call may publish: a slower "Mine"
+// response landing after "All" put the wrong list under the selected pill.
+let loadSeq = 0;
+const loadError = ref<string | null>(null);
+
 async function loadData() {
   if (!user.value) return;
+  const seq = ++loadSeq;
+  const isCurrent = () => seq === loadSeq;
   isLoading.value = true;
+  loadError.value = null;
   try {
     const effectiveScope =
       dashFolders.currentFolderId.value !== null ? 'all' : scope.value;
@@ -247,12 +256,14 @@ async function loadData() {
       getRecentOpens(user.value.id),
       dashFolders.refreshFolderContents(),
     ]);
+    if (!isCurrent()) return;
     // Assigned in one tick, so the list's first paint is already final: Vue
     // flushes both refs into a single render.
     recentOpens.value = opens;
     projects.value = fetched;
 
     const counts = await ProjectService.getProjectCountsBatched(projects.value);
+    if (!isCurrent()) return;
     annotationCounts.value = counts.annotationCounts;
     commentCounts.value = counts.commentCounts;
     const videoIds = projects.value
@@ -265,6 +276,7 @@ async function loadData() {
       videoIds,
       comparisonIds
     );
+    if (!isCurrent()) return;
     availableLabels.value = labelData.labels;
     labelIdsByProject.value = labelData.labelIdsByProject;
 
@@ -274,6 +286,7 @@ async function loadData() {
       p.projectType === 'single' ? [p.video.id] : [p.videoA.id, p.videoB.id]
     );
     const mergedRanges = await getMergedRangesForVideos(allVideoIds);
+    if (!isCurrent()) return;
     const coverage: Record<string, number> = {};
     for (const p of projects.value) {
       coverage[p.id] =
@@ -294,8 +307,13 @@ async function loadData() {
             );
     }
     watchCoverage.value = coverage;
+  } catch (err) {
+    if (!isCurrent()) return;
+    // Without this the rejection went unhandled and the page fell through to
+    // "No videos found.", indistinguishable from an empty library.
+    loadError.value = err instanceof Error ? err.message : String(err);
   } finally {
-    isLoading.value = false;
+    if (isCurrent()) isLoading.value = false;
   }
 }
 
@@ -788,6 +806,20 @@ watch(user, (u) => {
                refetch that already has rows on screen swaps them in place
                rather than flashing placeholders over them. -->
           <ProjectListSkeleton v-if="isLoading && projects.length === 0" />
+          <div
+            v-else-if="loadError"
+            role="alert"
+            class="px-4 py-12 text-center text-[12px] text-red-600 dark:text-red-400"
+          >
+            Could not load videos: {{ loadError }}
+            <button
+              type="button"
+              class="ml-2 underline underline-offset-2 hover:no-underline"
+              @click="loadData"
+            >
+              Try again
+            </button>
+          </div>
           <div
             v-else-if="paginatedProjects.length === 0"
             class="px-4 py-12 text-center text-[12px] text-gray-600 dark:text-gray-400"
