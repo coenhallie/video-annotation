@@ -82,33 +82,33 @@ export type Database = {
         Row: {
           annotationId: string
           content: string
-          createdAt: string | null
+          createdAt: string
           id: string
-          isAnonymous: boolean | null
+          isAnonymous: boolean
           sessionId: string | null
-          updatedAt: string | null
+          updatedAt: string
           userDisplayName: string | null
           userId: string | null
         }
         Insert: {
           annotationId: string
           content: string
-          createdAt?: string | null
+          createdAt?: string
           id?: string
-          isAnonymous?: boolean | null
+          isAnonymous?: boolean
           sessionId?: string | null
-          updatedAt?: string | null
+          updatedAt?: string
           userDisplayName?: string | null
           userId?: string | null
         }
         Update: {
           annotationId?: string
           content?: string
-          createdAt?: string | null
+          createdAt?: string
           id?: string
-          isAnonymous?: boolean | null
+          isAnonymous?: boolean
           sessionId?: string | null
-          updatedAt?: string | null
+          updatedAt?: string
           userDisplayName?: string | null
           userId?: string | null
         }
@@ -132,19 +132,19 @@ export type Database = {
       annotation_labels: {
         Row: {
           annotationId: string
-          createdAt: string | null
+          createdAt: string
           id: string
           labelId: string
         }
         Insert: {
           annotationId: string
-          createdAt?: string | null
+          createdAt?: string
           id?: string
           labelId: string
         }
         Update: {
           annotationId?: string
-          createdAt?: string | null
+          createdAt?: string
           id?: string
           labelId?: string
         }
@@ -171,7 +171,7 @@ export type Database = {
           color: string
           comparisonVideoId: string | null
           content: string
-          createdAt: string | null
+          createdAt: string
           drawingData: Json | null
           duration: number
           durationFrames: number
@@ -186,7 +186,7 @@ export type Database = {
           synchronizedFrame: number | null
           timestamp: number
           title: string
-          updatedAt: string | null
+          updatedAt: string
           userId: string
           videoAFrame: number | null
           videoATimestamp: number | null
@@ -200,7 +200,7 @@ export type Database = {
           color?: string
           comparisonVideoId?: string | null
           content: string
-          createdAt?: string | null
+          createdAt?: string
           drawingData?: Json | null
           duration?: number
           durationFrames?: number
@@ -215,7 +215,7 @@ export type Database = {
           synchronizedFrame?: number | null
           timestamp: number
           title: string
-          updatedAt?: string | null
+          updatedAt?: string
           userId: string
           videoAFrame?: number | null
           videoATimestamp?: number | null
@@ -229,7 +229,7 @@ export type Database = {
           color?: string
           comparisonVideoId?: string | null
           content?: string
-          createdAt?: string | null
+          createdAt?: string
           drawingData?: Json | null
           duration?: number
           durationFrames?: number
@@ -244,7 +244,7 @@ export type Database = {
           synchronizedFrame?: number | null
           timestamp?: number
           title?: string
-          updatedAt?: string | null
+          updatedAt?: string
           userId?: string
           videoAFrame?: number | null
           videoATimestamp?: number | null
@@ -280,25 +280,25 @@ export type Database = {
       anonymous_sessions: {
         Row: {
           comparisonVideoId: string | null
-          createdAt: string | null
+          createdAt: string
           displayName: string
-          lastActive: string | null
+          lastActive: string
           sessionId: string
           videoId: string | null
         }
         Insert: {
           comparisonVideoId?: string | null
-          createdAt?: string | null
+          createdAt?: string
           displayName: string
-          lastActive?: string | null
+          lastActive?: string
           sessionId: string
           videoId?: string | null
         }
         Update: {
           comparisonVideoId?: string | null
-          createdAt?: string | null
+          createdAt?: string
           displayName?: string
-          lastActive?: string | null
+          lastActive?: string
           sessionId?: string
           videoId?: string | null
         }
@@ -322,42 +322,42 @@ export type Database = {
       comparison_videos: {
         Row: {
           allowAnnotations: boolean
-          createdAt: string | null
+          createdAt: string
           description: string | null
           id: string
-          isPublic: boolean | null
+          isPublic: boolean
           thumbnailLayout: string | null
           thumbnailUrl: string | null
           title: string
-          updatedAt: string | null
+          updatedAt: string
           userId: string
           videoAId: string
           videoBId: string
         }
         Insert: {
           allowAnnotations?: boolean
-          createdAt?: string | null
+          createdAt?: string
           description?: string | null
           id?: string
-          isPublic?: boolean | null
+          isPublic?: boolean
           thumbnailLayout?: string | null
           thumbnailUrl?: string | null
           title: string
-          updatedAt?: string | null
+          updatedAt?: string
           userId: string
           videoAId: string
           videoBId: string
         }
         Update: {
           allowAnnotations?: boolean
-          createdAt?: string | null
+          createdAt?: string
           description?: string | null
           id?: string
-          isPublic?: boolean | null
+          isPublic?: boolean
           thumbnailLayout?: string | null
           thumbnailUrl?: string | null
           title?: string
-          updatedAt?: string | null
+          updatedAt?: string
           userId?: string
           videoAId?: string
           videoBId?: string
@@ -426,41 +426,41 @@ export type Database = {
       labels: {
         Row: {
           color: string
-          createdAt: string | null
+          createdAt: string
           description: string | null
           id: string
           isActive: boolean
           isDefault: boolean
           name: string
           projectId: string | null
-          updatedAt: string | null
-          usageCount: number | null
+          updatedAt: string
+          usageCount: number
           userId: string | null
         }
         Insert: {
           color: string
-          createdAt?: string | null
+          createdAt?: string
           description?: string | null
           id?: string
           isActive?: boolean
           isDefault?: boolean
           name: string
           projectId?: string | null
-          updatedAt?: string | null
-          usageCount?: number | null
+          updatedAt?: string
+          usageCount?: number
           userId?: string | null
         }
         Update: {
           color?: string
-          createdAt?: string | null
+          createdAt?: string
           description?: string | null
           id?: string
           isActive?: boolean
           isDefault?: boolean
           name?: string
           projectId?: string | null
-          updatedAt?: string | null
-          usageCount?: number | null
+          updatedAt?: string
+          usageCount?: number
           userId?: string | null
         }
         Relationships: []
@@ -543,56 +543,56 @@ export type Database = {
       users: {
         Row: {
           avatarUrl: string | null
-          createdAt: string | null
+          createdAt: string
           email: string
           fullName: string | null
           id: string
           metadata: Json | null
-          updatedAt: string | null
+          updatedAt: string
         }
         Insert: {
           avatarUrl?: string | null
-          createdAt?: string | null
+          createdAt?: string
           email: string
           fullName?: string | null
           id: string
           metadata?: Json | null
-          updatedAt?: string | null
+          updatedAt?: string
         }
         Update: {
           avatarUrl?: string | null
-          createdAt?: string | null
+          createdAt?: string
           email?: string
           fullName?: string | null
           id?: string
           metadata?: Json | null
-          updatedAt?: string | null
+          updatedAt?: string
         }
         Relationships: []
       }
       video_sessions: {
         Row: {
-          createdAt: string | null
+          createdAt: string
           id: string
-          isActive: boolean | null
+          isActive: boolean
           lastAccessed: string | null
           sessionName: string | null
           userId: string
           videoId: string
         }
         Insert: {
-          createdAt?: string | null
+          createdAt?: string
           id?: string
-          isActive?: boolean | null
+          isActive?: boolean
           lastAccessed?: string | null
           sessionName?: string | null
           userId: string
           videoId: string
         }
         Update: {
-          createdAt?: string | null
+          createdAt?: string
           id?: string
-          isActive?: boolean | null
+          isActive?: boolean
           lastAccessed?: string | null
           sessionName?: string | null
           userId?: string
@@ -653,13 +653,13 @@ export type Database = {
       videos: {
         Row: {
           allowAnnotations: boolean
-          createdAt: string | null
+          createdAt: string
           duration: number
           filePath: string | null
           fileSize: number | null
           fps: number
           id: string
-          isPublic: boolean | null
+          isPublic: boolean
           metadata: Json | null
           originalFilename: string | null
           ownerId: string
@@ -669,20 +669,20 @@ export type Database = {
           thumbnailUrl: string | null
           title: string
           totalFrames: number
-          updatedAt: string | null
+          updatedAt: string
           url: string
           videoId: string
           videoType: string
         }
         Insert: {
           allowAnnotations?: boolean
-          createdAt?: string | null
+          createdAt?: string
           duration: number
           filePath?: string | null
           fileSize?: number | null
           fps?: number
           id?: string
-          isPublic?: boolean | null
+          isPublic?: boolean
           metadata?: Json | null
           originalFilename?: string | null
           ownerId: string
@@ -692,20 +692,20 @@ export type Database = {
           thumbnailUrl?: string | null
           title: string
           totalFrames: number
-          updatedAt?: string | null
+          updatedAt?: string
           url: string
           videoId: string
           videoType?: string
         }
         Update: {
           allowAnnotations?: boolean
-          createdAt?: string | null
+          createdAt?: string
           duration?: number
           filePath?: string | null
           fileSize?: number | null
           fps?: number
           id?: string
-          isPublic?: boolean | null
+          isPublic?: boolean
           metadata?: Json | null
           originalFilename?: string | null
           ownerId?: string
@@ -715,7 +715,7 @@ export type Database = {
           thumbnailUrl?: string | null
           title?: string
           totalFrames?: number
-          updatedAt?: string | null
+          updatedAt?: string
           url?: string
           videoId?: string
           videoType?: string
@@ -762,13 +762,13 @@ export type Database = {
         Args: { p_title: string; p_video_id: string }
         Returns: {
           allowAnnotations: boolean
-          createdAt: string | null
+          createdAt: string
           duration: number
           filePath: string | null
           fileSize: number | null
           fps: number
           id: string
-          isPublic: boolean | null
+          isPublic: boolean
           metadata: Json | null
           originalFilename: string | null
           ownerId: string
@@ -778,7 +778,7 @@ export type Database = {
           thumbnailUrl: string | null
           title: string
           totalFrames: number
-          updatedAt: string | null
+          updatedAt: string
           url: string
           videoId: string
           videoType: string
@@ -795,13 +795,13 @@ export type Database = {
         Args: { p_status: string; p_video_id: string }
         Returns: {
           allowAnnotations: boolean
-          createdAt: string | null
+          createdAt: string
           duration: number
           filePath: string | null
           fileSize: number | null
           fps: number
           id: string
-          isPublic: boolean | null
+          isPublic: boolean
           metadata: Json | null
           originalFilename: string | null
           ownerId: string
@@ -811,7 +811,7 @@ export type Database = {
           thumbnailUrl: string | null
           title: string
           totalFrames: number
-          updatedAt: string | null
+          updatedAt: string
           url: string
           videoId: string
           videoType: string
