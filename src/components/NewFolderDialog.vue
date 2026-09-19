@@ -12,6 +12,9 @@
         <!-- Modal panel. Same floating surface as the annotation form's label
              picker and the dashboard's filter card. -->
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="New folder"
           class="relative w-full max-w-sm rounded border border-gray-200 bg-white shadow-xl dark:border-white/10 dark:bg-gray-900"
           @click.stop
         >
@@ -36,7 +39,6 @@
               class="w-full rounded border border-gray-200 bg-transparent px-2.5 py-1.5 text-[12px] leading-snug text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-400 dark:border-white/10 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-white/25"
               placeholder="Untitled folder"
               @keydown.enter="createFolder"
-              @keydown.esc="$emit('close')"
             >
             <p
               v-if="parentFolder"
@@ -73,6 +75,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { useEscapeToClose } from '../composables/useEscapeToClose';
 import type { Folder } from '../types/folder';
 
 // Props
@@ -88,6 +91,10 @@ const emit = defineEmits<{
   create: [name: string, parentId: string | null];
   close: [];
 }>();
+
+// Anywhere in the dialog, not only while the input has focus - and without
+// the key press also closing the details panel behind it.
+useEscapeToClose(() => true, () => emit('close'));
 
 // State
 const folderName = ref('');

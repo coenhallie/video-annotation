@@ -9,6 +9,9 @@
     <div class="flex min-h-screen items-center justify-center px-4 py-10">
       <!-- Modal panel -->
       <div
+        role="alertdialog"
+        aria-modal="true"
+        :aria-label="getTitle()"
         class="relative w-full max-w-sm rounded border border-gray-200 bg-white shadow-xl dark:border-white/10 dark:bg-gray-900"
         @click.stop
       >
@@ -59,6 +62,7 @@
 
 <script setup lang="ts">
 import { onMounted, onUnmounted } from 'vue';
+import { useEscapeToClose } from '../composables/useEscapeToClose';
 
 // Props
 const props = defineProps<{
@@ -71,10 +75,13 @@ const props = defineProps<{
 }>();
 
 // Emits
-defineEmits<{
+const emit = defineEmits<{
   confirm: [];
   cancel: [];
 }>();
+
+// Rendered with v-if by its parents, so mounted means open.
+useEscapeToClose(() => true, () => emit('cancel'));
 
 // Lifecycle
 onMounted(() => {

@@ -12,6 +12,9 @@
         <!-- Modal panel. Same floating surface as NewFolderDialog, so a rename
              is the same object as every other dialog in the app. -->
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Rename video"
           class="relative w-full max-w-sm rounded border border-gray-200 bg-white shadow-xl dark:border-white/10 dark:bg-gray-900"
           @click.stop
         >
@@ -37,7 +40,6 @@
               class="w-full rounded border border-gray-200 bg-transparent px-2.5 py-1.5 text-[12px] leading-snug text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-400 dark:border-white/10 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-white/25"
               placeholder="Untitled video"
               @keydown.enter="submit"
-              @keydown.esc="$emit('close')"
             >
             <!-- The consequence, not a warning. Renaming is allowed and
                  ordinary; what is not obvious is that it is not private. -->
@@ -74,6 +76,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue';
+import { useEscapeToClose } from '../composables/useEscapeToClose';
 
 const props = defineProps<{
   currentTitle: string;
@@ -84,6 +87,8 @@ const emit = defineEmits<{
   rename: [title: string];
   close: [];
 }>();
+
+useEscapeToClose(() => true, () => emit('close'));
 
 const title = ref(props.currentTitle);
 const nameInput = ref<HTMLInputElement | null>(null);

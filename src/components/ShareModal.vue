@@ -5,6 +5,9 @@
     @click="closeModal"
   >
     <div
+      role="dialog"
+      aria-modal="true"
+      :aria-label="modalTitle"
       class="w-full max-w-sm rounded border border-gray-200 bg-white shadow-xl dark:border-white/10 dark:bg-gray-900"
       @click.stop
     >
@@ -17,6 +20,7 @@
         </h2>
         <button
           type="button"
+          aria-label="Close"
           class="rounded p-1 text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
           @click="closeModal"
         >
@@ -194,6 +198,7 @@
 <script setup lang="ts">
 import { logger } from '../utils/logger';
 import { ref, computed } from 'vue';
+import { useEscapeToClose } from '../composables/useEscapeToClose';
 // normalize TS import without extension to avoid TS plugin confusion
 import { ShareService } from '../services/shareService.ts';
 
@@ -252,6 +257,8 @@ const closeModal = () => {
   copied.value = false;
   allowAnnotations.value = false;
 };
+
+useEscapeToClose(() => props.isVisible, closeModal);
 
 // A permission refusal is not something retrying fixes, so it is shown as the
 // service worded it. Anything else (a raw PostgREST or network error) keeps the
