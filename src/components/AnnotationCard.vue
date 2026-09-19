@@ -133,8 +133,8 @@ const select = () => emit('select');
       role="button"
       tabindex="0"
       @click="select"
-      @keydown.enter.prevent="select"
-      @keydown.space.prevent="select"
+      @keydown.self.enter.prevent="select"
+      @keydown.self.space.prevent="select"
     >
       <span
         class="mt-[7px] h-2 w-2 shrink-0 rounded-full"
