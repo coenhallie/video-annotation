@@ -1,3 +1,4 @@
+import { errorMessage } from '@/utils/errorHandler';
 import {
   ref,
   readonly,
@@ -688,27 +689,20 @@ export function useVideoAnnotations(
         dbUpdates
       );
 
-      // If labels were provided, update them
+      // If labels were provided, replace the stored set. The entry only takes
+      // the new labels once that has worked: they used to be stamped first and
+      // the error swallowed, so a refused change looked saved until reload.
+      let labelError: unknown = null;
       if (labels !== undefined) {
-        // Stamped before the association, as on the create paths: an absent
-        // labels array means "never hydrated", so leaving it off after a failed
-        // association would make an edited comment render as a filled dot.
-        (updatedAnnotation as Record<string, unknown>).labels = labels || [];
         try {
           await AnnotationLabelService.updateAnnotationLabels(
             actualAnnotationId,
             labels || []
           );
-          logger.debug(
-            '[useVideoAnnotations] Labels updated for annotation:',
-            actualAnnotationId
-          );
-        } catch (labelError) {
-          logger.error(
-            '[useVideoAnnotations] Failed to update labels:',
-            labelError
-          );
-          // Continue even if label update fails
+          (updatedAnnotation as Record<string, unknown>).labels = labels || [];
+        } catch (err) {
+          logger.error('[useVideoAnnotations] Failed to update labels:', err);
+          labelError = err;
         }
       }
 
@@ -724,6 +718,14 @@ export function useVideoAnnotations(
       } as Annotation;
       if (index !== -1) {
         annotations.value[index] = appAnnotation;
+      }
+
+      // After the entry is updated: the annotation's own fields did save, and
+      // the list should show that. Only the labels are unchanged.
+      if (labelError) {
+        throw new Error(
+          `The annotation was saved, but its labels could not be changed: ${errorMessage(labelError)}`
+        );
       }
 
       return appAnnotation;

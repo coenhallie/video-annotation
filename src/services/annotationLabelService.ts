@@ -51,19 +51,44 @@ export class AnnotationLabelService {
   }
 
   /**
-   * Update labels for an annotation (replace existing)
+   * Make an annotation's labels exactly `labelIds`.
+   *
+   * Two requests cannot be one transaction, so the order is chosen for what a
+   * failure in between leaves behind: missing labels are ADDED first, and only
+   * then are unwanted ones removed. A failed add changes nothing; a failed
+   * remove leaves an extra label, which the next save corrects. The old order
+   * (delete everything, then insert) left the annotation with no labels at all
+   * whenever the insert failed.
+   *
+   * Only the difference is written, so saving an unchanged set writes nothing.
    */
   static async updateAnnotationLabels(
     annotationId: string,
     labelIds: string[]
   ) {
     try {
-      // First remove all existing labels
-      await this.removeLabelsFromAnnotation(annotationId);
+      const { data: current, error: readError } = await supabase
+        .from('annotation_labels')
+        .select('labelId')
+        .eq('annotationId', annotationId);
+      if (readError) throw readError;
 
-      // Then add new labels if any
-      if (labelIds && labelIds.length > 0) {
-        await this.addLabelsToAnnotation(annotationId, labelIds);
+      const wanted = new Set(labelIds ?? []);
+      const existing = new Set((current ?? []).map((row) => row.labelId as string));
+      const toAdd = [...wanted].filter((id) => !existing.has(id));
+      const toRemove = [...existing].filter((id) => !wanted.has(id));
+
+      if (toAdd.length > 0) {
+        await this.addLabelsToAnnotation(annotationId, toAdd);
+      }
+
+      if (toRemove.length > 0) {
+        const { error: removeError } = await supabase
+          .from('annotation_labels')
+          .delete()
+          .eq('annotationId', annotationId)
+          .in('labelId', toRemove);
+        if (removeError) throw removeError;
       }
     } catch (error) {
       console.error('Failed to update annotation labels:', error);

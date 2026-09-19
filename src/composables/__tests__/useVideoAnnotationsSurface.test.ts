@@ -12,6 +12,7 @@ import type { Annotation, AnnotationSurface } from '@/types/database';
 const getVideoAnnotations = vi.fn();
 const createAnnotation = vi.fn();
 const updateAnnotationRow = vi.fn();
+const updateAnnotationLabels = vi.fn(async (..._args: unknown[]) => {});
 
 vi.mock('@/services/annotationService', () => ({
   AnnotationService: {
@@ -35,7 +36,7 @@ vi.mock('@/services/shareService', () => ({
 vi.mock('@/services/annotationLabelService', () => ({
   AnnotationLabelService: {
     addLabelsToAnnotation: vi.fn(),
-    updateAnnotationLabels: vi.fn(),
+    updateAnnotationLabels: (...a: unknown[]) => updateAnnotationLabels(...a),
   },
 }));
 
@@ -275,6 +276,28 @@ describe('useVideoAnnotations update keeps hydrated fields', () => {
       content: 'after',
       labels: [{ id: 'l1', name: 'Smash' }],
       commentCount: 2,
+    });
+  });
+});
+
+describe('useVideoAnnotations label save failure', () => {
+  // The new labels were stamped on the entry before the write and the error was
+  // swallowed, so a refused label change looked saved until the next reload.
+  it('keeps showing the labels that are really stored, and reports the failure', async () => {
+    getVideoAnnotations.mockResolvedValue([
+      { ...row('a1'), labels: [{ id: 'l1', name: 'Smash' }] },
+    ]);
+    const { api } = await setup('video');
+    await flush();
+    updateAnnotationRow.mockResolvedValue({ ...row('a1') });
+    updateAnnotationLabels.mockRejectedValueOnce(new Error('permission denied'));
+
+    await expect(
+      api.updateAnnotation('a1', { labels: [{ id: 'l2', name: 'Drop' }] } as never)
+    ).rejects.toThrow(/labels/i);
+
+    expect(api.annotations.value[0]).toMatchObject({
+      labels: [{ id: 'l1', name: 'Smash' }],
     });
   });
 });

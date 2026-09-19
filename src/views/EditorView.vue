@@ -596,6 +596,22 @@ const isPlaybackRunning = () =>
       )
     : isPlaying.value;
 
+// updateAnnotation rejects when the save, or the label change that goes with
+// it, is refused. Bound straight to the panel's event that rejection reached
+// nobody: the edit form closed and the change quietly was not there.
+const handleUpdateAnnotation = async (
+  ...args: Parameters<typeof updateAnnotation>
+) => {
+  try {
+    await updateAnnotation(...args);
+  } catch (err) {
+    notifyError(
+      'Could not save the annotation',
+      err instanceof Error ? err.message : 'Please try again.'
+    );
+  }
+};
+
 // Everything outside the players that controls playback - Space, the arrow
 // keys, the pause on entering comment or draw mode - goes through this, so it
 // always reaches the surface on screen. See surfaceTransport.
@@ -2192,7 +2208,7 @@ watch(
             "
             :video-a-fps="dualVideoPlayer?.videoAState?.fps || 30"
             :video-b-fps="dualVideoPlayer?.videoBState?.fps || 30"
-            @update-annotation="updateAnnotation"
+            @update-annotation="handleUpdateAnnotation"
             @delete-annotation="deleteAnnotation"
             @select-annotation="onAnnotationClick"
             @form-show="handleFormShow"
