@@ -20,12 +20,13 @@
           @fps-detected="(d) => setFps?.('A', d.fps)"
           @error="(e) => onError('A', e)"
         >
-          <template #overlays="{ currentTime, currentFrame, videoElement }">
+          <template #overlays="{ currentTime, currentFrame, videoElement, videoSize }">
             <slot
               name="overlays-a"
               :current-time="currentTime"
               :current-frame="currentFrame"
               :video-element="videoElement"
+              :video-size="videoSize"
             />
           </template>
         </SingleVideoPlayer>
@@ -50,12 +51,13 @@
           @fps-detected="(d) => setFps?.('B', d.fps)"
           @error="(e) => onError('B', e)"
         >
-          <template #overlays="{ currentTime, currentFrame, videoElement }">
+          <template #overlays="{ currentTime, currentFrame, videoElement, videoSize }">
             <slot
               name="overlays-b"
               :current-time="currentTime"
               :current-frame="currentFrame"
               :video-element="videoElement"
+              :video-size="videoSize"
             />
           </template>
         </SingleVideoPlayer>

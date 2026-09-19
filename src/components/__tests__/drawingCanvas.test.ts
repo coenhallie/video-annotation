@@ -86,7 +86,8 @@ const fabricPathEvent = () => ({
 });
 
 function mountCanvas(
-  existingDrawings: DrawingData[] | Ref<DrawingData[]> = []
+  existingDrawings: DrawingData[] | Ref<DrawingData[]> = [],
+  extraProps: Record<string, unknown> = {}
 ) {
   FakeCanvas.instances = [];
   const root = document.createElement('div');
@@ -105,6 +106,7 @@ function mountCanvas(
             strokeWidth: 4,
             severity: 'medium',
             existingDrawings: unref(existingDrawings),
+            ...extraProps,
           });
       },
     })
@@ -321,6 +323,47 @@ describe('DrawingCanvas reload during a drawing session', () => {
     harness.component.undoLastStroke();
 
     expect(harness.canvas.getObjects()).toHaveLength(1);
+    harness.unmount();
+  });
+});
+
+describe('DrawingCanvas legacy coordinates', () => {
+  // Drawn when the canvas covered a 1000x800 player box around a 1920x660
+  // video: the stroke runs from the picture's top-left corner to its centre.
+  const legacy = {
+    frame: 300,
+    canvasWidth: 1000,
+    canvasHeight: 800,
+    paths: [
+      {
+        points: [
+          { x: 0, y: 228.125 / 800 },
+          { x: 0.5, y: 0.5 },
+        ],
+        strokeWidth: 3,
+        color: '#f00',
+        timestamp: 1,
+      },
+    ],
+  } as unknown as DrawingData;
+
+  it('draws an old drawing on the same part of the picture it was made on', async () => {
+    // jsdom does no layout; give the container the picture's size.
+    const rect = { width: 960, height: 330, top: 0, left: 0, right: 960, bottom: 330, x: 0, y: 0, toJSON: () => ({}) };
+    const spy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect as DOMRect);
+    const harness = mountCanvas([legacy], { videoSize: { width: 1920, height: 660 } });
+    await ready();
+    // The first load after sizing fades the old frame out for 150ms first.
+    await new Promise((resolve) => setTimeout(resolve, 220));
+
+    const path = harness.canvas.getObjects()[0] as { pathString: string };
+    // Top-left of the picture to its centre, on a 960x330 canvas.
+    const numbers = path.pathString.match(/-?[\d.]+(?:e-?\d+)?/g)!.map(Number);
+    expect(numbers[0]).toBeCloseTo(0, 1);
+    expect(numbers[1]).toBeCloseTo(0, 1);
+    expect(numbers[2]).toBeCloseTo(480, 1);
+    expect(numbers[3]).toBeCloseTo(165, 1);
+    spy.mockRestore();
     harness.unmount();
   });
 });

@@ -50,13 +50,27 @@
       Your browser does not support the video tag.
     </video>
 
-    <!-- Overlays Slot (DrawingCanvas, PoseVisualization, etc) -->
-    <slot 
-      name="overlays" 
-      :current-time="currentTime" 
-      :current-frame="currentFrame"
-      :video-element="videoRef"
-    />
+    <!--
+      Overlays (the drawing canvas), anchored to the picture like the controls
+      below and for the same reason. An overlay that filled the wrapper took in
+      the letterbox bands, so a drawing's 0..1 coordinates were fractions of the
+      player box and landed somewhere else on the picture whenever the box had
+      a different shape. See utils/drawingSpace for how older drawings are read.
+    -->
+    <div class="overlay-frame">
+      <div
+        class="overlay-frame-box"
+        :style="frameBoxStyle"
+      >
+        <slot
+          name="overlays"
+          :current-time="currentTime"
+          :current-frame="currentFrame"
+          :video-element="videoRef"
+          :video-size="videoSize"
+        />
+      </div>
+    </div>
 
     <!--
       Controls, anchored to the picture rather than to the wrapper. The video
@@ -171,6 +185,11 @@ const error = ref<string | null>(null);
 // in the template: the controls are positioned against these, not the wrapper.
 const intrinsicWidth = ref(0);
 const intrinsicHeight = ref(0);
+const videoSize = computed(() =>
+  intrinsicWidth.value && intrinsicHeight.value
+    ? { width: intrinsicWidth.value, height: intrinsicHeight.value }
+    : null
+);
 
 const frameBoxStyle = computed(() => {
   if (!intrinsicWidth.value || !intrinsicHeight.value) return undefined;
@@ -479,6 +498,7 @@ watch(isPlaying, (playing) => {
  * and the bar sits on the picture rather than in the letterbox band. Inert
  * itself; only the bar inside it takes pointer events, and only when shown.
  */
+.overlay-frame,
 .controls-frame {
   position: absolute;
   inset: 0;
@@ -488,6 +508,7 @@ watch(isPlaying, (playing) => {
   pointer-events: none;
 }
 
+.overlay-frame-box,
 .controls-frame-box {
   position: relative;
   width: 100%;

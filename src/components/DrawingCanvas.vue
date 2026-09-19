@@ -28,6 +28,7 @@
 import { ref, onMounted, onUnmounted, watch, nextTick, markRaw } from 'vue';
 import * as fabric from 'fabric';
 import type { DrawingData, DrawingPath, SeverityLevel } from '@/types/database';
+import { toPictureSpace } from '@/utils/drawingSpace';
 
 interface Props {
   // Optional because withDefaults supplies a value for each: a prop that has a
@@ -41,6 +42,13 @@ interface Props {
   existingDrawings?: DrawingData[];
   isLoadingDrawings?: boolean;
   videoContext?: 'A' | 'B'; // Video context for dual mode
+  /**
+   * The video's intrinsic size, when this canvas sits over a video picture.
+   * Needed to place drawings stored before the canvas matched the picture:
+   * see utils/drawingSpace. Left unset over the pipeline replay, whose overlay
+   * has always matched its picture, so its drawings are never converted.
+   */
+  videoSize?: { width: number; height: number } | null;
 }
 
 interface Emits {
@@ -58,6 +66,7 @@ const props = withDefaults(defineProps<Props>(), {
   severity: 'medium',
   existingDrawings: () => [],
   isLoadingDrawings: false,
+  videoSize: null,
 });
 
 const emit = defineEmits<Emits>();
@@ -354,7 +363,14 @@ const loadDrawingsForFrame = async (skipTransition: boolean = false) => {
     frameDrawings.forEach((drawing) => {
       if (drawing.paths && Array.isArray(drawing.paths)) {
         drawing.paths.forEach((path) => {
-          renderDrawingPath(path);
+          // Stored points are fractions of the canvas the drawing was made on.
+          // That used to be the whole player box; this canvas is the picture.
+          renderDrawingPath({
+            ...path,
+            points: path.points.map((point) =>
+              toPictureSpace(point, drawing, props.videoSize)
+            ),
+          });
         });
       }
     });
@@ -542,6 +558,13 @@ watch(
     await loadDrawingsForFrame(skipTransition);
     previousFrame.value = newFrame;
   }
+);
+
+// Older drawings are placed using the video's intrinsic size, which arrives
+// with the media's metadata - after the first load has already drawn them.
+watch(
+  () => props.videoSize,
+  () => void loadDrawingsForFrame(true)
 );
 
 // Watch for changes to existing drawings and reload them

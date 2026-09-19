@@ -17,12 +17,13 @@
       @pause="emit('pause')"
       @fps-detected="(data) => emit('fps-detected', data)"
     >
-      <template #overlays="{ currentFrame }">
+      <template #overlays="{ currentFrame, videoSize }">
         <!-- Drawing Canvas -->
         <DrawingCanvas
           v-if="videoUrl && drawingCanvas"
           ref="singleDrawingCanvasRef"
           :current-frame="currentFrame"
+          :video-size="videoSize"
           :is-drawing-mode="drawingCanvas?.isDrawingMode?.value ?? false"
           :stroke-width="drawingCanvas?.currentTool?.value?.strokeWidth ?? 3"
           :severity="drawingCanvas?.currentTool?.value?.severity ?? defaultSeverity"
@@ -51,11 +52,12 @@
       @error="(e) => emit('error', e)"
     >
       <!-- Overlays for Video A -->
-      <template #overlays-a="{ currentFrame }">
+      <template #overlays-a="{ currentFrame, videoSize }">
         <DrawingCanvas
           v-if="videoAUrl && drawingCanvasA"
           ref="drawingCanvasARef"
           :current-frame="currentFrame"
+          :video-size="videoSize"
           :is-drawing-mode="drawingCanvasA?.isDrawingMode?.value ?? false"
           :stroke-width="drawingCanvasA?.currentTool?.value?.strokeWidth ?? 3"
           :severity="drawingCanvasA?.currentTool?.value?.severity ?? defaultSeverity"
@@ -67,11 +69,12 @@
       </template>
 
       <!-- Overlays for Video B -->
-      <template #overlays-b="{ currentFrame }">
+      <template #overlays-b="{ currentFrame, videoSize }">
         <DrawingCanvas
           v-if="videoBUrl && drawingCanvasB"
           ref="drawingCanvasBRef"
           :current-frame="currentFrame"
+          :video-size="videoSize"
           :is-drawing-mode="drawingCanvasB?.isDrawingMode?.value ?? false"
           :stroke-width="drawingCanvasB?.currentTool?.value?.strokeWidth ?? 3"
           :severity="drawingCanvasB?.currentTool?.value?.severity ?? defaultSeverity"
