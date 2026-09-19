@@ -39,19 +39,6 @@ type ColumnOverrides = {
   };
 };
 
-/**
- * TEMPORARY - functions that exist in a migration not yet applied to the
- * database the types were generated from. Delete an entry once its migration is
- * applied and `npm run gen:types` has been run; the generated file then has it.
- */
-type PendingFunctions = {
-  // migrations/20260920_set_video_media_info.sql
-  set_video_media_info: {
-    Args: { p_video_id: string; p_duration: number; p_fps: number };
-    Returns: boolean;
-  };
-};
-
 type PublicTables = Generated['public']['Tables'];
 
 /** Replaces the listed columns of a Row/Insert/Update shape, keeping optionality. */
@@ -70,8 +57,7 @@ type NarrowTable<Table, Columns> = {
 };
 
 export type Database = Omit<Generated, 'public'> & {
-  public: Omit<Generated['public'], 'Tables' | 'Functions'> & {
-    Functions: Generated['public']['Functions'] & PendingFunctions;
+  public: Omit<Generated['public'], 'Tables'> & {
     Tables: {
       [T in keyof PublicTables]: T extends keyof ColumnOverrides
         ? NarrowTable<PublicTables[T], ColumnOverrides[T]>

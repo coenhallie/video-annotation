@@ -791,6 +791,10 @@ export type Database = {
         }
       }
       set_session_context: { Args: { session_id: string }; Returns: undefined }
+      set_video_media_info: {
+        Args: { p_duration: number; p_fps: number; p_video_id: string }
+        Returns: boolean
+      }
       set_video_qa_status: {
         Args: { p_status: string; p_video_id: string }
         Returns: {

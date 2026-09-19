@@ -1,8 +1,7 @@
 -- Let the first viewer store a pipeline video's real duration and fps (2026-09-20)
 --
--- NOT APPLIED YET. Apply with:
---   supabase db query --linked -f migrations/20260920_set_video_media_info.sql
---   npm run gen:types
+-- Applied to production 2026-09-20 and verified (SECURITY DEFINER, search_path
+-- public, pg_temp); types regenerated the same day.
 --
 -- Why: a pipeline output's row has to exist before its file can be requested
 -- (the storage proxy authorises by asking whether the caller can see the row),
