@@ -65,14 +65,27 @@ export function timelineNumbersFor(
  * instead - the same computation `openQuickPickAtTime` already does for a
  * scrubbed timeline position.
  */
+/**
+ * The zero-based frame number for a position on the replay's clock. The one
+ * conversion both sides of a pipeline drawing use: annotationStampFor stamps a
+ * new drawing with it, and the pipeline overlay keys the canvas on it. They
+ * must agree exactly, because DrawingCanvas shows a drawing only on strict
+ * frame equality.
+ */
+export function replayDrawingFrame(replay: {
+  currentTime: number;
+  fps: number;
+}): number {
+  return Math.round(replay.currentTime * (replay.fps || 30));
+}
+
 export function annotationStampFor(
   surface: AnnotationSurface,
   video: TimelineNumbers,
   replay: TimelineNumbers
 ): { frame: number; fps: number } {
   if (surface === 'pipeline') {
-    const fps = replay.fps || 30;
-    return { frame: Math.round(replay.currentTime * fps), fps };
+    return { frame: replayDrawingFrame(replay), fps: replay.fps || 30 };
   }
   const fps = video.fps || 30;
   return { frame: video.currentFrame, fps };

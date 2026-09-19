@@ -3,8 +3,16 @@ import { ref, watch, onMounted, onUnmounted, computed } from 'vue';
 import { useRenderer2D } from '@/lib/vis/useRenderer2D';
 import { FRAME_W, FRAME_H } from '@/lib/vis/constants';
 import type { PipelineReplay } from '@/composables/usePipelineReplay';
+import { replayDrawingFrame } from '@/utils/timelineBinding';
 
 const props = defineProps<{ replay: PipelineReplay }>();
+
+const overlayFrame = computed(() =>
+  replayDrawingFrame({
+    currentTime: props.replay.currentTime.value,
+    fps: props.replay.fps.value,
+  })
+);
 const emit = defineEmits<{ (e: 'context-menu', ev: MouseEvent): void }>();
 
 const canvasRef = ref<HTMLCanvasElement | null>(null);
@@ -311,7 +319,12 @@ onUnmounted(() => {
             data-testid="pipeline-overlay"
             class="relative aspect-video max-h-full w-[1280px] max-w-full"
           >
-            <slot name="overlay" :current-frame="props.replay.currentFrame.value" />
+            <!--
+              Not replay.currentFrame: that is the pipeline's own frame_count,
+              which does not start at zero, while drawings are stamped with the
+              zero-based frame for the replay's time. See replayDrawingFrame.
+            -->
+            <slot name="overlay" :current-frame="overlayFrame" />
           </div>
         </div>
       </div>

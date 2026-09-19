@@ -326,4 +326,37 @@ describe('PipelineOutputSurface', () => {
       m.unmount();
     });
   });
+
+  /**
+   * DrawingCanvas shows a drawing only where drawing.frame equals the frame it
+   * is given. Pipeline drawings are stamped round(replayTime * fps), zero-based,
+   * because the pipeline's own frame_count is not (see annotationStampFor). The
+   * overlay used to hand the canvas frame_count, so a saved pipeline drawing
+   * never came back on any export whose numbering does not start at zero.
+   */
+  it('gives the overlay the same frame number drawings are stamped with', async () => {
+    const replay = fakeReplay('ready');
+    replay.currentTime.value = 4;
+    let seen: Record<string, unknown> | null = null;
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    const app = createApp(
+      defineComponent({
+        setup: () => () =>
+          h(PipelineOutputSurface, { replay }, {
+            overlay: (slotProps: Record<string, unknown>) => {
+              seen = slotProps;
+              return null;
+            },
+          }),
+      })
+    );
+    app.mount(root);
+    await nextTick();
+
+    // 4s at 25 fps. The record's own number, 457, is not what drawings carry.
+    expect(seen).toMatchObject({ currentFrame: 100 });
+    app.unmount();
+    root.remove();
+  });
 });
