@@ -21,13 +21,11 @@ vi.mock('@/composables/useNotifications', () => ({
     addNotification: vi.fn(),
   }),
 }));
+const getProjectCountsBatched = vi.fn();
 vi.mock('@/services/projectService', () => ({
   ProjectService: {
     getAllProjects,
-    getProjectCountsBatched: vi.fn(async () => ({
-      annotationCounts: {},
-      commentCounts: {},
-    })),
+    getProjectCountsBatched: (...a: unknown[]) => getProjectCountsBatched(...a),
   },
 }));
 vi.mock('@/services/labelService', () => ({
@@ -134,6 +132,10 @@ beforeEach(() => {
   localStorage.clear();
   user.value = { id: 'u1' };
   getRecentOpens.mockImplementation(async () => ({}));
+  getProjectCountsBatched.mockImplementation(async () => ({
+    annotationCounts: {},
+    commentCounts: {},
+  }));
 });
 
 describe('DashboardView load races and failures', () => {
@@ -176,6 +178,19 @@ describe('DashboardView load races and failures', () => {
     await d.settle();
 
     expect(d.root.textContent).toContain('Could not load videos: upstream unavailable');
+    d.unmount();
+  });
+
+  // Counts, label chips and coverage decorate the rows. Failing to load them
+  // must not take the library itself off the screen.
+  it('keeps the library on screen when only the row details fail to load', async () => {
+    getAllProjects.mockResolvedValue([project('everyones')]);
+    getProjectCountsBatched.mockRejectedValue({ message: 'counts unavailable' });
+    const d = await mountDashboard();
+    await d.settle();
+
+    expect(d.titles()).toEqual(['everyones']);
+    expect(d.root.textContent).not.toContain('Could not load videos');
     d.unmount();
   });
 });

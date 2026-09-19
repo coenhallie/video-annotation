@@ -1,80 +1,59 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// annotations rows: two for video v1, one for comparison c1, none for v2
-const annotationRows = [
-  { id: 'a1', videoId: 'v1', comparisonVideoId: null },
-  { id: 'a2', videoId: 'v1', comparisonVideoId: null },
-  { id: 'a3', videoId: null, comparisonVideoId: 'c1' },
+// Annotation rows as the one paged scan returns them: each carries its comment
+// count as an embedded aggregate, so there is no second query over annotation ids.
+const rows = [
+  { id: 'a1', videoId: 'v1', comparisonVideoId: null, annotation_comments: [{ count: 2 }] },
+  { id: 'a2', videoId: 'v1', comparisonVideoId: null, annotation_comments: [{ count: 0 }] },
+  { id: 'a3', videoId: null, comparisonVideoId: 'c1', annotation_comments: [{ count: 1 }] },
 ];
-const commentRows = [
-  { annotationId: 'a1' },
-  { annotationId: 'a1' },
-  { annotationId: 'a3' },
+const selectAllIn = vi.fn(async (_t: string, _s: string, column: string, ids: string[]) =>
+  rows.filter((r) => ids.includes((r as any)[column]))
+);
+vi.mock('@/services/selectAllIn', () => ({ selectAllIn }));
+vi.mock('@/composables/useSupabase', () => ({ supabase: {} }));
+
+// Braces matter: vitest calls a function RETURNED from beforeEach as a teardown,
+// and mockClear returns the mock itself.
+beforeEach(() => {
+  selectAllIn.mockClear();
+});
+
+const projects: any = [
+  { id: 'v1', projectType: 'single', video: { id: 'v1' } },
+  { id: 'c1', projectType: 'dual', comparisonVideo: { id: 'c1' } },
+  // v2 has no annotations at all - regression guard for seeding both counts to
+  // 0 for every project id.
+  { id: 'v2', projectType: 'single', video: { id: 'v2' } },
 ];
-
-function makeChain(resolver: (column: string, ids: string[]) => unknown[]) {
-  const chain: any = {
-    select: vi.fn(() => chain),
-    in: vi.fn((column: string, ids: string[]) =>
-      Promise.resolve({ data: resolver(column, ids), error: null })
-    ),
-  };
-  return chain;
-}
-
-// The annotations table is queried twice (once per filtered column), so we
-// reuse a single chain instance to capture both `.in` calls in order.
-const annotationsChain = makeChain((column) =>
-  column === 'videoId'
-    ? annotationRows.filter((r) => r.videoId)
-    : annotationRows.filter((r) => r.comparisonVideoId)
-);
-const commentsChain = makeChain(() => commentRows);
-
-const fromMock = vi.fn((table: string) =>
-  table === 'annotations' ? annotationsChain : commentsChain
-);
-vi.mock('@/composables/useSupabase', () => ({
-  supabase: { from: (t: string) => fromMock(t) },
-}));
 
 describe('getProjectCountsBatched', () => {
-  it('buckets annotation and comment counts by project id, seeding zero counts for projects with no annotations', async () => {
+  it('buckets annotation and comment counts by project id, seeding zeroes', async () => {
     const { ProjectService } = await import('@/services/projectService');
-    const projects: any = [
-      { id: 'v1', projectType: 'single', video: { id: 'v1' } },
-      { id: 'c1', projectType: 'dual', comparisonVideo: { id: 'c1' } },
-      // v2 has no annotations at all — regression guard for seeding both
-      // annotationCounts and commentCounts to 0 for every project id.
-      { id: 'v2', projectType: 'single', video: { id: 'v2' } },
-    ];
 
     const { annotationCounts, commentCounts } =
       await ProjectService.getProjectCountsBatched(projects);
 
     expect(annotationCounts).toEqual({ v1: 2, c1: 1, v2: 0 });
     expect(commentCounts).toEqual({ v1: 2, c1: 1, v2: 0 });
-    expect(annotationCounts.v2).toBe(0);
-    expect(commentCounts.v2).toBe(0);
+  });
 
-    // two column-filtered annotations queries + one comments query = 3 table reads
-    expect(fromMock.mock.calls.length).toBe(3);
+  it('scans annotations once per id column, through the paged helper', async () => {
+    const { ProjectService } = await import('@/services/projectService');
+    await ProjectService.getProjectCountsBatched(projects);
 
-    // Verify the annotations queries hit the correct column + id list, not
-    // just "some query happened in the right order".
-    expect(annotationsChain.in.mock.calls[0]).toEqual([
-      'videoId',
-      ['v1', 'v2'],
+    expect(selectAllIn.mock.calls.map((c) => [c[0], c[2], c[3]])).toEqual([
+      ['annotations', 'videoId', ['v1', 'v2']],
+      ['annotations', 'comparisonVideoId', ['c1']],
     ]);
-    expect(annotationsChain.in.mock.calls[1]).toEqual([
-      'comparisonVideoId',
-      ['c1'],
-    ]);
+  });
 
-    // Comments query filtered by annotationId, containing exactly the
-    // annotation ids discovered in the two annotations queries.
-    const [commentColumn, commentIds] = commentsChain.in.mock.calls[0];
-    expect(commentColumn).toBe('annotationId');
-    expect([...commentIds].sort()).toEqual(['a1', 'a2', 'a3']);
+  // A counts failure used to be swallowed and shown as zeroes.
+  it('rejects when the scan fails', async () => {
+    const { ProjectService } = await import('@/services/projectService');
+    selectAllIn.mockRejectedValueOnce({ message: 'permission denied' });
+    await expect(ProjectService.getProjectCountsBatched(projects)).rejects.toMatchObject({
+      message: 'permission denied',
+    });
   });
 });

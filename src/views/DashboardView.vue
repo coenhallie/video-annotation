@@ -263,51 +263,59 @@ async function loadData() {
     recentOpens.value = opens;
     projects.value = fetched;
 
-    const counts = await ProjectService.getProjectCountsBatched(projects.value);
-    if (!isCurrent()) return;
-    annotationCounts.value = counts.annotationCounts;
-    commentCounts.value = counts.commentCounts;
-    const videoIds = projects.value
-      .filter((p) => p.projectType === 'single')
-      .map((p) => (p as Extract<Project, { projectType: 'single' }>).video.id);
-    const comparisonIds = projects.value
-      .filter((p) => p.projectType === 'dual')
-      .map((p) => p.id);
-    const labelData = await LabelService.getProjectLabelData(
-      videoIds,
-      comparisonIds
-    );
-    if (!isCurrent()) return;
-    availableLabels.value = labelData.labels;
-    labelIdsByProject.value = labelData.labelIdsByProject;
+    // Counts, label chips and coverage decorate rows that are already on
+    // screen. If they fail, the library stays and the failure is reported; it
+    // must not read as "could not load videos".
+    try {
+      const counts = await ProjectService.getProjectCountsBatched(projects.value);
+      if (!isCurrent()) return;
+      annotationCounts.value = counts.annotationCounts;
+      commentCounts.value = counts.commentCounts;
+      const videoIds = projects.value
+        .filter((p) => p.projectType === 'single')
+        .map((p) => (p as Extract<Project, { projectType: 'single' }>).video.id);
+      const comparisonIds = projects.value
+        .filter((p) => p.projectType === 'dual')
+        .map((p) => p.id);
+      const labelData = await LabelService.getProjectLabelData(
+        videoIds,
+        comparisonIds
+      );
+      if (!isCurrent()) return;
+      availableLabels.value = labelData.labels;
+      labelIdsByProject.value = labelData.labelIdsByProject;
 
-    // Team coverage per project: one batched query over every video id, then
-    // union percent per video (dual = lower of the two sides, as elsewhere).
-    const allVideoIds = projects.value.flatMap((p) =>
-      p.projectType === 'single' ? [p.video.id] : [p.videoA.id, p.videoB.id]
-    );
-    const mergedRanges = await getMergedRangesForVideos(allVideoIds);
-    if (!isCurrent()) return;
-    const coverage: Record<string, number> = {};
-    for (const p of projects.value) {
-      coverage[p.id] =
-        p.projectType === 'single'
-          ? percentFromRanges(
-              mergedRanges[p.video.id] ?? [],
-              p.video.duration
-            )
-          : Math.min(
-              percentFromRanges(
-                mergedRanges[p.videoA.id] ?? [],
-                p.videoA.duration
-              ),
-              percentFromRanges(
-                mergedRanges[p.videoB.id] ?? [],
-                p.videoB.duration
+      // Team coverage per project: one batched query over every video id, then
+      // union percent per video (dual = lower of the two sides, as elsewhere).
+      const allVideoIds = projects.value.flatMap((p) =>
+        p.projectType === 'single' ? [p.video.id] : [p.videoA.id, p.videoB.id]
+      );
+      const mergedRanges = await getMergedRangesForVideos(allVideoIds);
+      if (!isCurrent()) return;
+      const coverage: Record<string, number> = {};
+      for (const p of projects.value) {
+        coverage[p.id] =
+          p.projectType === 'single'
+            ? percentFromRanges(
+                mergedRanges[p.video.id] ?? [],
+                p.video.duration
               )
-            );
+            : Math.min(
+                percentFromRanges(
+                  mergedRanges[p.videoA.id] ?? [],
+                  p.videoA.duration
+                ),
+                percentFromRanges(
+                  mergedRanges[p.videoB.id] ?? [],
+                  p.videoB.duration
+                )
+              );
+      }
+      watchCoverage.value = coverage;
+    } catch (err) {
+      if (!isCurrent()) return;
+      notifyError('Some video details could not be loaded', errorMessage(err));
     }
-    watchCoverage.value = coverage;
   } catch (err) {
     if (!isCurrent()) return;
     // Without this the rejection went unhandled and the page fell through to

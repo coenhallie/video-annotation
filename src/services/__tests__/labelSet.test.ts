@@ -1,18 +1,20 @@
 import { describe, it, expect, vi } from 'vitest';
 
-const annChain: any = { select: vi.fn(() => annChain), in: vi.fn(() =>
-  Promise.resolve({ data: [
-    { id: 'a1', videoId: 'v1', comparisonVideoId: null },
-    { id: 'a2', videoId: 'v2', comparisonVideoId: null },
-  ], error: null })) };
-const joinChain: any = { select: vi.fn(() => joinChain), in: vi.fn(() =>
-  Promise.resolve({ data: [
-    { annotationId: 'a1', labelId: 'l1', labels: { id: 'l1', name: 'Foul', color: '#f00' } },
-    { annotationId: 'a1', labelId: 'l1', labels: { id: 'l1', name: 'Foul', color: '#f00' } },
-    { annotationId: 'a2', labelId: 'l2', labels: { id: 'l2', name: 'Goal', color: '#0f0' } },
-  ], error: null })) };
-const fromMock = vi.fn((t: string) => (t === 'annotations' ? annChain : joinChain));
-vi.mock('@/composables/useSupabase', () => ({ supabase: { from: (t: string) => fromMock(t) } }));
+// Annotation rows as the one paged scan returns them, labels embedded.
+const foul = { id: 'l1', name: 'Foul', color: '#f00' };
+const goal = { id: 'l2', name: 'Goal', color: '#0f0' };
+const rows = [
+  { id: 'a1', videoId: 'v1', comparisonVideoId: null, annotation_labels: [
+    { labelId: 'l1', labels: foul }, { labelId: 'l1', labels: foul },
+  ] },
+  { id: 'a2', videoId: 'v2', comparisonVideoId: null, annotation_labels: [{ labelId: 'l2', labels: goal }] },
+  { id: 'a3', videoId: null, comparisonVideoId: 'c1', annotation_labels: [{ labelId: 'l2', labels: goal }] },
+];
+const selectAllIn = vi.fn(async (_t: string, _s: string, column: string, ids: string[]) =>
+  rows.filter((r) => ids.includes((r as any)[column]))
+);
+vi.mock('@/services/selectAllIn', () => ({ selectAllIn }));
+vi.mock('@/composables/useSupabase', () => ({ supabase: {} }));
 
 describe('getLabelsForProjects', () => {
   it('returns the distinct labels across all annotations of the videos', async () => {
@@ -37,5 +39,11 @@ describe('getProjectLabelData', () => {
       labels: [],
       labelIdsByProject: {},
     });
+  });
+
+  it('keys a comparison project by its comparison id', async () => {
+    const { LabelService } = await import('@/services/labelService');
+    const { labelIdsByProject } = await LabelService.getProjectLabelData(['v1'], ['c1']);
+    expect(labelIdsByProject).toEqual({ v1: ['l1'], c1: ['l2'] });
   });
 });

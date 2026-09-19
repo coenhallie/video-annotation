@@ -1,6 +1,6 @@
+import { selectAllIn } from './selectAllIn';
 import { VideoService } from './videoService';
 import { ComparisonVideoService } from './comparisonVideoService';
-import { supabase } from '@/composables/useSupabase';
 import { fetchOwners } from './ownerEnrichmentService';
 import type { Project } from '../types/project';
 
@@ -239,10 +239,8 @@ export class ProjectService {
    * queries total, rather than a pair of queries per project.
    *
    * PostgREST can't express a cross-column OR in a single `.in(...)`, so
-   * the annotation read is split into two column-filtered queries (one for
-   * single-video projects via `videoId`, one for dual projects via
-   * `comparisonVideoId`), plus one comments query — 3 queries total,
-   * still O(1) in the number of projects.
+   * the annotation read is one scan per id column (`videoId` for single
+   * projects, `comparisonVideoId` for dual ones).
    */
   static async getProjectCountsBatched(projects: Project[]): Promise<{
     annotationCounts: Record<string, number>;
@@ -259,50 +257,34 @@ export class ProjectService {
       .filter((p) => p.projectType === 'dual')
       .map((p) => (p as any).comparisonVideo.id as string);
 
-    // Map annotation id -> owning project id, and seed annotation counts.
-    const annToProject: Record<string, string> = {};
-    const ids = [...videoIds, ...comparisonIds];
-    for (const id of ids) {
+    for (const id of [...videoIds, ...comparisonIds]) {
       annotationCounts[id] = 0;
       commentCounts[id] = 0;
     }
 
-    // Single-video projects: annotations filtered by videoId.
-    const { data: annRowsByVideo } = await supabase
-      .from('annotations')
-      .select('id, videoId, comparisonVideoId')
-      .in('videoId', videoIds.length ? videoIds : ['__none__']);
+    // One paged scan per id column. Each row carries its own comment count as
+    // an embedded aggregate, which removes the old third query (every
+    // annotation id in the library in one URL). selectAllIn pages past the
+    // API's 1,000-row cap, where a plain `.in` silently truncated the counts,
+    // and throws rather than letting a failure read as zeroes.
+    type Row = {
+      id: string;
+      videoId: string | null;
+      comparisonVideoId: string | null;
+      annotation_comments?: Array<{ count: number }>;
+    };
+    const select = 'id, videoId, comparisonVideoId, annotation_comments ( count )';
+    const rows = [
+      ...(await selectAllIn<Row>('annotations', select, 'videoId', videoIds)),
+      ...(await selectAllIn<Row>('annotations', select, 'comparisonVideoId', comparisonIds)),
+    ];
 
-    // Dual projects: annotations filtered by comparisonVideoId. This is a
-    // separate query (not chained as OR) because PostgREST can't express a
-    // cross-column OR within a single `.in(...)`.
-    const { data: annRowsByComparison } = await supabase
-      .from('annotations')
-      .select('id, videoId, comparisonVideoId')
-      .in(
-        'comparisonVideoId',
-        comparisonIds.length ? comparisonIds : ['__none__']
-      );
-
-    const allAnn = [...(annRowsByVideo ?? []), ...(annRowsByComparison ?? [])];
-    for (const a of allAnn) {
-      const pid = a.videoId ?? a.comparisonVideoId;
+    for (const row of rows) {
+      const pid = row.videoId ?? row.comparisonVideoId;
       if (pid == null) continue;
-      annToProject[a.id] = pid;
       annotationCounts[pid] = (annotationCounts[pid] ?? 0) + 1;
-      commentCounts[pid] = commentCounts[pid] ?? 0;
-    }
-
-    const annIds = Object.keys(annToProject);
-    if (annIds.length) {
-      const { data: commentRows } = await supabase
-        .from('annotation_comments')
-        .select('annotationId')
-        .in('annotationId', annIds);
-      for (const c of commentRows ?? []) {
-        const pid = annToProject[c.annotationId];
-        if (pid) commentCounts[pid] = (commentCounts[pid] ?? 0) + 1;
-      }
+      commentCounts[pid] =
+        (commentCounts[pid] ?? 0) + (row.annotation_comments?.[0]?.count ?? 0);
     }
     return { annotationCounts, commentCounts };
   }

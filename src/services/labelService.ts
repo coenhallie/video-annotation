@@ -1,3 +1,4 @@
+import { selectAllIn } from './selectAllIn';
 import { supabase } from '../composables/useSupabase';
 import type {
   Label,
@@ -503,42 +504,37 @@ export class LabelService {
     const empty = { labels: [], labelIdsByProject: {} };
     if (videoIds.length === 0 && comparisonVideoIds.length === 0) return empty;
 
-    let annQuery = supabase
-      .from('annotations')
-      .select('id, videoId, comparisonVideoId');
-    if (comparisonVideoIds.length === 0) {
-      annQuery = annQuery.in('videoId', videoIds);
-    } else if (videoIds.length === 0) {
-      annQuery = annQuery.in('comparisonVideoId', comparisonVideoIds);
-    } else {
-      annQuery = annQuery.or(
-        `videoId.in.(${videoIds.join(',')}),comparisonVideoId.in.(${comparisonVideoIds.join(',')})`
-      );
-    }
-    const { data: anns, error: annErr } = await annQuery;
-    if (annErr || !anns?.length) return empty;
-
-    const projectByAnnotation = new Map<string, string>();
-    for (const a of anns as any[]) {
-      const projectKey = a.videoId ?? a.comparisonVideoId;
-      if (a.id && projectKey) projectByAnnotation.set(a.id, projectKey);
-    }
-
-    const { data: rows, error } = await supabase
-      .from('annotation_labels')
-      .select('annotationId, labelId, labels(*)')
-      .in('annotationId', anns.map((a) => a.id));
-    if (error || !rows) return empty;
+    // One paged scan per id column, labels embedded. The old shape fetched the
+    // annotation ids first and then sent all of them back in a second URL, and
+    // both steps stopped silently at the API's 1,000-row cap.
+    type Row = {
+      id: string;
+      videoId: string | null;
+      comparisonVideoId: string | null;
+      annotation_labels?: Array<{ labelId: string | null; labels: Label | null }>;
+    };
+    const select =
+      'id, videoId, comparisonVideoId, annotation_labels ( labelId, labels ( * ) )';
+    const rows = [
+      ...(await selectAllIn<Row>('annotations', select, 'videoId', videoIds)),
+      ...(await selectAllIn<Row>(
+        'annotations',
+        select,
+        'comparisonVideoId',
+        comparisonVideoIds
+      )),
+    ];
 
     const byId = new Map<string, Label>();
     const setsByProject = new Map<string, Set<string>>();
-    for (const r of rows as any[]) {
-      if (!r.labelId) continue;
-      if (r.labels && !byId.has(r.labelId)) byId.set(r.labelId, r.labels as Label);
-      const projectKey = projectByAnnotation.get(r.annotationId);
-      if (projectKey) {
+    for (const row of rows) {
+      const projectKey = row.videoId ?? row.comparisonVideoId;
+      if (!projectKey) continue;
+      for (const link of row.annotation_labels ?? []) {
+        if (!link.labelId) continue;
+        if (link.labels && !byId.has(link.labelId)) byId.set(link.labelId, link.labels);
         if (!setsByProject.has(projectKey)) setsByProject.set(projectKey, new Set());
-        setsByProject.get(projectKey)!.add(r.labelId);
+        setsByProject.get(projectKey)!.add(link.labelId);
       }
     }
     const labelIdsByProject: Record<string, string[]> = {};
