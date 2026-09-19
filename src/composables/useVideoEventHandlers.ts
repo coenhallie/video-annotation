@@ -1,3 +1,4 @@
+import { createRetryBudget } from '@/utils/retryBudget';
 import { type Ref } from 'vue';
 import { VideoService } from '@/services/videoService';
 import type { Video, Annotation } from '@/types/database';
@@ -180,6 +181,9 @@ export function useVideoEventHandlers(deps: {
       }
 
       videoLoaded.value = true;
+      if (currentVideoObject.value?.id) {
+        awsRefreshBudget.reset(String(currentVideoObject.value.id));
+      }
 
       if (data.duration !== undefined) {
         videoStore.updateDuration(data.duration);
@@ -221,12 +225,25 @@ export function useVideoEventHandlers(deps: {
     }
   };
 
+  // A refresh reloads the player, and a reload of an object that is really gone
+  // errors again, so without a cap this ran presign, attach, error forever.
+  // Three covers an expired URL plus a transient blip; a successful load hands
+  // the budget back.
+  const awsRefreshBudget = createRetryBudget(3);
+
   const handleVideoError = async (_error: Error | Event) => {
     // If this is an AWS video, the presigned URL may have expired - try refreshing
     if (
       currentVideoObject.value &&
       VideoService.isAwsVideo(currentVideoObject.value as Record<string, unknown>)
     ) {
+      const budgetKey = String(currentVideoObject.value.id ?? '');
+      if (!awsRefreshBudget.take(budgetKey)) {
+        console.error(
+          '[useVideoEventHandlers] AWS video still failing after repeated URL refreshes; giving up.'
+        );
+        return;
+      }
       console.log('🔄 [App] AWS video error, attempting URL refresh...');
       const freshUrl = await VideoService.refreshAwsVideoUrl(
         currentVideoObject.value as Video,
