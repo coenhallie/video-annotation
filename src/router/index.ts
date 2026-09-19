@@ -1,6 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { supabase } from '@/composables/useSupabase';
-import { ShareService } from '@/services/shareService';
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -43,16 +42,27 @@ router.beforeEach(async (to, from, next) => {
     import.meta.env.DEV && import.meta.env.VITE_DEV_AUTH_BYPASS === 'true';
   const isAuthenticated = !!session?.user || devAuthBypass;
 
-  // Check for share URL
-  // Note: We use window.location because usage of 'to' might be complex if params are query based
-  // But ShareService.parseShareUrl uses window.location.search and hash
-  // We can let it run.
-  const shareInfo = ShareService.parseShareUrl();
+  // Deep-link parameters are read from `to`, never from window.location. Guards
+  // run before vue-router touches history, so during an in-app push
+  // window.location is still the page being left: reading it made a plain
+  // "back to dashboard" look like the deep link that opened the editor, and the
+  // redirect below sent the user straight back there.
+  const firstQueryValue = (value: unknown): string | null => {
+    const v = Array.isArray(value) ? value[0] : value;
+    return typeof v === 'string' && v ? v : null;
+  };
+  const shareVideoId = firstQueryValue(to.query.share);
+  const shareComparisonId = firstQueryValue(to.query.shareComparison);
+  const shareInfo: { type: 'video' | 'comparison' | null; id: string | null } =
+    shareVideoId
+      ? { type: 'video', id: shareVideoId }
+      : shareComparisonId
+        ? { type: 'comparison', id: shareComparisonId }
+        : { type: null, id: null };
   const isSharedLink = !!(shareInfo.type && shareInfo.id);
 
   // Check for AWS project link - store in sessionStorage so it survives auth redirects
-  const params = new URLSearchParams(window.location.search);
-  const outputVideo = params.get('outputVideo');
+  const outputVideo = firstQueryValue(to.query.outputVideo);
   if (outputVideo) {
     sessionStorage.setItem('pendingOutputVideo', outputVideo);
   }
