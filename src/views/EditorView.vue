@@ -376,6 +376,7 @@ const {
   deleteAnnotation,
   initializeVideo,
   loadAnnotations,
+  currentVideo: annotationVideo,
   isLoading: annotationsLoading,
 } = useVideoAnnotations(
   videoUrl,
@@ -1290,6 +1291,7 @@ const {
   dualVideoPlayerRef,
   comparisonWorkflow,
   unifiedVideoPlayerRef,
+  annotationVideoId: () => annotationVideo.value?.id ?? null,
   initializeVideo,
   loadAnnotations,
 });
@@ -1492,8 +1494,15 @@ const handleProjectSelected = async (project: ProjectSelection) => {
       currentVideoId.value = project.video.id || null;
       currentComparisonId.value = null;
 
-      // Load annotations for the new video
-      await loadAnnotations();
+      // Give the annotation list its video from the record, now. It used to be
+      // set only by the media element's `loaded` event, so a video that failed
+      // or stalled left the sidebar and timeline empty, and an annotation made
+      // right after an in-place switch was written under the previous video.
+      if (project.video.id) {
+        await initializeVideo({
+          existingVideo: { ...video, id: project.video.id },
+        });
+      }
     } else if (project.projectType === 'dual') {
       console.log('🎬 [App] Loading dual video project');
 

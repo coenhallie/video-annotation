@@ -90,6 +90,9 @@ export function useVideoEventHandlers(deps: {
     performVideoFadeTransition?: (fn: () => void) => Promise<void>;
   } | null>;
 
+  /** The video the annotation list currently belongs to, or null. */
+  annotationVideoId: () => string | null;
+
   /** Annotation composable methods. */
   initializeVideo: (data: any) => Promise<void>;
   loadAnnotations: () => Promise<void>;
@@ -113,8 +116,8 @@ export function useVideoEventHandlers(deps: {
     dualVideoPlayerRef,
     comparisonWorkflow,
     unifiedVideoPlayerRef,
+    annotationVideoId,
     initializeVideo,
-    loadAnnotations,
   } = deps;
 
   // ── Single video event handlers ────────────────────────────────────────────
@@ -197,29 +200,29 @@ export function useVideoEventHandlers(deps: {
         currentVideoId.value = data.id as string;
       }
 
-      // Initialize video with complete data object, not just ID
-      if (data) {
-        // For uploaded videos, we need to pass the existing video record
-        // to prevent creating duplicates
-        const existingVideoObj = currentVideoObject.value
-          ? currentVideoObject.value
-          : currentVideoId.value
-            ? {
-                id: currentVideoId.value,
-                url: videoUrl.value,
-                title: data.title || '',
-                videoType: currentVideoType.value || 'url',
-              }
-            : null;
-        const initData: Record<string, unknown> = {
-          ...data,
-          videoType: currentVideoType.value || 'url',
-          existingVideo: existingVideoObj,
-        };
-        await initializeVideo(initData as Parameters<typeof initializeVideo>[0]);
-      }
+      // The project loader gives the annotation list its video from the video
+      // record, so that annotations load even when the media never does. This
+      // stays as the fallback for entry points that do not (and initializeVideo
+      // loads the list itself - a second load here was pure duplication).
+      const loadedId = currentVideoObject.value?.id ?? currentVideoId.value;
+      if (loadedId && annotationVideoId() === loadedId) return;
 
-      await loadAnnotations();
+      const existingVideoObj = currentVideoObject.value
+        ? currentVideoObject.value
+        : currentVideoId.value
+          ? {
+              id: currentVideoId.value,
+              url: videoUrl.value,
+              title: data.title || '',
+              videoType: currentVideoType.value || 'url',
+            }
+          : null;
+      const initData: Record<string, unknown> = {
+        ...data,
+        videoType: currentVideoType.value || 'url',
+        existingVideo: existingVideoObj,
+      };
+      await initializeVideo(initData as Parameters<typeof initializeVideo>[0]);
     } catch (error) {
       console.error('Error in handleLoaded:', error);
     }
