@@ -78,6 +78,7 @@ import { useVideoStore } from '@/stores/video';
 import { useLayoutStore } from '@/stores/layout';
 import { storeToRefs } from 'pinia';
 import { useRoute, useRouter } from 'vue-router';
+import { resolveRouteProject } from '@/utils/routeProject';
 
 const route = useRoute();
 const router = useRouter();
@@ -1567,30 +1568,23 @@ async function loadRouteProject() {
     pendingAnnotationId.value =
       aParam != null && aParam !== '' ? String(aParam) : null;
 
-    if (route.name === 'editor-single' && route.params.id) {
-      const video = await VideoService.getVideoById(route.params.id as string);
-      if (video) {
-        await handleProjectSelected({ projectType: 'single', video } as any);
+    const project = await resolveRouteProject(
+      { name: route.name, id: route.params.id as string | undefined },
+      {
+        getVideo: (id) => VideoService.getVideoById(id),
+        getComparison: (id) => ComparisonVideoService.getComparisonVideoById(id),
       }
-    } else if (route.name === 'editor-dual' && route.params.id) {
-      const comparisonVideo = await ComparisonVideoService.getComparisonVideoById(
-        route.params.id as string
-      );
-      if (comparisonVideo) {
-        await handleProjectSelected({
-          projectType: 'dual',
-          comparisonVideo,
-          videoA: (comparisonVideo as any).videoA,
-          videoB: (comparisonVideo as any).videoB,
-        } as any);
-      }
-    }
+    );
+    if (project) await handleProjectSelected(project as any);
   } catch (err) {
     console.warn('[EditorView] loadFromRoute failed to load', route.params.id, err);
     notifyError(
       'Video not found',
       'This video could not be loaded. It may have been deleted or the link is invalid.'
     );
+    // Nothing to show here: without this the editor sits on "Loading video..."
+    // behind the notification.
+    void router.replace({ name: 'dashboard' });
   }
 }
 
