@@ -2057,7 +2057,7 @@ watch(
         </div>
 
         <!-- Timeline -->
-        <div class="bg-gray-900 dark:bg-black p-4 border-t border-gray-800 dark:border-gray-800">
+        <div class="bg-gray-900 dark:bg-black p-2 lg:p-4 border-t border-gray-800 dark:border-gray-800">
           <!-- Single Video Timeline -->
           <VideoTimeline
             v-if="playerMode === 'single'"

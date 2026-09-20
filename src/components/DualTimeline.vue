@@ -245,8 +245,9 @@ const timelineBClasses = computed(() => ({
 
 <template>
   <div class="dual-timeline bg-gray-900 text-white">
-    <!-- Instructions -->
-    <div class="px-6 pt-4 pb-2">
+    <!-- Instructions. Below lg the ring around the selected timeline says the
+         same thing, and the row's height goes to the videos instead. -->
+    <div class="hidden px-6 pt-4 pb-2 lg:block">
       <div class="flex items-center justify-between text-xs text-gray-400">
         <!-- Keyboard hints: hidden where there is no keyboard to use them. -->
         <div class="hidden items-center space-x-4 lg:flex">
@@ -268,8 +269,8 @@ const timelineBClasses = computed(() => ({
       :class="timelineAClasses"
       @click="selectTimeline('A')"
     >
-      <div class="px-6 py-2">
-        <div class="flex items-center justify-between mb-2">
+      <div class="px-3 py-1 lg:px-6 lg:py-2">
+        <div class="flex items-center justify-between mb-1 lg:mb-2">
           <h3 class="text-[10px] font-semibold uppercase tracking-[0.18em] text-white">
             Video A Timeline
             <span
@@ -321,6 +322,7 @@ const timelineBClasses = computed(() => ({
           :selected-annotation="selectedAnnotation"
           :is-playing="videoAPlaying"
           :player-mode="'single'"
+          compact
           @seek-to-time="handleSeekVideoA"
           @annotation-click="handleAnnotationClick"
           @play="handlePlayVideoA"
@@ -336,8 +338,8 @@ const timelineBClasses = computed(() => ({
       :class="timelineBClasses"
       @click="selectTimeline('B')"
     >
-      <div class="px-6 py-2">
-        <div class="flex items-center justify-between mb-2">
+      <div class="px-3 py-1 lg:px-6 lg:py-2">
+        <div class="flex items-center justify-between mb-1 lg:mb-2">
           <h3 class="text-[10px] font-semibold uppercase tracking-[0.18em] text-white">
             Video B Timeline
             <span
@@ -389,6 +391,7 @@ const timelineBClasses = computed(() => ({
           :selected-annotation="selectedAnnotation"
           :is-playing="videoBPlaying"
           :player-mode="'single'"
+          compact
           @seek-to-time="handleSeekVideoB"
           @annotation-click="handleAnnotationClick"
           @play="handlePlayVideoB"

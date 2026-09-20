@@ -64,6 +64,11 @@ const props = defineProps({
     type: String,
     default: 'single',
   },
+  // Tighter below lg, for a timeline that shares the screen with another one.
+  compact: {
+    type: Boolean,
+    default: false,
+  },
   // New props for dual video FPS handling
   fpsCompatible: {
     type: Boolean,
@@ -343,7 +348,10 @@ const handlePlayPause = (): void => {
 </script>
 
 <template>
-  <div class="bg-gray-900 text-white p-2">
+  <div
+    class="bg-gray-900 text-white"
+    :class="compact ? 'p-1 lg:p-2' : 'p-2'"
+  >
     <!-- Play/Pause Controls (only show in dual mode) -->
     <div
       v-if="playerMode === 'dual'"
@@ -376,11 +384,15 @@ const handlePlayPause = (): void => {
     </div>
 
     <!-- Timeline Container (moved to top for priority) -->
-    <div class="relative mb-4">
+    <div
+      class="relative"
+      :class="compact ? 'mb-2 lg:mb-4' : 'mb-4'"
+    >
       <!-- Main Timeline -->
       <div
         ref="timelineRef"
-        class="relative h-12 cursor-pointer rounded overflow-hidden"
+        class="relative cursor-pointer rounded overflow-hidden"
+        :class="compact ? 'h-8 lg:h-12' : 'h-12'"
         @click="handleTimelineClick"
         @mousedown="handleTimelineMouseDown"
       >
@@ -433,7 +445,7 @@ const handlePlayPause = (): void => {
     <div
       class="flex justify-between items-center md:flex-row flex-col md:gap-0 gap-2"
     >
-      <div class="flex items-center space-x-4 font-mono text-[11px] tracking-wider text-gray-400">
+      <div class="flex items-center space-x-4 whitespace-nowrap font-mono text-[11px] tracking-wider text-gray-400">
         <div class="flex items-center space-x-2">
           <span>{{ formatTime(currentTime) }}</span>
           <span class="opacity-50">/</span>
@@ -462,8 +474,12 @@ const handlePlayPause = (): void => {
         </div>
       </div>
 
-      <!-- Severity Legend -->
-      <div class="flex space-x-3">
+      <!-- Severity Legend. A compact timeline drops it below lg: two stacked
+           legends cost a phone the height the videos need. -->
+      <div
+        class="space-x-3"
+        :class="compact ? 'hidden lg:flex' : 'flex'"
+      >
         <div class="flex items-center space-x-1.5 text-xs text-gray-400">
           <div
             class="w-2 h-2 rounded-sm"
