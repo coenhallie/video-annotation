@@ -117,6 +117,18 @@ useEscapeToClose(() => props.isVisible, closeModal);
 // Add new entries to the TOP of this array
 const changelogEntries = ref([
   {
+    version: 'Beta v3.12',
+    date: 'September 20, 2026',
+    changes: [
+      'Comparison view on a phone: both videos are visible again. The two timelines used to take all the space and leave the videos with none',
+      'Comparison view: holding an arrow key steps one frame per repeat instead of getting stuck after the first frame',
+      'Comparison view: going straight from one comparison to another no longer leaves play, stepping and the timelines unresponsive',
+      'Comparison annotations show and sort by their real position on video A. Older ones that read 0:00 now show the right time',
+      'Opening a link to a video or comparison you cannot see says so and returns to the dashboard instead of showing "Loading video..." forever',
+      'Adding a video no longer risks a duplicate in the library when the check for an existing copy fails',
+    ],
+  },
+  {
     version: 'Beta v3.11',
     date: 'September 20, 2026',
     changes: [
