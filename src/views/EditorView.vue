@@ -47,6 +47,7 @@ import { ComparisonVideoService } from '@/services/comparisonVideoService';
 import { useAuth } from '@/composables/useAuth';
 import { useVideoAnnotations } from '@/composables/useVideoAnnotations';
 import { useRealtimeAnnotations } from '@/composables/useRealtimeAnnotations';
+import { annotationRealtimeScope } from '@/utils/annotationRealtimeScope';
 import { useVideoSession } from '@/composables/useVideoSession';
 import { useDrawingCanvas } from '@/composables/useDrawingCanvas';
 import { useDrawingCoordinator } from '@/composables/useDrawingCoordinator';
@@ -1046,8 +1047,16 @@ watch(annotations, (list) => {
 });
 
 // Real-time features
-const { setupPresenceTracking } =
-  useRealtimeAnnotations(videoId, annotations, activeSurface);
+useRealtimeAnnotations(
+  () =>
+    annotationRealtimeScope({
+      playerMode: playerMode.value,
+      videoId: videoId.value,
+      surface: activeSurface.value,
+      comparison: comparisonWorkflow.currentComparison.value,
+    }),
+  annotations
+);
 // Use either currentVideoId or currentComparisonId depending on mode
 const activeContentId = computed(() => {
   return currentComparisonId.value || currentVideoId.value;
@@ -1838,7 +1847,6 @@ watch(
     if (newUser && (newUser as any).id) {
       if (currentVideoId.value) {
         startSession();
-        setupPresenceTracking((newUser as any).id, (newUser as any).email);
       }
 
       // Check if user just logged in and we have pending shared content

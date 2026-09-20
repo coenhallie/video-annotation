@@ -568,7 +568,13 @@ export function useVideoAnnotations(
         return newAnnotation;
       }
 
-      annotations.value.push(newAnnotation);
+      // The realtime echo of this insert can land before the create returns
+      // (labels are saved after the row). It is the bare row, so the complete
+      // one takes its place rather than joining it.
+      const created = newAnnotation;
+      const echoed = annotations.value.findIndex((a) => a.id === created.id);
+      if (echoed !== -1) annotations.value[echoed] = created;
+      else annotations.value.push(created);
       annotations.value.sort((a, b) => a.timestamp - b.timestamp);
 
       logger.debug(

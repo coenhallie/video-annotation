@@ -301,3 +301,22 @@ describe('useVideoAnnotations label save failure', () => {
     });
   });
 });
+
+describe('useVideoAnnotations create racing its own realtime echo', () => {
+  // The database announces the insert as soon as the row exists, while the
+  // create is still saving labels. The echo is the bare row; the create then
+  // finishes with the complete one. One annotation, the complete one.
+  it('replaces the echoed row instead of adding the annotation twice', async () => {
+    const { api } = await setup('video');
+    const pending = deferred<Annotation>();
+    createAnnotation.mockReturnValue(pending.promise);
+
+    const adding = api.addAnnotation({ content: 'x', timestamp: 1, frame: 30 });
+    (api.annotations.value as Annotation[]).push(row('a1'));
+    pending.resolve({ ...row('a1'), content: 'complete' } as Annotation);
+    await adding;
+
+    expect(ids(api.annotations.value)).toEqual(['a1']);
+    expect(api.annotations.value[0]?.content).toBe('complete');
+  });
+});

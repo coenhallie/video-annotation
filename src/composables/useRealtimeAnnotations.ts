@@ -8,129 +8,87 @@ import {
   type MaybeRefOrGetter,
 } from 'vue';
 import { supabase } from './useSupabase';
-import type { Annotation, AnnotationSurface } from '../types/database';
+import type { Annotation } from '../types/database';
+import type { RealtimeScope } from '../utils/annotationRealtimeScope';
 
 type RealtimeChannel = ReturnType<typeof supabase.channel>;
 
+/**
+ * Keeps the local annotation list in step with what teammates write.
+ *
+ * `scope` says what to listen to and which rows belong to the list on screen
+ * (see annotationRealtimeScope). One channel carries every source of a scope,
+ * and it is replaced whenever the scope's channel or filters change.
+ */
 export function useRealtimeAnnotations(
-  videoId: Ref<string | null> | (() => string | null),
-  annotations: Ref<Annotation[]>,
-  surface: MaybeRefOrGetter<AnnotationSurface> = 'video'
+  scope: MaybeRefOrGetter<RealtimeScope | null>,
+  annotations: Ref<Annotation[]>
 ) {
   const isConnected = ref(false);
-  const activeUsers = ref<Set<string>>(new Set());
   let subscription: RealtimeChannel | null = null;
-  let presenceChannel: RealtimeChannel | null = null;
 
-  const setupRealtimeSubscription = () => {
-    if (!toValue(videoId)) return;
+  // Read through the live scope at event time, not the one captured when the
+  // channel was opened: switching between the Video and Pipeline tabs changes
+  // which rows are accepted without changing what is listened to.
+  const accept = (filter: string, row: Annotation): Annotation | null =>
+    toValue(scope)
+      ?.sources.find((source) => source.filter === filter)
+      ?.accept(row) ?? null;
 
-    // Subscribe to annotation changes
-    subscription = supabase
-      .channel(`video_annotations:${toValue(videoId)}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'annotations',
-          filter: `videoId=eq.${toValue(videoId)}`,
-        },
-        (payload) => {
-          const newAnnotation = payload.new as Annotation;
+  const subscribe = (current: RealtimeScope) => {
+    let channel = supabase.channel(current.channel);
 
-          // The channel filters on videoId only, and the Video and Pipeline
-          // tabs share one video row, so an insert from the other tab arrives
-          // here too. The local list holds the active surface alone; letting a
-          // foreign row in puts a phantom marker on the timeline.
-          //
-          // Rows written before the surface column existed have no value here.
-          // They are 'video' by the column's default, so treat a missing value
-          // as 'video' rather than dropping them.
-          const rowSurface =
-            (newAnnotation as { surface?: AnnotationSurface }).surface ??
-            'video';
-          if (rowSurface !== toValue(surface)) return;
-
-          // Add to annotations if not already present
-          if (!annotations.value.find((a) => a.id === newAnnotation.id)) {
-            annotations.value.push(newAnnotation);
+    for (const { filter } of current.sources) {
+      channel = channel
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'annotations', filter },
+          (payload) => {
+            const row = accept(filter, payload.new as Annotation);
+            if (!row) return;
+            // The author's own client already holds the row it just saved.
+            if (annotations.value.some((a) => a.id === row.id)) return;
+            annotations.value.push(row);
             annotations.value.sort((a, b) => a.timestamp - b.timestamp);
           }
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'annotations',
-          filter: `videoId=eq.${toValue(videoId)}`,
-        },
-        (payload) => {
-          const updatedAnnotation = payload.new as Annotation;
-
-          const index = annotations.value.findIndex(
-            (a) => a.id === updatedAnnotation.id
-          );
-          if (index !== -1) {
-            // Merge, never replace: the payload is the bare table row, and the
-            // entry carries fields hydrated from other tables (labels,
-            // commentCount) that a replace would silently drop.
-            annotations.value[index] = {
-              ...annotations.value[index],
-              ...updatedAnnotation,
-            };
+        )
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'annotations', filter },
+          (payload) => {
+            const row = accept(filter, payload.new as Annotation);
+            if (!row) return;
+            const index = annotations.value.findIndex((a) => a.id === row.id);
+            if (index !== -1) {
+              // Merge, never replace: the payload is the bare table row, and
+              // the entry carries fields hydrated from other tables (labels,
+              // commentCount) that a replace would silently drop.
+              annotations.value[index] = {
+                ...annotations.value[index],
+                ...row,
+              };
+            }
           }
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'DELETE',
-          schema: 'public',
-          table: 'annotations',
-          filter: `videoId=eq.${toValue(videoId)}`,
-        },
-        (payload) => {
-          annotations.value = annotations.value.filter(
-            (a) => a.id !== payload.old.id
-          );
-        }
-      )
-      .subscribe((status) => {
-        isConnected.value = status === 'SUBSCRIBED';
-      });
-  };
+        );
+    }
 
-  const setupPresenceTracking = (userId: string, userName: string) => {
-    if (!toValue(videoId) || !userId) return;
+    // One unfiltered binding for deletes. A delete event carries the primary
+    // key and nothing else, so a column filter can never match it and a
+    // filtered binding receives nothing. Every delete in the table arrives here
+    // as a bare id; one that is not in the list removes nothing.
+    channel = channel.on(
+      'postgres_changes',
+      { event: 'DELETE', schema: 'public', table: 'annotations' },
+      (payload) => {
+        annotations.value = annotations.value.filter(
+          (a) => a.id !== payload.old.id
+        );
+      }
+    );
 
-    const channel = supabase.channel(`presence:video:${toValue(videoId)}`, {
-      config: {
-        presence: {
-          key: userId,
-        },
-      },
+    subscription = channel.subscribe((status) => {
+      isConnected.value = status === 'SUBSCRIBED';
     });
-    presenceChannel = channel;
-
-    channel
-      .on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState();
-        activeUsers.value = new Set(Object.keys(state));
-      })
-      .on('presence', { event: 'join' }, () => {})
-      .on('presence', { event: 'leave' }, () => {})
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          await channel.track({
-            userId: userId,
-            userName: userName,
-            onlineAt: new Date().toISOString(),
-          });
-        }
-      });
   };
 
   const cleanup = () => {
@@ -138,24 +96,22 @@ export function useRealtimeAnnotations(
       supabase.removeChannel(subscription);
       subscription = null;
     }
-    if (presenceChannel) {
-      supabase.removeChannel(presenceChannel);
-      presenceChannel = null;
-    }
     isConnected.value = false;
-    activeUsers.value.clear();
   };
 
-  // Watch for videoId changes
+  // The scope object is rebuilt whenever anything it reads changes; only a
+  // change to what is actually listened to is worth a resubscribe.
   watch(
-    videoId,
-    (newVideoId, oldVideoId) => {
-      if (oldVideoId) {
-        cleanup();
-      }
-      if (newVideoId) {
-        setupRealtimeSubscription();
-      }
+    () => {
+      const current = toValue(scope);
+      return current
+        ? [current.channel, ...current.sources.map((s) => s.filter)].join('|')
+        : null;
+    },
+    () => {
+      cleanup();
+      const current = toValue(scope);
+      if (current) subscribe(current);
     },
     { immediate: true }
   );
@@ -164,8 +120,6 @@ export function useRealtimeAnnotations(
 
   return {
     isConnected: readonly(isConnected),
-    activeUsers: readonly(activeUsers),
-    setupPresenceTracking,
     cleanup,
   };
 }
