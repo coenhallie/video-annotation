@@ -32,7 +32,10 @@ export function useWatchProgress(options: {
   const { videoId, duration, userId } = options;
 
   const ranges = ref<WatchedRange[]>([]);
-  let loadedKey: string | null = null;
+  // Who the seconds in `ranges` belong to. The editor stays mounted across a
+  // project switch, so the ids can change while unsaved seconds are still held;
+  // a save always goes to this owner, never to whatever is open by then.
+  let owner: { uid: string; vid: string; duration: number } | null = null;
   let dirty = false;
   let lastFlushAt = 0;
 
@@ -43,10 +46,18 @@ export function useWatchProgress(options: {
   async function loadExisting() {
     const vid = videoId.value;
     const uid = userId.value;
-    if (!vid || !uid) return;
-    const key = `${uid}:${vid}`;
-    if (loadedKey === key) return;
-    loadedKey = key;
+    if (owner && owner.uid === uid && owner.vid === vid) return;
+    // Save the outgoing video's unsaved seconds before letting go of them.
+    // flush() reads its owner and ranges before its first await, so the new
+    // owner can take over at once and seconds marked from here on are kept.
+    void flush();
+    if (!vid || !uid) {
+      owner = null;
+      ranges.value = [];
+      return;
+    }
+    const mine = { uid, vid, duration: duration.value };
+    owner = mine;
     ranges.value = [];
     dirty = false;
     const row = await getProgress(vid, uid);
@@ -54,7 +65,7 @@ export function useWatchProgress(options: {
     // merge with seconds marked during the load. DB-sourced ranges are
     // untrusted (no RLS) — sanitize before any range math.
     const stored = sanitizeRanges(row?.watchedRanges);
-    if (loadedKey === key && stored.length) {
+    if (owner === mine && stored.length) {
       ranges.value = mergeRanges([...stored, ...ranges.value]);
     }
   }
@@ -62,20 +73,24 @@ export function useWatchProgress(options: {
   function onTimeUpdate(currentTime: number, isPlaying: boolean) {
     if (!isPlaying) return;
     if (!videoId.value || !userId.value || duration.value <= 0) return;
+    // Between an id change and its watcher the open video is not the owner yet.
+    if (owner?.vid !== videoId.value || owner.uid !== userId.value) return;
+    owner.duration = duration.value;
     ranges.value = addSecond(ranges.value, currentTime);
     dirty = true;
     if (Date.now() - lastFlushAt >= FLUSH_INTERVAL_MS) void flush();
   }
 
   async function flush() {
-    if (!dirty) return;
-    const vid = videoId.value;
-    const uid = userId.value;
-    if (!vid || !uid || duration.value <= 0) return;
+    if (!dirty || !owner || owner.duration <= 0) return;
+    const { uid, vid, duration: ownerDuration } = owner;
+    const saving = ranges.value;
     dirty = false;
     lastFlushAt = Date.now();
-    const ok = await upsertProgress(uid, vid, ranges.value, duration.value);
-    if (!ok) dirty = true;
+    const ok = await upsertProgress(uid, vid, saving, ownerDuration);
+    // Only the same owner can be marked unsaved again: by now the ranges may
+    // already belong to another video.
+    if (!ok && owner?.uid === uid && owner.vid === vid) dirty = true;
   }
 
   watch([videoId, userId], () => void loadExisting(), { immediate: true });

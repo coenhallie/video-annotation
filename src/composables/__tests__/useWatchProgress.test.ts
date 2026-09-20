@@ -134,4 +134,37 @@ describe('useWatchProgress', () => {
     expect(getProgressMock).toHaveBeenLastCalledWith('v2', 'u1');
     expect(wp.percentWatched.value).toBe(0);
   });
+
+  // The editor stays mounted across a project switch, so the ids change under
+  // a composable that may still hold seconds it has not saved yet.
+  it('saves what was watched on the previous video when another one opens', async () => {
+    const { wp, videoId, duration } = await setup();
+    wp.onTimeUpdate(0, true); // flushes immediately and opens the 10s window
+    upsertProgressMock.mockClear();
+    for (let t = 1; t < 8; t++) wp.onTimeUpdate(t, true); // held back by the window
+
+    duration.value = 400;
+    videoId.value = 'v2';
+    await nextTick();
+    await Promise.resolve();
+
+    expect(upsertProgressMock).toHaveBeenCalledTimes(1);
+    const [uid, vid, ranges, savedDuration] = upsertProgressMock.mock.calls[0]!;
+    expect([uid, vid, savedDuration]).toEqual(['u1', 'v1', 100]);
+    expect(ranges).toEqual([[0, 8]]);
+  });
+
+  it("never writes the previous video's seconds under the new video", async () => {
+    const { wp, videoId } = await setup();
+    wp.onTimeUpdate(0, true);
+    for (let t = 1; t < 8; t++) wp.onTimeUpdate(t, true);
+    upsertProgressMock.mockClear();
+
+    videoId.value = 'v2';
+    await wp.flush(); // e.g. the pause that comes with the switch
+    await nextTick();
+    await Promise.resolve();
+
+    for (const call of upsertProgressMock.mock.calls) expect(call[1]).toBe('v1');
+  });
 });
