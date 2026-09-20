@@ -419,13 +419,17 @@ export function useDualVideoPlayer(): DualVideoPlayer {
   }
 
   function stepFrameVideoA(direction: number) {
-    const currentFrame = timeToFrame(videoACurrentTime.value, 'A');
-    const newFrame = Math.max(0, currentFrame + direction);
-    const newTime = frameToTime(newFrame, 'A');
-
     if (videoARef.value) {
+      // Step from the element, not from the reactive time: that one only moves
+      // on `timeupdate`, so a held arrow key would step from the same stale
+      // position each repeat and lose frames.
+      const currentFrame = timeToFrame(videoARef.value.currentTime, 'A');
+      const newFrame = Math.max(0, currentFrame + direction);
+      const newTime = frameToTime(newFrame, 'A');
+
       isManualSeekingA.value = true;
       videoARef.value.currentTime = newTime;
+      videoACurrentTime.value = newTime;
       videoACurrentFrame.value = newFrame;
       if (seekTimeoutA) clearTimeout(seekTimeoutA);
       seekTimeoutA = setTimeout(() => {
@@ -435,13 +439,17 @@ export function useDualVideoPlayer(): DualVideoPlayer {
   }
 
   function stepFrameVideoB(direction: number) {
-    const currentFrame = timeToFrame(videoBCurrentTime.value, 'B');
-    const newFrame = Math.max(0, currentFrame + direction);
-    const newTime = frameToTime(newFrame, 'B');
-
     if (videoBRef.value) {
+      // Step from the element, not from the reactive time: that one only moves
+      // on `timeupdate`, so a held arrow key would step from the same stale
+      // position each repeat and lose frames.
+      const currentFrame = timeToFrame(videoBRef.value.currentTime, 'B');
+      const newFrame = Math.max(0, currentFrame + direction);
+      const newTime = frameToTime(newFrame, 'B');
+
       isManualSeekingB.value = true;
       videoBRef.value.currentTime = newTime;
+      videoBCurrentTime.value = newTime;
       videoBCurrentFrame.value = newFrame;
       if (seekTimeoutB) clearTimeout(seekTimeoutB);
       seekTimeoutB = setTimeout(() => {

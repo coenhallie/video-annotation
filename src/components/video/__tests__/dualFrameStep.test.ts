@@ -27,6 +27,46 @@ function fakeClock(el: HTMLVideoElement, start: number) {
 }
 
 describe('dual frame step buttons', () => {
+  // Key-repeat fires faster than `timeupdate`, so the reactive time still holds
+  // the position from before the previous step. Stepping from it lands on the
+  // same frame again and the repeat is lost.
+  it('advances one frame per step even when no timeupdate arrives in between', () => {
+    let dual: DualVideoPlayer | null = null;
+    const Host = defineComponent({
+      setup() {
+        dual = useDualVideoPlayer();
+        return () => null;
+      },
+    });
+    const root = document.createElement('div');
+    const app = createApp(Host);
+    app.mount(root);
+    try {
+      const d = dual as unknown as DualVideoPlayer;
+      const a = document.createElement('video');
+      const b = document.createElement('video');
+      fakeClock(a, 10);
+      fakeClock(b, 25);
+      d.videoARef.value = a;
+      d.videoBRef.value = b;
+      d.videoACurrentTime!.value = 10;
+      d.videoBCurrentTime!.value = 25;
+      d.setFps!('A', 25);
+      d.setFps!('B', 50);
+
+      d.stepFrameVideoA!(1);
+      d.stepFrameVideoA!(1);
+      d.stepFrameVideoA!(1);
+      d.stepFrameVideoB!(-1);
+      d.stepFrameVideoB!(-1);
+
+      expect(a.currentTime).toBeCloseTo(10.12, 5);
+      expect(b.currentTime).toBeCloseTo(24.96, 5);
+    } finally {
+      app.unmount();
+    }
+  });
+
   it('steps each video one frame from its own position, keeping the offset', async () => {
     let dual: DualVideoPlayer | null = null;
     const player = ref<{ stepFrame: (n: number) => void } | null>(null);
