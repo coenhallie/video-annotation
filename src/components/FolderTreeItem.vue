@@ -88,14 +88,18 @@
         {{ folder.totalProjectCount }}
       </span>
 
-      <!-- Actions Menu -->
+      <!-- Actions Menu. Revealed on hover, but hover alone would leave them
+           invisible to a keyboard (focus lands on a button nobody can see) and
+           unreachable on a touch screen, where they are the only way to add a
+           subfolder, rename or delete. -->
       <div
-        class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+        class="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100"
       >
         <button
           type="button"
-          class="rounded p-1 text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
+          class="rounded p-1 text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200 [@media(hover:none)]:p-2"
           title="New subfolder"
+          aria-label="New subfolder"
           @click.stop="createSubfolder"
         >
           <svg
@@ -114,8 +118,9 @@
         </button>
         <button
           type="button"
-          class="rounded p-1 text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
+          class="rounded p-1 text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200 [@media(hover:none)]:p-2"
           title="Rename"
+          aria-label="Rename"
           @click.stop="startRename"
         >
           <svg
@@ -135,8 +140,9 @@
         <!-- Red only on hover, the one place colour still carries meaning. -->
         <button
           type="button"
-          class="rounded p-1 text-gray-500 transition-colors hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400"
+          class="rounded p-1 text-gray-500 transition-colors hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 [@media(hover:none)]:p-2"
           title="Delete"
+          aria-label="Delete"
           @click.stop="deleteFolder"
         >
           <svg
