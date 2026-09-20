@@ -209,7 +209,6 @@ const drawingCoordinator = useDrawingCoordinator({
 
 // Dual video player state
 const dualVideoPlayer = useDualVideoPlayer();
-const dualVideoPlayerRef = ref(null);
 
 dualVideoPlayer.drawingCanvasA = drawingCanvasA;
 dualVideoPlayer.drawingCanvasB = drawingCanvasB;
@@ -1279,7 +1278,6 @@ const {
   handleTimelinePlay,
   handleTimelinePause,
   handleDrawingCreated,
-  handleDualVideoLoaded,
   handleSeekVideoA,
   handleSeekVideoB,
   handlePlayVideoA,
@@ -1309,8 +1307,6 @@ const {
   drawingCanvasA,
   drawingCanvasB,
   dualVideoPlayer,
-  dualVideoPlayerRef,
-  comparisonWorkflow,
   unifiedVideoPlayerRef,
   annotationVideoId: () => annotationVideo.value?.id ?? null,
   initializeVideo,
@@ -2011,8 +2007,6 @@ watch(
                 @frame-update="handleFrameUpdate"
                 @fps-detected="handleFPSDetected"
                 @loaded="handleLoaded"
-                @video-a-loaded="handleDualVideoLoaded"
-                @video-b-loaded="handleDualVideoLoaded"
                 @drawing-created="handleDrawingCreated"
                 @error="handleVideoError"
               />

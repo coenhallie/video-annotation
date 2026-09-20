@@ -19,7 +19,6 @@ export interface VideoEventHandlers {
   handleTimelinePlay: () => void;
   handleTimelinePause: () => void;
   handleDrawingCreated: (drawing: DrawingCreatedEvent, videoContext?: string) => void;
-  handleDualVideoLoaded: () => Promise<void>;
   handleDualVideoAction: (action: string, context: string, ...args: any[]) => void;
   handleSeekVideoA: (time: number) => void;
   handleSeekVideoB: (time: number) => void;
@@ -79,10 +78,8 @@ export function useVideoEventHandlers(deps: {
   dualVideoPlayer: Record<string, any>;
 
   /** Ref to the dual video player component. */
-  dualVideoPlayerRef: Ref<any>;
 
   /** Comparison workflow instance. */
-  comparisonWorkflow: Record<string, any>;
 
   /** Ref to the UnifiedVideoPlayer component. */
   unifiedVideoPlayerRef: Ref<{
@@ -116,8 +113,6 @@ export function useVideoEventHandlers(deps: {
     drawingCoordinator,
     drawingCanvas,
     dualVideoPlayer,
-    dualVideoPlayerRef,
-    comparisonWorkflow,
     unifiedVideoPlayerRef,
     annotationVideoId,
     initializeVideo,
@@ -364,26 +359,6 @@ export function useVideoEventHandlers(deps: {
   const handleFrameStepVideoB = (direction: string) =>
     handleDualVideoAction('stepFrame', 'B', direction);
 
-  // ── Dual video loaded ──────────────────────────────────────────────────────
-
-  const handleDualVideoLoaded = async () => {
-    if (dualVideoPlayerRef.value) {
-      const videoAState = (dualVideoPlayerRef.value as any).videoAState;
-      const videoBState = (dualVideoPlayerRef.value as any).videoBState;
-
-      if (
-        videoAState.duration > 0 &&
-        videoAState.fps > 0 &&
-        videoBState.duration > 0 &&
-        videoBState.fps > 0
-      ) {
-        if (comparisonWorkflow) {
-          (comparisonWorkflow as any).setDualVideoReady?.(true);
-        }
-      }
-    }
-  };
-
   // ── Annotation click / edit ────────────────────────────────────────────────
 
   const handleAnnotationClick = async (annotation: Annotation) => {
@@ -437,7 +412,6 @@ export function useVideoEventHandlers(deps: {
     handleTimelinePlay,
     handleTimelinePause,
     handleDrawingCreated,
-    handleDualVideoLoaded,
     handleDualVideoAction,
     handleSeekVideoA,
     handleSeekVideoB,
