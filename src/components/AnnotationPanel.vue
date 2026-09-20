@@ -179,6 +179,8 @@ const annotationsRef = computed(() => props.annotations);
 const { sortedAnnotations, availableCategories, activeCategory } = useAnnotationFiltering({
   annotations: annotationsRef,
   labelsById: labelColors,
+  isDualMode: () => props.isDualMode,
+  fps: () => props.fps,
 });
 
 /**

@@ -1,10 +1,19 @@
-import { computed, ref, watch, type ComputedRef, type Ref } from 'vue';
+import {
+  computed,
+  ref,
+  toValue,
+  watch,
+  type ComputedRef,
+  type MaybeRefOrGetter,
+  type Ref,
+} from 'vue';
 import {
   CATEGORY_ORDER,
   categoryKeyForLabel,
   type LabelCategoryKey,
 } from '@/utils/labelCategories';
 import type { LabelColorMap, PanelAnnotation } from '@/types/component-interfaces';
+import { annotationListTime } from '@/utils/annotationTime';
 
 export interface UseAnnotationFilteringOptions {
   /** Reactive list of annotations from the parent. */
@@ -16,10 +25,14 @@ export interface UseAnnotationFilteringOptions {
    * no category - they stay visible under "All" and never under a pill.
    */
   labelsById: Ref<LabelColorMap> | ComputedRef<LabelColorMap>;
+  /** A comparison orders its rows by video A's position, as the rows show it. */
+  isDualMode?: MaybeRefOrGetter<boolean>;
+  /** Frame rate behind that position when only a frame was stored. */
+  fps?: MaybeRefOrGetter<number>;
 }
 
 export function useAnnotationFiltering(options: UseAnnotationFilteringOptions) {
-  const { annotations, labelsById } = options;
+  const { annotations, labelsById, isDualMode = false, fps = 30 } = options;
 
   // Default color for annotations without specific labels
   const defaultAnnotationColor = '#6b7280'; // gray-500
@@ -47,6 +60,8 @@ export function useAnnotationFiltering(options: UseAnnotationFilteringOptions) {
       if (typeof a?.durationFrames === 'number') result.durationFrames = a.durationFrames;
       if (typeof a?.videoAFrame === 'number') result.videoAFrame = a.videoAFrame;
       if (typeof a?.videoBFrame === 'number') result.videoBFrame = a.videoBFrame;
+      if (typeof a?.videoATimestamp === 'number') result.videoATimestamp = a.videoATimestamp;
+      if (typeof a?.videoBTimestamp === 'number') result.videoBTimestamp = a.videoBTimestamp;
       if (typeof a?.commentCount === 'number') result.commentCount = a.commentCount;
       return result;
     });
@@ -94,11 +109,12 @@ export function useAnnotationFiltering(options: UseAnnotationFilteringOptions) {
     const list = key
       ? normalizedAnnotations.value.filter((a) => categoriesOf(a).includes(key))
       : normalizedAnnotations.value;
-    return list.slice().sort((a, b) => {
-      const ta = a && typeof a.timestamp === 'number' ? a.timestamp : 0;
-      const tb = b && typeof b.timestamp === 'number' ? b.timestamp : 0;
-      return ta - tb;
-    });
+    const context = { isDualMode: toValue(isDualMode), fps: toValue(fps) };
+    return list
+      .slice()
+      .sort(
+        (a, b) => annotationListTime(a, context) - annotationListTime(b, context)
+      );
   });
 
   return {

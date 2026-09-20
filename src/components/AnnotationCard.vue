@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, type PropType } from 'vue';
 import { formatFrameCompact, formatTime } from '@/utils/formatters';
+import { annotationListTime } from '@/utils/annotationTime';
 import CommentSection from './CommentSection.vue';
 import DeleteConfirmationDialog from './DeleteConfirmationDialog.vue';
 import type { Comment } from '../types/database';
@@ -107,7 +108,14 @@ const frameLabel = computed(() => {
   return formatFrameCompact(frame.value);
 });
 
-const timecode = computed(() => formatTime(props.annotation.timestamp));
+const timecode = computed(() =>
+  formatTime(
+    annotationListTime(props.annotation, {
+      isDualMode: props.isDualMode,
+      fps: props.fps,
+    })
+  )
+);
 
 const hasDrawing = computed(
   () => props.annotation.annotationType === 'drawing' || Boolean(props.annotation.drawingData)
