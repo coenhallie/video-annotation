@@ -80,11 +80,11 @@ const props = defineProps({
   },
   videoAState: {
     type: Object,
-    default: () => ({ fps: -1, duration: 0 }),
+    default: () => ({ fps: 30, duration: 0 }),
   },
   videoBState: {
     type: Object,
-    default: () => ({ fps: -1, duration: 0 }),
+    default: () => ({ fps: 30, duration: 0 }),
   },
 });
 
