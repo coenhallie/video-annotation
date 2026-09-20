@@ -305,3 +305,26 @@ export const LABEL_COLORS: readonly [string, ...string[]] = [
   '#db2777', // pink-600
   '#374151', // gray-700
 ];
+
+// What a screen reader calls each swatch. The same hue comes in two shades, so
+// the darker one says so rather than repeating the name.
+export const LABEL_COLOR_NAMES: Readonly<Record<string, string>> = {
+  '#ef4444': 'Red',
+  '#f97316': 'Orange',
+  '#eab308': 'Yellow',
+  '#22c55e': 'Green',
+  '#06b6d4': 'Cyan',
+  '#3b82f6': 'Blue',
+  '#8b5cf6': 'Violet',
+  '#ec4899': 'Pink',
+  '#6b7280': 'Gray',
+  '#dc2626': 'Dark red',
+  '#ea580c': 'Dark orange',
+  '#ca8a04': 'Dark yellow',
+  '#16a34a': 'Dark green',
+  '#0891b2': 'Dark cyan',
+  '#2563eb': 'Dark blue',
+  '#7c3aed': 'Dark violet',
+  '#db2777': 'Dark pink',
+  '#374151': 'Dark gray',
+};

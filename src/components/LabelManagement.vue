@@ -254,11 +254,25 @@
                         : 'hover:scale-110'
                     "
                     :style="{ backgroundColor: color }"
+                    :aria-label="LABEL_COLOR_NAMES[color] ?? color"
+                    :aria-pressed="labelForm.color === color"
+                    :title="LABEL_COLOR_NAMES[color] ?? color"
                     @click="labelForm.color = color"
                   />
                 </div>
               </div>
             </div>
+
+            <!-- A refused save keeps the form open with the draft in it, so the
+                 reason has to be said here: the panel's own error line is
+                 behind this overlay's backdrop. -->
+            <p
+              v-if="formError"
+              role="alert"
+              class="px-4 pb-3 text-[12px] leading-relaxed text-red-600 dark:text-red-400"
+            >
+              {{ formError }}
+            </p>
 
             <div
               class="flex items-center justify-end gap-3 border-t border-gray-200 px-4 py-3 dark:border-white/10"
@@ -341,7 +355,7 @@ import { useAuth } from '../composables/useAuth';
 import { errorMessage } from '../utils/errorHandler';
 import LabelInfoTooltip from './LabelInfoTooltip.vue';
 import type { Label, LabelStats } from '../types/labels';
-import { LABEL_COLORS, DEFAULT_LABELS } from '../types/labels';
+import { LABEL_COLORS, LABEL_COLOR_NAMES, DEFAULT_LABELS } from '../types/labels';
 
 const props = defineProps({
   projectId: {
@@ -362,6 +376,8 @@ const loading = ref(false);
 const saving = ref(false);
 const deleting = ref(false);
 const error = ref<string | null>(null);
+// A failed save, shown inside the form while it stays open.
+const formError = ref<string | null>(null);
 
 // Form state
 const showCreateForm = ref(false);
@@ -495,6 +511,7 @@ const editLabel = (label: Label) => {
 };
 
 const closeForm = () => {
+  formError.value = null;
   showCreateForm.value = false;
   editingLabel.value = null;
   labelForm.value = {
@@ -507,6 +524,7 @@ const closeForm = () => {
 const saveLabel = async () => {
   try {
     saving.value = true;
+    formError.value = null;
 
     if (editingLabel.value) {
       // Update existing label
@@ -542,7 +560,7 @@ const saveLabel = async () => {
     await loadLabels(); // Refresh to get updated stats
   } catch (err) {
     console.error('Failed to save label:', err);
-    error.value = `Could not save the label: ${errorMessage(err)}`;
+    formError.value = `Could not save the label: ${errorMessage(err)}`;
   } finally {
     saving.value = false;
   }

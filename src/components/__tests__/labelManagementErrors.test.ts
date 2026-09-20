@@ -5,13 +5,14 @@ import { createApp, h, nextTick, ref } from 'vue';
 const getLabels = vi.fn();
 const getLabelStats = vi.fn();
 const updateLabel = vi.fn();
+const createLabel = vi.fn();
 vi.mock('@/services/labelService', () => ({
   LabelService: {
     initializeDefaultLabels: vi.fn(async () => {}),
     getLabels: (...a: unknown[]) => getLabels(...a),
     getLabelStats: (...a: unknown[]) => getLabelStats(...a),
     updateLabel: (...a: unknown[]) => updateLabel(...a),
-    createLabel: vi.fn(),
+    createLabel: (...a: unknown[]) => createLabel(...a),
     deleteLabel: vi.fn(),
   },
 }));
@@ -40,6 +41,7 @@ beforeEach(() => {
   getLabels.mockReset();
   getLabelStats.mockReset().mockResolvedValue([]);
   updateLabel.mockReset();
+  createLabel.mockReset();
 });
 
 describe('LabelManagement failures', () => {
@@ -73,6 +75,49 @@ describe('LabelManagement failures', () => {
     for (let i = 0; i < 6; i++) { await Promise.resolve(); await nextTick(); }
 
     expect(p.root.querySelector('[role="alert"]')?.textContent ?? '').toContain('not allowed');
+    p.unmount();
+  });
+
+  // The form is a full-screen overlay. The panel's own error line sits behind
+  // its backdrop, so a refused save looked like the button had done nothing.
+  it('shows a refused save inside the form that is still open', async () => {
+    getLabels.mockResolvedValue([]);
+    createLabel.mockRejectedValue(new Error('duplicate key value'));
+    const p = await mountPanel();
+
+    [...p.root.querySelectorAll('button')]
+      .find((b) => /new label|add label|create/i.test(b.textContent ?? ''))!
+      .click();
+    await nextTick();
+    const form = p.root.querySelector('form')!;
+    const name = form.querySelector('input')!;
+    name.value = 'Footwork';
+    name.dispatchEvent(new Event('input'));
+    form.dispatchEvent(new Event('submit', { cancelable: true }));
+    for (let i = 0; i < 6; i++) { await Promise.resolve(); await nextTick(); }
+
+    expect(form.querySelector('[role="alert"]')?.textContent ?? '').toContain(
+      'duplicate key value'
+    );
+    p.unmount();
+  });
+
+  it('names each colour swatch for a screen reader', async () => {
+    getLabels.mockResolvedValue([]);
+    const p = await mountPanel();
+    [...p.root.querySelectorAll('button')]
+      .find((b) => /new label|add label|create/i.test(b.textContent ?? ''))!
+      .click();
+    await nextTick();
+
+    const swatches = [...p.root.querySelectorAll('form button[type="button"]')].filter(
+      (b) => (b as HTMLElement).style.backgroundColor
+    );
+    expect(swatches.length).toBeGreaterThan(5);
+    for (const swatch of swatches) {
+      expect(swatch.getAttribute('aria-label')).toBeTruthy();
+    }
+    expect(swatches.filter((b) => b.getAttribute('aria-pressed') === 'true').length).toBe(1);
     p.unmount();
   });
 });
