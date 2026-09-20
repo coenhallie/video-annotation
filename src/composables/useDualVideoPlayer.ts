@@ -92,10 +92,6 @@ export interface DualVideoPlayer {
   setFps?: (side: 'A' | 'B', fps: number) => void;
 
   // Sync control
-  isSyncEnabled?: Ref<boolean>;
-  isIndependentMode?: Ref<boolean>;
-  toggleTimelineMode?: () => void;
-  setTimelineMode?: (independent: boolean) => void;
 }
 
 export function useDualVideoPlayer(): DualVideoPlayer {
@@ -148,16 +144,6 @@ export function useDualVideoPlayer(): DualVideoPlayer {
 
   const fallbackFps = 30;
 
-  // Add sync control flags
-  const isSyncEnabled = ref(true);
-  const isManualSeekingA = ref(false);
-  const isManualSeekingB = ref(false);
-  const isIndependentMode = ref(true); // New flag for independent timeline control
-
-  // Track setTimeout IDs for cleanup
-  let seekTimeoutA: ReturnType<typeof setTimeout> | null = null;
-  let seekTimeoutB: ReturnType<typeof setTimeout> | null = null;
-  let seekTimeoutBoth: ReturnType<typeof setTimeout> | null = null;
 
   const timeToFrame = (timeInSeconds: number, which: 'A' | 'B') =>
     Math.round(
@@ -186,54 +172,17 @@ export function useDualVideoPlayer(): DualVideoPlayer {
         : fallbackFps
     );
 
-  function syncTime(
-    target: HTMLVideoElement,
-    other: HTMLVideoElement,
-    _sourceVideo: 'A' | 'B'
-  ) {
-    try {
-      // Only sync if:
-      // 1. Sync is enabled globally
-      // 2. Independent mode is disabled (for synchronized playback)
-      // 3. Neither video is being manually controlled
-      // 4. This is not during an individual timeline seek
-      if (
-        isSyncEnabled.value &&
-        !isIndependentMode.value &&
-        !isManualSeekingA.value &&
-        !isManualSeekingB.value
-      ) {
-        // keep within ~1 frame at 30fps
-        if (Math.abs(target.currentTime - other.currentTime) > 0.033) {
-          other.currentTime = target.currentTime;
-        }
-      }
-    } catch {
-      // ignore sync failures due to readiness
-    }
-  }
-
   function attachSync() {
     const a = videoARef.value;
     const b = videoBRef.value;
     if (!a || !b) return;
 
     const onTimeA = () => {
-      // Only attempt sync if not in independent mode and not manually seeking
-      if (!isIndependentMode.value) {
-        syncTime(a, b, 'A');
-      }
-      // Always update reactive state for Video A
       videoACurrentTime.value = a.currentTime;
       videoACurrentFrame.value = timeToFrame(a.currentTime, 'A');
     };
 
     const onTimeB = () => {
-      // Only attempt sync if not in independent mode and not manually seeking
-      if (!isIndependentMode.value) {
-        syncTime(b, a, 'B');
-      }
-      // Always update reactive state for Video B
       videoBCurrentTime.value = b.currentTime;
       videoBCurrentFrame.value = timeToFrame(b.currentTime, 'B');
     };
@@ -327,9 +276,6 @@ export function useDualVideoPlayer(): DualVideoPlayer {
 
   onUnmounted(() => {
     if (cleanupSync) cleanupSync();
-    if (seekTimeoutA) clearTimeout(seekTimeoutA);
-    if (seekTimeoutB) clearTimeout(seekTimeoutB);
-    if (seekTimeoutBoth) clearTimeout(seekTimeoutBoth);
   });
 
   function play() {
@@ -342,42 +288,22 @@ export function useDualVideoPlayer(): DualVideoPlayer {
     videoBRef.value?.pause();
   }
 
+  // Moves both videos to the same time.
   function seek(time: number) {
-    // This is for simultaneous seeking of both videos (synchronized operation)
-    isManualSeekingA.value = true;
-    isManualSeekingB.value = true;
-
     if (videoARef.value) videoARef.value.currentTime = time;
     if (videoBRef.value) videoBRef.value.currentTime = time;
-
-    // Reset flags after simultaneous seek
-    if (seekTimeoutBoth) clearTimeout(seekTimeoutBoth);
-    seekTimeoutBoth = setTimeout(() => {
-      isManualSeekingA.value = false;
-      isManualSeekingB.value = false;
-    }, 300);
   }
 
   // Explicit per-video controls used by callers like App.vue
   function seekVideoA(time: number) {
     if (videoARef.value) {
-      isManualSeekingA.value = true;
       videoARef.value.currentTime = time;
-      if (seekTimeoutA) clearTimeout(seekTimeoutA);
-      seekTimeoutA = setTimeout(() => {
-        isManualSeekingA.value = false;
-      }, 300);
     }
   }
 
   function seekVideoB(time: number) {
     if (videoBRef.value) {
-      isManualSeekingB.value = true;
       videoBRef.value.currentTime = time;
-      if (seekTimeoutB) clearTimeout(seekTimeoutB);
-      seekTimeoutB = setTimeout(() => {
-        isManualSeekingB.value = false;
-      }, 300);
     }
   }
 
@@ -427,14 +353,9 @@ export function useDualVideoPlayer(): DualVideoPlayer {
       const newFrame = Math.max(0, currentFrame + direction);
       const newTime = frameToTime(newFrame, 'A');
 
-      isManualSeekingA.value = true;
       videoARef.value.currentTime = newTime;
       videoACurrentTime.value = newTime;
       videoACurrentFrame.value = newFrame;
-      if (seekTimeoutA) clearTimeout(seekTimeoutA);
-      seekTimeoutA = setTimeout(() => {
-        isManualSeekingA.value = false;
-      }, 300);
     }
   }
 
@@ -447,14 +368,9 @@ export function useDualVideoPlayer(): DualVideoPlayer {
       const newFrame = Math.max(0, currentFrame + direction);
       const newTime = frameToTime(newFrame, 'B');
 
-      isManualSeekingB.value = true;
       videoBRef.value.currentTime = newTime;
       videoBCurrentTime.value = newTime;
       videoBCurrentFrame.value = newFrame;
-      if (seekTimeoutB) clearTimeout(seekTimeoutB);
-      seekTimeoutB = setTimeout(() => {
-        isManualSeekingB.value = false;
-      }, 300);
     }
   }
 
@@ -489,34 +405,11 @@ export function useDualVideoPlayer(): DualVideoPlayer {
     }
   }
 
-  // Method to toggle between independent and synchronized timeline modes
-  function toggleTimelineMode() {
-    isIndependentMode.value = !isIndependentMode.value;
-    console.log(
-      '🎥 [useDualVideoPlayer] Timeline mode changed to:',
-      isIndependentMode.value ? 'Independent' : 'Synchronized'
-    );
-  }
-
-  // Method to set timeline mode explicitly
-  function setTimelineMode(independent: boolean) {
-    isIndependentMode.value = independent;
-    console.log(
-      '🎥 [useDualVideoPlayer] Timeline mode set to:',
-      independent ? 'Independent' : 'Synchronized'
-    );
-  }
-
   // Ends the current project's session. The element refs and their listeners
   // stay: DualVideoPlayer owns that binding, and the same two elements carry on
   // into the next comparison with new sources.
   function destroy() {
     pause();
-    if (seekTimeoutA) clearTimeout(seekTimeoutA);
-    if (seekTimeoutB) clearTimeout(seekTimeoutB);
-    if (seekTimeoutBoth) clearTimeout(seekTimeoutBoth);
-    isManualSeekingA.value = false;
-    isManualSeekingB.value = false;
     videoACurrentTime.value = 0;
     videoBCurrentTime.value = 0;
     videoACurrentFrame.value = 0;
@@ -565,10 +458,5 @@ export function useDualVideoPlayer(): DualVideoPlayer {
     setVideoSources,
     setFps,
     // expose drawing methods
-    // expose sync control
-    isSyncEnabled,
-    isIndependentMode,
-    toggleTimelineMode,
-    setTimelineMode,
   };
 }

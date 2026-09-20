@@ -348,14 +348,6 @@ const onTimelineSeek = (time: number) => {
   if (onPipeline.value) void pipelineReplay.seek(time);
   else handleTimelineSeek(time);
 };
-const onTimelinePlay = () => {
-  if (onPipeline.value) pipelineReplay.play();
-  else handleTimelinePlay();
-};
-const onTimelinePause = () => {
-  if (onPipeline.value) pipelineReplay.pause();
-  else handleTimelinePause();
-};
 
 const onAnnotationClick = (annotation: Annotation) => {
   // Clicking a pipeline marker must move the replay, not the hidden video.
@@ -1252,7 +1244,7 @@ watch(selectedAnnotation, (newAnnotation, oldAnnotation) => {
       newAnnotation.videoBFrame ?? undefined,
     );
 
-    // Also keep the single canvas frame in sync (used by handleFrameUpdate)
+    // Also keep the single canvas frame in sync
     drawingCanvas.currentFrame.value = newAnnotation.frame;
   }
 });
@@ -1278,13 +1270,11 @@ const refreshCurrentVideoUrl: RefreshVideoUrl = (staleUrl) =>
 // ── Video event handlers (extracted composable) ──────────────────────────────
 const {
   handleTimeUpdate,
-  handleFrameUpdate,
   handleFPSDetected,
   handleLoaded,
   handleVideoError,
   handleSeekToTime,
   handleSeekToTimeWithFade,
-  handleTimelinePlay,
   handleTimelinePause,
   handleDrawingCreated,
   handleSeekVideoA,
@@ -1300,7 +1290,6 @@ const {
   currentTime,
   videoStore,
   duration,
-  currentFrame,
   totalFrames,
   fps,
   isPlaying,
@@ -1312,9 +1301,6 @@ const {
   currentVideoObject,
   selectedAnnotation,
   drawingCoordinator,
-  drawingCanvas,
-  drawingCanvasA,
-  drawingCanvasB,
   dualVideoPlayer,
   unifiedVideoPlayerRef,
   annotationVideoId: () => annotationVideo.value?.id ?? null,
@@ -2012,7 +1998,6 @@ watch(
                   comparisonWorkflow.currentComparison.value?.id || ''
                 "
                 @time-update="handleTimeUpdate"
-                @frame-update="handleFrameUpdate"
                 @fps-detected="handleFPSDetected"
                 @loaded="handleLoaded"
                 @drawing-created="handleDrawingCreated"
@@ -2076,12 +2061,8 @@ watch(
             :fps="timeline.fps"
             :annotations="annotations"
             :selected-annotation="selectedAnnotation"
-            :is-playing="timeline.isPlaying"
-            :player-mode="playerMode"
             @seek-to-time="onTimelineSeek"
             @annotation-click="onAnnotationClick"
-            @play="onTimelinePlay"
-            @pause="onTimelinePause"
             @open-quick-pick="openQuickPickAtTime"
           />
 

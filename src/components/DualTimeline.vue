@@ -320,13 +320,9 @@ const timelineBClasses = computed(() => ({
           :fps="videoAFps"
           :annotations="annotationsForA"
           :selected-annotation="selectedAnnotation"
-          :is-playing="videoAPlaying"
-          :player-mode="'single'"
           compact
           @seek-to-time="handleSeekVideoA"
           @annotation-click="handleAnnotationClick"
-          @play="handlePlayVideoA"
-          @pause="handlePauseVideoA"
           @open-quick-pick="handleOpenQuickPickA"
         />
       </div>
@@ -389,13 +385,9 @@ const timelineBClasses = computed(() => ({
           :fps="videoBFps"
           :annotations="annotationsForB"
           :selected-annotation="selectedAnnotation"
-          :is-playing="videoBPlaying"
-          :player-mode="'single'"
           compact
           @seek-to-time="handleSeekVideoB"
           @annotation-click="handleAnnotationClick"
-          @play="handlePlayVideoB"
-          @pause="handlePauseVideoB"
           @open-quick-pick="handleOpenQuickPickB"
         />
       </div>

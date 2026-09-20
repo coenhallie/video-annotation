@@ -11,13 +11,11 @@ import type { DualVideoPlayer } from './useDualVideoPlayer';
 
 export interface VideoEventHandlers {
   handleTimeUpdate: (data: { currentTime: number; duration: number }) => void;
-  handleFrameUpdate: (data: { currentFrame: number; totalFrames: number; fps: number }) => void;
   handleFPSDetected: (data: { fps: number; totalFrames: number }) => void;
   handleLoaded: (data: VideoLoadedEvent) => Promise<void>;
   handleVideoError: (error: Error | Event) => Promise<void>;
   handleSeekToTime: (time: number) => void;
   handleSeekToTimeWithFade: (time: number) => Promise<void>;
-  handleTimelinePlay: () => void;
   handleTimelinePause: () => void;
   handleDrawingCreated: (drawing: DrawingCreatedEvent, videoContext?: string) => void;
   handleSeekVideoA: (time: number) => void;
@@ -43,7 +41,6 @@ export function useVideoEventHandlers(deps: {
   /** The single player's position, in seconds. */
   currentTime: Ref<number>;
   duration: Ref<number>;
-  currentFrame: Ref<number>;
   totalFrames: Ref<number>;
   fps: Ref<number>;
   isPlaying: Ref<boolean>;
@@ -61,18 +58,6 @@ export function useVideoEventHandlers(deps: {
 
   /** Drawing coordinator (unified single/dual API). */
   drawingCoordinator: UseDrawingCoordinator;
-
-  /** Drawing canvases (still needed for currentFrame sync in handleFrameUpdate). */
-  drawingCanvas: {
-    currentFrame: Ref<number>;
-    addDrawing: (drawing: DrawingCreatedEvent) => void;
-  };
-  drawingCanvasA: {
-    currentFrame: Ref<number>;
-  };
-  drawingCanvasB: {
-    currentFrame: Ref<number>;
-  };
 
   /** Dual video player instance. */
   dualVideoPlayer: DualVideoPlayer;
@@ -96,7 +81,6 @@ export function useVideoEventHandlers(deps: {
     videoStore,
     currentTime,
     duration,
-    currentFrame,
     totalFrames,
     fps,
     playerMode,
@@ -107,7 +91,6 @@ export function useVideoEventHandlers(deps: {
     currentVideoObject,
     selectedAnnotation,
     drawingCoordinator,
-    drawingCanvas,
     dualVideoPlayer,
     unifiedVideoPlayerRef,
     annotationVideoId,
@@ -122,36 +105,6 @@ export function useVideoEventHandlers(deps: {
 
     if (data.duration && data.duration > 0 && duration.value !== data.duration) {
       duration.value = data.duration;
-    }
-  };
-
-  const handleFrameUpdate = (data: {
-    currentFrame: number;
-    totalFrames: number;
-    fps: number;
-  }) => {
-    try {
-      if (data && typeof data === 'object') {
-        if (typeof data.currentFrame === 'number') {
-          currentFrame.value = data.currentFrame;
-        }
-        if (typeof data.totalFrames === 'number') {
-          totalFrames.value = data.totalFrames;
-        }
-        if (typeof data.fps === 'number') {
-          fps.value = data.fps;
-        }
-
-        if (
-          drawingCanvas &&
-          drawingCanvas.currentFrame &&
-          typeof data.currentFrame === 'number'
-        ) {
-          drawingCanvas.currentFrame.value = data.currentFrame;
-        }
-      }
-    } catch (error) {
-      console.error('Error in handleFrameUpdate:', error);
     }
   };
 
@@ -300,15 +253,6 @@ export function useVideoEventHandlers(deps: {
 
   // ── Timeline play/pause ────────────────────────────────────────────────────
 
-  const handleTimelinePlay = () => {
-    if (playerMode.value === 'single' && unifiedVideoPlayerRef.value) {
-      unifiedVideoPlayerRef.value.play?.();
-    } else if (playerMode.value === 'dual' && dualVideoPlayer) {
-      dualVideoPlayer.playVideoA?.();
-      dualVideoPlayer.playVideoB?.();
-    }
-  };
-
   const handleTimelinePause = () => {
     if (playerMode.value === 'single' && unifiedVideoPlayerRef.value) {
       unifiedVideoPlayerRef.value.pause?.();
@@ -384,13 +328,11 @@ export function useVideoEventHandlers(deps: {
 
   return {
     handleTimeUpdate,
-    handleFrameUpdate,
     handleFPSDetected,
     handleLoaded,
     handleVideoError,
     handleSeekToTime,
     handleSeekToTimeWithFade,
-    handleTimelinePlay,
     handleTimelinePause,
     handleDrawingCreated,
     handleSeekVideoA,

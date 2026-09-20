@@ -186,7 +186,6 @@ const props = withDefaults(defineProps<Props>(), {
 // Emits
 const emit = defineEmits<{
   (e: 'time-update', data: { currentTime: number; duration: number; videoId?: string }): void;
-  (e: 'frame-update', data: { currentFrame: number; totalFrames: number; fps: number; videoId?: string }): void;
   (e: 'play'): void;
   (e: 'pause'): void;
   (e: 'duration-change', duration: number): void;

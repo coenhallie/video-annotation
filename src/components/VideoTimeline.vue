@@ -56,43 +56,16 @@ const props = defineProps({
     type: Object as PropType<Annotation | null>,
     default: null,
   },
-  isPlaying: {
-    type: Boolean,
-    default: false,
-  },
-  playerMode: {
-    type: String,
-    default: 'single',
-  },
   // Tighter below lg, for a timeline that shares the screen with another one.
   compact: {
     type: Boolean,
     default: false,
-  },
-  // New props for dual video FPS handling
-  fpsCompatible: {
-    type: Boolean,
-    default: true,
-  },
-  primaryVideo: {
-    type: String,
-    default: 'A',
-  },
-  videoAState: {
-    type: Object,
-    default: () => ({ fps: 30, duration: 0 }),
-  },
-  videoBState: {
-    type: Object,
-    default: () => ({ fps: 30, duration: 0 }),
   },
 });
 
 const emit = defineEmits([
   'seek-to-time',
   'annotation-click',
-  'play',
-  'pause',
   'open-quick-pick',
 ]);
 
@@ -318,33 +291,6 @@ const handleAnnotationClick = (
   emit('annotation-click', annotation);
   emit('seek-to-time', annotation.timestamp);
 };
-
-// Play/pause button handlers
-const handlePlayPause = (): void => {
-  if (props.isPlaying) {
-    emit('pause');
-  } else {
-    emit('play');
-  }
-};
-
-// Optimized timeline markers - only create when needed
-// const timeMarkers = computed(() => {
-//   if (!props.duration || props.duration < 60) return [];
-
-//   const markers = [];
-//   const interval = Math.max(60, Math.floor(props.duration / 10)); // Adaptive interval
-
-//   for (let time = 0; time <= props.duration; time += interval) {
-//     markers.push({
-//       time,
-//       position: (time / props.duration) * 100,
-//       label: formatTime(time),
-//     });
-//   }
-
-//   return markers;
-// });
 </script>
 
 <template>
@@ -352,37 +298,6 @@ const handlePlayPause = (): void => {
     class="bg-gray-900 text-white"
     :class="compact ? 'p-1 lg:p-2' : 'p-2'"
   >
-    <!-- Play/Pause Controls (only show in dual mode) -->
-    <div
-      v-if="playerMode === 'dual'"
-      class="flex items-center justify-center mb-4"
-    >
-      <button
-        class="flex items-center justify-center w-12 h-12 bg-gray-800 hover:bg-gray-700 border border-gray-600 rounded-full transition-colors focus:outline-none focus:ring-1 focus:ring-white/40 shadow-lg"
-        :title="isPlaying ? 'Pause' : 'Play'"
-        @click="handlePlayPause"
-      >
-        <!-- Play Icon -->
-        <svg
-          v-if="!isPlaying"
-          class="w-5 h-5 text-white ml-0.5"
-          fill="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path d="M8 5v14l11-7z" />
-        </svg>
-        <!-- Pause Icon -->
-        <svg
-          v-else
-          class="w-5 h-5 text-white"
-          fill="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
-        </svg>
-      </button>
-    </div>
-
     <!-- Timeline Container (moved to top for priority) -->
     <div
       class="relative"
@@ -456,21 +371,7 @@ const handlePlayPause = (): void => {
           <span class="opacity-50">/</span>
           <span>{{ formatFrame(totalFrames) }}</span>
           <span class="opacity-50">@</span>
-          <span
-            v-if="playerMode === 'dual' && !fpsCompatible"
-            class="text-yellow-400"
-            :title="`Video A: ${videoAState.fps}fps, Video B: ${videoBState.fps}fps`"
-          >
-            {{ fps }}fps ({{ primaryVideo }})
-          </span>
-          <span v-else>{{ fps }}fps</span>
-          <span
-            v-if="playerMode === 'dual' && !fpsCompatible"
-            class="text-yellow-400 text-xs ml-1"
-            title="Videos have different frame rates"
-          >
-            ⚠️
-          </span>
+          <span>{{ fps }}fps</span>
         </div>
       </div>
 
