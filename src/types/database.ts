@@ -435,167 +435,36 @@ export interface SharedComparisonVideoWithCommentPermissions {
 // Union type for mixed video lists (individual + comparison)
 export type VideoEntity = Video | ComparisonVideo;
 
-// Hand-written schema shape. The Supabase client is NOT built with this any
-// more - it uses the generated types in ./supabase. This remains only as the
-// source of the Insert/Update helper types below; moving those onto the
-// generated types is the remaining step.
-export interface Database {
-  public: {
-    Tables: {
-      users: {
-        Row: DatabaseUser;
-        Insert: Omit<DatabaseUser, 'id' | 'createdAt' | 'updatedAt'>;
-        Update: Partial<Omit<DatabaseUser, 'id' | 'createdAt' | 'updatedAt'>>;
-      };
-      videos: {
-        Row: DatabaseVideo;
-        // `qaStatus` and `allowAnnotations` are optional on insert only because
-        // both columns are NOT NULL with a default - 'not_started' and false
-        // respectively. Omitting either means taking that default.
-        Insert: Omit<
-          DatabaseVideo,
-          'id' | 'createdAt' | 'updatedAt' | 'qaStatus' | 'allowAnnotations'
-        > & { qaStatus?: QaStatus; allowAnnotations?: boolean };
-        Update: Partial<Omit<DatabaseVideo, 'id' | 'createdAt' | 'updatedAt'>>;
-      };
-      annotations: {
-        Row: DatabaseAnnotation;
-        // `surface` is optional on insert only because the column is
-        // NOT NULL DEFAULT 'video'. Omitting it means 'video'. Four call sites
-        // omit it deliberately: annotationService.ts createComparisonAnnotation
-        // and the two useComparisonVideoWorkflow inserts, where the value is
-        // meaningless, plus any legacy path not yet surface-aware.
-        Insert: Omit<
-          DatabaseAnnotation,
-          'id' | 'createdAt' | 'updatedAt' | 'surface'
-        > & { surface?: AnnotationSurface };
-        Update: Partial<
-          Omit<DatabaseAnnotation, 'id' | 'createdAt' | 'updatedAt'>
-        >;
-      };
-      comparison_videos: {
-        Row: DatabaseComparisonVideo;
-        Insert: Omit<DatabaseComparisonVideo, 'id' | 'createdAt' | 'updatedAt'>;
-        Update: Partial<
-          Omit<DatabaseComparisonVideo, 'id' | 'createdAt' | 'updatedAt'>
-        >;
-      };
-      annotation_comments: {
-        Row: DatabaseComment;
-        Insert: Omit<DatabaseComment, 'id' | 'createdAt' | 'updatedAt'>;
-        Update: Partial<
-          Omit<DatabaseComment, 'id' | 'createdAt' | 'updatedAt'>
-        >;
-      };
-      anonymous_sessions: {
-        Row: DatabaseAnonymousSession;
-        Insert: Omit<DatabaseAnonymousSession, 'createdAt' | 'lastActive'>;
-        Update: Partial<
-          Omit<DatabaseAnonymousSession, 'sessionId' | 'createdAt'>
-        >;
-      };
-      labels: {
-        Row: DatabaseLabel;
-        Insert: Omit<DatabaseLabel, 'id' | 'createdAt' | 'updatedAt'>;
-        Update: Partial<Omit<DatabaseLabel, 'id' | 'createdAt' | 'updatedAt'>>;
-      };
-      annotation_labels: {
-        Row: DatabaseAnnotationLabel;
-        Insert: Omit<DatabaseAnnotationLabel, 'id' | 'createdAt'>;
-        Update: Partial<Omit<DatabaseAnnotationLabel, 'id' | 'createdAt'>>;
-      };
-      project_opens: {
-        Row: DatabaseProjectOpen;
-        Insert: Omit<DatabaseProjectOpen, 'id'>;
-        Update: Partial<Omit<DatabaseProjectOpen, 'id'>>;
-      };
-    };
-    Functions: {
-      get_annotations_at_frame: {
-        Args: {
-          p_video_id: string;
-          p_frame: number;
-        };
-        Returns: Array<{
-          id: string;
-          content: string;
-          title: string;
-          severity: SeverityLevel;
-          color: string;
-          frame: number;
-        }>;
-      };
-      update_session_activity: {
-        Args: {
-          p_video_id: string;
-          p_user_id: string;
-        };
-        Returns: void;
-      };
-      get_comparison_annotations_at_frame: {
-        Args: {
-          p_comparison_video_id: string;
-          p_frame: number;
-          p_video_a_id: string;
-          p_video_b_id: string;
-        };
-        Returns: Array<{
-          id: string;
-          content: string;
-          title: string;
-          severity: SeverityLevel;
-          color: string;
-          frame: number;
-          video_context: VideoContext;
-        }>;
-      };
-      set_session_context: {
-        Args: {
-          session_id: string;
-        };
-        Returns: void;
-      };
-      cleanup_old_anonymous_sessions: {
-        Args: {};
-        Returns: void;
-      };
-      set_video_thumbnail: {
-        Args: {
-          video_id: string;
-          thumbnail: string;
-        };
-        // false when the row already had a thumbnail or no longer exists.
-        Returns: boolean;
-      };
-    };
-  };
-}
+// Insert/Update shapes come from the generated schema types (narrowed in
+// ./supabase), so they follow the database after `npm run gen:types` instead of
+// a hand-kept copy of it.
+type Tables = import('./supabase').Database['public']['Tables'];
 
 // Utility types for data transformation
 export type AnnotationInsert =
-  Database['public']['Tables']['annotations']['Insert'];
+  Tables['annotations']['Insert'];
 export type AnnotationUpdate =
-  Database['public']['Tables']['annotations']['Update'];
-export type VideoInsert = Database['public']['Tables']['videos']['Insert'];
-export type VideoUpdate = Database['public']['Tables']['videos']['Update'];
+  Tables['annotations']['Update'];
+export type VideoInsert = Tables['videos']['Insert'];
+export type VideoUpdate = Tables['videos']['Update'];
 export type ComparisonVideoInsert =
-  Database['public']['Tables']['comparison_videos']['Insert'];
+  Tables['comparison_videos']['Insert'];
 export type ComparisonVideoUpdate =
-  Database['public']['Tables']['comparison_videos']['Update'];
+  Tables['comparison_videos']['Update'];
 export type CommentInsert =
-  Database['public']['Tables']['annotation_comments']['Insert'];
+  Tables['annotation_comments']['Insert'];
 export type CommentUpdate =
-  Database['public']['Tables']['annotation_comments']['Update'];
+  Tables['annotation_comments']['Update'];
 export type AnonymousSessionInsert =
-  Database['public']['Tables']['anonymous_sessions']['Insert'];
+  Tables['anonymous_sessions']['Insert'];
 export type AnonymousSessionUpdate =
-  Database['public']['Tables']['anonymous_sessions']['Update'];
-export type LabelInsertDB = Database['public']['Tables']['labels']['Insert'];
-export type LabelUpdateDB = Database['public']['Tables']['labels']['Update'];
+  Tables['anonymous_sessions']['Update'];
+export type LabelInsertDB = Tables['labels']['Insert'];
+export type LabelUpdateDB = Tables['labels']['Update'];
 export type AnnotationLabelInsertDB =
-  Database['public']['Tables']['annotation_labels']['Insert'];
+  Tables['annotation_labels']['Insert'];
 export type AnnotationLabelUpdateDB =
-  Database['public']['Tables']['annotation_labels']['Update'];
+  Tables['annotation_labels']['Update'];
 
 // Note: Transformation functions removed - database now uses camelCase matching frontend
 

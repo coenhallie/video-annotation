@@ -145,7 +145,9 @@ export class VideoService {
         .from('videos')
         .update({
           title: videoData.title,
-          fps: videoData.fps,
+          // fps is optional on insert (the column has a default); leave the
+          // stored rate alone when the caller has none to offer.
+          ...(videoData.fps !== undefined && { fps: videoData.fps }),
           duration: videoData.duration,
           totalFrames: videoData.totalFrames,
         })
