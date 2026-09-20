@@ -7,6 +7,7 @@ import type {
   DrawingCreatedEvent,
 } from '@/types/component-interfaces';
 import type { UseDrawingCoordinator } from './useDrawingCoordinator';
+import type { DualVideoPlayer } from './useDualVideoPlayer';
 
 export interface VideoEventHandlers {
   handleTimeUpdate: (data: { currentTime: number; duration: number }) => void;
@@ -19,15 +20,14 @@ export interface VideoEventHandlers {
   handleTimelinePlay: () => void;
   handleTimelinePause: () => void;
   handleDrawingCreated: (drawing: DrawingCreatedEvent, videoContext?: string) => void;
-  handleDualVideoAction: (action: string, context: string, ...args: any[]) => void;
   handleSeekVideoA: (time: number) => void;
   handleSeekVideoB: (time: number) => void;
   handlePlayVideoA: () => void;
   handlePauseVideoA: () => void;
   handlePlayVideoB: () => void;
   handlePauseVideoB: () => void;
-  handleFrameStepVideoA: (direction: string) => void;
-  handleFrameStepVideoB: (direction: string) => void;
+  handleFrameStepVideoA: (direction: number) => void;
+  handleFrameStepVideoB: (direction: number) => void;
   handleAnnotationClick: (annotation: Annotation) => Promise<void>;
 }
 
@@ -75,11 +75,7 @@ export function useVideoEventHandlers(deps: {
   };
 
   /** Dual video player instance. */
-  dualVideoPlayer: Record<string, any>;
-
-  /** Ref to the dual video player component. */
-
-  /** Comparison workflow instance. */
+  dualVideoPlayer: DualVideoPlayer;
 
   /** Ref to the UnifiedVideoPlayer component. */
   unifiedVideoPlayerRef: Ref<{
@@ -277,27 +273,27 @@ export function useVideoEventHandlers(deps: {
   };
 
   const handleSeekToTime = (time: number) => {
-    if ((unifiedVideoPlayerRef.value as any)?.seekTo) {
-      (unifiedVideoPlayerRef.value as any).seekTo(time);
+    if (unifiedVideoPlayerRef.value?.seekTo) {
+      unifiedVideoPlayerRef.value?.seekTo?.(time);
     }
   };
 
   const handleSeekToTimeWithFade = async (time: number) => {
     if (playerMode.value === 'dual' && dualVideoPlayer) {
-      (dualVideoPlayer as any).seekVideoA?.(time);
-      (dualVideoPlayer as any).seekVideoB?.(time);
+      dualVideoPlayer.seekVideoA?.(time);
+      dualVideoPlayer.seekVideoB?.(time);
     } else {
       if (
-        (unifiedVideoPlayerRef.value as any)?.performVideoFadeTransition &&
-        (unifiedVideoPlayerRef.value as any)?.seekTo
+        unifiedVideoPlayerRef.value?.performVideoFadeTransition &&
+        unifiedVideoPlayerRef.value?.seekTo
       ) {
-        await (unifiedVideoPlayerRef.value as any).performVideoFadeTransition(
+        await unifiedVideoPlayerRef.value.performVideoFadeTransition(
           () => {
-            (unifiedVideoPlayerRef.value as any).seekTo(time);
+            unifiedVideoPlayerRef.value?.seekTo?.(time);
           },
         );
-      } else if ((unifiedVideoPlayerRef.value as any)?.seekTo) {
-        (unifiedVideoPlayerRef.value as any).seekTo(time);
+      } else if (unifiedVideoPlayerRef.value?.seekTo) {
+        unifiedVideoPlayerRef.value?.seekTo?.(time);
       }
     }
   };
@@ -306,19 +302,19 @@ export function useVideoEventHandlers(deps: {
 
   const handleTimelinePlay = () => {
     if (playerMode.value === 'single' && unifiedVideoPlayerRef.value) {
-      (unifiedVideoPlayerRef.value as any).play();
+      unifiedVideoPlayerRef.value.play?.();
     } else if (playerMode.value === 'dual' && dualVideoPlayer) {
-      (dualVideoPlayer as any).playVideoA?.();
-      (dualVideoPlayer as any).playVideoB?.();
+      dualVideoPlayer.playVideoA?.();
+      dualVideoPlayer.playVideoB?.();
     }
   };
 
   const handleTimelinePause = () => {
     if (playerMode.value === 'single' && unifiedVideoPlayerRef.value) {
-      (unifiedVideoPlayerRef.value as any).pause();
+      unifiedVideoPlayerRef.value.pause?.();
     } else if (playerMode.value === 'dual' && dualVideoPlayer) {
-      (dualVideoPlayer as any).pauseVideoA?.();
-      (dualVideoPlayer as any).pauseVideoB?.();
+      dualVideoPlayer.pauseVideoA?.();
+      dualVideoPlayer.pauseVideoB?.();
     }
   };
 
@@ -333,31 +329,16 @@ export function useVideoEventHandlers(deps: {
 
   // ── Dual video action handlers ─────────────────────────────────────────────
 
-  const handleDualVideoAction = (
-    action: string,
-    context: string,
-    ...args: any[]
-  ) => {
-    if (!dualVideoPlayer) return;
-
-    const methodName = `${action}Video${context}`;
-    if (typeof (dualVideoPlayer as any)[methodName] === 'function') {
-      (dualVideoPlayer as any)[methodName](...args);
-    }
-  };
-
-  const handleSeekVideoA = (time: number) =>
-    handleDualVideoAction('seek', 'A', time);
-  const handleSeekVideoB = (time: number) =>
-    handleDualVideoAction('seek', 'B', time);
-  const handlePlayVideoA = () => handleDualVideoAction('play', 'A');
-  const handlePauseVideoA = () => handleDualVideoAction('pause', 'A');
-  const handlePlayVideoB = () => handleDualVideoAction('play', 'B');
-  const handlePauseVideoB = () => handleDualVideoAction('pause', 'B');
-  const handleFrameStepVideoA = (direction: string) =>
-    handleDualVideoAction('stepFrame', 'A', direction);
-  const handleFrameStepVideoB = (direction: string) =>
-    handleDualVideoAction('stepFrame', 'B', direction);
+  const handleSeekVideoA = (time: number) => dualVideoPlayer.seekVideoA?.(time);
+  const handleSeekVideoB = (time: number) => dualVideoPlayer.seekVideoB?.(time);
+  const handlePlayVideoA = () => void dualVideoPlayer.playVideoA?.();
+  const handlePauseVideoA = () => dualVideoPlayer.pauseVideoA?.();
+  const handlePlayVideoB = () => void dualVideoPlayer.playVideoB?.();
+  const handlePauseVideoB = () => dualVideoPlayer.pauseVideoB?.();
+  const handleFrameStepVideoA = (direction: number) =>
+    dualVideoPlayer.stepFrameVideoA?.(direction);
+  const handleFrameStepVideoB = (direction: number) =>
+    dualVideoPlayer.stepFrameVideoB?.(direction);
 
   // ── Annotation click / edit ────────────────────────────────────────────────
 
@@ -389,8 +370,8 @@ export function useVideoEventHandlers(deps: {
           annotation.videoBTimestamp ||
           annotation.videoBFrame / (dualVideoPlayer.videoBState?.fps || 30);
 
-        (dualVideoPlayer as any).seekVideoA?.(videoATime);
-        (dualVideoPlayer as any).seekVideoB?.(videoBTime);
+        dualVideoPlayer.seekVideoA?.(videoATime);
+        dualVideoPlayer.seekVideoB?.(videoBTime);
       } else if (annotation.timestamp !== undefined) {
         // Fallback to timestamp if dual mode frames are not properly set
         await handleSeekToTimeWithFade(annotation.timestamp);
@@ -412,7 +393,6 @@ export function useVideoEventHandlers(deps: {
     handleTimelinePlay,
     handleTimelinePause,
     handleDrawingCreated,
-    handleDualVideoAction,
     handleSeekVideoA,
     handleSeekVideoB,
     handlePlayVideoA,
