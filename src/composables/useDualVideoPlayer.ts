@@ -499,15 +499,20 @@ export function useDualVideoPlayer(): DualVideoPlayer {
     );
   }
 
+  // Ends the current project's session. The element refs and their listeners
+  // stay: DualVideoPlayer owns that binding, and the same two elements carry on
+  // into the next comparison with new sources.
   function destroy() {
     pause();
-    cleanupSync?.();
     if (seekTimeoutA) clearTimeout(seekTimeoutA);
     if (seekTimeoutB) clearTimeout(seekTimeoutB);
     if (seekTimeoutBoth) clearTimeout(seekTimeoutBoth);
-    videoARef.value = null;
-    videoBRef.value = null;
-    isReady.value = false;
+    isManualSeekingA.value = false;
+    isManualSeekingB.value = false;
+    videoACurrentTime.value = 0;
+    videoBCurrentTime.value = 0;
+    videoACurrentFrame.value = 0;
+    videoBCurrentFrame.value = 0;
     // Both elements get new sources after a project switch, so their metadata
     // is stale until `loadedmetadata` fires again.
     videoAState.isLoaded = false;

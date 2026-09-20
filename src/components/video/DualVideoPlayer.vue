@@ -85,7 +85,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue';
+import { ref, watch, computed, onBeforeUnmount } from 'vue';
 import SingleVideoPlayer from './SingleVideoPlayer.vue';
 import VideoControls from './VideoControls.vue';
 import { useDualVideoPlayer, type DualVideoPlayer as DualVideoPlayerType } from '../../composables/useDualVideoPlayer';
@@ -134,21 +134,21 @@ const {
   setFps
 } = dualPlayer;
 
-// We need to bind the internal video elements to the composable refs
+// The rendered <video> elements belong to this component, so it alone binds
+// them into the composable and lets go of them again. The composable's
+// `destroy()` leaves them alone: a switch between two comparisons keeps the same
+// elements mounted, and nothing would bind them a second time.
 watch(() => singlePlayerA.value?.videoRef, (el) => {
-  if (el) {
-    videoARef.value = el;
-    // Set source for composable tracking (optional but good for completeness)
-    if (props.videoAUrl) {
-       // We can't easily access ID here unless passed as prop, defaulting for now
-       // setVideoSources handles this if we call it, or we rely on the ref binding and manual url watching in composable?
-       // The composable watches videoARef and sets up listeners.
-    }
-  }
+  videoARef.value = el ?? null;
 });
 
 watch(() => singlePlayerB.value?.videoRef, (el) => {
-  if (el) videoBRef.value = el;
+  videoBRef.value = el ?? null;
+});
+
+onBeforeUnmount(() => {
+  videoARef.value = null;
+  videoBRef.value = null;
 });
 
 // Watch URL props to update composable state.
