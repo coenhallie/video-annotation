@@ -1,3 +1,4 @@
+import { selectAllIn } from './selectAllIn';
 import { supabase } from '@/composables/useSupabase';
 import {
   fetchOwners,
@@ -87,23 +88,15 @@ export async function getMergedRangesForVideos(
 ): Promise<Record<string, WatchedRange[]>> {
   if (videoIds.length === 0) return {};
   try {
-    const { data, error } = await supabase
-      .from('video_watch_progress')
-      .select('videoId, watchedRanges')
-      .in('videoId', videoIds);
-
-    if (error || !data) {
-      if (error) {
-        console.warn('⚠️ [watchProgress] getMergedRangesForVideos error:', error);
-      }
-      return {};
-    }
+    // Every video in the shared library arrives here at once. One `.in()` over
+    // a few hundred uuids is a URL the gateway refuses, and the response would
+    // stop at 1,000 rows anyway, so this goes through the chunked, paged read.
+    const data = await selectAllIn<
+      Pick<WatchProgressRow, 'videoId' | 'watchedRanges'> & { id: string }
+    >('video_watch_progress', 'id, videoId, watchedRanges', 'videoId', videoIds);
 
     const byVideo: Record<string, WatchedRange[]> = {};
-    for (const row of data as Pick<
-      WatchProgressRow,
-      'videoId' | 'watchedRanges'
-    >[]) {
+    for (const row of data) {
       (byVideo[row.videoId] ??= []).push(...sanitizeRanges(row.watchedRanges));
     }
     for (const [id, ranges] of Object.entries(byVideo)) {
