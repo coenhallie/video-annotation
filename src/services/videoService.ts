@@ -136,7 +136,11 @@ export class VideoService {
       .eq('videoType', 'url')
       .maybeSingle();
 
+    // A failed lookup is not "no existing row": carrying on would insert a
+    // duplicate of a video that is already there.
     if (queryError) {
+      handleServiceError('VideoService.createVideo', queryError);
+      throw queryError;
     }
 
     if (existingVideo) {
