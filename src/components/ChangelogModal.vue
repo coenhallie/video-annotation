@@ -117,6 +117,18 @@ useEscapeToClose(() => props.isVisible, closeModal);
 // Add new entries to the TOP of this array
 const changelogEntries = ref([
   {
+    version: 'Beta v3.13',
+    date: 'October 15, 2026',
+    changes: [
+      'Label without the mouse: step to a moment with the arrow keys, press Enter to open the label picker above the playhead, then pick a category and a label by letter. In a comparison it labels the selected video',
+      'Annotations made by teammates now appear, change and disappear live, in single videos and in comparisons, without reloading',
+      'Watch progress is no longer lost, or counted against the wrong video, when you switch to another video in the editor',
+      'Team watch coverage on the dashboard no longer reads 0% for every video in a large library',
+      'Folder actions (new subfolder, rename, delete) can now be reached on a touch screen and with the keyboard',
+      'A label that fails to save now says why inside the label form instead of behind it',
+    ],
+  },
+  {
     version: 'Beta v3.12',
     date: 'September 20, 2026',
     changes: [
