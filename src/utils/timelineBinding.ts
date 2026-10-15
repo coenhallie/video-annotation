@@ -90,3 +90,31 @@ export function annotationStampFor(
   const fps = video.fps || 30;
   return { frame: video.currentFrame, fps };
 }
+
+/**
+ * The stamp for a quick pick opened from the keyboard in a comparison: the
+ * selected video's own frame and fps, and both videos' frames as they stand.
+ *
+ * It is what a click on the selected bar's playhead stamps, without the click.
+ * Neither video moved, so both frames are read rather than derived from a time.
+ */
+export function comparisonPlayheadStamp(
+  video: 'A' | 'B',
+  positions: {
+    videoAFrame: number;
+    videoAFps: number;
+    videoBFrame: number;
+    videoBFps: number;
+  }
+): {
+  frame: number;
+  fps: number;
+  dual: { videoAFrame: number; videoBFrame: number };
+} {
+  const { videoAFrame, videoAFps, videoBFrame, videoBFps } = positions;
+  return {
+    frame: video === 'A' ? videoAFrame : videoBFrame,
+    fps: (video === 'A' ? videoAFps : videoBFps) || 30,
+    dual: { videoAFrame, videoBFrame },
+  };
+}

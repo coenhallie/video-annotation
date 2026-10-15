@@ -3,6 +3,7 @@ import {
   timelineNumbersFor,
   annotationStampFor,
   videoTimelineNumbersFor,
+  comparisonPlayheadStamp,
   type TimelineNumbers,
 } from '@/utils/timelineBinding';
 
@@ -115,5 +116,37 @@ describe('videoTimelineNumbersFor', () => {
       frame: 2375,
       fps: 25,
     });
+  });
+});
+
+// Enter in a comparison labels the selected video where it stands. It is the
+// keyboard twin of a click on that bar: the selected video supplies the frame
+// and fps the annotation is stamped with, and both videos keep their frames.
+describe('comparisonPlayheadStamp', () => {
+  const POSITIONS = {
+    videoAFrame: 900,
+    videoAFps: 30,
+    videoBFrame: 1250,
+    videoBFps: 25,
+  };
+
+  it('stamps video A on its own clock when A is selected', () => {
+    expect(comparisonPlayheadStamp('A', POSITIONS)).toEqual({
+      frame: 900,
+      fps: 30,
+      dual: { videoAFrame: 900, videoBFrame: 1250 },
+    });
+  });
+
+  it('stamps video B on its own clock when B is selected', () => {
+    expect(comparisonPlayheadStamp('B', POSITIONS)).toEqual({
+      frame: 1250,
+      fps: 25,
+      dual: { videoAFrame: 900, videoBFrame: 1250 },
+    });
+  });
+
+  it('falls back to 30 fps before a video has reported its rate', () => {
+    expect(comparisonPlayheadStamp('B', { ...POSITIONS, videoBFps: 0 }).fps).toBe(30);
   });
 });

@@ -135,6 +135,21 @@ const timeAtPointer = (event: MouseEvent): number | null => {
   return percentage * props.duration;
 };
 
+/**
+ * Where the quick pick opens when Enter, not a click, asks for it: above the
+ * playhead, at the top of the bar for the same reason a click anchors there.
+ */
+const playheadAnchor = (): { clientX: number; clientY: number } | null => {
+  if (!timelineRef.value || !props.duration) return null;
+  const rect = timelineRef.value.getBoundingClientRect();
+  return {
+    clientX: rect.left + (rect.width * progressPercentage.value) / 100,
+    clientY: rect.top,
+  };
+};
+
+defineExpose({ playheadAnchor });
+
 const handleTimelineMouseDown = (event: MouseEvent): void => {
   if (!props.duration) {
     return;

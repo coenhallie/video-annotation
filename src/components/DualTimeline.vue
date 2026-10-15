@@ -153,6 +153,20 @@ const handleOpenQuickPickB = (payload) => {
   emit('open-quick-pick', { ...payload, video: 'B' });
 };
 
+// Each bar's VideoTimeline, so Enter can open the quick pick on the selected
+// one the way a click on it does.
+const timelineARef = ref(null);
+const timelineBRef = ref(null);
+
+const playheadAnchor = () => {
+  const video = selectedTimeline.value;
+  const timeline = video === 'A' ? timelineARef.value : timelineBRef.value;
+  const anchor = timeline?.playheadAnchor();
+  return anchor ? { video, ...anchor } : null;
+};
+
+defineExpose({ playheadAnchor });
+
 // Handle annotation clicks
 const handleAnnotationClick = (annotation) => {
   emit('annotation-click', annotation);
@@ -313,6 +327,7 @@ const timelineBClasses = computed(() => ({
         </div>
 
         <VideoTimeline
+          ref="timelineARef"
           :current-time="videoACurrentTime"
           :duration="videoADuration"
           :current-frame="videoACurrentFrame"
@@ -378,6 +393,7 @@ const timelineBClasses = computed(() => ({
         </div>
 
         <VideoTimeline
+          ref="timelineBRef"
           :current-time="videoBCurrentTime"
           :duration="videoBDuration"
           :current-frame="videoBCurrentFrame"

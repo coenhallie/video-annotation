@@ -38,6 +38,7 @@ import {
   timelineNumbersFor,
   annotationStampFor,
   videoTimelineNumbersFor,
+  comparisonPlayheadStamp,
   type TimelineNumbers,
 } from '@/utils/timelineBinding';
 import { ShareService } from '@/services/shareService';
@@ -430,6 +431,35 @@ const quickPickSnapshot = ref<{
 // tied to the share permission.
 const quickPickReadOnly = () => !canAnnotate.value;
 
+/**
+ * Where playback stands on the active surface, for the entry points that label
+ * the frame on screen rather than a time under the pointer.
+ *
+ * The pitch's right-click and Enter on the pitch tab land here too, and on
+ * that tab the video is hidden and paused, so its currentFrame is meaningless.
+ * annotationStampFor resolves both frame and fps from whichever surface is
+ * active - see its doc comment for why the frame is derived from
+ * currentTime * fps rather than read off the surface's own currentFrame ref.
+ */
+const snapshotCurrentPosition = () => {
+  const stamp = annotationStampFor(
+    activeSurface.value,
+    videoTimelineNumbers.value,
+    replayTimelineNumbers.value
+  );
+  return {
+    frame: stamp.frame,
+    fps: stamp.fps,
+    dual:
+      playerMode.value === 'dual'
+        ? {
+            videoAFrame: dualVideoPlayer?.videoACurrentFrame?.value ?? 0,
+            videoBFrame: dualVideoPlayer?.videoBCurrentFrame?.value ?? 0,
+          }
+        : null,
+  };
+};
+
 const openQuickPick = (event: MouseEvent) => {
   // VideoControls.vue's root element (play/pause, frame-step, mute, volume,
   // speed) always renders with class "video-controls", whether it's mounted
@@ -448,30 +478,56 @@ const openQuickPick = (event: MouseEvent) => {
   // simply eating the click the way every other draw-mode key does.
   if (drawingCoordinator?.isDrawingMode?.value) return;
 
-  // The pitch's right-click reaches here too, and on that tab the video is
-  // hidden and paused, so its currentFrame is meaningless. annotationStampFor
-  // resolves both frame and fps from whichever surface is active - see its
-  // doc comment for why the frame is derived from currentTime * fps rather
-  // than read off the surface's own currentFrame ref.
-  const stamp = annotationStampFor(
-    activeSurface.value,
-    videoTimelineNumbers.value,
-    replayTimelineNumbers.value
-  );
-  quickPickSnapshot.value = {
-    frame: stamp.frame,
-    fps: stamp.fps,
-    dual:
-      playerMode.value === 'dual'
-        ? {
-            videoAFrame: dualVideoPlayer?.videoACurrentFrame?.value ?? 0,
-            videoBFrame: dualVideoPlayer?.videoBCurrentFrame?.value ?? 0,
-          }
-        : null,
-  };
+  quickPickSnapshot.value = snapshotCurrentPosition();
   quickPickX.value = event.clientX;
   quickPickY.value = event.clientY;
   quickPickOpen.value = true;
+};
+
+const videoTimelineRef = ref<InstanceType<typeof VideoTimeline> | null>(null);
+const dualTimelineRef = ref<{
+  playheadAnchor: () => {
+    video: 'A' | 'B';
+    clientX: number;
+    clientY: number;
+  } | null;
+} | null>(null);
+
+/**
+ * Keyboard entry point: Enter opens the panel above the playhead, so stepping
+ * to a moment and labelling it never needs the mouse. In a comparison it acts
+ * on the selected bar (Up/Down choose it), the way a click on that bar does.
+ */
+const openQuickPickAtPlayhead = (): boolean => {
+  // Enter still arrives here while the panel is up, which has no use for it
+  // outside draw mode. Reopening would re-stamp the frame mid-pick.
+  if (quickPickOpen.value) return false;
+  if (quickPickReadOnly()) return false;
+  if (!user.value) return false;
+  if (drawingCoordinator?.isDrawingMode?.value) return false;
+
+  if (playerMode.value === 'dual') {
+    const anchor = dualTimelineRef.value?.playheadAnchor();
+    if (!anchor) return false;
+    quickPickSnapshot.value = comparisonPlayheadStamp(anchor.video, {
+      videoAFrame: dualVideoPlayer?.videoACurrentFrame?.value ?? 0,
+      videoAFps: dualVideoPlayer?.videoAState?.fps || 30,
+      videoBFrame: dualVideoPlayer?.videoBCurrentFrame?.value ?? 0,
+      videoBFps: dualVideoPlayer?.videoBState?.fps || 30,
+    });
+    quickPickX.value = anchor.clientX;
+    quickPickY.value = anchor.clientY;
+    quickPickOpen.value = true;
+    return true;
+  }
+
+  const anchor = videoTimelineRef.value?.playheadAnchor();
+  if (!anchor) return false;
+  quickPickSnapshot.value = snapshotCurrentPosition();
+  quickPickX.value = anchor.clientX;
+  quickPickY.value = anchor.clientY;
+  quickPickOpen.value = true;
+  return true;
 };
 
 /**
@@ -1736,7 +1792,11 @@ watch(activeSurface, (surface, previous) => {
 });
 
 // ── Keyboard shortcuts (extracted composable) ────────────────────────────────
-useDashboardKeyboard({ playerMode, transport });
+useDashboardKeyboard({
+  playerMode,
+  transport,
+  openQuickPick: openQuickPickAtPlayhead,
+});
 
 const loadOutputVideo = async (outputVideoId: string) => {
   if (!user.value) {
@@ -2054,6 +2114,7 @@ watch(
           <!-- Single Video Timeline -->
           <VideoTimeline
             v-if="playerMode === 'single'"
+            ref="videoTimelineRef"
             :current-time="timeline.currentTime"
             :duration="timeline.duration"
             :current-frame="timeline.currentFrame"
@@ -2069,6 +2130,7 @@ watch(
           <!-- Dual Video Timeline -->
           <DualTimeline
             v-else-if="playerMode === 'dual'"
+            ref="dualTimelineRef"
             :video-a-current-time="
               dualVideoPlayer?.videoACurrentTime?.value ?? 0
             "
