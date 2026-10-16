@@ -116,12 +116,6 @@
         >
           {{ commentCount }}C
         </span>
-        <!-- DALF's game id, so a row can be matched back to its game. -->
-        <span
-          v-if="project.projectType === 'single' && project.video.gameId"
-          data-testid="dalf-game-id"
-          :title="`DALF game ID ${project.video.gameId}`"
-        >GAME {{ project.video.gameId }}</span>
       </div>
     </div>
 
