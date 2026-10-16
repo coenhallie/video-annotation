@@ -52,10 +52,10 @@ async function mount(status: QaStatus = 'not_started') {
 beforeEach(() => vi.clearAllMocks());
 
 describe('QaStatusPillSelect', () => {
-  it('offers the five values in workflow order', async () => {
+  it('offers the four values in workflow order', async () => {
     const m = await mount();
     expect([...m.sel().options].map((o) => o.value)).toEqual([
-      'not_started', 'in_review', 'failed', 'staging', 'production',
+      'not_started', 'in_review', 'failed', 'complete',
     ]);
     m.unmount();
   });
@@ -76,9 +76,9 @@ describe('QaStatusPillSelect', () => {
     const failed = await mount('failed');
     expect(failed.sel().className).toContain('text-red-600');
     failed.unmount();
-    const staging = await mount('staging');
-    expect(staging.sel().className).not.toContain('red');
-    staging.unmount();
+    const inReview = await mount('in_review');
+    expect(inReview.sel().className).not.toContain('red');
+    inReview.unmount();
   });
 
   // Without stopPropagation every status change also opens the details panel.

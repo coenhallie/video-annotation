@@ -28,13 +28,13 @@ export function filterByQaStatus<T>(
 /**
  * How many of these projects carry each status.
  *
- * Every one of the five keys is always present, zeros included: the filter
+ * Every one of the four keys is always present, zeros included: the filter
  * panel renders a fixed vocabulary, and a missing key would make a row's count
  * read as undefined.
  *
  * The counts describe exactly the list handed in. The caller is responsible for
  * passing a list with every OTHER filter already applied but not the status
- * filter, so that selecting one status does not collapse the other four to
+ * filter, so that selecting one status does not collapse the other three to
  * zero.
  */
 export function countByQaStatus<T>(

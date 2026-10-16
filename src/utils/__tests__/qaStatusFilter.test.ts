@@ -40,7 +40,7 @@ describe('filterByQaStatus', () => {
 
   // Dual projects have no status, so no selection can match them.
   it('never matches a project with no status', () => {
-    for (const status of ['not_started', 'in_review', 'failed', 'staging', 'production'] as QaStatus[]) {
+    for (const status of ['not_started', 'in_review', 'failed', 'complete'] as QaStatus[]) {
       const kept = filterByQaStatus(rows, new Set([status]), statusOf);
       expect(kept.some((r) => r.id === 'e')).toBe(false);
     }
@@ -58,8 +58,7 @@ describe('countByQaStatus', () => {
       not_started: 1,
       in_review: 1,
       failed: 2,
-      staging: 0,
-      production: 0,
+      complete: 0,
     });
   });
 
@@ -77,7 +76,7 @@ describe('countByQaStatus', () => {
 
   it('returns zeros for an empty list rather than an empty object', () => {
     expect(countByQaStatus([], statusOf)).toEqual({
-      not_started: 0, in_review: 0, failed: 0, staging: 0, production: 0,
+      not_started: 0, in_review: 0, failed: 0, complete: 0,
     });
   });
 });
@@ -110,10 +109,10 @@ describe('qaStatusHiddenByFilter', () => {
   });
 
   it('is false when the new status is one of the selected ones', () => {
-    expect(qaStatusHiddenByFilter('failed', new Set<QaStatus>(['failed', 'staging']))).toBe(false);
+    expect(qaStatusHiddenByFilter('failed', new Set<QaStatus>(['failed', 'complete']))).toBe(false);
   });
 
   it('is true when the new status is excluded by the active filter', () => {
-    expect(qaStatusHiddenByFilter('production', new Set<QaStatus>(['failed']))).toBe(true);
+    expect(qaStatusHiddenByFilter('complete', new Set<QaStatus>(['failed']))).toBe(true);
   });
 });

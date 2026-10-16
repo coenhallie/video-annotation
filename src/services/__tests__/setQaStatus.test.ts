@@ -18,16 +18,16 @@ const loadService = async () =>
 describe('VideoService.setQaStatus', () => {
   it('calls the RPC with the video id and status', async () => {
     rpc.mockResolvedValue({
-      data: { id: 'v1', qaStatus: 'staging' },
+      data: { id: 'v1', qaStatus: 'in_review' },
       error: null,
     });
     const VideoService = await loadService();
 
-    await VideoService.setQaStatus('v1', 'staging');
+    await VideoService.setQaStatus('v1', 'in_review');
 
     expect(rpc).toHaveBeenCalledWith('set_video_qa_status', {
       p_video_id: 'v1',
-      p_status: 'staging',
+      p_status: 'in_review',
     });
   });
 
@@ -35,7 +35,7 @@ describe('VideoService.setQaStatus', () => {
     rpc.mockResolvedValue({
       data: {
         id: 'v1',
-        qaStatus: 'production',
+        qaStatus: 'complete',
         qaStatusUpdatedAt: '2026-08-21T10:00:00Z',
         qaStatusUpdatedBy: 'u1',
       },
@@ -43,9 +43,9 @@ describe('VideoService.setQaStatus', () => {
     });
     const VideoService = await loadService();
 
-    const video = await VideoService.setQaStatus('v1', 'production');
+    const video = await VideoService.setQaStatus('v1', 'complete');
 
-    expect(video.qaStatus).toBe('production');
+    expect(video.qaStatus).toBe('complete');
     expect(video.qaStatusUpdatedBy).toBe('u1');
   });
 
@@ -58,7 +58,7 @@ describe('VideoService.setQaStatus', () => {
     });
     const VideoService = await loadService();
 
-    await expect(VideoService.setQaStatus('v9', 'staging')).rejects.toThrow(
+    await expect(VideoService.setQaStatus('v9', 'in_review')).rejects.toThrow(
       /not visible to the caller/
     );
   });
@@ -67,7 +67,7 @@ describe('VideoService.setQaStatus', () => {
     rpc.mockResolvedValue({ data: null, error: null });
     const VideoService = await loadService();
 
-    await expect(VideoService.setQaStatus('v1', 'staging')).rejects.toThrow();
+    await expect(VideoService.setQaStatus('v1', 'in_review')).rejects.toThrow();
   });
 
   // PostgREST can return a single-row function's result as `[row]` instead
@@ -80,7 +80,7 @@ describe('VideoService.setQaStatus', () => {
       data: [
         {
           id: 'v1',
-          qaStatus: 'production',
+          qaStatus: 'complete',
           qaStatusUpdatedAt: '2026-08-21T10:00:00Z',
         },
       ],
@@ -88,16 +88,16 @@ describe('VideoService.setQaStatus', () => {
     });
     const VideoService = await loadService();
 
-    const video = await VideoService.setQaStatus('v1', 'production');
+    const video = await VideoService.setQaStatus('v1', 'complete');
 
     expect(video.id).toBe('v1');
-    expect(video.qaStatus).toBe('production');
+    expect(video.qaStatus).toBe('complete');
   });
 
   it('throws when the RPC returns an empty array and no error', async () => {
     rpc.mockResolvedValue({ data: [], error: null });
     const VideoService = await loadService();
 
-    await expect(VideoService.setQaStatus('v1', 'staging')).rejects.toThrow();
+    await expect(VideoService.setQaStatus('v1', 'in_review')).rejects.toThrow();
   });
 });

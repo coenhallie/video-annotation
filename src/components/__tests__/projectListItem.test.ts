@@ -54,7 +54,7 @@ const singleProject: Project = {
   projectType: 'single',
   title: 'A single project',
   createdAt: '2026-08-01T00:00:00Z',
-  video: makeVideo({ id: 'video-single', qaStatus: 'staging' }),
+  video: makeVideo({ id: 'video-single', qaStatus: 'in_review' }),
 };
 
 function mountItem(

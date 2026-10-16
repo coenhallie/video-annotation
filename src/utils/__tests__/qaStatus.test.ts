@@ -11,22 +11,15 @@ import {
 import type { Video } from '@/types/database';
 
 describe('qaStatus vocabulary', () => {
-  it('lists the five values in workflow order', () => {
-    expect(QA_STATUSES).toEqual([
-      'not_started',
-      'in_review',
-      'failed',
-      'staging',
-      'production',
-    ]);
+  it('lists the four values in workflow order', () => {
+    expect(QA_STATUSES).toEqual(['not_started', 'in_review', 'failed', 'complete']);
   });
 
   it('renders labels as uppercase display text', () => {
     expect(qaStatusLabel('not_started')).toBe('UNREVIEWED');
     expect(qaStatusLabel('in_review')).toBe('IN REVIEW');
     expect(qaStatusLabel('failed')).toBe('FAILED');
-    expect(qaStatusLabel('staging')).toBe('STAGING');
-    expect(qaStatusLabel('production')).toBe('PRODUCTION');
+    expect(qaStatusLabel('complete')).toBe('COMPLETE');
   });
 
   // A pill with no text is a 96px empty outline that reads as a progress bar.
@@ -45,11 +38,14 @@ describe('qaStatus vocabulary', () => {
   it('normalises an absent status to not started', () => {
     expect(toQaStatus(undefined)).toBe('not_started');
     expect(toQaStatus(null)).toBe('not_started');
-    expect(toQaStatus('staging')).toBe('staging');
+    expect(toQaStatus('complete')).toBe('complete');
   });
 
-  it('accepts only the five values', () => {
-    expect(isQaStatus('staging')).toBe(true);
+  it('accepts only the four values', () => {
+    expect(isQaStatus('complete')).toBe(true);
+    // Retired by migrations/20261016_qa_status_complete.sql.
+    expect(isQaStatus('staging')).toBe(false);
+    expect(isQaStatus('production')).toBe(false);
     expect(isQaStatus('shipped')).toBe(false);
     expect(isQaStatus(null)).toBe(false);
     expect(isQaStatus(undefined)).toBe(false);
@@ -70,11 +66,11 @@ describe('qaStatus vocabulary', () => {
     }
   });
 
-  // Three weights, not five colours. These two assertions are what stop a later
+  // Three weights, not four colours. These two assertions are what stop a later
   // change from quietly turning the column into a rainbow.
-  it('fills only production and accents only failed', () => {
-    expect(qaStatusPillClass('production')).toContain('bg-gray-900');
-    for (const status of QA_STATUSES.filter((s) => s !== 'production')) {
+  it('fills only complete and accents only failed', () => {
+    expect(qaStatusPillClass('complete')).toContain('bg-gray-900');
+    for (const status of QA_STATUSES.filter((s) => s !== 'complete')) {
       expect(qaStatusPillClass(status)).not.toContain('bg-');
     }
 
@@ -117,7 +113,7 @@ describe('mergeQaStatusUpdate', () => {
       url: 'http://v',
     };
     const updated = fullVideo({
-      qaStatus: 'staging',
+      qaStatus: 'in_review',
       qaStatusUpdatedAt: '2026-08-21T00:00:00Z',
       qaStatusUpdatedBy: 'u2',
       updatedAt: '2026-08-21T00:00:01Z',
@@ -130,7 +126,7 @@ describe('mergeQaStatusUpdate', () => {
 
     const merged = mergeQaStatusUpdate(current, updated);
 
-    expect(merged?.qaStatus).toBe('staging');
+    expect(merged?.qaStatus).toBe('in_review');
     expect(merged?.qaStatusUpdatedAt).toBe('2026-08-21T00:00:00Z');
     expect(merged?.qaStatusUpdatedBy).toBe('u2');
     expect(merged?.updatedAt).toBe('2026-08-21T00:00:01Z');
@@ -145,7 +141,7 @@ describe('mergeQaStatusUpdate', () => {
   // video must not stamp that video's fields onto this one.
   it('leaves a different video untouched', () => {
     const current = { id: 'video-2', qaStatus: 'not_started' as const };
-    const updated = fullVideo({ id: 'video-1', qaStatus: 'production' });
+    const updated = fullVideo({ id: 'video-1', qaStatus: 'complete' });
 
     expect(mergeQaStatusUpdate(current, updated)).toBe(current);
   });

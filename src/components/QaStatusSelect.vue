@@ -1,5 +1,5 @@
 <template>
-  <!-- One line: attribution left, status right. No "QA" heading - the five
+  <!-- One line: attribution left, status right. No "QA" heading - the four
        values name themselves, and the select is the only control in its block.
        That leaves attribution and status as a label/value pair, the same shape
        the Watched and Annotations blocks beside it already use.

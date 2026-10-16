@@ -94,8 +94,7 @@ export type QaStatus =
   | 'not_started'
   | 'in_review'
   | 'failed'
-  | 'staging'
-  | 'production';
+  | 'complete';
 
 // Nullable columns are written `?: T | null`, not `?: T`. Both halves are load
 // bearing under exactOptionalPropertyTypes: the `?` is what lets an insert omit

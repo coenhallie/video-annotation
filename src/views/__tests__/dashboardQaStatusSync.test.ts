@@ -229,11 +229,11 @@ describe('DashboardView QA status, row and details panel', () => {
     // leave the rest of this test passing without ever exercising a reload.
     expect(getAllProjects).toHaveBeenCalledTimes(2);
 
-    await choose(panelSelect(root), 'staging');
-    expect(rowSelect(root).value).toBe('staging');
+    await choose(panelSelect(root), 'in_review');
+    expect(rowSelect(root).value).toBe('in_review');
 
-    await choose(rowSelect(root), 'production');
-    expect(panelSelect(root).value).toBe('production');
+    await choose(rowSelect(root), 'complete');
+    expect(panelSelect(root).value).toBe('complete');
 
     app.unmount();
     root.remove();
