@@ -162,33 +162,15 @@ describe('ProjectListItem keyboard', () => {
   });
 });
 
-// DALF's game id, from the "Open in Perspecto" link: printed after the comment
-// count so a row can be matched back to its game in DALF.
+// DALF's game id belongs in the details panel, not the row: the row's meta
+// line is already full (user, 2026-10-17).
 describe('ProjectListItem DALF game id', () => {
-  const withGameId = (gameId: string | null): Project => ({
-    ...singleProject,
-    video: makeVideo({ id: 'video-single', gameId }),
-  });
-
-  const gameIdText = (root: HTMLElement) =>
-    root.querySelector<HTMLElement>('[data-testid="dalf-game-id"]');
-
-  it('shows the game id when the video has one', () => {
-    const harness = mountItem(withGameId('48213'), 0);
-    expect(gameIdText(harness.root)?.textContent?.trim()).toBe('GAME 48213');
-    expect(gameIdText(harness.root)?.getAttribute('title')).toBe('DALF game ID 48213');
-    harness.unmount();
-  });
-
-  it('shows nothing when the video has none', () => {
-    const harness = mountItem(withGameId(null), 0);
-    expect(gameIdText(harness.root)).toBeNull();
-    harness.unmount();
-  });
-
-  it('shows nothing on a comparison', () => {
-    const harness = mountItem(dualProject, 0);
-    expect(gameIdText(harness.root)).toBeNull();
+  it('is not printed in the row', () => {
+    const harness = mountItem(
+      { ...singleProject, video: makeVideo({ id: 'video-single', gameId: '48213' }) },
+      0
+    );
+    expect(harness.root.textContent).not.toContain('48213');
     harness.unmount();
   });
 });

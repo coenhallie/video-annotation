@@ -75,7 +75,10 @@
     </div>
 
     <!-- Stat row -->
-    <div class="flex items-baseline gap-6 border-b border-gray-200 px-4 py-3 dark:border-white/10">
+    <!-- Wraps: the panel is 384px wide and the counts take most of it, so the
+         game id, when there is one, drops to its own line rather than being
+         cut short. -->
+    <div class="flex flex-wrap items-baseline gap-x-6 gap-y-2 border-b border-gray-200 px-4 py-3 dark:border-white/10">
       <div class="flex items-baseline gap-2">
         <span class="font-mono text-[13px] text-gray-900 dark:text-white">{{ annotationCount }}</span>
         <span class="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">
@@ -86,6 +89,20 @@
         <span class="font-mono text-[13px] text-gray-900 dark:text-white">{{ commentCount }}</span>
         <span class="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">
           Comments
+        </span>
+      </div>
+      <!-- DALF's game id, from the "Open in Perspecto" link, so a video can be
+           matched back to its game. Single videos only: a comparison is two
+           games, and one id would be a guess. -->
+      <div
+        v-if="project.projectType === 'single' && project.video.gameId"
+        data-testid="dalf-game-id"
+        class="flex min-w-0 items-baseline gap-2"
+        :title="`DALF game ID ${project.video.gameId}`"
+      >
+        <span class="min-w-0 break-all font-mono text-[13px] text-gray-900 dark:text-white">{{ project.video.gameId }}</span>
+        <span class="shrink-0 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">
+          Game ID
         </span>
       </div>
     </div>

@@ -117,6 +117,13 @@ useEscapeToClose(() => props.isVisible, closeModal);
 // Add new entries to the TOP of this array
 const changelogEntries = ref([
   {
+    version: 'Beta v3.18',
+    date: 'October 17, 2026',
+    changes: [
+      'The DALF game ID moved off the dashboard rows and into the details panel that opens when you click a video, next to its annotation and comment counts',
+    ],
+  },
+  {
     version: 'Beta v3.17',
     date: 'October 17, 2026',
     changes: [
