@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { supabase } from '@/composables/useSupabase';
+import { pipelineMatchTitle, stashPendingPipelineTitle } from '@/utils/pipelineTitle';
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -65,6 +66,13 @@ router.beforeEach(async (to, from, next) => {
   const outputVideo = firstQueryValue(to.query.outputVideo);
   if (outputVideo) {
     sessionStorage.setItem('pendingOutputVideo', outputVideo);
+    // DALF's link also names the match; see utils/pipelineTitle.ts.
+    const matchTitle = pipelineMatchTitle({
+      match: firstQueryValue(to.query.match),
+      competition: firstQueryValue(to.query.competition),
+      date: firstQueryValue(to.query.date),
+    });
+    if (matchTitle) stashPendingPipelineTitle(outputVideo, matchTitle);
   }
 
   // Where a signed-out visitor was heading when they were sent to login. The

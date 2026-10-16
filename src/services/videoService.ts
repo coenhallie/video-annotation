@@ -12,6 +12,7 @@ import { isComparisonVideo, isIndividualVideo } from '../types/database';
 import { ThumbnailGenerator } from '../utils/thumbnailGenerator';
 import { AwsStorageService } from './awsStorageService';
 import { handleServiceError } from '../utils/errorHandler';
+import { defaultPipelineTitle } from '../utils/pipelineTitle';
 
 /**
  * How long to wait for a thumbnail before giving up on it. Generous: the frame
@@ -613,8 +614,16 @@ export class VideoService {
    *   visible to nobody.
    * - Either way, fetches a fresh presigned URL and updates the row with it.
    * Returns the video record with a fresh presigned URL.
+   *
+   * `matchTitle` is the name DALF's link gives the match (see
+   * utils/pipelineTitle.ts). A new row is created with it; an existing row
+   * takes it only while its title is still the untouched default.
    */
-  static async findOrCreateOutputVideo(outputVideoId: string, ownerId: string): Promise<Video> {
+  static async findOrCreateOutputVideo(
+    outputVideoId: string,
+    ownerId: string,
+    matchTitle: string | null = null
+  ): Promise<Video> {
     // The row must exist before the presigned URL is requested. The storage proxy
     // authorizes by asking whether the caller can see this video, and a row that
     // does not exist yet is visible to nobody, so fetching first would 403 the
@@ -634,7 +643,7 @@ export class VideoService {
         .insert({
           ownerId,
           url: '',
-          title: `Pipeline Output - ${outputVideoId.substring(0, 8)}`,
+          title: matchTitle ?? defaultPipelineTitle(outputVideoId),
           videoType: 'url',
           videoId: `aws:${outputVideoId}`,
           isPublic: false,
@@ -684,6 +693,23 @@ export class VideoService {
       } else {
         record = data;
         createdHere = true;
+      }
+    }
+
+    // Only an untouched default is replaced, so a name someone chose is never
+    // overwritten. Through rename_video rather than a direct update: the
+    // videos UPDATE policy is owner-only, and a teammate's update would match
+    // zero rows and report success. The title is cosmetic, so a failed rename
+    // (already reported by renameVideo) must not stop the video opening.
+    if (
+      !createdHere &&
+      matchTitle &&
+      record.title === defaultPipelineTitle(outputVideoId)
+    ) {
+      try {
+        record = await this.renameVideo(record.id, matchTitle);
+      } catch {
+        // Keep the default title.
       }
     }
 
