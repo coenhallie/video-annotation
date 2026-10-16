@@ -117,6 +117,14 @@ useEscapeToClose(() => props.isVisible, closeModal);
 // Add new entries to the TOP of this array
 const changelogEntries = ref([
   {
+    version: 'Beta v3.14',
+    date: 'October 16, 2026',
+    changes: [
+      'QA status is now Unreviewed, In review, Failed or Complete. Staging and Production are gone, and videos that had either are now Complete',
+      'Videos opened from DALF are named after the match, for example "Manchester City vs PSG - Champions League - 14/10/2026", instead of "Pipeline Output" and a number. Videos still carrying that default name are renamed the next time they are opened from DALF; names someone chose are never changed',
+    ],
+  },
+  {
     version: 'Beta v3.13',
     date: 'October 15, 2026',
     changes: [
