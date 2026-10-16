@@ -117,6 +117,14 @@ useEscapeToClose(() => props.isVisible, closeModal);
 // Add new entries to the TOP of this array
 const changelogEntries = ref([
   {
+    version: 'Beta v3.15',
+    date: 'October 16, 2026',
+    changes: [
+      'The whole video library is shared with the team: every signed-in teammate can see, annotate, comment on, rename and delete every video, including uploads that used to be private. Comparisons stay private to whoever made them',
+      'Delete a video from its details panel on the dashboard. The confirmation says how many annotations and comments go with it, and warns when comparisons using the video will be deleted too',
+    ],
+  },
+  {
     version: 'Beta v3.14',
     date: 'October 16, 2026',
     changes: [

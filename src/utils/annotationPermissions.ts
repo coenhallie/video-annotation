@@ -1,20 +1,18 @@
 /**
  * Who may create annotations.
  *
- * This mirrors the `annotations` INSERT row-level security policies (see
- * migrations/20260817_open_annotations_to_all_users.sql): annotating is open to
- * any signed-in user on any video they can see. Neither ownership nor the
- * view-only/can-annotate share permission restricts it.
+ * This mirrors the `annotations` INSERT row-level security policies: annotating
+ * is open to any signed-in user on anything they can see. Neither ownership nor
+ * the view-only/can-annotate share permission restricts it.
  *
- * "Can see" means `isPublic`, their own, or a pipeline output - the same
- * reachability the SELECT policies grant. A private upload belonging to
- * someone else is not readable in the first place. Pipeline outputs (a
- * `videos.videoId` of `aws:<outputVideoId>`) are readable and annotatable by
- * every signed-in account since migrations/20260903_rename_video.sql, whose
- * policies test `"videoId" LIKE 'aws:%'` directly; the same prefix test lives
- * in VideoService.isAwsVideo and the storage proxy. Comparison targets carry
- * no `videoId`, and those policies require one, so the clause never applies
- * to them.
+ * What a signed-in user can see differs by target:
+ *
+ * - A single video: every one. Since
+ *   migrations/20261016_team_library_and_video_delete.sql the whole library is
+ *   shared with every signed-in account, pipeline outputs and private uploads
+ *   alike.
+ * - A comparison: only their own, or one shared by link (`isPublic`).
+ *   comparison_videos was deliberately not widened.
  *
  * The UI has to apply the same rule. Offering an annotate affordance the
  * database will reject only produces a 403
@@ -26,6 +24,8 @@
  * create an annotation, since every insert policy requires `auth.uid()`.
  */
 export interface AnnotationTarget {
+  /** True for a comparison; absent or false for a single video. */
+  isComparison?: boolean | undefined;
   /**
    * The owner column of whatever is being annotated: `videos.ownerId` for a
    * single video, `comparison_videos.userId` for a comparison.
@@ -36,11 +36,6 @@ export interface AnnotationTarget {
   videoId?: string | null | undefined;
 }
 
-/** The predicate the pipeline-output policies use: `"videoId" LIKE 'aws:%'`. */
-function isPipelineOutput(videoId: string | null | undefined): boolean {
-  return typeof videoId === 'string' && videoId.startsWith('aws:');
-}
-
 export function canCreateAnnotations(
   target: AnnotationTarget | null | undefined,
   userId: string | null | undefined
@@ -48,9 +43,9 @@ export function canCreateAnnotations(
   // Every insert policy requires an authenticated identity.
   if (!userId || !target) return false;
 
-  return (
-    target.isPublic === true ||
-    target.ownerId === userId ||
-    isPipelineOutput(target.videoId)
-  );
+  if (target.isComparison) {
+    return target.isPublic === true || target.ownerId === userId;
+  }
+
+  return true;
 }
