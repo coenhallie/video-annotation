@@ -6,7 +6,8 @@
  *
  *   https://perspecto.ai/?outputVideo=<pipe_id>&match=<teams>&competition=<c>&date=<YYYY-MM-DD>
  *
- * and this module turns those three into the title, e.g.
+ * (plus `gameId=<DALF game id>`), and this module turns the match fields into
+ * the title, e.g.
  * "Manchester City vs PSG - Champions League - 14/10/2026", and the date into
  * videos."matchDate" for the dashboard's match-date sort. The format lives
  * here rather than in DALF so that DALF only has to pass fields it already has.
@@ -90,10 +91,22 @@ export function pipelineMatchTitle(fields: PipelineMatchFields): string | null {
   return parts.join(' - ').slice(0, MAX_TITLE_LENGTH).trim();
 }
 
-/** What a DALF link says about its match: either part can be missing. */
+/**
+ * DALF's game id, as the link sends it, or null. It is shown in every
+ * dashboard row and comes from a URL anyone can write, so only an id-shaped
+ * value is kept: letters, digits, `-`, `_`, `.` and `:`, at most 64 of them.
+ */
+export function pipelineGameId(value: string | null | undefined): string | null {
+  const id = (value ?? '').trim();
+  if (!id || id.toUpperCase() === 'N/A') return null;
+  return /^[A-Za-z0-9_.:-]{1,64}$/.test(id) ? id : null;
+}
+
+/** What a DALF link says about its match: any part can be missing. */
 export interface PipelineMatch {
   title: string | null;
   matchDate: string | null;
+  gameId: string | null;
 }
 
 /**
@@ -119,7 +132,7 @@ export function takePendingPipelineMatch(outputVideoId: string): PipelineMatch |
     return null;
   }
 
-  const { id, title, matchDate } = (stored ?? {}) as Record<string, unknown>;
+  const { id, title, matchDate, gameId } = (stored ?? {}) as Record<string, unknown>;
   if (id !== outputVideoId) return null;
 
   sessionStorage.removeItem(PENDING_KEY);
@@ -127,5 +140,6 @@ export function takePendingPipelineMatch(outputVideoId: string): PipelineMatch |
     title: typeof title === 'string' ? title : null,
     // Re-validated: sessionStorage is writable by anything on the page.
     matchDate: typeof matchDate === 'string' ? pipelineMatchDate(matchDate) : null,
+    gameId: typeof gameId === 'string' ? pipelineGameId(gameId) : null,
   };
 }

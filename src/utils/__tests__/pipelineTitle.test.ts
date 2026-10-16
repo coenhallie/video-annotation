@@ -2,6 +2,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   defaultPipelineTitle,
+  pipelineGameId,
   pipelineMatchDate,
   pipelineMatchTitle,
   stashPendingPipelineMatch,
@@ -94,24 +95,58 @@ describe('pipelineMatchDate', () => {
   });
 });
 
+describe('pipelineGameId', () => {
+  it('is the id as DALF sends it, trimmed', () => {
+    expect(pipelineGameId(' 48213 ')).toBe('48213');
+  });
+
+  it('is null when missing, blank or N/A', () => {
+    expect(pipelineGameId(null)).toBeNull();
+    expect(pipelineGameId('   ')).toBeNull();
+    expect(pipelineGameId('N/A')).toBeNull();
+  });
+
+  // It comes from a URL anyone can write, and it is printed in every row.
+  it('refuses anything that does not look like an id', () => {
+    expect(pipelineGameId('a'.repeat(65))).toBeNull();
+    expect(pipelineGameId('48 213')).toBeNull();
+    expect(pipelineGameId('<b>48213</b>')).toBeNull();
+  });
+
+  it('accepts uuid-style and prefixed ids', () => {
+    expect(pipelineGameId('9eddbba3-4e1f-4e02-8072-3679b22de1e0')).toBe(
+      '9eddbba3-4e1f-4e02-8072-3679b22de1e0'
+    );
+    expect(pipelineGameId('game_48213')).toBe('game_48213');
+  });
+});
+
 describe('pending pipeline match', () => {
   beforeEach(() => sessionStorage.clear());
 
   it('hands back the stashed title and date once, for the same id', () => {
-    stashPendingPipelineMatch('abc', { title: 'A vs B', matchDate: '2026-10-14' });
-    expect(takePendingPipelineMatch('abc')).toEqual({ title: 'A vs B', matchDate: '2026-10-14' });
+    stashPendingPipelineMatch('abc', { title: 'A vs B', matchDate: '2026-10-14', gameId: '48213' });
+    expect(takePendingPipelineMatch('abc')).toEqual({
+      title: 'A vs B',
+      matchDate: '2026-10-14',
+      gameId: '48213',
+    });
     expect(takePendingPipelineMatch('abc')).toBeNull();
   });
 
   // A link can date a match without naming it.
   it('keeps a date without a title', () => {
-    stashPendingPipelineMatch('abc', { title: null, matchDate: '2026-10-14' });
-    expect(takePendingPipelineMatch('abc')).toEqual({ title: null, matchDate: '2026-10-14' });
+    stashPendingPipelineMatch('abc', { title: null, matchDate: '2026-10-14', gameId: null });
+    expect(takePendingPipelineMatch('abc')).toEqual({
+      title: null,
+      matchDate: '2026-10-14',
+      gameId: null,
+    });
   });
 
   // A stash for one pipeline must never name or date another.
   it('ignores a stash for a different id', () => {
-    stashPendingPipelineMatch('abc', { title: 'A vs B', matchDate: null });
+    stashPendingPipelineMatch('abc', { title: 'A vs B', matchDate: null, gameId: null });
     expect(takePendingPipelineMatch('xyz')).toBeNull();
   });
 
@@ -123,8 +158,12 @@ describe('pending pipeline match', () => {
   it('drops fields of the wrong type', () => {
     sessionStorage.setItem(
       'pendingOutputVideoMatch',
-      JSON.stringify({ id: 'abc', title: 7, matchDate: 'yesterday' })
+      JSON.stringify({ id: 'abc', title: 7, matchDate: 'yesterday', gameId: '<b>1</b>' })
     );
-    expect(takePendingPipelineMatch('abc')).toEqual({ title: null, matchDate: null });
+    expect(takePendingPipelineMatch('abc')).toEqual({
+      title: null,
+      matchDate: null,
+      gameId: null,
+    });
   });
 });

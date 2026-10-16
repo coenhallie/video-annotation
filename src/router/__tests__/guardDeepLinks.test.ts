@@ -44,13 +44,14 @@ describe('router guard deep links', () => {
   it('stashes the match title and date from an ?outputVideo= link, even when signed out', async () => {
     signedIn = false;
     await router.push(
-      '/?outputVideo=abc123&match=A%20vs%20B&competition=Cup&date=2026-10-14'
+      '/?outputVideo=abc123&gameId=48213&match=A%20vs%20B&competition=Cup&date=2026-10-14'
     );
     expect(router.currentRoute.value.name).toBe('login');
 
     expect(takePendingPipelineMatch('abc123')).toEqual({
       title: 'A vs B - Cup - 14/10/2026',
       matchDate: '2026-10-14',
+      gameId: '48213',
     });
   });
 
