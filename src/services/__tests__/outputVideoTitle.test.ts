@@ -15,6 +15,7 @@ const MATCH_TITLE = 'Manchester City vs PSG - Champions League - 14/10/2026';
 let existing: Record<string, unknown> | null = null;
 let inserted: Record<string, unknown> | null = null;
 let renameError: { message: string } | null = null;
+let matchDateError: { message: string } | null = null;
 const rpcCalls: Array<{ fn: string; args: Record<string, unknown> }> = [];
 
 vi.mock('@/composables/useSupabase', () => ({
@@ -22,6 +23,10 @@ vi.mock('@/composables/useSupabase', () => ({
   supabase: {
     rpc: async (fn: string, args: Record<string, unknown>) => {
       rpcCalls.push({ fn, args });
+      if (fn === 'set_video_match_date') {
+        if (matchDateError) return { data: null, error: matchDateError };
+        return { data: { ...existing, matchDate: args.p_match_date }, error: null };
+      }
       if (fn !== 'rename_video') return { data: true, error: null };
       if (renameError) return { data: null, error: renameError };
       return { data: { ...existing, title: args.p_title }, error: null };
@@ -57,10 +62,15 @@ vi.mock('@/composables/useSupabase', () => ({
 }));
 
 const renames = () => rpcCalls.filter((c) => c.fn === 'rename_video');
+const dateWrites = () => rpcCalls.filter((c) => c.fn === 'set_video_match_date');
 
-const open = async (matchTitle?: string | null) => {
+const open = async (title?: string | null, matchDate: string | null = null) => {
   const { VideoService } = await import('@/services/videoService');
-  return VideoService.findOrCreateOutputVideo(OUTPUT_ID, 'me', matchTitle);
+  return VideoService.findOrCreateOutputVideo(
+    OUTPUT_ID,
+    'me',
+    title === undefined && matchDate === null ? null : { title: title ?? null, matchDate }
+  );
 };
 
 const row = (over: Record<string, unknown> = {}) => ({
@@ -76,6 +86,7 @@ beforeEach(() => {
   existing = null;
   inserted = null;
   renameError = null;
+  matchDateError = null;
   rpcCalls.length = 0;
   getVideoUrlForProject.mockResolvedValue('https://s3/fresh');
 });
@@ -124,5 +135,46 @@ describe('findOrCreateOutputVideo titles', () => {
     const video = await open(MATCH_TITLE);
     expect(video.url).toBe('https://s3/fresh');
     expect(video.title).toBe(DEFAULT_TITLE);
+  });
+});
+
+describe('findOrCreateOutputVideo match dates', () => {
+  it('stores the match date on a new video', async () => {
+    const video = await open(MATCH_TITLE, '2026-10-14');
+    expect(inserted?.matchDate).toBe('2026-10-14');
+    expect(video.matchDate).toBe('2026-10-14');
+  });
+
+  it('leaves the match date empty on a new video when the link has none', async () => {
+    await open(MATCH_TITLE, null);
+    expect(inserted?.matchDate ?? null).toBeNull();
+  });
+
+  // DALF is where match dates come from, and nobody edits them here, so the
+  // link's date wins over an older one, whoever owns the video.
+  it('dates an existing video through set_video_match_date', async () => {
+    existing = row({ title: 'Derby, second half', matchDate: null });
+    const video = await open(null, '2026-10-14');
+    expect(dateWrites()).toEqual([
+      {
+        fn: 'set_video_match_date',
+        args: { p_video_id: 'v1', p_match_date: '2026-10-14' },
+      },
+    ]);
+    expect(video.matchDate).toBe('2026-10-14');
+  });
+
+  it('does not rewrite a match date that already matches', async () => {
+    existing = row({ matchDate: '2026-10-14' });
+    await open(null, '2026-10-14');
+    expect(dateWrites()).toHaveLength(0);
+  });
+
+  it('still opens the video when the date cannot be written', async () => {
+    existing = row({ matchDate: null });
+    matchDateError = { message: 'boom' };
+    const video = await open(null, '2026-10-14');
+    expect(video.url).toBe('https://s3/fresh');
+    expect(video.matchDate ?? null).toBeNull();
   });
 });

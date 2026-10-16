@@ -7,7 +7,8 @@
  *   https://perspecto.ai/?outputVideo=<pipe_id>&match=<teams>&competition=<c>&date=<YYYY-MM-DD>
  *
  * and this module turns those three into the title, e.g.
- * "Manchester City vs PSG - Champions League - 14/10/2026". The format lives
+ * "Manchester City vs PSG - Champions League - 14/10/2026", and the date into
+ * videos."matchDate" for the dashboard's match-date sort. The format lives
  * here rather than in DALF so that DALF only has to pass fields it already has.
  */
 
@@ -16,7 +17,7 @@ const DEFAULT_PREFIX = 'Pipeline Output - ';
 /** Matches the rename_video limit, so a link-derived title is always storable. */
 const MAX_TITLE_LENGTH = 200;
 
-const PENDING_KEY = 'pendingOutputVideoTitle';
+const PENDING_KEY = 'pendingOutputVideoMatch';
 
 /**
  * The title a pipeline video gets when nothing better is known. Also how an
@@ -43,18 +44,35 @@ function cleanPart(value: string | null | undefined): string | null {
 }
 
 /**
- * DD/MM/YYYY from a string starting YYYY-MM-DD, time part ignored. Read off
- * the string rather than through Date, which would move the day by the local
- * offset.
+ * Year, month and day from a string starting YYYY-MM-DD, time part ignored.
+ * Read off the string rather than through Date, which would move the day by
+ * the local offset.
  */
-function formatDate(value: string | null | undefined): string | null {
+function dateParts(
+  value: string | null | undefined
+): { year: string; month: string; day: string } | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec((value ?? '').trim());
   if (!match) return null;
-  const [, year, month, day] = match;
+  const [, year, month, day] = match as unknown as [string, string, string, string];
   const m = Number(month);
   const d = Number(day);
   if (m < 1 || m > 12 || d < 1 || d > 31) return null;
-  return `${day}/${month}/${year}`;
+  return { year, month, day };
+}
+
+/** DD/MM/YYYY, for the title. */
+function formatDate(value: string | null | undefined): string | null {
+  const parts = dateParts(value);
+  return parts ? `${parts.day}/${parts.month}/${parts.year}` : null;
+}
+
+/**
+ * The match date as `YYYY-MM-DD`, the form videos."matchDate" stores and the
+ * match-date sort compares, or null when the link carries no usable date.
+ */
+export function pipelineMatchDate(value: string | null | undefined): string | null {
+  const parts = dateParts(value);
+  return parts ? `${parts.year}-${parts.month}-${parts.day}` : null;
 }
 
 /**
@@ -72,17 +90,24 @@ export function pipelineMatchTitle(fields: PipelineMatchFields): string | null {
   return parts.join(' - ').slice(0, MAX_TITLE_LENGTH).trim();
 }
 
-/**
- * The Keycloak login round trip comes back to the site root with only
- * `?outputVideo=`, so the title rides in sessionStorage next to
- * pendingOutputVideo. Keyed by id so it can never name a different pipeline.
- */
-export function stashPendingPipelineTitle(outputVideoId: string, title: string): void {
-  sessionStorage.setItem(PENDING_KEY, JSON.stringify({ id: outputVideoId, title }));
+/** What a DALF link says about its match: either part can be missing. */
+export interface PipelineMatch {
+  title: string | null;
+  matchDate: string | null;
 }
 
-/** The stashed title for this id, removed as it is read. */
-export function takePendingPipelineTitle(outputVideoId: string): string | null {
+/**
+ * The Keycloak login round trip comes back to the site root with only
+ * `?outputVideo=`, so the match rides in sessionStorage next to
+ * pendingOutputVideo. Keyed by id so it can never name or date a different
+ * pipeline.
+ */
+export function stashPendingPipelineMatch(outputVideoId: string, match: PipelineMatch): void {
+  sessionStorage.setItem(PENDING_KEY, JSON.stringify({ id: outputVideoId, ...match }));
+}
+
+/** The stashed match for this id, removed as it is read. */
+export function takePendingPipelineMatch(outputVideoId: string): PipelineMatch | null {
   const raw = sessionStorage.getItem(PENDING_KEY);
   if (raw === null) return null;
 
@@ -94,9 +119,13 @@ export function takePendingPipelineTitle(outputVideoId: string): string | null {
     return null;
   }
 
-  const { id, title } = (stored ?? {}) as { id?: unknown; title?: unknown };
-  if (id !== outputVideoId || typeof title !== 'string') return null;
+  const { id, title, matchDate } = (stored ?? {}) as Record<string, unknown>;
+  if (id !== outputVideoId) return null;
 
   sessionStorage.removeItem(PENDING_KEY);
-  return title;
+  return {
+    title: typeof title === 'string' ? title : null,
+    // Re-validated: sessionStorage is writable by anything on the page.
+    matchDate: typeof matchDate === 'string' ? pipelineMatchDate(matchDate) : null,
+  };
 }

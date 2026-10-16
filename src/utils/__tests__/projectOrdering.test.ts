@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sortByRecentOpens } from '@/utils/projectOrdering';
+import { sortByMatchDate, sortByRecentOpens } from '@/utils/projectOrdering';
 import type { Project } from '@/types/project';
 
 // Only id and createdAt matter to the comparator; the cast keeps the fixture
@@ -63,5 +63,65 @@ describe('sortByRecentOpens', () => {
     const input = [...INCOMING];
     sortByRecentOpens(input, { oldest: '2026-08-21T09:00:00Z' });
     expect(ids(input)).toEqual(['newest', 'middle', 'oldest']);
+  });
+});
+
+describe('sortByMatchDate', () => {
+  const withMatch = (id: string, matchDate: string | null): Project =>
+    ({
+      id,
+      projectType: 'single',
+      title: id,
+      createdAt: '2026-08-01T00:00:00Z',
+      video: { id, duration: 10, matchDate },
+    }) as unknown as Project;
+
+  const dual = (id: string): Project =>
+    ({
+      id,
+      projectType: 'dual',
+      title: id,
+      createdAt: '2026-08-01T00:00:00Z',
+    }) as unknown as Project;
+
+  it('puts the latest match first', () => {
+    const list = [
+      withMatch('early', '2026-09-01'),
+      withMatch('late', '2026-10-14'),
+      withMatch('middle', '2026-10-01'),
+    ];
+    expect(ids(sortByMatchDate(list, {}))).toEqual(['late', 'middle', 'early']);
+  });
+
+  // Most of the library has no match date. It stays reachable, after the
+  // dated videos, in the same last-opened order the default sort uses.
+  it('lists everything without a match date after, by last opened', () => {
+    const list = [
+      withMatch('undated-a', null),
+      dual('comparison'),
+      withMatch('dated', '2026-10-14'),
+      withMatch('undated-b', null),
+    ];
+    const opened = {
+      'undated-b': '2026-10-16T10:00:00Z',
+      comparison: '2026-10-15T10:00:00Z',
+    };
+    expect(ids(sortByMatchDate(list, opened))).toEqual([
+      'dated',
+      'undated-b',
+      'comparison',
+      'undated-a',
+    ]);
+  });
+
+  it('breaks a tie on the same match date by last opened', () => {
+    const list = [withMatch('a', '2026-10-14'), withMatch('b', '2026-10-14')];
+    expect(ids(sortByMatchDate(list, { b: '2026-10-16T10:00:00Z' }))).toEqual(['b', 'a']);
+  });
+
+  it('does not reorder the list it is handed', () => {
+    const list = [withMatch('early', '2026-09-01'), withMatch('late', '2026-10-14')];
+    sortByMatchDate(list, {});
+    expect(ids(list)).toEqual(['early', 'late']);
   });
 });

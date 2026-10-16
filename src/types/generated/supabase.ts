@@ -660,6 +660,7 @@ export type Database = {
           fps: number
           id: string
           isPublic: boolean
+          matchDate: string | null
           metadata: Json | null
           originalFilename: string | null
           ownerId: string
@@ -683,6 +684,7 @@ export type Database = {
           fps?: number
           id?: string
           isPublic?: boolean
+          matchDate?: string | null
           metadata?: Json | null
           originalFilename?: string | null
           ownerId: string
@@ -706,6 +708,7 @@ export type Database = {
           fps?: number
           id?: string
           isPublic?: boolean
+          matchDate?: string | null
           metadata?: Json | null
           originalFilename?: string | null
           ownerId?: string
@@ -769,6 +772,7 @@ export type Database = {
           fps: number
           id: string
           isPublic: boolean
+          matchDate: string | null
           metadata: Json | null
           originalFilename: string | null
           ownerId: string
@@ -791,6 +795,39 @@ export type Database = {
         }
       }
       set_session_context: { Args: { session_id: string }; Returns: undefined }
+      set_video_match_date: {
+        Args: { p_match_date: string; p_video_id: string }
+        Returns: {
+          allowAnnotations: boolean
+          createdAt: string
+          duration: number
+          filePath: string | null
+          fileSize: number | null
+          fps: number
+          id: string
+          isPublic: boolean
+          matchDate: string | null
+          metadata: Json | null
+          originalFilename: string | null
+          ownerId: string
+          qaStatus: string
+          qaStatusUpdatedAt: string | null
+          qaStatusUpdatedBy: string | null
+          thumbnailUrl: string | null
+          title: string
+          totalFrames: number
+          updatedAt: string
+          url: string
+          videoId: string
+          videoType: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "videos"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       set_video_media_info: {
         Args: { p_duration: number; p_fps: number; p_video_id: string }
         Returns: boolean
@@ -806,6 +843,7 @@ export type Database = {
           fps: number
           id: string
           isPublic: boolean
+          matchDate: string | null
           metadata: Json | null
           originalFilename: string | null
           ownerId: string

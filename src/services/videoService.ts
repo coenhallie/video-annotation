@@ -12,7 +12,7 @@ import { isComparisonVideo, isIndividualVideo } from '../types/database';
 import { ThumbnailGenerator } from '../utils/thumbnailGenerator';
 import { AwsStorageService } from './awsStorageService';
 import { handleServiceError } from '../utils/errorHandler';
-import { defaultPipelineTitle } from '../utils/pipelineTitle';
+import { defaultPipelineTitle, type PipelineMatch } from '../utils/pipelineTitle';
 
 /**
  * How long to wait for a thumbnail before giving up on it. Generous: the frame
@@ -411,6 +411,26 @@ export class VideoService {
     }
   }
 
+  /** Sets the day the match was played (`YYYY-MM-DD`) on any video. */
+  static async setMatchDate(videoId: string, matchDate: string): Promise<Video> {
+    const { data, error } = await supabase.rpc('set_video_match_date', {
+      p_video_id: videoId,
+      p_match_date: matchDate,
+    });
+    if (error) {
+      handleServiceError('VideoService.setMatchDate', error);
+      throw new Error(error.message);
+    }
+    // Same set-or-object handling as renameVideo.
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) {
+      const missing = new Error('set_video_match_date returned no row');
+      handleServiceError('VideoService.setMatchDate', missing);
+      throw missing;
+    }
+    return row as Video;
+  }
+
   /**
    * What deleting this video takes with it, for the confirmation dialog.
    *
@@ -657,15 +677,19 @@ export class VideoService {
    * - Either way, fetches a fresh presigned URL and updates the row with it.
    * Returns the video record with a fresh presigned URL.
    *
-   * `matchTitle` is the name DALF's link gives the match (see
-   * utils/pipelineTitle.ts). A new row is created with it; an existing row
-   * takes it only while its title is still the untouched default.
+   * `match` is what DALF's link says about the match (see
+   * utils/pipelineTitle.ts). A new row is created with its title and date. An
+   * existing row takes the title only while its own is still the untouched
+   * default, and takes the date whenever it differs: DALF is where match dates
+   * come from, and nobody edits them here.
    */
   static async findOrCreateOutputVideo(
     outputVideoId: string,
     ownerId: string,
-    matchTitle: string | null = null
+    match: PipelineMatch | null = null
   ): Promise<Video> {
+    const matchTitle = match?.title ?? null;
+    const matchDate = match?.matchDate ?? null;
     // The row must exist before the presigned URL is requested. The storage proxy
     // authorizes by asking whether the caller can see this video, and a row that
     // does not exist yet is visible to nobody, so fetching first would 403 the
@@ -686,6 +710,7 @@ export class VideoService {
           ownerId,
           url: '',
           title: matchTitle ?? defaultPipelineTitle(outputVideoId),
+          ...(matchDate ? { matchDate } : {}),
           videoType: 'url',
           videoId: `aws:${outputVideoId}`,
           isPublic: false,
@@ -752,6 +777,16 @@ export class VideoService {
         record = await this.renameVideo(record.id, matchTitle);
       } catch {
         // Keep the default title.
+      }
+    }
+
+    // Through a function for the same reason as the rename. Equally cosmetic:
+    // a failed write leaves the video undated, not unopened.
+    if (!createdHere && matchDate && record.matchDate !== matchDate) {
+      try {
+        record = await this.setMatchDate(record.id, matchDate);
+      } catch {
+        // Keep the previous date; setMatchDate has reported it.
       }
     }
 
