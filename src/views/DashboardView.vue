@@ -371,7 +371,7 @@ const statusOfProject = (p: Project): QaStatus | null =>
   p.projectType === 'single' ? toQaStatus(p.video.qaStatus) : null;
 
 // Everything except the status filter. The counts are computed against this,
-// so selecting FAILED does not drop the other four statuses to zero and make
+// so selecting FAILED does not drop the other three statuses to zero and make
 // the panel useless exactly when it is being used.
 const projectsBeforeQaFilter = computed(() => {
   let list = dashFolders.filterByFolder(projects.value);
@@ -725,10 +725,10 @@ watch(user, (u) => {
                   >
                     QA status
                   </div>
-                  <!-- All five always render, zeros included. The vocabulary is
+                  <!-- All four always render, zeros included. The vocabulary is
                        fixed, so hiding empty ones would make the panel's
-                       contents shift as data changes, and "nothing is in
-                       staging" is itself an answer. -->
+                       contents shift as data changes, and "nothing is
+                       complete" is itself an answer. -->
                   <button
                     v-for="status in QA_STATUSES"
                     :key="status"

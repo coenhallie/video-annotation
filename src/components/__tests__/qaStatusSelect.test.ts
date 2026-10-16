@@ -72,48 +72,47 @@ beforeEach(() => {
 });
 
 describe('QaStatusSelect', () => {
-  it('offers the five values in workflow order', async () => {
+  it('offers the four values in workflow order', async () => {
     const s = await mountSelect(video());
     expect([...s.select().options].map((o) => o.value)).toEqual([
       'not_started',
       'in_review',
       'failed',
-      'staging',
-      'production',
+      'complete',
     ]);
     s.unmount();
   });
 
   it('writes the chosen status through the service', async () => {
-    setQaStatus.mockResolvedValue(video({ qaStatus: 'staging' }));
+    setQaStatus.mockResolvedValue(video({ qaStatus: 'in_review' }));
     const s = await mountSelect(video());
 
-    await s.choose('staging');
+    await s.choose('in_review');
 
-    expect(setQaStatus).toHaveBeenCalledWith('v1', 'staging');
-    expect(s.select().value).toBe('staging');
+    expect(setQaStatus).toHaveBeenCalledWith('v1', 'in_review');
+    expect(s.select().value).toBe('in_review');
     s.unmount();
   });
 
   it('emits the updated video so the parent can refresh its copy', async () => {
-    const updated = video({ qaStatus: 'staging', qaStatusUpdatedBy: 'u2' });
+    const updated = video({ qaStatus: 'in_review', qaStatusUpdatedBy: 'u2' });
     setQaStatus.mockResolvedValue(updated);
     const s = await mountSelect(video());
 
-    await s.choose('staging');
+    await s.choose('in_review');
 
     expect(s.updates).toHaveLength(1);
-    expect(s.updates[0]?.qaStatus).toBe('staging');
+    expect(s.updates[0]?.qaStatus).toBe('in_review');
     s.unmount();
   });
 
-  // The optimistic update is what stops a five-value dropdown feeling like a
+  // The optimistic update is what stops a four-value dropdown feeling like a
   // form submission. The rollback is what keeps it honest when the RPC raises.
   it('rolls back and notifies when the write is rejected', async () => {
     setQaStatus.mockRejectedValue(new Error('Video v1 is not visible to the caller'));
     const s = await mountSelect(video({ qaStatus: 'in_review' }));
 
-    await s.choose('production');
+    await s.choose('complete');
 
     expect(s.select().value).toBe('in_review');
     expect(addNotification).toHaveBeenCalledWith(
@@ -125,7 +124,7 @@ describe('QaStatusSelect', () => {
 
   it('shows attribution once the status has been set', async () => {
     const s = await mountSelect(
-      video({ qaStatus: 'staging', qaStatusUpdatedAt: '2026-08-20T00:00:00Z' }),
+      video({ qaStatus: 'in_review', qaStatusUpdatedAt: '2026-08-20T00:00:00Z' }),
       'Alice'
     );
     expect(s.attribution()?.textContent).toContain('Alice');
@@ -152,13 +151,13 @@ describe('QaStatusSelect', () => {
     const s = await mountSelect(video());
 
     const el = s.select();
-    el.value = 'staging';
+    el.value = 'in_review';
     el.dispatchEvent(new Event('change'));
     await nextTick();
 
     expect(el.disabled).toBe(true);
 
-    resolveWrite(video({ qaStatus: 'staging' }));
+    resolveWrite(video({ qaStatus: 'in_review' }));
     await nextTick();
     await Promise.resolve();
     await nextTick();
@@ -190,22 +189,22 @@ describe('QaStatusSelect', () => {
 
     // Start an optimistic write for this video.
     const el = s.select();
-    el.value = 'production';
+    el.value = 'complete';
     el.dispatchEvent(new Event('change'));
     await nextTick();
-    expect(s.select().value).toBe('production');
+    expect(s.select().value).toBe('complete');
 
     // A stale mutation arrives mid-write; the optimistic value must hold.
-    target.qaStatus = 'staging';
+    target.qaStatus = 'in_review';
     await nextTick();
-    expect(s.select().value).toBe('production');
+    expect(s.select().value).toBe('complete');
 
-    resolveWrite(video({ qaStatus: 'production' }));
+    resolveWrite(video({ qaStatus: 'complete' }));
     await nextTick();
     await Promise.resolve();
     await nextTick();
 
-    expect(s.select().value).toBe('production');
+    expect(s.select().value).toBe('complete');
     s.unmount();
   });
 });

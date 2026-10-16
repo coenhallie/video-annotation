@@ -15,7 +15,7 @@ const load = async () =>
   (await import('@/composables/useQaStatusWrite')).useQaStatusWrite;
 
 const video = (over: Partial<Video> = {}): Video =>
-  ({ id: 'v1', qaStatus: 'staging', qaStatusUpdatedAt: '2026-08-22T00:00:00Z', ...over }) as Video;
+  ({ id: 'v1', qaStatus: 'complete', qaStatusUpdatedAt: '2026-08-22T00:00:00Z', ...over }) as Video;
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -27,9 +27,9 @@ describe('useQaStatusWrite', () => {
     const seen: Video[] = [];
     const w = useQaStatusWrite(() => target.value, (v) => seen.push(v));
 
-    await w.change('staging');
+    await w.change('complete');
 
-    expect(w.current.value).toBe('staging');
+    expect(w.current.value).toBe('complete');
     expect(seen).toHaveLength(1);
     expect(w.saving.value).toBe(false);
   });
@@ -44,7 +44,7 @@ describe('useQaStatusWrite', () => {
     const seen: Video[] = [];
     const w = useQaStatusWrite(() => target.value, (v) => seen.push(v));
 
-    const pending = w.change('staging');
+    const pending = w.change('complete');
     target.value = { id: 'v2', qaStatus: 'in_review' };
     resolve(video());
     await pending;
@@ -54,7 +54,7 @@ describe('useQaStatusWrite', () => {
     // The "applies nothing" half of this test's name: the resolved v1 write
     // must not land on the swapped-to v2 target. current/updatedAt must show
     // v2's own value ('in_review', no qaStatusUpdatedAt), never v1's resolved
-    // row ('staging', '2026-08-22T00:00:00Z' from the video() factory).
+    // row ('complete', '2026-08-22T00:00:00Z' from the video() factory).
     expect(w.current.value).toBe('in_review');
     expect(w.updatedAt.value).toBeUndefined();
   });
@@ -65,7 +65,7 @@ describe('useQaStatusWrite', () => {
     const target = ref<QaStatusTarget>({ id: 'v1', qaStatus: 'in_review' });
     const w = useQaStatusWrite(() => target.value, () => {});
 
-    await w.change('production');
+    await w.change('complete');
 
     expect(w.current.value).toBe('in_review');
     expect(addNotification).toHaveBeenCalledWith(
@@ -82,7 +82,7 @@ describe('useQaStatusWrite', () => {
     const target = ref<QaStatusTarget>({ id: 'v1', qaStatus: 'in_review' });
     const w = useQaStatusWrite(() => target.value, () => {});
 
-    const pending = w.change('production');
+    const pending = w.change('complete');
     target.value = { id: 'v2', qaStatus: 'failed' };
     reject(new Error('refused'));
     await pending;
@@ -96,10 +96,10 @@ describe('useQaStatusWrite', () => {
 
   it('ignores a change to the value already shown', async () => {
     const useQaStatusWrite = await load();
-    const target = ref<QaStatusTarget>({ id: 'v1', qaStatus: 'staging' });
+    const target = ref<QaStatusTarget>({ id: 'v1', qaStatus: 'complete' });
     const w = useQaStatusWrite(() => target.value, () => {});
 
-    await w.change('staging');
+    await w.change('complete');
 
     expect(setQaStatus).not.toHaveBeenCalled();
   });

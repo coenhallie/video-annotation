@@ -25,7 +25,7 @@ describe('QaStatusPill', () => {
   // Not suppressed at not_started, unlike the watch chip. The column exists to
   // tell states apart at a glance, and an empty slot cannot be told from a row
   // whose data has not loaded.
-  it('renders a pill for all five values', () => {
+  it('renders a pill for all four values', () => {
     for (const status of QA_STATUSES) {
       const p = mountPill(status);
       expect(p.pill()).not.toBeNull();
@@ -38,8 +38,7 @@ describe('QaStatusPill', () => {
       ['not_started', 'UNREVIEWED'],
       ['in_review', 'IN REVIEW'],
       ['failed', 'FAILED'],
-      ['staging', 'STAGING'],
-      ['production', 'PRODUCTION'],
+      ['complete', 'COMPLETE'],
     ] as [QaStatus, string][]) {
       const p = mountPill(status);
       expect(p.pill()?.textContent?.trim()).toBe(label);
@@ -62,16 +61,16 @@ describe('QaStatusPill', () => {
     expect(widths.size).toBe(1);
   });
 
-  it('accents only failed and fills only production', () => {
+  it('accents only failed and fills only complete', () => {
     const failed = mountPill('failed');
     expect(failed.pill()?.className).toContain('text-red-600');
     failed.unmount();
 
-    const production = mountPill('production');
-    expect(production.pill()?.className).toContain('bg-gray-900');
-    production.unmount();
+    const complete = mountPill('complete');
+    expect(complete.pill()?.className).toContain('bg-gray-900');
+    complete.unmount();
 
-    for (const status of ['not_started', 'in_review', 'staging'] as QaStatus[]) {
+    for (const status of ['not_started', 'in_review'] as QaStatus[]) {
       const p = mountPill(status);
       expect(p.pill()?.className).not.toContain('red');
       expect(p.pill()?.className).not.toContain('bg-gray-900');
@@ -90,7 +89,7 @@ describe('QaStatusPill', () => {
   });
 
   it('does not shrink when the row is tight', () => {
-    const p = mountPill('production');
+    const p = mountPill('complete');
     expect(p.pill()?.className).toContain('shrink-0');
     p.unmount();
   });

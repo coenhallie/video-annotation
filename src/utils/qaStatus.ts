@@ -1,24 +1,22 @@
 import type { QaStatus, Video } from '@/types/database';
 
 /**
- * The five values in workflow order. This array is the source of truth for the
+ * The four values in workflow order. This array is the source of truth for the
  * order options appear in the select; it must stay in step with the
- * videos_qa_status_check constraint in migrations/20260821_video_qa_status.sql.
+ * videos_qa_status_check constraint in migrations/20261016_qa_status_complete.sql.
  */
 export const QA_STATUSES: readonly QaStatus[] = [
   'not_started',
   'in_review',
   'failed',
-  'staging',
-  'production',
+  'complete',
 ] as const;
 
 const LABELS: Record<QaStatus, string> = {
   not_started: 'UNREVIEWED',
   in_review: 'IN REVIEW',
   failed: 'FAILED',
-  staging: 'STAGING',
-  production: 'PRODUCTION',
+  complete: 'COMPLETE',
 };
 
 /**
@@ -82,20 +80,19 @@ export function qaStatusToneClass(status: QaStatus | null | undefined): string {
 /**
  * Border, fill and text for the dashboard pill.
  *
- * Three weights, not five colours: recedes (not_started), outlined
- * (in_review, staging, and failed in the accent), filled (production, the
- * terminal state). Five hues would scan marginally faster and would add five
- * accents to an app whose header comment says three were already too many.
- * Weight also survives colour-blind viewing, which hue does not.
+ * Three weights, not four colours: recedes (not_started), outlined
+ * (in_review, and failed in the accent), filled (complete, the terminal
+ * state). Four hues would scan marginally faster and would add four accents to
+ * an app whose header comment says three were already too many. Weight also
+ * survives colour-blind viewing, which hue does not.
  *
- * Production inverts in dark mode. A dark fill on a dark page is invisible.
+ * Complete inverts in dark mode. A dark fill on a dark page is invisible.
  */
 const PILL_CLASSES: Record<QaStatus, string> = {
   not_started: 'border-gray-200 text-gray-400 dark:border-white/10 dark:text-gray-500',
   in_review: 'border-gray-300 text-gray-500 dark:border-white/15 dark:text-gray-400',
   failed: 'border-red-300 text-red-600 dark:border-red-400/40 dark:text-red-400',
-  staging: 'border-gray-300 text-gray-900 dark:border-white/20 dark:text-white',
-  production:
+  complete:
     'border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-gray-900',
 };
 

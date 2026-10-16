@@ -1,7 +1,7 @@
 <template>
   <!-- Every row gets one, not_started included: the column's job is telling
        states apart at a glance, and a gap cannot be told from unloaded data.
-       w-24 on all five is what makes it a column rather than five ragged
+       w-24 on all four is what makes it a column rather than four ragged
        shapes; do not swap it for hug-content padding. -->
   <span
     data-testid="qa-status-pill"

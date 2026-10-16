@@ -1,11 +1,11 @@
 <template>
   <!-- The editable twin of QaStatusPill, and pixel-identical to it at rest:
-       same w-24, same radius, same border, same five weights. Only hover and
+       same w-24, same radius, same border, same four styles. Only hover and
        focus differ, so the column keeps scanning as one column.
 
        The hover signal is a neutral ring rather than a border colour change.
-       A colour change would have to work against five palettes, and
-       `production` is a filled pill whose border is part of its fill; a ring
+       A colour change would have to work against four palettes, and
+       `complete` is a filled pill whose border is part of its fill; a ring
        sits outside all of that and costs no layout.
 
        stop on click and mousedown because the row around this opens the
