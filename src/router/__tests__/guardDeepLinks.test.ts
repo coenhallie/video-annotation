@@ -17,7 +17,7 @@ vi.mock('../../views/EditorView.vue', () => stubView);
 vi.mock('../../views/LoginView.vue', () => stubView);
 
 import router from '@/router';
-import { takePendingPipelineTitle } from '@/utils/pipelineTitle';
+import { takePendingPipelineMatch } from '@/utils/pipelineTitle';
 
 describe('router guard deep links', () => {
   beforeEach(() => {
@@ -41,14 +41,17 @@ describe('router guard deep links', () => {
 
   // DALF's link names the match. The Keycloak round trip returns with only
   // ?outputVideo=, so the title has to be stashed before login, not after.
-  it('stashes the match title from an ?outputVideo= link, even when signed out', async () => {
+  it('stashes the match title and date from an ?outputVideo= link, even when signed out', async () => {
     signedIn = false;
     await router.push(
       '/?outputVideo=abc123&match=A%20vs%20B&competition=Cup&date=2026-10-14'
     );
     expect(router.currentRoute.value.name).toBe('login');
 
-    expect(takePendingPipelineTitle('abc123')).toBe('A vs B - Cup - 14/10/2026');
+    expect(takePendingPipelineMatch('abc123')).toEqual({
+      title: 'A vs B - Cup - 14/10/2026',
+      matchDate: '2026-10-14',
+    });
   });
 
   it('lets the user go back to the dashboard after a ?share= link', async () => {

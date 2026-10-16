@@ -43,7 +43,7 @@ import type { ComparisonCreatedEvent } from '@/types/component-interfaces';
 import { getMergedRangesForVideos } from '@/services/watchProgressService';
 import { percentFromRanges } from '@/utils/watchedRanges';
 import { getRecentOpens } from '@/services/recentOpensService';
-import { sortByRecentOpens } from '@/utils/projectOrdering';
+import { sortByMatchDate, sortByRecentOpens } from '@/utils/projectOrdering';
 import { applyVideoRename } from '@/utils/projectRename';
 
 const router = useRouter();
@@ -406,11 +406,29 @@ const filteredProjects = computed(() =>
   )
 );
 
-// Recency ordering lives here, not in ProjectService.mapToProjects: that is a
-// private static shared by getUserProjects and getAllProjects with no user
-// context, and it keeps owning created-date order as the stable base.
+// Ordering lives here, not in ProjectService.mapToProjects: that is a private
+// static shared by getUserProjects and getAllProjects with no user context,
+// and it keeps owning created-date order as the stable base. Remembered like
+// the scope beside it.
+type SortMode = 'recent' | 'matchDate';
+const sortMode = ref<SortMode>(
+  localStorage.getItem('dashboardSort') === 'matchDate' ? 'matchDate' : 'recent'
+);
+// Back to page 1: page 2 of one order is an arbitrary slice of the other. The
+// details panel stays open - unlike a filter, a sort removes nothing.
+watch(sortMode, (mode) => {
+  localStorage.setItem('dashboardSort', mode);
+  currentPage.value = 1;
+});
+const SORT_OPTIONS: ReadonlyArray<{ mode: SortMode; label: string }> = [
+  { mode: 'recent', label: 'Last opened' },
+  { mode: 'matchDate', label: 'Match date' },
+];
+
 const orderedProjects = computed(() =>
-  sortByRecentOpens(filteredProjects.value, recentOpens.value)
+  sortMode.value === 'matchDate'
+    ? sortByMatchDate(filteredProjects.value, recentOpens.value)
+    : sortByRecentOpens(filteredProjects.value, recentOpens.value)
 );
 
 const totalPages = computed(() =>
@@ -706,6 +724,32 @@ watch(user, (u) => {
               placeholder="Search videos or owners…"
               class="min-w-[12rem] flex-1 rounded border border-gray-200 bg-transparent px-2.5 py-1.5 text-[12px] leading-snug text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-400 dark:border-white/10 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-white/25"
             >
+
+            <!-- Sort. The same pills as the scope, but on the far side of the
+                 search with the filter: side by side, two pill groups read as
+                 one control with two selections. -->
+            <div
+              class="flex shrink-0 items-center gap-1"
+              role="group"
+              aria-label="Sort"
+            >
+              <button
+                v-for="option in SORT_OPTIONS"
+                :key="option.mode"
+                type="button"
+                :data-testid="`sort-${option.mode}`"
+                :aria-pressed="sortMode === option.mode"
+                class="rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] transition-colors"
+                :class="
+                  sortMode === option.mode
+                    ? 'bg-gray-900 text-white dark:bg-gray-700 dark:text-white'
+                    : 'text-gray-500 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-300'
+                "
+                @click="sortMode = option.mode"
+              >
+                {{ option.label }}
+              </button>
+            </div>
 
             <!-- Label filter -->
             <div class="relative">

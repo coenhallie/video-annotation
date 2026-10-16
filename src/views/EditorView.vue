@@ -33,7 +33,7 @@ import type { DrawingCanvasExpose } from '@/types/component-interfaces';
 import { resolveAnnotationDeepLink } from '@/utils/annotationDeepLink';
 import { canCreateAnnotations } from '@/utils/annotationPermissions';
 import { isPipelineSurfaceVisible } from '@/utils/pipelineSurface';
-import { takePendingPipelineTitle } from '@/utils/pipelineTitle';
+import { takePendingPipelineMatch } from '@/utils/pipelineTitle';
 import { planHistorySelection } from '@/utils/historySelection';
 import {
   timelineNumbersFor,
@@ -1807,12 +1807,13 @@ const loadOutputVideo = async (outputVideoId: string) => {
   }
 
   try {
-    // Stashed by the router from DALF's link; null when the link named no match.
-    const matchTitle = takePendingPipelineTitle(outputVideoId);
+    // Stashed by the router from DALF's link; null when the link said nothing
+    // about the match.
+    const match = takePendingPipelineMatch(outputVideoId);
     const video = await VideoService.findOrCreateOutputVideo(
       outputVideoId,
       user.value.id,
-      matchTitle
+      match
     );
 
     isAwsVideo.value = true;

@@ -29,3 +29,34 @@ export function sortByRecentOpens(
     return new Date(bOpened).getTime() - new Date(aOpened).getTime();
   });
 }
+
+/** A single project's match date (`YYYY-MM-DD`), or null. Comparisons have none. */
+function matchDateOf(project: Project): string | null {
+  return project.projectType === 'single' ? (project.video.matchDate ?? null) : null;
+}
+
+/**
+ * Order by match date, latest match first. Projects without one - most of the
+ * library, and every comparison - follow in sortByRecentOpens order, as does a
+ * tie between two videos of the same date.
+ *
+ * Match dates are plain `YYYY-MM-DD` strings, so comparing them as strings is
+ * comparing them as dates: no time, no offset.
+ */
+export function sortByMatchDate(
+  projects: Project[],
+  openedAt: Record<string, string>
+): Project[] {
+  const byRecent = sortByRecentOpens(projects, openedAt);
+  const rank = new Map(byRecent.map((p, i) => [p.id, i]));
+  return byRecent.sort((a, b) => {
+    const aDate = matchDateOf(a);
+    const bDate = matchDateOf(b);
+    if (aDate !== bDate) {
+      if (!aDate) return 1;
+      if (!bDate) return -1;
+      return aDate < bDate ? 1 : -1;
+    }
+    return rank.get(a.id)! - rank.get(b.id)!;
+  });
+}

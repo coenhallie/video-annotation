@@ -117,6 +117,13 @@ useEscapeToClose(() => props.isVisible, closeModal);
 // Add new entries to the TOP of this array
 const changelogEntries = ref([
   {
+    version: 'Beta v3.16',
+    date: 'October 16, 2026',
+    changes: [
+      'Sort the dashboard by match date as well as by last opened. Videos opened from DALF carry their match date; the rest follow, in last-opened order. The choice is remembered',
+    ],
+  },
+  {
     version: 'Beta v3.15',
     date: 'October 16, 2026',
     changes: [

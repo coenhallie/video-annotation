@@ -2,9 +2,10 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   defaultPipelineTitle,
+  pipelineMatchDate,
   pipelineMatchTitle,
-  stashPendingPipelineTitle,
-  takePendingPipelineTitle,
+  stashPendingPipelineMatch,
+  takePendingPipelineMatch,
 } from '@/utils/pipelineTitle';
 
 describe('defaultPipelineTitle', () => {
@@ -76,23 +77,54 @@ describe('pipelineMatchTitle', () => {
   });
 });
 
-describe('pending pipeline title', () => {
-  beforeEach(() => sessionStorage.clear());
-
-  it('hands back the stashed title once, for the same id', () => {
-    stashPendingPipelineTitle('abc', 'A vs B');
-    expect(takePendingPipelineTitle('abc')).toBe('A vs B');
-    expect(takePendingPipelineTitle('abc')).toBeNull();
+describe('pipelineMatchDate', () => {
+  it('is the calendar day of the link date', () => {
+    expect(pipelineMatchDate('2026-10-14')).toBe('2026-10-14');
   });
 
-  // A title stashed for one pipeline must never name another.
-  it('ignores a title stashed for a different id', () => {
-    stashPendingPipelineTitle('abc', 'A vs B');
-    expect(takePendingPipelineTitle('xyz')).toBeNull();
+  // Read off the string, like the title: through Date the day could shift.
+  it('ignores any time part', () => {
+    expect(pipelineMatchDate('2026-10-14T23:30:00-05:00')).toBe('2026-10-14');
+  });
+
+  it('is null for a missing or impossible date', () => {
+    expect(pipelineMatchDate(null)).toBeNull();
+    expect(pipelineMatchDate('tomorrow')).toBeNull();
+    expect(pipelineMatchDate('2026-13-40')).toBeNull();
+  });
+});
+
+describe('pending pipeline match', () => {
+  beforeEach(() => sessionStorage.clear());
+
+  it('hands back the stashed title and date once, for the same id', () => {
+    stashPendingPipelineMatch('abc', { title: 'A vs B', matchDate: '2026-10-14' });
+    expect(takePendingPipelineMatch('abc')).toEqual({ title: 'A vs B', matchDate: '2026-10-14' });
+    expect(takePendingPipelineMatch('abc')).toBeNull();
+  });
+
+  // A link can date a match without naming it.
+  it('keeps a date without a title', () => {
+    stashPendingPipelineMatch('abc', { title: null, matchDate: '2026-10-14' });
+    expect(takePendingPipelineMatch('abc')).toEqual({ title: null, matchDate: '2026-10-14' });
+  });
+
+  // A stash for one pipeline must never name or date another.
+  it('ignores a stash for a different id', () => {
+    stashPendingPipelineMatch('abc', { title: 'A vs B', matchDate: null });
+    expect(takePendingPipelineMatch('xyz')).toBeNull();
   });
 
   it('returns null for an unreadable stash', () => {
-    sessionStorage.setItem('pendingOutputVideoTitle', '{not json');
-    expect(takePendingPipelineTitle('abc')).toBeNull();
+    sessionStorage.setItem('pendingOutputVideoMatch', '{not json');
+    expect(takePendingPipelineMatch('abc')).toBeNull();
+  });
+
+  it('drops fields of the wrong type', () => {
+    sessionStorage.setItem(
+      'pendingOutputVideoMatch',
+      JSON.stringify({ id: 'abc', title: 7, matchDate: 'yesterday' })
+    );
+    expect(takePendingPipelineMatch('abc')).toEqual({ title: null, matchDate: null });
   });
 });

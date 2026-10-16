@@ -1,6 +1,10 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { supabase } from '@/composables/useSupabase';
-import { pipelineMatchTitle, stashPendingPipelineTitle } from '@/utils/pipelineTitle';
+import {
+  pipelineMatchDate,
+  pipelineMatchTitle,
+  stashPendingPipelineMatch,
+} from '@/utils/pipelineTitle';
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -66,13 +70,17 @@ router.beforeEach(async (to, from, next) => {
   const outputVideo = firstQueryValue(to.query.outputVideo);
   if (outputVideo) {
     sessionStorage.setItem('pendingOutputVideo', outputVideo);
-    // DALF's link also names the match; see utils/pipelineTitle.ts.
-    const matchTitle = pipelineMatchTitle({
-      match: firstQueryValue(to.query.match),
-      competition: firstQueryValue(to.query.competition),
-      date: firstQueryValue(to.query.date),
-    });
-    if (matchTitle) stashPendingPipelineTitle(outputVideo, matchTitle);
+    // DALF's link also names and dates the match; see utils/pipelineTitle.ts.
+    const date = firstQueryValue(to.query.date);
+    const match = {
+      title: pipelineMatchTitle({
+        match: firstQueryValue(to.query.match),
+        competition: firstQueryValue(to.query.competition),
+        date,
+      }),
+      matchDate: pipelineMatchDate(date),
+    };
+    if (match.title || match.matchDate) stashPendingPipelineMatch(outputVideo, match);
   }
 
   // Where a signed-out visitor was heading when they were sent to login. The

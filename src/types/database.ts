@@ -73,6 +73,12 @@ export interface DatabaseVideo {
   qaStatus: QaStatus;
   qaStatusUpdatedAt?: string | null;
   qaStatusUpdatedBy?: string | null;
+  /**
+   * The day the match was played, `YYYY-MM-DD`. Set from DALF's "Open in
+   * Perspecto" link (see utils/pipelineTitle.ts); null for anything DALF has
+   * not dated, which is most of the library.
+   */
+  matchDate?: string | null;
 }
 
 /**
@@ -329,6 +335,12 @@ export interface Video {
   qaStatus: QaStatus;
   qaStatusUpdatedAt?: string | null;
   qaStatusUpdatedBy?: string | null;
+  /**
+   * The day the match was played, `YYYY-MM-DD`. Set from DALF's "Open in
+   * Perspecto" link (see utils/pipelineTitle.ts); null for anything DALF has
+   * not dated, which is most of the library.
+   */
+  matchDate?: string | null;
 }
 
 // Application interface for comparison videos
