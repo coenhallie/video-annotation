@@ -253,6 +253,7 @@ const canAnnotate = computed(() => {
   if (playerMode.value === 'dual' && comparison) {
     return canCreateAnnotations(
       {
+        isComparison: true,
         // comparison_videos names its owner column `userId`, not `ownerId`.
         ownerId: (comparison as Partial<ComparisonVideo>).userId,
         isPublic: (comparison as Partial<ComparisonVideo>).isPublic,

@@ -13,7 +13,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "12.2.3 (519615d)"
+    PostgrestVersion: "12.2.3"
   }
   public: {
     Tables: {
@@ -863,6 +863,8 @@ export type Database = {
         Args: { p_thumbnail_url: string; p_video_id: string }
         Returns: undefined
       }
+      video_delete_impact: { Args: { p_video_id: string }; Returns: Json }
+      video_file_is_referenced: { Args: { p_name: string }; Returns: boolean }
     }
     Enums: {
       action_type: "created" | "updated" | "deleted" | "shared"

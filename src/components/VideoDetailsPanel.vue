@@ -248,6 +248,17 @@
       >
         Share
       </button>
+      <!-- Single videos only: a comparison goes when one of its videos does.
+           Quiet until hovered, in the red the confirmation dialog uses. -->
+      <button
+        v-if="project.projectType === 'single'"
+        type="button"
+        data-testid="video-delete"
+        class="rounded px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 transition-colors hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400"
+        @click="emit('delete', project)"
+      >
+        Delete
+      </button>
     </div>
   </div>
 </template>
@@ -283,6 +294,7 @@ const emit = defineEmits<{
   'annotation-click': [project: Project, annotation: PanelAnnotation];
   'qa-status-updated': [project: Project, updated: Video];
   rename: [project: Project];
+  delete: [project: Project];
 }>();
 
 // fetchOwners guarantees an entry for every requested id, filling unresolved

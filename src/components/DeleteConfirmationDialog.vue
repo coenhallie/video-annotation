@@ -29,6 +29,19 @@
           <!-- The extra loss is the one thing here that must not be skimmed,
                so it keeps a colour - the same red the action button uses. -->
           <p
+            v-if="itemType === 'video' && impactLoading"
+            class="mt-3 text-[12px] leading-relaxed text-gray-500 dark:text-gray-400"
+          >
+            Counting what goes with it…
+          </p>
+          <p
+            v-if="itemType === 'video' && impact && impact.comparisons > 0"
+            class="mt-3 text-[12px] leading-relaxed text-red-600 dark:text-red-400"
+          >
+            It is used in {{ plural(impact.comparisons, 'comparison') }}. They will be
+            deleted too, with their annotations.
+          </p>
+          <p
             v-if="itemType === 'folder' && itemCount > 0"
             class="mt-3 text-[12px] leading-relaxed text-red-600 dark:text-red-400"
           >
@@ -49,7 +62,7 @@
           </button>
           <button
             type="button"
-            :disabled="busy === true"
+            :disabled="busy === true || impactLoading === true"
             class="rounded bg-red-600 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-40"
             @click="$emit('confirm')"
           >
@@ -65,16 +78,25 @@
 import { onMounted, onUnmounted, ref } from 'vue';
 import { useEscapeToClose } from '../composables/useEscapeToClose';
 import { useFocusTrap } from '../composables/useFocusTrap';
+import type { VideoDeleteImpact } from '../services/videoService';
 
 // Props
 const props = defineProps<{
-  itemType: 'project' | 'folder' | 'projects' | 'annotation';
+  itemType: 'project' | 'folder' | 'projects' | 'annotation' | 'video';
   itemName: string;
   itemCount: number;
   // True while the parent's delete request runs; a second confirm would fire
   // the delete again and fail on the row the first one removed.
   busy?: boolean;
+  // Video only: what goes with the video. Null once loading has finished means
+  // the counts could not be read, and the message falls back to a general one.
+  impact?: VideoDeleteImpact | null;
+  // Video only: confirm stays disabled meanwhile, so nobody deletes before
+  // seeing the counts the dialog exists to show.
+  impactLoading?: boolean;
 }>();
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 // Emits
 const emit = defineEmits<{
@@ -112,6 +134,8 @@ const getTitle = () => {
       return 'Delete Projects';
     case 'annotation':
       return 'Delete Annotation';
+    case 'video':
+      return 'Delete Video';
     default:
       return 'Confirm Delete';
   }
@@ -127,6 +151,13 @@ const getMessage = () => {
       return `Are you sure you want to delete ${props.itemCount} selected projects? This action cannot be undone and will permanently remove all selected projects and their annotations.`;
     case 'annotation':
       return `Are you sure you want to delete "${props.itemName}"? This action cannot be undone and will permanently remove the annotation with its drawing and comments.`;
+    case 'video': {
+      const lead = `Are you sure you want to delete "${props.itemName}"? This action cannot be undone and removes the video for everyone`;
+      if (props.impact) {
+        return `${lead}, with its ${plural(props.impact.annotations, 'annotation')} and ${plural(props.impact.comments, 'comment')}.`;
+      }
+      return `${lead}, with all its annotations and comments.`;
+    }
     default:
       return 'Are you sure you want to delete this item? This action cannot be undone.';
   }

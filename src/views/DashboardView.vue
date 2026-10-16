@@ -5,7 +5,7 @@ import { useRouter } from 'vue-router';
 import { useAuth } from '@/composables/useAuth';
 import { useNotifications } from '@/composables/useNotifications';
 import { ProjectService } from '@/services/projectService';
-import { VideoService } from '@/services/videoService';
+import { VideoService, type VideoDeleteImpact } from '@/services/videoService';
 import { LabelService } from '@/services/labelService';
 import type { Project } from '@/types/project';
 import type { Label } from '@/types/labels';
@@ -495,6 +495,57 @@ async function onRenameFolder(node: FolderTreeNode, newName: string) {
     notifyError('Could not rename folder', folderErrorMessage(err));
   }
 }
+// Deleting a video. The dialog opens at once and fills in its counts when
+// they arrive; confirm stays disabled meanwhile. A delete also removes every
+// comparison that used the video, so the library reloads rather than dropping
+// the one row.
+const pendingDeleteVideo = ref<Project | null>(null);
+const deleteImpact = ref<VideoDeleteImpact | null>(null);
+const deleteImpactLoading = ref(false);
+const videoDeleteBusy = ref(false);
+// Monotonic, so counts for a video whose dialog was closed or replaced in the
+// meantime never land on the one now open.
+let deleteImpactReq = 0;
+
+async function requestDeleteVideo(project: Project) {
+  if (project.projectType !== 'single') return;
+  const req = ++deleteImpactReq;
+  pendingDeleteVideo.value = project;
+  deleteImpact.value = null;
+  deleteImpactLoading.value = true;
+  try {
+    const impact = await VideoService.getDeleteImpact(project.video.id);
+    if (req === deleteImpactReq) deleteImpact.value = impact;
+  } catch {
+    // The counts are a courtesy. Without them the dialog falls back to a
+    // general warning rather than making the video impossible to delete.
+  } finally {
+    if (req === deleteImpactReq) deleteImpactLoading.value = false;
+  }
+}
+
+function cancelDeleteVideo() {
+  deleteImpactReq++;
+  pendingDeleteVideo.value = null;
+  deleteImpactLoading.value = false;
+}
+
+async function confirmDeleteVideo() {
+  const project = pendingDeleteVideo.value;
+  if (!project || project.projectType !== 'single' || videoDeleteBusy.value) return;
+  videoDeleteBusy.value = true;
+  try {
+    await VideoService.deleteVideo(project.video.id);
+    pendingDeleteVideo.value = null;
+    // The panel closes by itself: selectedProject is derived from the list.
+    await loadData();
+  } catch (err) {
+    notifyError('Could not delete video', errorMessage(err));
+  } finally {
+    videoDeleteBusy.value = false;
+  }
+}
+
 function requestDeleteFolder(node: FolderTreeNode) {
   pendingDeleteFolder.value = node;
 }
@@ -914,6 +965,7 @@ watch(user, (u) => {
             @annotation-click="openAnnotation"
             @qa-status-updated="onProjectQaStatusUpdated"
             @rename="openRename"
+            @delete="requestDeleteVideo"
           />
         </aside>
       </div>
@@ -948,6 +1000,17 @@ watch(user, (u) => {
       @confirm="confirmDeleteFolder"
       @cancel="pendingDeleteFolder = null"
     />
+    <DeleteConfirmationDialog
+      v-if="pendingDeleteVideo"
+      item-type="video"
+      :item-name="pendingDeleteVideo.title"
+      :item-count="0"
+      :busy="videoDeleteBusy"
+      :impact="deleteImpact"
+      :impact-loading="deleteImpactLoading"
+      @confirm="confirmDeleteVideo"
+      @cancel="cancelDeleteVideo"
+    />
     <Teleport to="body">
       <Transition name="modal">
         <div
@@ -972,6 +1035,7 @@ watch(user, (u) => {
               @annotation-click="openAnnotation"
               @qa-status-updated="onProjectQaStatusUpdated"
               @rename="openRename"
+              @delete="requestDeleteVideo"
             />
           </div>
         </div>

@@ -4,71 +4,68 @@ import { canCreateAnnotations } from '../annotationPermissions';
 const me = 'user-me';
 const someoneElse = 'user-other';
 
-describe('canCreateAnnotations', () => {
+describe('canCreateAnnotations, single videos', () => {
   it('lets the owner annotate their own video', () => {
-    expect(canCreateAnnotations({ ownerId: me, isPublic: false }, me)).toBe(
-      true
-    );
+    expect(canCreateAnnotations({ ownerId: me, isPublic: false }, me)).toBe(true);
   });
 
-  it('lets a non-owner annotate any video they can see', () => {
-    // The case that used to 403: the dashboard lists other people's shared
-    // videos, and annotating them is now open.
+  // Since 20261016_team_library_and_video_delete.sql the whole library is
+  // shared with the team: a teammate's private upload is visible to and
+  // annotatable by every signed-in account. The rule used to stop at
+  // isPublic || owner || pipeline output, which would now show "View only" on
+  // videos the database accepts annotations for.
+  it("lets a signed-in teammate annotate someone else's private video", () => {
+    expect(canCreateAnnotations({ ownerId: someoneElse, isPublic: false }, me)).toBe(true);
+  });
+
+  it('lets a signed-in teammate annotate a pipeline output', () => {
     expect(
-      canCreateAnnotations({ ownerId: someoneElse, isPublic: true }, me)
+      canCreateAnnotations(
+        { ownerId: someoneElse, isPublic: false, videoId: 'aws:1b30b3cc' },
+        me
+      )
     ).toBe(true);
   });
 
-  it('refuses a private video belonging to someone else', () => {
-    expect(
-      canCreateAnnotations({ ownerId: someoneElse, isPublic: false }, me)
-    ).toBe(false);
-  });
-
-  it('refuses anonymous visitors on a public video', () => {
+  it('refuses anonymous visitors, even on a public video', () => {
     // Every insert policy requires auth.uid(), so signing in is not optional.
-    expect(
-      canCreateAnnotations({ ownerId: someoneElse, isPublic: true }, null)
-    ).toBe(false);
+    expect(canCreateAnnotations({ ownerId: someoneElse, isPublic: true }, null)).toBe(false);
   });
 
   it('refuses while the target has not loaded yet', () => {
     expect(canCreateAnnotations(null, me)).toBe(false);
     expect(canCreateAnnotations(undefined, me)).toBe(false);
   });
+});
 
-  it('treats a missing isPublic flag as not public', () => {
-    expect(canCreateAnnotations({ ownerId: someoneElse }, me)).toBe(false);
-  });
-
-  // Since 20260903_rename_video.sql every signed-in account can see and
-  // annotate pipeline outputs, public or not. The rule here used to stop at
-  // isPublic || owner, so a teammate opening one saw "View only" while the
-  // database would have taken their annotation.
-  it('lets a signed-in non-owner annotate a private pipeline output', () => {
+// Comparisons were not widened: comparison_videos stays visible to its
+// creator, or to everyone when shared by link.
+describe('canCreateAnnotations, comparisons', () => {
+  it('lets the creator annotate their comparison', () => {
     expect(
-      canCreateAnnotations(
-        { ownerId: someoneElse, isPublic: false, videoId: 'aws:1b30b3cc' },
-        me
-      )
+      canCreateAnnotations({ isComparison: true, ownerId: me, isPublic: false }, me)
     ).toBe(true);
   });
 
-  it('still refuses anonymous visitors on a pipeline output', () => {
+  it('lets a signed-in teammate annotate a comparison shared by link', () => {
     expect(
-      canCreateAnnotations(
-        { ownerId: someoneElse, isPublic: false, videoId: 'aws:1b30b3cc' },
-        null
-      )
+      canCreateAnnotations({ isComparison: true, ownerId: someoneElse, isPublic: true }, me)
+    ).toBe(true);
+  });
+
+  it("refuses someone else's private comparison", () => {
+    expect(
+      canCreateAnnotations({ isComparison: true, ownerId: someoneElse, isPublic: false }, me)
     ).toBe(false);
   });
 
-  it('does not mistake an ordinary upload id for a pipeline output', () => {
+  it('treats a missing isPublic flag as not shared', () => {
+    expect(canCreateAnnotations({ isComparison: true, ownerId: someoneElse }, me)).toBe(false);
+  });
+
+  it('refuses anonymous visitors', () => {
     expect(
-      canCreateAnnotations(
-        { ownerId: someoneElse, isPublic: false, videoId: 'upload_1770221101010' },
-        me
-      )
+      canCreateAnnotations({ isComparison: true, ownerId: someoneElse, isPublic: true }, null)
     ).toBe(false);
   });
 });

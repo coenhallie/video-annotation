@@ -20,6 +20,13 @@ import { defaultPipelineTitle } from '../utils/pipelineTitle';
  */
 const THUMBNAIL_TIMEOUT_MS = 15_000;
 
+/** Counts of what a video delete removes along with the video. */
+export interface VideoDeleteImpact {
+  annotations: number;
+  comments: number;
+  comparisons: number;
+}
+
 export class VideoService {
   static async findExistingUploadedVideo(url: string, ownerId: string) {
     const { data, error } = await supabase
@@ -384,12 +391,47 @@ export class VideoService {
     // row that was never deleted would leave a video that cannot play.
     assertRowsAffected(deleted, 'This video', 'delete it');
 
-    // Legacy uploaded videos also own a storage object. Manual upload is gone, but
-    // existing objects still need removing when their row is deleted. Best effort:
-    // the row is already gone, so a storage failure must not fail the delete.
+    // Uploaded videos also own a storage object, removed once the row is gone:
+    // the storage DELETE policy only admits a file no video row references any
+    // more. Best effort: the row is already gone, so a storage failure must not
+    // fail the delete, but a file left behind is reported rather than ignored.
     if (video && video.videoType === 'upload' && video.filePath) {
-      await supabase.storage.from('videos').remove([video.filePath]);
+      const { data: removedFiles, error: storageError } = await supabase.storage
+        .from('videos')
+        .remove([video.filePath]);
+      // A removal RLS declines is not an error: it comes back as an empty list.
+      const removedIt =
+        !storageError && (removedFiles ?? []).some((f) => f.name === video.filePath);
+      if (!removedIt) {
+        handleServiceError(
+          'VideoService.deleteVideo (stored file not removed)',
+          storageError ?? new Error(`Storage declined to remove ${video.filePath}`)
+        );
+      }
     }
+  }
+
+  /**
+   * What deleting this video takes with it, for the confirmation dialog.
+   *
+   * A function rather than client-side counts: comparisons are visible only to
+   * their creator, so a teammate counting them through RLS would be told fewer
+   * comparisons go than actually do.
+   */
+  static async getDeleteImpact(videoId: string): Promise<VideoDeleteImpact> {
+    const { data, error } = await supabase.rpc('video_delete_impact', {
+      p_video_id: videoId,
+    });
+    if (error) {
+      handleServiceError('VideoService.getDeleteImpact', error);
+      throw new Error(error.message);
+    }
+    const impact = (data ?? {}) as Partial<VideoDeleteImpact>;
+    return {
+      annotations: Number(impact.annotations ?? 0),
+      comments: Number(impact.comments ?? 0),
+      comparisons: Number(impact.comparisons ?? 0),
+    };
   }
 
   // Enhanced methods for unified video entity management
