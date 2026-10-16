@@ -117,6 +117,13 @@ useEscapeToClose(() => props.isVisible, closeModal);
 // Add new entries to the TOP of this array
 const changelogEntries = ref([
   {
+    version: 'Beta v3.17',
+    date: 'October 17, 2026',
+    changes: [
+      'Videos opened from DALF show their DALF game ID on the dashboard, after the comment count, so a video can be matched back to its game',
+    ],
+  },
+  {
     version: 'Beta v3.16',
     date: 'October 16, 2026',
     changes: [

@@ -658,6 +658,7 @@ export type Database = {
           filePath: string | null
           fileSize: number | null
           fps: number
+          gameId: string | null
           id: string
           isPublic: boolean
           matchDate: string | null
@@ -682,6 +683,7 @@ export type Database = {
           filePath?: string | null
           fileSize?: number | null
           fps?: number
+          gameId?: string | null
           id?: string
           isPublic?: boolean
           matchDate?: string | null
@@ -706,6 +708,7 @@ export type Database = {
           filePath?: string | null
           fileSize?: number | null
           fps?: number
+          gameId?: string | null
           id?: string
           isPublic?: boolean
           matchDate?: string | null
@@ -770,6 +773,7 @@ export type Database = {
           filePath: string | null
           fileSize: number | null
           fps: number
+          gameId: string | null
           id: string
           isPublic: boolean
           matchDate: string | null
@@ -795,6 +799,40 @@ export type Database = {
         }
       }
       set_session_context: { Args: { session_id: string }; Returns: undefined }
+      set_video_game_id: {
+        Args: { p_game_id: string; p_video_id: string }
+        Returns: {
+          allowAnnotations: boolean
+          createdAt: string
+          duration: number
+          filePath: string | null
+          fileSize: number | null
+          fps: number
+          gameId: string | null
+          id: string
+          isPublic: boolean
+          matchDate: string | null
+          metadata: Json | null
+          originalFilename: string | null
+          ownerId: string
+          qaStatus: string
+          qaStatusUpdatedAt: string | null
+          qaStatusUpdatedBy: string | null
+          thumbnailUrl: string | null
+          title: string
+          totalFrames: number
+          updatedAt: string
+          url: string
+          videoId: string
+          videoType: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "videos"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       set_video_match_date: {
         Args: { p_match_date: string; p_video_id: string }
         Returns: {
@@ -804,6 +842,7 @@ export type Database = {
           filePath: string | null
           fileSize: number | null
           fps: number
+          gameId: string | null
           id: string
           isPublic: boolean
           matchDate: string | null
@@ -841,6 +880,7 @@ export type Database = {
           filePath: string | null
           fileSize: number | null
           fps: number
+          gameId: string | null
           id: string
           isPublic: boolean
           matchDate: string | null

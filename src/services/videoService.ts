@@ -431,6 +431,26 @@ export class VideoService {
     return row as Video;
   }
 
+  /** Sets DALF's game id on any video. */
+  static async setGameId(videoId: string, gameId: string): Promise<Video> {
+    const { data, error } = await supabase.rpc('set_video_game_id', {
+      p_video_id: videoId,
+      p_game_id: gameId,
+    });
+    if (error) {
+      handleServiceError('VideoService.setGameId', error);
+      throw new Error(error.message);
+    }
+    // Same set-or-object handling as renameVideo.
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) {
+      const missing = new Error('set_video_game_id returned no row');
+      handleServiceError('VideoService.setGameId', missing);
+      throw missing;
+    }
+    return row as Video;
+  }
+
   /**
    * What deleting this video takes with it, for the confirmation dialog.
    *
@@ -678,10 +698,10 @@ export class VideoService {
    * Returns the video record with a fresh presigned URL.
    *
    * `match` is what DALF's link says about the match (see
-   * utils/pipelineTitle.ts). A new row is created with its title and date. An
-   * existing row takes the title only while its own is still the untouched
-   * default, and takes the date whenever it differs: DALF is where match dates
-   * come from, and nobody edits them here.
+   * utils/pipelineTitle.ts). A new row is created with its title, date and
+   * game id. An existing row takes the title only while its own is still the
+   * untouched default, and takes the date and game id whenever they differ:
+   * DALF is where those come from, and nobody edits them here.
    */
   static async findOrCreateOutputVideo(
     outputVideoId: string,
@@ -690,6 +710,7 @@ export class VideoService {
   ): Promise<Video> {
     const matchTitle = match?.title ?? null;
     const matchDate = match?.matchDate ?? null;
+    const gameId = match?.gameId ?? null;
     // The row must exist before the presigned URL is requested. The storage proxy
     // authorizes by asking whether the caller can see this video, and a row that
     // does not exist yet is visible to nobody, so fetching first would 403 the
@@ -711,6 +732,7 @@ export class VideoService {
           url: '',
           title: matchTitle ?? defaultPipelineTitle(outputVideoId),
           ...(matchDate ? { matchDate } : {}),
+          ...(gameId ? { gameId } : {}),
           videoType: 'url',
           videoId: `aws:${outputVideoId}`,
           isPublic: false,
@@ -787,6 +809,14 @@ export class VideoService {
         record = await this.setMatchDate(record.id, matchDate);
       } catch {
         // Keep the previous date; setMatchDate has reported it.
+      }
+    }
+
+    if (!createdHere && gameId && record.gameId !== gameId) {
+      try {
+        record = await this.setGameId(record.id, gameId);
+      } catch {
+        // Keep the previous id; setGameId has reported it.
       }
     }
 

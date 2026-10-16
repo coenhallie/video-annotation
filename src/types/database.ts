@@ -79,6 +79,8 @@ export interface DatabaseVideo {
    * not dated, which is most of the library.
    */
   matchDate?: string | null;
+  /** DALF's id for the game, from the same link. Null when DALF sent none. */
+  gameId?: string | null;
 }
 
 /**
@@ -341,6 +343,8 @@ export interface Video {
    * not dated, which is most of the library.
    */
   matchDate?: string | null;
+  /** DALF's id for the game, from the same link. Null when DALF sent none. */
+  gameId?: string | null;
 }
 
 // Application interface for comparison videos

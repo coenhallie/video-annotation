@@ -16,6 +16,7 @@ let existing: Record<string, unknown> | null = null;
 let inserted: Record<string, unknown> | null = null;
 let renameError: { message: string } | null = null;
 let matchDateError: { message: string } | null = null;
+let gameIdError: { message: string } | null = null;
 const rpcCalls: Array<{ fn: string; args: Record<string, unknown> }> = [];
 
 vi.mock('@/composables/useSupabase', () => ({
@@ -23,6 +24,10 @@ vi.mock('@/composables/useSupabase', () => ({
   supabase: {
     rpc: async (fn: string, args: Record<string, unknown>) => {
       rpcCalls.push({ fn, args });
+      if (fn === 'set_video_game_id') {
+        if (gameIdError) return { data: null, error: gameIdError };
+        return { data: { ...existing, gameId: args.p_game_id }, error: null };
+      }
       if (fn === 'set_video_match_date') {
         if (matchDateError) return { data: null, error: matchDateError };
         return { data: { ...existing, matchDate: args.p_match_date }, error: null };
@@ -63,13 +68,20 @@ vi.mock('@/composables/useSupabase', () => ({
 
 const renames = () => rpcCalls.filter((c) => c.fn === 'rename_video');
 const dateWrites = () => rpcCalls.filter((c) => c.fn === 'set_video_match_date');
+const gameIdWrites = () => rpcCalls.filter((c) => c.fn === 'set_video_game_id');
 
-const open = async (title?: string | null, matchDate: string | null = null) => {
+const open = async (
+  title?: string | null,
+  matchDate: string | null = null,
+  gameId: string | null = null
+) => {
   const { VideoService } = await import('@/services/videoService');
   return VideoService.findOrCreateOutputVideo(
     OUTPUT_ID,
     'me',
-    title === undefined && matchDate === null ? null : { title: title ?? null, matchDate }
+    title === undefined && matchDate === null && gameId === null
+      ? null
+      : { title: title ?? null, matchDate, gameId }
   );
 };
 
@@ -87,6 +99,7 @@ beforeEach(() => {
   inserted = null;
   renameError = null;
   matchDateError = null;
+  gameIdError = null;
   rpcCalls.length = 0;
   getVideoUrlForProject.mockResolvedValue('https://s3/fresh');
 });
@@ -176,5 +189,36 @@ describe('findOrCreateOutputVideo match dates', () => {
     const video = await open(null, '2026-10-14');
     expect(video.url).toBe('https://s3/fresh');
     expect(video.matchDate ?? null).toBeNull();
+  });
+});
+
+describe('findOrCreateOutputVideo game ids', () => {
+  it('stores the game id on a new video', async () => {
+    const video = await open(MATCH_TITLE, null, '48213');
+    expect(inserted?.gameId).toBe('48213');
+    expect(video.gameId).toBe('48213');
+  });
+
+  it('stores an existing video\'s game id through set_video_game_id', async () => {
+    existing = row({ gameId: null });
+    const video = await open(null, null, '48213');
+    expect(gameIdWrites()).toEqual([
+      { fn: 'set_video_game_id', args: { p_video_id: 'v1', p_game_id: '48213' } },
+    ]);
+    expect(video.gameId).toBe('48213');
+  });
+
+  it('does not rewrite a game id that already matches', async () => {
+    existing = row({ gameId: '48213' });
+    await open(null, null, '48213');
+    expect(gameIdWrites()).toHaveLength(0);
+  });
+
+  it('still opens the video when the game id cannot be written', async () => {
+    existing = row({ gameId: null });
+    gameIdError = { message: 'boom' };
+    const video = await open(null, null, '48213');
+    expect(video.url).toBe('https://s3/fresh');
+    expect(video.gameId ?? null).toBeNull();
   });
 });
