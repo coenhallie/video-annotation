@@ -74,12 +74,18 @@ async function mount() {
   const { default: AnnotationPanel } = await import('@/components/AnnotationPanel.vue');
   const root = document.createElement('div');
   document.body.appendChild(root);
+  const filterChanges: Array<string[] | null> = [];
   const app = createApp({
-    render: () => h(AnnotationPanel, { annotations: ANNOTATIONS, canAnnotate: false }),
+    render: () =>
+      h(AnnotationPanel, {
+        annotations: ANNOTATIONS,
+        canAnnotate: false,
+        onFilterChange: (ids: string[] | null) => filterChanges.push(ids),
+      }),
   });
   app.mount(root);
   await flush();
-  return { root, unmount: () => { app.unmount(); root.remove(); } };
+  return { root, filterChanges, unmount: () => { app.unmount(); root.remove(); } };
 }
 
 const groupPill = (root: HTMLElement, name: string) =>
@@ -140,4 +146,25 @@ describe('AnnotationPanel label filter', () => {
     expect(missed().getAttribute('aria-pressed')).toBe('true');
     panel.unmount();
   });
+
+  // The timeline follows the list: the panel reports which annotations the
+  // filter shows, or null when nothing is filtered.
+  it('reports what the filter shows, for the timeline', async () => {
+    const panel = await mount();
+    expect(panel.filterChanges.at(-1)).toBeNull();
+
+    groupPill(panel.root, 'PLR').click();
+    await flush();
+    expect(panel.filterChanges.at(-1)).toEqual(['a1', 'a2']);
+
+    labelPills(panel.root).find((b) => b.textContent?.includes('PLR MISSED'))!.click();
+    await flush();
+    expect(panel.filterChanges.at(-1)).toEqual(['a1']);
+
+    groupPill(panel.root, 'All').click();
+    await flush();
+    expect(panel.filterChanges.at(-1)).toBeNull();
+    panel.unmount();
+  });
 });
+

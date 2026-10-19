@@ -144,6 +144,9 @@ const emit = defineEmits([
   'comment-added',
   'comment-updated',
   'comment-deleted',
+  // The ids the group/label filter shows, or null when nothing is filtered.
+  // EditorView hands these to the timeline so its markers follow the list.
+  'filter-change',
 ]);
 
 // Authentication
@@ -188,6 +191,17 @@ const {
   isDualMode: () => props.isDualMode,
   fps: () => props.fps,
 });
+
+watch(
+  [activeCategory, sortedAnnotations],
+  () => {
+    emit(
+      'filter-change',
+      activeCategory.value === null ? null : sortedAnnotations.value.map((a) => String(a.id))
+    );
+  },
+  { immediate: true }
+);
 
 /**
  * Shown in place of the label editor when this viewer cannot annotate, so the
