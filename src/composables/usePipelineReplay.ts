@@ -397,6 +397,19 @@ export function usePipelineReplay(opts: {
     const controller = new AbortController();
     const fg: Foreground = { controller, fillFrom: null, promise: Promise.resolve() };
     fg.promise = (async () => {
+      if (index && !index.acceptsRanges) {
+        // The only read a server without range support can answer is the
+        // whole object. buildIndex has already refused one too large for
+        // that, and once it is cached it holds every frame there is, so no
+        // other window is ever read to evict it.
+        const whole = await readWindow(0, index.size, startEpoch, controller.signal, true);
+        if (!whole || controller.signal.aborted || startEpoch !== epoch) return;
+        onLocated?.(
+          findIn(whole.win, target) ??
+            (target < whole.first.t ? whole.first : whole.last)
+        );
+        return;
+      }
       const found = await locate(target, startEpoch, controller.signal);
       if (!found || controller.signal.aborted || startEpoch !== epoch) return;
       onLocated?.(found.record);

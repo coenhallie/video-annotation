@@ -160,6 +160,33 @@ describe('usePipelineReplay', () => {
     expect(calls.length).toBe(12);
   });
 
+  // A server without range support can only hand over the whole object, so
+  // the replay has to read it once and serve every frame from that. Larger
+  // than one window on purpose: that is where a windowed read would be
+  // narrower than the object and the fetcher would refuse it.
+  it('plays a file served without range support from one whole read', async () => {
+    const text = fakeFile(2000);
+    const fetcher: RangeFetcher = {
+      async head() {
+        return { size: text.length, acceptsRanges: false };
+      },
+      async range(start, end) {
+        if (start !== 0 || end !== text.length - 1) {
+          throw new Error('only a whole-object read is valid');
+        }
+        return text;
+      },
+    };
+    const r = usePipelineReplay({ openFetcher: async () => fetcher });
+    await r.load();
+    expect(r.state.value).toBe('ready');
+    expect(r.currentFrame.value).toBe(457);
+
+    await r.seek(70);
+    expect(r.state.value).toBe('ready');
+    expect(r.currentFrame.value).toBe(frameAt(70));
+  });
+
   it('seeks to the record bracketing the requested time', async () => {
     const { fetcher } = counting(fakeFile(500));
     const r = usePipelineReplay({ openFetcher: async () => fetcher });
@@ -169,10 +196,10 @@ describe('usePipelineReplay', () => {
     expect(r.currentTime.value).toBeCloseTo(4, 2);
   });
 
-  // Also the regression test for the quarter-window backoff in recordAt.
+  // Also the regression test for centring the seek's probe on its estimate.
   // index.last.offset is the file size, so estimateOffset at the very end
-  // returns a byte past the last record; without the backoff the window is
-  // empty and currentFrame never reaches the final frame.
+  // returns a byte past the last record; a read starting there is empty and
+  // currentFrame never reaches the final frame.
   it('clamps a seek past the end and still finds the last record', async () => {
     const { fetcher } = counting(fakeFile(500));
     const r = usePipelineReplay({ openFetcher: async () => fetcher });
@@ -548,7 +575,7 @@ describe('usePipelineReplay', () => {
     const second = r.load();
     await second;
 
-    // The fresh load's own buildIndex/recordAt calls prove the property so
+    // The fresh load's own index and first-frame reads prove the property so
     // far: nothing has reached the stale fetcher yet.
     expect(madeFetchers.length).toBeGreaterThan(0);
     expect(madeFetchers.every((name) => name === 'fresh')).toBe(true);

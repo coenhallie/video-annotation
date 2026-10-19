@@ -7,9 +7,9 @@ export const PROBE_BYTES = 65536;
  * Ceiling on reading a no-ranges object whole.
  *
  * When the server won't serve byte ranges, the fallback below reads the
- * entire object into memory once to build the index - and then `load()`'s
- * first `recordAt` reads it again in full, since the index it builds keeps
- * only the first record's offset. The producer emits files on the order of a
+ * entire object into memory once to build the index - and then the replay
+ * reads it again in full to hold as its one window, since the index it builds
+ * keeps only the first record's offset. The producer emits files on the order of a
  * gigabyte; two full downloads of one of those would stall the tab. A file
  * small enough to read whole twice without anyone noticing is fine. One that
  * is not, is not - so refuse rather than attempt it.
