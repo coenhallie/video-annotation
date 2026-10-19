@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readRecord, parseWindow } from '@/lib/pipelineData/frameWindow';
+import { readRecord, parseWindow, parseWindowAt } from '@/lib/pipelineData/frameWindow';
 
 const DT = 0.04;
 const WINDOW_SIZE = 9; // matches the real pipeline's rolling window
@@ -153,5 +153,27 @@ describe('parseWindow', () => {
 
   it('returns an empty array for a range holding no complete record', () => {
     expect(parseWindow('no newline here at all', MIDDLE)).toEqual([]);
+  });
+});
+
+describe('parseWindowAt', () => {
+  it('reports where each record starts, past a malformed line', () => {
+    const lead = 'ount": 99}]}\n';
+    const a = record(1, 10);
+    const b = record(3, 10.08);
+    const text = lead + a + '\n{ broken\n' + b + '\n{"match_id": 1, "fra';
+    const { records, offsets } = parseWindowAt(text, MIDDLE);
+    expect(records.map((r) => r.frameCount)).toEqual([1, 3]);
+    expect(offsets).toEqual([lead.length, text.indexOf(b)]);
+  });
+
+  it('reports where the record the range cut off starts', () => {
+    const text = 'ount": 99}]}\n' + record(2, 10.04) + '\n{"match_id": 1, "fra';
+    expect(parseWindowAt(text, MIDDLE).next).toBe(text.lastIndexOf('\n') + 1);
+  });
+
+  it('reports the end of the text as next when the range reaches EOF', () => {
+    const text = [record(1, 10), record(2, 10.04)].join('\n') + '\n';
+    expect(parseWindowAt(text, WHOLE).next).toBe(text.length);
   });
 });

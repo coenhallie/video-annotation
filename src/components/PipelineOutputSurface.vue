@@ -353,9 +353,21 @@ onUnmounted(() => {
           data-testid="pipeline-hud"
         >
           <div
-            class="absolute bottom-2 left-2 rounded bg-black/60 px-2.5 py-1 font-mono text-[11px] text-white"
+            class="absolute bottom-2 left-2 flex items-center gap-1.5 rounded bg-black/60 px-2.5 py-1 font-mono text-[11px] text-white"
           >
             F{{ replay.currentFrame.value }}
+            <!--
+              The replay holds its clock while data is on its way, so the
+              playhead stops. This says why, beside the frame it is holding.
+            -->
+            <span
+              v-if="replay.buffering.value"
+              data-testid="pipeline-buffering"
+              role="status"
+              aria-label="Loading pipeline data"
+              title="Loading pipeline data"
+              class="h-2.5 w-2.5 animate-spin rounded-full border border-white/25 border-t-white motion-reduce:animate-none"
+            />
           </div>
 
           <div

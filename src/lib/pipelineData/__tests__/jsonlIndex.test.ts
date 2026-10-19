@@ -116,6 +116,30 @@ describe('buildIndex', () => {
   });
 });
 
+describe('buildIndex request scheduling', () => {
+  // Each probe is a round trip. Made one after another they put ten round
+  // trips in front of the first frame; none of them depends on another.
+  it('sends the head, tail and probe reads concurrently', async () => {
+    const text = fakeFile(5000);
+    let inFlight = 0;
+    let peak = 0;
+    const fetcher: RangeFetcher = {
+      async head() {
+        return { size: text.length, acceptsRanges: true };
+      },
+      async range(start, end) {
+        inFlight += 1;
+        peak = Math.max(peak, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        inFlight -= 1;
+        return text.slice(start, end + 1);
+      },
+    };
+    await buildIndex(fetcher);
+    expect(peak).toBe(10);
+  });
+});
+
 describe('estimateOffset', () => {
   it('returns the first offset for the start of the file', async () => {
     const index = await buildIndex(fetcherFor(fakeFile(500)));

@@ -30,6 +30,7 @@ function fakeReplay(state: ReplayState, message: string | null = null) {
     fps: ref(25),
     isPlaying: ref(false),
     frame: ref(null),
+    buffering: ref(false),
     state: ref(state),
     error: ref(message),
     load: vi.fn(async () => {}),
@@ -145,6 +146,24 @@ describe('PipelineOutputSurface', () => {
     expect(at(m.root, 'pipeline-canvas')).not.toBeNull();
     expect(at(m.root, 'pipeline-empty')).toBeNull();
     m.unmount();
+  });
+
+  // The replay holds its clock while it waits on data, and a playhead that
+  // stops with nothing on screen saying why reads as a freeze.
+  it('marks the frame label while the replay waits on data', async () => {
+    const replay = fakeReplay('ready');
+    const { root, unmount } = mount(replay);
+    await nextTick();
+    expect(at(root, 'pipeline-buffering')).toBeNull();
+
+    (replay.buffering as unknown as { value: boolean }).value = true;
+    await nextTick();
+    expect(at(root, 'pipeline-buffering')?.getAttribute('role')).toBe('status');
+
+    (replay.buffering as unknown as { value: boolean }).value = false;
+    await nextTick();
+    expect(at(root, 'pipeline-buffering')).toBeNull();
+    unmount();
   });
 
   it('calls load on mount', async () => {
