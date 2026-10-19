@@ -117,6 +117,15 @@ useEscapeToClose(() => props.isVisible, closeModal);
 // Add new entries to the TOP of this array
 const changelogEntries = ref([
   {
+    version: 'Beta v3.19',
+    date: 'October 19, 2026',
+    changes: [
+      'Filter the editor\'s annotations by individual labels: the filter icon beside the group pills opens a checklist of the labels in this video. Tick several to see annotations with any of them',
+      'The timeline shows only the annotations the filter keeps, and every marker again under All',
+      'Labels without a group, such as Review Needed, can now be filtered on under OTHER',
+    ],
+  },
+  {
     version: 'Beta v3.18',
     date: 'October 17, 2026',
     changes: [

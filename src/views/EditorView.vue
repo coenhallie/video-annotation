@@ -34,6 +34,7 @@ import { resolveAnnotationDeepLink } from '@/utils/annotationDeepLink';
 import { canCreateAnnotations } from '@/utils/annotationPermissions';
 import { isPipelineSurfaceVisible } from '@/utils/pipelineSurface';
 import { takePendingPipelineMatch } from '@/utils/pipelineTitle';
+import { timelineAnnotations } from '@/utils/timelineAnnotations';
 import { planHistorySelection } from '@/utils/historySelection';
 import {
   timelineNumbersFor,
@@ -487,6 +488,22 @@ const openQuickPick = (event: MouseEvent) => {
 };
 
 const videoTimelineRef = ref<InstanceType<typeof VideoTimeline> | null>(null);
+
+// The timeline follows the annotation list's group/label filter: the panel
+// reports the ids it shows (null when nothing is filtered), and the timelines
+// draw only those markers.
+const annotationFilterIds = ref<string[] | null>(null);
+const onAnnotationFilterChange = (ids: string[] | null) => {
+  annotationFilterIds.value = ids;
+};
+// A different video starts unfiltered; the panel reports again once its list
+// is in.
+watch(currentVideoId, () => {
+  annotationFilterIds.value = null;
+});
+const timelineMarkers = computed(() =>
+  timelineAnnotations(annotations.value ?? [], annotationFilterIds.value)
+);
 const dualTimelineRef = ref<{
   playheadAnchor: () => {
     video: 'A' | 'B';
@@ -2129,7 +2146,7 @@ watch(
             :current-frame="timeline.currentFrame"
             :total-frames="timeline.totalFrames"
             :fps="timeline.fps"
-            :annotations="annotations"
+            :annotations="timelineMarkers"
             :selected-annotation="selectedAnnotation"
             @seek-to-time="onTimelineSeek"
             @annotation-click="onAnnotationClick"
@@ -2168,7 +2185,7 @@ watch(
             :video-b-state="
               dualVideoPlayer?.videoBState || { fps: 30, duration: 0 }
             "
-            :annotations="annotations"
+            :annotations="timelineMarkers"
             :selected-annotation="selectedAnnotation"
             :video-a-playing="dualVideoPlayer?.videoAIsPlaying?.value ?? false"
             :video-b-playing="dualVideoPlayer?.videoBIsPlaying?.value ?? false"
@@ -2271,6 +2288,7 @@ watch(
             @update-annotation="handleUpdateAnnotation"
             @delete-annotation="deleteAnnotation"
             @select-annotation="onAnnotationClick"
+            @filter-change="onAnnotationFilterChange"
             @form-show="handleFormShow"
             @form-hide="handleFormHide"
             @pause="handleTimelinePause"
