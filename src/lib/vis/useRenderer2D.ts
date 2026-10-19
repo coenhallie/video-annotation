@@ -12,6 +12,10 @@
 //    device pixel - and drawing is scaled from frame units into it. The pitch
 //    cache is built at that size through the current view, and rebuilt when
 //    either changes, instead of once at 1280x720 and then magnified.
+//  - players are coloured by role from fixed colours (constants.ts,
+//    PERSON_COLORS): home red, away blue, goalkeepers yellow ringed in their
+//    team's colour, officials magenta. The vendored copy coloured each team
+//    from the kit colours the pipeline detected; that resolver is gone.
 
 // ---------------------------------------------------------------------------
 // 2D canvas rendering composable.
@@ -22,10 +26,9 @@
 //   const { renderFrame, invalidateCache } = useRenderer2D(canvas)
 // ---------------------------------------------------------------------------
 
-import type { Player, Ball, TeamColors, Frame, Transform2D } from './types'
-import { FRAME_W, FRAME_H, PLAYER_RADIUS } from './constants'
+import type { Player, Ball, Frame, Transform2D } from './types'
+import { FRAME_W, FRAME_H, PLAYER_RADIUS, PERSON_COLORS } from './constants'
 import { build2DTransform, worldToPx, buildPitchCache } from './pitchGeometry'
-import { resolveTeamColors } from './useColorResolver'
 import {
   computeViewMatrix,
   IDENTITY_VIEW,
@@ -107,9 +110,8 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     // ── Teams + players ────────────────────────────────────────────────────
     for (const team of frame.teams ?? []) {
       const tid = team.team_id ?? -1
-      const colors = resolveTeamColors(team, tid)
       for (const player of team.players ?? []) {
-        draw2DPlayer(player, colors, tid)
+        draw2DPlayer(player, tid)
       }
     }
 
@@ -139,7 +141,7 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
    * Draw a single player as a filled circle with shadow, outline, optional
    * possession ring, jersey number, and track ID label.
    */
-  function draw2DPlayer(player: Player, colors: TeamColors, teamId: number): void {
+  function draw2DPlayer(player: Player, teamId: number): void {
     const coords = player.projected_coordinates
     const x = coords?.x
     const y = coords?.y
@@ -148,30 +150,21 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
 
     const [px, py] = worldToPx(x, y, transform2d)
     const pt = String(player.person_type ?? '').toUpperCase()
-    const tid = teamId
 
-    // Resolve fill / outline / text colours based on person type
-    let fill: string
-    let outline: string
-    let textColor: string
-    // Dashed means "the frame reported no colour for this team". Only the
-    // team-coloured branch can be undetected: the other two are keyed on
-    // person_type, which the frame does state.
-    let undetected = false
-
+    // Fixed colours by role; see PERSON_COLORS. Team 0 is home, team 1 away.
+    const team =
+      teamId === 0 ? PERSON_COLORS.home : teamId === 1 ? PERSON_COLORS.away : null
+    let colors = team ?? PERSON_COLORS.unknown
+    let outline = colors.outline
+    let outlineWidth = 2
     if (pt.includes('GOALKEEPER')) {
-      fill = '#00af4b'
-      outline = '#000'
-      textColor = '#000'
-    } else if (pt.includes('OFFICIAL') || tid === -1) {
-      fill = '#323232'
-      outline = '#000'
-      textColor = '#f0f0f0'
-    } else {
-      fill = colors.fill
+      colors = PERSON_COLORS.goalkeeper
+      // Ringed in their team's colour, so which team they keep for still shows.
+      outline = team?.fill ?? colors.outline
+      outlineWidth = 3
+    } else if (pt.includes('OFFICIAL') || teamId === -1) {
+      colors = PERSON_COLORS.official
       outline = colors.outline
-      textColor = colors.text
-      undetected = !colors.detected
     }
 
     // Shadow (offset 1px down-right)
@@ -183,13 +176,11 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     // Player circle
     ctx.beginPath()
     ctx.arc(px, py, PLAYER_RADIUS, 0, Math.PI * 2)
-    ctx.fillStyle = fill
+    ctx.fillStyle = colors.fill
     ctx.fill()
     ctx.strokeStyle = outline
-    ctx.lineWidth = 2
-    if (undetected) ctx.setLineDash([3, 3])
+    ctx.lineWidth = outlineWidth
     ctx.stroke()
-    if (undetected) ctx.setLineDash([])
 
     // Possession ring (gold)
     if (player.in_possession) {
@@ -203,7 +194,7 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     // Jersey number (centred inside the circle)
     const num = player.player_number
     if (num != null && Number(num) > 0) {
-      ctx.fillStyle = textColor
+      ctx.fillStyle = colors.text
       ctx.font = 'bold 10px sans-serif'
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'

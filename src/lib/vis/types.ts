@@ -86,24 +86,6 @@ export interface Frame {
   balls?: Ball[]
 }
 
-/** Resolved CSS-friendly colour set for a team. */
-export interface TeamColors {
-  /** CSS colour string for the player fill. */
-  fill: string
-  /** CSS colour string for the player outline / stroke. */
-  outline: string
-  /** CSS colour string for jersey number text. */
-  text: string
-  /** RGB tuple (0-255) of the fill colour. */
-  fillRgb: [number, number, number]
-  /**
-   * True when the frame reported a colour for this team, false when these
-   * values are this code's own neutral stand-in. The renderer draws the two
-   * cases differently so an absent detection cannot read as a detected colour.
-   */
-  detected: boolean
-}
-
 /**
  * 2D canvas coordinate transform.
  * Maps world (pitch) coordinates to pixel positions on a FRAME_W x FRAME_H canvas.
