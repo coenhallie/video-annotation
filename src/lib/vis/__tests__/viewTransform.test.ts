@@ -3,6 +3,7 @@ import {
   computeViewMatrix,
   applyViewMatrix,
   IDENTITY_VIEW,
+  fitFrameBox,
 } from '../viewTransform';
 import { FRAME_W, FRAME_H } from '../constants';
 
@@ -71,5 +72,62 @@ describe('computeViewMatrix', () => {
   it('falls back to fit for a nonsensical zoom', () => {
     expect(computeViewMatrix({ ...fit, zoom: 0 })).toEqual(IDENTITY_VIEW);
     expect(computeViewMatrix({ ...fit, zoom: Number.NaN })).toEqual(IDENTITY_VIEW);
+  });
+});
+
+describe('fitFrameBox', () => {
+  const at = (left: number, top: number, width: number, height: number) => ({
+    left,
+    top,
+    width,
+    height,
+  });
+
+  it('fills the width when the container is taller than 16:9', () => {
+    const box = fitFrameBox(at(0, 0, 1096, 640), 2);
+    expect(box.width).toBe(1096);
+    expect(box.height).toBeCloseTo(616.5, 5);
+  });
+
+  // The case the old CSS clamps got wrong: the canvas shrank to keep its
+  // ratio while a div carrying the same classes stayed 1280 wide.
+  it('keeps 16:9 when the container is wider than it is tall', () => {
+    const box = fitFrameBox(at(0, 0, 1468, 380), 2);
+    // Height-bound, to within the device pixel lost to whole-pixel sizing.
+    expect(box.height).toBeLessThanOrEqual(380);
+    expect(box.height).toBeGreaterThanOrEqual(380 - 0.5);
+    expect(Math.abs(box.width - (box.height * 16) / 9)).toBeLessThanOrEqual(0.5);
+  });
+
+  it('never grows past the frame width', () => {
+    const box = fitFrameBox(at(0, 0, 3000, 2000), 1);
+    expect(box.width).toBe(1280);
+    expect(box.height).toBe(720);
+  });
+
+  it('sizes the bitmap in whole device pixels, at the display ratio', () => {
+    const box = fitFrameBox(at(0, 0, 1096, 640), 2);
+    expect(box.pixelWidth).toBe(2192);
+    expect(box.pixelHeight).toBe(1233);
+    expect(box.width * 2).toBe(box.pixelWidth);
+    expect(box.height * 2).toBe(box.pixelHeight);
+  });
+
+  // A canvas whose edge falls between device pixels is resampled by the
+  // browser, which blurs it no matter how many pixels its bitmap has.
+  it('puts the box on the device pixel grid, wherever the container sits', () => {
+    const container = at(24.3, 107.7, 1096, 640);
+    const box = fitFrameBox(container, 2);
+    for (const edge of [container.left + box.left, container.top + box.top]) {
+      expect(Number.isInteger(Math.round(edge * 2 * 1e6) / 1e6)).toBe(true);
+    }
+    // Still centred, to within one device pixel.
+    expect(Math.abs(box.left - (1096 - box.width) / 2)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(box.top - (640 - box.height) / 2)).toBeLessThanOrEqual(0.5);
+  });
+
+  it('reports an empty box for a container with no size', () => {
+    const box = fitFrameBox(at(0, 0, 0, 0), 2);
+    expect(box.pixelWidth).toBe(0);
   });
 });

@@ -8,6 +8,10 @@
 //  - zoom/pan is applied here via setView() rather than as a CSS transform on
 //    the canvas element. The element has to stay unscaled so a drawing layer
 //    can share its coordinate system; see viewTransform.ts.
+//  - the canvas bitmap is whatever size the surface gives it - one pixel per
+//    device pixel - and drawing is scaled from frame units into it. The pitch
+//    cache is built at that size through the current view, and rebuilt when
+//    either changes, instead of once at 1280x720 and then magnified.
 
 // ---------------------------------------------------------------------------
 // 2D canvas rendering composable.
@@ -19,7 +23,7 @@
 // ---------------------------------------------------------------------------
 
 import type { Player, Ball, TeamColors, Frame, Transform2D } from './types'
-import { FRAME_H, PLAYER_RADIUS } from './constants'
+import { FRAME_W, FRAME_H, PLAYER_RADIUS } from './constants'
 import { build2DTransform, worldToPx, buildPitchCache } from './pitchGeometry'
 import { resolveTeamColors } from './useColorResolver'
 import {
@@ -49,6 +53,9 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
   // invalidateCache().
   let transform2d: Transform2D | null = null
   let pitchCache: OffscreenCanvas | null = null
+  // The bitmap size and matrix the cache was drawn for. A pan, a zoom or a
+  // resize changes it, and only then is the pitch drawn again.
+  let pitchKey = ''
 
   // ── Public API ─────────────────────────────────────────────────────────────
 
@@ -61,19 +68,41 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
 
     const pd = frame.pitch_dimensions
 
-    // Lazily build / cache transform and pitch image
     if (!transform2d) transform2d = build2DTransform(pd)
-    if (!pitchCache) pitchCache = buildPitchCache(pd, transform2d)
+
+    // Everything is drawn in frame units (1280x720). The bitmap is sized to
+    // the display, so scale frame units into it, then apply the view.
+    const sx = canvas.width / FRAME_W
+    const sy = canvas.height / FRAME_H
+    const matrix: [number, number, number, number, number, number] = [
+      sx * view.a,
+      sy * view.b,
+      sx * view.c,
+      sy * view.d,
+      sx * view.e,
+      sy * view.f,
+    ]
+
+    const key = `${canvas.width}x${canvas.height}:${matrix.join(',')}`
+    if (!pitchCache || key !== pitchKey) {
+      pitchCache = buildPitchCache(pd, transform2d, {
+        width: canvas.width,
+        height: canvas.height,
+        matrix,
+      })
+      pitchKey = key
+    }
 
     // Cleared to transparent, not filled: panning used to slide the canvas
     // element and reveal the stage behind it, and letting the stage show
     // through here keeps that looking the same.
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.clearRect(0, 0, canvas.width, canvas.height)
-    ctx.setTransform(view.a, view.b, view.c, view.d, view.e, view.f)
 
-    // Blit the pre-rendered pitch
+    // The pitch is already drawn through the view, pixel for pixel.
     ctx.drawImage(pitchCache, 0, 0)
+
+    ctx.setTransform(...matrix)
 
     // ── Teams + players ────────────────────────────────────────────────────
     for (const team of frame.teams ?? []) {

@@ -116,3 +116,56 @@ describe('view transform', () => {
     expect(viewOps(ops)[1]).toEqual([2, 0, 0, 2, -640, -360]);
   });
 });
+
+describe('resolution', () => {
+  const viewOps = (ops: Op[]) =>
+    ops.filter((o) => o.op === 'setTransform').map((o) => o.args);
+
+  /** A canvas with a bitmap twice the frame size, as on a 2x display. */
+  function hiDpi() {
+    const fake = fakeCanvas();
+    Object.assign(fake.canvas, { width: 2560, height: 1440 });
+    return fake;
+  }
+
+  const ZOOM_2 = { zoom: 2, panX: 0, panY: 0, renderedWidth: 1280 };
+
+  it("draws through the canvas's own resolution", () => {
+    const { canvas, ops } = hiDpi();
+    const renderer = useRenderer2D(canvas);
+    renderer.setView(ZOOM_2);
+    renderer.renderFrame(frameWith({}));
+
+    // The view matrix, scaled from frame units into the 2x bitmap.
+    expect(viewOps(ops)[1]).toEqual([4, 0, 0, 4, -1280, -720]);
+  });
+
+  // A pitch drawn once at frame size and then magnified is what made the lines
+  // blur under zoom. It is drawn at the bitmap's size, through the view.
+  it('builds the pitch at the canvas resolution, through the view', () => {
+    const { canvas } = hiDpi();
+    const renderer = useRenderer2D(canvas);
+    renderer.setView(ZOOM_2);
+    renderer.renderFrame(frameWith({}));
+
+    expect(offscreen.sizes).toEqual([[2560, 1440]]);
+    expect(viewOps(offscreen.ops)).toContainEqual([4, 0, 0, 4, -1280, -720]);
+  });
+
+  it('rebuilds the pitch only when the view or the resolution changes', () => {
+    const { canvas } = hiDpi();
+    const renderer = useRenderer2D(canvas);
+    renderer.renderFrame(frameWith({}));
+    renderer.renderFrame(frameWith({}));
+    expect(offscreen.sizes.length).toBe(1);
+
+    renderer.setView(ZOOM_2);
+    renderer.renderFrame(frameWith({}));
+    renderer.renderFrame(frameWith({}));
+    expect(offscreen.sizes.length).toBe(2);
+
+    Object.assign(canvas, { width: 1280, height: 720 });
+    renderer.renderFrame(frameWith({}));
+    expect(offscreen.sizes.at(-1)).toEqual([1280, 720]);
+  });
+});

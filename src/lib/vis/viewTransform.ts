@@ -76,3 +76,64 @@ export function applyViewMatrix(
 ): { x: number; y: number } {
   return { x: m.a * x + m.c * y + m.e, y: m.b * x + m.d * y + m.f };
 }
+
+/** Where the frame sits inside its container, and the bitmap it needs. */
+export interface FrameBox {
+  /** Offset from the container's top-left, in CSS pixels. */
+  left: number;
+  top: number;
+  /** Displayed size in CSS pixels. */
+  width: number;
+  height: number;
+  /** Bitmap size: exactly one bitmap pixel per device pixel. */
+  pixelWidth: number;
+  pixelHeight: number;
+}
+
+/**
+ * Fit the 16:9 frame inside a container, the way the canvas, the drawing
+ * overlay and the HUD all have to agree on.
+ *
+ * Computed rather than left to CSS clamps, for two reasons. A canvas and a div
+ * given the same clamps do not resolve to the same box once the container is
+ * wider than 16:9: the canvas shrinks to keep its ratio and the div does not,
+ * which put the drawing overlay and HUD out of line with the pitch. And the
+ * bitmap has to match the displayed size in device pixels, with the box
+ * starting on a device pixel, or the browser resamples it and it blurs however
+ * many pixels it holds.
+ *
+ * Never wider than the frame itself, as before.
+ */
+export function fitFrameBox(
+  container: { left: number; top: number; width: number; height: number },
+  dpr: number
+): FrameBox {
+  const ratio = dpr > 0 && Number.isFinite(dpr) ? dpr : 1;
+  const fit = Math.max(
+    0,
+    Math.min(container.width, (container.height * FRAME_W) / FRAME_H, FRAME_W)
+  );
+  const pixelWidth = Math.floor(fit * ratio);
+  // Rounded, so the ratio is off by under half a device pixel, but never
+  // taller than the container.
+  const pixelHeight = Math.min(
+    Math.round((pixelWidth * FRAME_H) / FRAME_W),
+    Math.floor(Math.max(0, container.height) * ratio)
+  );
+  const width = pixelWidth / ratio;
+  const height = pixelHeight / ratio;
+
+  // Centred, then nudged onto the device grid in absolute terms: the
+  // container itself may start partway through a device pixel.
+  const snap = (origin: number, free: number) =>
+    Math.round((origin + free / 2) * ratio) / ratio - origin;
+
+  return {
+    left: snap(container.left, container.width - width),
+    top: snap(container.top, container.height - height),
+    width,
+    height,
+    pixelWidth,
+    pixelHeight,
+  };
+}

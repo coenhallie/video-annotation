@@ -108,23 +108,130 @@ describe('PipelineOutputSurface', () => {
 
   /**
    * The overlay is where the drawing layer mounts, and strokes only land on the
-   * right pitch positions if it covers exactly the canvas's rendered rect. Both
-   * are absolutely positioned and letterboxed, and what makes them coincide is
-   * carrying the same clamps - so that is what is pinned here. jsdom does no
-   * layout, so comparing rects would compare two zeroes.
+   * right pitch positions if it covers exactly the canvas's rendered rect; the
+   * HUD has to sit on the pitch the same way. All three are placed from one
+   * computed box. Matching CSS clamps were not enough: a canvas and a div given
+   * the same clamps resolve differently once the stage is wider than 16:9.
+   *
+   * jsdom does no layout, so the stage's rect and the resize notification are
+   * supplied here.
    */
-  it('sizes the overlay with the same clamps as the canvas', async () => {
-    const m = mount(fakeReplay('ready'));
-    await nextTick();
+  describe('sizing', () => {
+    let observed: Array<() => void> = [];
+    const originalObserver = globalThis.ResizeObserver;
+    const originalDpr = window.devicePixelRatio;
 
-    const overlay = at(m.root, 'pipeline-overlay');
-    expect(overlay).not.toBeNull();
-    const cls = overlay!.className;
-    for (const clamp of ['aspect-video', 'max-h-full', 'max-w-full', 'w-[1280px]']) {
-      expect(cls).toContain(clamp);
-    }
+    beforeEach(() => {
+      observed = [];
+      globalThis.ResizeObserver = class {
+        private readonly notify: () => void;
+        constructor(cb: () => void) {
+          this.notify = cb;
+        }
+        observe() {
+          observed.push(this.notify);
+        }
+        unobserve() {}
+        disconnect() {}
+      } as unknown as typeof ResizeObserver;
+      Object.defineProperty(window, 'devicePixelRatio', { value: 2, configurable: true });
+      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+        function (this: HTMLElement) {
+          return this.dataset.testid === 'pipeline-viewport'
+            ? ({ left: 0, top: 0, width: 1096, height: 640 } as DOMRect)
+            : ({ left: 0, top: 0, width: 0, height: 0 } as DOMRect);
+        }
+      );
+    });
 
-    m.unmount();
+    afterEach(() => {
+      globalThis.ResizeObserver = originalObserver;
+      Object.defineProperty(window, 'devicePixelRatio', {
+        value: originalDpr,
+        configurable: true,
+      });
+      vi.mocked(HTMLElement.prototype.getBoundingClientRect).mockRestore();
+    });
+
+    const box = (el: Element | null) => {
+      const style = (el as HTMLElement | null)?.style;
+      return [style?.left, style?.top, style?.width, style?.height];
+    };
+
+    it('places the canvas, the drawing overlay and the HUD in one box', async () => {
+      const m = mount(fakeReplay('ready'));
+      await nextTick();
+      observed.forEach((notify) => notify());
+      await nextTick();
+
+      const canvasBox = box(at(m.root, 'pipeline-canvas'));
+      expect(canvasBox[2]).toBe('1096px');
+      expect(box(at(m.root, 'pipeline-overlay'))).toEqual(canvasBox);
+      expect(box(at(m.root, 'pipeline-hud'))).toEqual(canvasBox);
+      m.unmount();
+    });
+
+    it('gives the canvas one bitmap pixel per device pixel', async () => {
+      const m = mount(fakeReplay('ready'));
+      await nextTick();
+      observed.forEach((notify) => notify());
+      await nextTick();
+
+      const canvas = at(m.root, 'pipeline-canvas') as HTMLCanvasElement;
+      expect([canvas.width, canvas.height]).toEqual([2192, 1233]);
+      m.unmount();
+    });
+
+    // Dragging the window to a display with another pixel ratio leaves its CSS
+    // size alone, so no resize is reported. The resolution query is what says.
+    it('resizes the bitmap when the device pixel ratio changes', async () => {
+      const listeners: Array<() => void> = [];
+      const originalMatchMedia = window.matchMedia;
+      window.matchMedia = ((query: string) => ({
+        media: query,
+        addEventListener: (_: string, cb: () => void) => listeners.push(cb),
+        removeEventListener: () => {},
+      })) as unknown as typeof window.matchMedia;
+      try {
+        const m = mount(fakeReplay('ready'));
+        await nextTick();
+        observed.forEach((notify) => notify());
+        await nextTick();
+
+        Object.defineProperty(window, 'devicePixelRatio', { value: 3, configurable: true });
+        listeners.splice(0).forEach((cb) => cb());
+        await nextTick();
+
+        const canvas = at(m.root, 'pipeline-canvas') as HTMLCanvasElement;
+        expect(canvas.width).toBe(3288);
+        m.unmount();
+      } finally {
+        window.matchMedia = originalMatchMedia;
+      }
+    });
+
+    it('draws the current frame again once the bitmap is resized', async () => {
+      // The order load() produces: mounted while loading, then a frame and
+      // ready together, which is what attaches the renderer.
+      const replay = fakeReplay('loading');
+      const m = mount(replay);
+      await nextTick();
+      (replay.frame as unknown as { value: unknown }).value = {
+        teams: [],
+        balls: [],
+        state: { actions: [] },
+        frame_data: [{ frame_count: 1 }],
+      };
+      (replay.state as unknown as { value: string }).value = 'ready';
+      await nextTick();
+      renderFrame.mockClear();
+      observed.forEach((notify) => notify());
+      await nextTick();
+
+      // Resizing a canvas clears it, so a paused replay would go blank.
+      expect(renderFrame).toHaveBeenCalled();
+      m.unmount();
+    });
   });
 
   // Zoom and pan live in the renderer now. A transform on the element would put

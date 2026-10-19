@@ -2,6 +2,7 @@
 import { ref, watch, onMounted, onUnmounted, computed } from 'vue';
 import { useRenderer2D } from '@/lib/vis/useRenderer2D';
 import { FRAME_W, FRAME_H } from '@/lib/vis/constants';
+import { fitFrameBox, type FrameBox } from '@/lib/vis/viewTransform';
 import type { PipelineReplay } from '@/composables/usePipelineReplay';
 import { replayDrawingFrame } from '@/utils/timelineBinding';
 
@@ -50,7 +51,8 @@ function pushView(): void {
     zoom: zoom.value,
     panX: panX.value,
     panY: panY.value,
-    renderedWidth: canvasRef.value?.getBoundingClientRect().width ?? 0,
+    renderedWidth:
+      frameBox.value?.width ?? canvasRef.value?.getBoundingClientRect().width ?? 0,
   });
   // The replay can be paused, so a view change has to repaint by itself rather
   // than waiting for the next frame.
@@ -59,6 +61,81 @@ function pushView(): void {
 }
 
 watch([zoom, panX, panY], pushView, { flush: 'post' });
+
+// ── Sizing ──────────────────────────────────────────────────────────────────
+//
+// The canvas, the drawing overlay and the HUD are all placed from one computed
+// box, and the canvas bitmap is sized to that box in device pixels. A 1280x720
+// bitmap stretched to the display was soft on any 2x screen; see fitFrameBox
+// for why CSS clamps could not do either job.
+
+const viewportRef = ref<HTMLElement | null>(null);
+const frameBox = ref<FrameBox | null>(null);
+
+const boxStyle = computed(() => {
+  const box = frameBox.value;
+  if (!box) return undefined;
+  return {
+    left: `${box.left}px`,
+    top: `${box.top}px`,
+    width: `${box.width}px`,
+    height: `${box.height}px`,
+  };
+});
+
+function measure(): void {
+  const el = viewportRef.value;
+  if (!el) return;
+  const next = fitFrameBox(el.getBoundingClientRect(), window.devicePixelRatio || 1);
+  // A hidden surface measures as nothing. Keep the last box rather than
+  // collapse the bitmap to zero, which has nothing to draw into.
+  if (next.pixelWidth < 1 || next.pixelHeight < 1) return;
+  frameBox.value = next;
+  applyBitmapSize();
+}
+
+function applyBitmapSize(): void {
+  const canvas = canvasRef.value;
+  const box = frameBox.value;
+  if (!canvas || !box) return;
+  // Assigning a canvas's size clears it even when the value is unchanged.
+  if (canvas.width !== box.pixelWidth || canvas.height !== box.pixelHeight) {
+    canvas.width = box.pixelWidth;
+    canvas.height = box.pixelHeight;
+  }
+  // Repaints too, which a cleared canvas needs while the replay is paused.
+  pushView();
+}
+
+watch(
+  viewportRef,
+  (el, _old, onCleanup) => {
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => measure());
+    observer.observe(el);
+    measure();
+    onCleanup(() => observer.disconnect());
+  },
+  { flush: 'post' }
+);
+
+// Moving the window to a display with a different pixel ratio changes the
+// bitmap the box needs without changing its CSS size, so a resize observer
+// never hears of it. A resolution media query does, once per ratio.
+let dprQuery: MediaQueryList | null = null;
+
+function watchPixelRatio(): void {
+  dprQuery?.removeEventListener('change', onPixelRatioChange);
+  dprQuery = null;
+  if (typeof window.matchMedia !== 'function') return;
+  dprQuery = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+  dprQuery.addEventListener('change', onPixelRatioChange);
+}
+
+function onPixelRatioChange(): void {
+  measure();
+  watchPixelRatio();
+}
 
 function onWheel(e: WheelEvent) {
   const stage = stageRef.value;
@@ -177,10 +254,15 @@ function ensureRenderer() {
   // jsdom has no 2D context, so this is null under test. The component still
   // mounts and its states still render; only drawing is skipped.
   if (!canvas.getContext('2d')) return;
-  canvas.width = FRAME_W;
-  canvas.height = FRAME_H;
   renderer = useRenderer2D(canvas);
-  pushView();
+  if (frameBox.value) {
+    applyBitmapSize();
+  } else {
+    // Not laid out yet. Frame size is a sane bitmap until the box arrives.
+    canvas.width = FRAME_W;
+    canvas.height = FRAME_H;
+    pushView();
+  }
 }
 
 // flush: 'post' is load-bearing. Vue's default pre-flush timing runs the
@@ -211,10 +293,13 @@ watch(
 );
 
 onMounted(() => {
+  watchPixelRatio();
   void props.replay.load();
 });
 
 onUnmounted(() => {
+  dprQuery?.removeEventListener('change', onPixelRatioChange);
+  dprQuery = null;
   props.replay.dispose();
   renderer = null;
 });
@@ -291,6 +376,8 @@ onUnmounted(() => {
 
     <template v-else>
       <div
+        ref="viewportRef"
+        data-testid="pipeline-viewport"
         class="absolute inset-0 overflow-hidden"
         :class="{ 'cursor-grab': zoom > 1 }"
         @wheel.prevent="onWheel"
@@ -300,32 +387,33 @@ onUnmounted(() => {
         @pointercancel="onPointerUp"
         @dblclick="resetZoom"
       >
+        <!--
+          No width/height attributes: the bitmap is sized in script, to the
+          box in device pixels, and the box sets the displayed size.
+        -->
         <canvas
           ref="canvasRef"
           data-testid="pipeline-canvas"
-          :width="FRAME_W"
-          :height="FRAME_H"
-          class="absolute left-1/2 top-1/2 max-h-full max-w-full -translate-x-1/2 -translate-y-1/2 object-contain"
-          style="aspect-ratio: 1280 / 720"
+          class="absolute"
+          :style="boxStyle"
         />
 
         <!--
-          Overlay slot, sized to the canvas's rendered rect by the same width
-          cap, aspect ratio and max-* clamps the canvas carries. A drawing layer
-          mounted here shares the canvas's coordinate system exactly, which is
-          what the zoom/pan move into the renderer made possible.
+          Overlay slot, placed in the same computed box as the canvas. A
+          drawing layer mounted here shares the canvas's coordinate system
+          exactly, which is what the zoom/pan move into the renderer made
+          possible.
 
           pointer-events-none by default so panning and zooming still work
           through it; the drawing layer turns them back on for itself only while
           drawing mode is active.
         -->
-        <div
-          class="pointer-events-none absolute inset-0 flex items-center justify-center"
-        >
+        <div class="pointer-events-none absolute inset-0">
           <div
             ref="overlayRef"
             data-testid="pipeline-overlay"
-            class="relative aspect-video max-h-full w-[1280px] max-w-full"
+            class="absolute"
+            :style="boxStyle"
           >
             <!--
               Not replay.currentFrame: that is the pipeline's own frame_count,
@@ -343,13 +431,13 @@ onUnmounted(() => {
       <!--
         The HUD is anchored to the pitch, not to the stage. The canvas is
         letterboxed inside the stage, so stage-relative badges float in the
-        black band beside it. This box carries the same width cap, aspect ratio
-        and max-* clamps as the canvas, which resolves it to exactly the
-        canvas's rendered rect at any editor size.
+        black band beside it. This box is the canvas's own computed box, so it
+        is exactly the canvas's rendered rect at any editor size.
       -->
-      <div class="pointer-events-none absolute inset-0 flex items-center justify-center">
+      <div class="pointer-events-none absolute inset-0">
         <div
-          class="relative aspect-video max-h-full w-[1280px] max-w-full"
+          class="absolute"
+          :style="boxStyle"
           data-testid="pipeline-hud"
         >
           <div

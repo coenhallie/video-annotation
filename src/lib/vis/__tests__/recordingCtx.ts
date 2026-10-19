@@ -88,17 +88,31 @@ export function fakeCanvas() {
  * the ops it collects. jsdom does not implement OffscreenCanvas at all, so the
  * pitch cache cannot be built without this.
  */
-export function stubOffscreenCanvas(): { ops: Op[]; restore: () => void } {
+export function stubOffscreenCanvas(): {
+  ops: Op[];
+  /** The size each OffscreenCanvas was created at, in order. */
+  sizes: Array<[number, number]>;
+  restore: () => void;
+} {
   const g = globalThis as Record<string, unknown>;
   const original = g.OffscreenCanvas;
   const { ctx, ops } = recordingCtx();
+  const sizes: Array<[number, number]> = [];
   g.OffscreenCanvas = class {
+    width: number;
+    height: number;
+    constructor(width: number, height: number) {
+      this.width = width;
+      this.height = height;
+      sizes.push([width, height]);
+    }
     getContext() {
       return ctx;
     }
   };
   return {
     ops,
+    sizes,
     restore: () => {
       g.OffscreenCanvas = original;
     },
