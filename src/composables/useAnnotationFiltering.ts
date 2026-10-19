@@ -120,43 +120,63 @@ export function useAnnotationFiltering(options: UseAnnotationFilteringOptions) {
   /** null means "All": no group filter. */
   const activeCategory = ref<AnnotationFilterGroup | null>(null);
 
-  /** Narrows the active group to one label. null means the whole group. */
-  const activeLabelId = ref<string | null>(null);
+  /**
+   * Labels ticked in the filter checklist. Empty means no label filter. A row
+   * shows when it carries any of them: ticking two labels widens the list
+   * from one to both, which is what a checklist reads as.
+   */
+  const activeLabelIds = ref<string[]>([]);
 
-  /** The labels of the active group that this video uses, by name. */
-  const labelsInActiveCategory = computed((): Label[] => {
-    const group = activeCategory.value;
-    if (!group) return [];
-    return usedLabels.value
-      .filter((label) => groupOf(label) === group)
-      .sort((a, b) => a.name.localeCompare(b.name));
+  const byName = (a: Label, b: Label) => a.name.localeCompare(b.name);
+
+  /**
+   * What the checklist offers: the active group's labels, or under All every
+   * group with its labels, in the pills' own order. Only labels this video
+   * uses, so a tick can never empty the list on its own.
+   */
+  const labelOptions = computed((): { group: AnnotationFilterGroup; labels: Label[] }[] => {
+    const groups = activeCategory.value ? [activeCategory.value] : availableCategories.value;
+    return groups
+      .map((group) => ({
+        group,
+        labels: usedLabels.value.filter((label) => groupOf(label) === group).sort(byName),
+      }))
+      .filter((option) => option.labels.length > 0);
   });
 
-  // A label belongs to one group, so changing group always drops it.
-  watch(activeCategory, () => {
-    activeLabelId.value = null;
-  });
+  const toggleLabel = (labelId: string) => {
+    activeLabelIds.value = activeLabelIds.value.includes(labelId)
+      ? activeLabelIds.value.filter((id) => id !== labelId)
+      : [...activeLabelIds.value, labelId];
+  };
 
-  // Deleting the last annotation in a group, or with a label, retires its pill.
-  // Without this the filter would stay on and leave an empty list with no way
-  // back.
+  const clearLabels = () => {
+    activeLabelIds.value = [];
+  };
+
+  // The checklist follows the group, so changing group drops the ticks.
+  watch(activeCategory, clearLabels);
+
+  // Deleting the last annotation in a group, or with a label, retires its pill
+  // or tick. Without this the filter would stay on and leave an empty list
+  // with no way back.
   watch(availableCategories, (categories) => {
     if (activeCategory.value && !categories.includes(activeCategory.value)) {
       activeCategory.value = null;
     }
   });
-  watch(labelsInActiveCategory, (labels) => {
-    if (activeLabelId.value && !labels.some((label) => label.id === activeLabelId.value)) {
-      activeLabelId.value = null;
-    }
+  watch(labelOptions, (options) => {
+    const offered = new Set(options.flatMap((option) => option.labels.map((l) => l.id)));
+    const kept = activeLabelIds.value.filter((id) => offered.has(id));
+    if (kept.length !== activeLabelIds.value.length) activeLabelIds.value = kept;
   });
 
-  /** Filtered by the active label, else the active group, then ordered by time. */
+  /** Filtered by the ticked labels, else the active group, then ordered by time. */
   const sortedAnnotations = computed((): PanelAnnotation[] => {
     const key = activeCategory.value;
-    const labelId = activeLabelId.value;
-    const list = labelId
-      ? normalizedAnnotations.value.filter((a) => (a.labels ?? []).includes(labelId))
+    const ticked = activeLabelIds.value;
+    const list = ticked.length > 0
+      ? normalizedAnnotations.value.filter((a) => (a.labels ?? []).some((id) => ticked.includes(id)))
       : key
         ? normalizedAnnotations.value.filter((a) => categoriesOf(a).includes(key))
         : normalizedAnnotations.value;
@@ -173,7 +193,9 @@ export function useAnnotationFiltering(options: UseAnnotationFilteringOptions) {
     sortedAnnotations,
     availableCategories,
     activeCategory,
-    labelsInActiveCategory,
-    activeLabelId,
+    labelOptions,
+    activeLabelIds,
+    toggleLabel,
+    clearLabels,
   };
 }

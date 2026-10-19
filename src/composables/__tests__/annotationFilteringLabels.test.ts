@@ -57,54 +57,71 @@ describe('useAnnotationFiltering groups', () => {
 });
 
 describe('useAnnotationFiltering individual labels', () => {
-  it('lists the labels in the active group that this video uses, by name', () => {
-    const { activeCategory, labelsInActiveCategory } = setup();
-    expect(labelsInActiveCategory.value).toEqual([]);
-    activeCategory.value = 'PLR';
-    // PLR TELEPORT is in the catalog but on no annotation here.
-    expect(labelsInActiveCategory.value.map((l) => l.name)).toEqual([
-      'PLR DUPLICATE',
-      'PLR MISSED',
+  const groupsOf = (options: { group: string; labels: { name: string }[] }[]) =>
+    options.map((o) => [o.group, o.labels.map((l) => l.name)]);
+
+  // Under ALL the checklist offers every label this video uses, grouped.
+  it('offers every used label, grouped, under All', () => {
+    const { labelOptions } = setup();
+    expect(groupsOf(labelOptions.value)).toEqual([
+      ['PLR', ['PLR DUPLICATE', 'PLR MISSED']],
+      ['BALL', ['BALL MISSED']],
+      ['OTHER', ['Review Needed']],
     ]);
   });
 
-  it('narrows the list to one label', () => {
-    const { activeCategory, activeLabelId, sortedAnnotations } = setup();
+  it("offers only the active group's labels once a group is picked", () => {
+    const { activeCategory, labelOptions } = setup();
     activeCategory.value = 'PLR';
-    expect(ids(sortedAnnotations.value)).toEqual(['a', 'b', 'd']);
-    activeLabelId.value = 'missed';
-    expect(ids(sortedAnnotations.value)).toEqual(['a', 'd']);
+    // PLR TELEPORT is in the catalog but on no annotation here.
+    expect(groupsOf(labelOptions.value)).toEqual([['PLR', ['PLR DUPLICATE', 'PLR MISSED']]]);
   });
 
-  it('drops the label when the group changes', async () => {
-    const { activeCategory, activeLabelId, sortedAnnotations } = setup();
-    activeCategory.value = 'PLR';
-    activeLabelId.value = 'missed';
-    activeCategory.value = 'BALL';
-    await nextTick();
-    expect(activeLabelId.value).toBeNull();
+  it('shows annotations with any of the ticked labels', () => {
+    const { toggleLabel, sortedAnnotations } = setup();
+    toggleLabel('dup');
+    expect(ids(sortedAnnotations.value)).toEqual(['b']);
+    toggleLabel('ball');
+    expect(ids(sortedAnnotations.value)).toEqual(['b', 'c', 'd']);
+    toggleLabel('dup');
     expect(ids(sortedAnnotations.value)).toEqual(['c', 'd']);
   });
 
-  // Deleting the last annotation with a label retires its pill; the filter
-  // must not stay on with nothing to show and no pill to turn it off.
-  it('drops the label when its last annotation goes', async () => {
-    const { annotations, activeCategory, activeLabelId, sortedAnnotations } = setup();
+  it('refines the active group', () => {
+    const { activeCategory, toggleLabel, sortedAnnotations } = setup();
     activeCategory.value = 'PLR';
-    activeLabelId.value = 'dup';
-    annotations.value = ROWS.filter((r) => r.id !== 'b');
-    await nextTick();
-    expect(activeLabelId.value).toBeNull();
+    expect(ids(sortedAnnotations.value)).toEqual(['a', 'b', 'd']);
+    toggleLabel('missed');
     expect(ids(sortedAnnotations.value)).toEqual(['a', 'd']);
   });
 
-  it('clears both when going back to All', async () => {
-    const { activeCategory, activeLabelId, sortedAnnotations } = setup();
+  it('clears the ticks when the group changes', async () => {
+    const { activeCategory, activeLabelIds, toggleLabel } = setup();
     activeCategory.value = 'PLR';
-    activeLabelId.value = 'missed';
-    activeCategory.value = null;
+    toggleLabel('missed');
+    activeCategory.value = 'BALL';
     await nextTick();
-    expect(activeLabelId.value).toBeNull();
-    expect(ids(sortedAnnotations.value)).toEqual(['a', 'b', 'c', 'd', 'e', 'f']);
+    expect(activeLabelIds.value).toEqual([]);
+  });
+
+  it('clears the ticks on request', () => {
+    const { toggleLabel, clearLabels, activeLabelIds, sortedAnnotations } = setup();
+    toggleLabel('missed');
+    toggleLabel('ball');
+    clearLabels();
+    expect(activeLabelIds.value).toEqual([]);
+    expect(sortedAnnotations.value).toHaveLength(6);
+  });
+
+  // Deleting the last annotation with a label retires its tick; the filter
+  // must not stay on for a label nobody can untick any more.
+  it('drops a ticked label when its last annotation goes', async () => {
+    const { annotations, toggleLabel, activeLabelIds, sortedAnnotations } = setup();
+    toggleLabel('dup');
+    toggleLabel('ball');
+    annotations.value = ROWS.filter((r) => r.id !== 'b');
+    await nextTick();
+    expect(activeLabelIds.value).toEqual(['ball']);
+    expect(ids(sortedAnnotations.value)).toEqual(['c', 'd']);
   });
 });

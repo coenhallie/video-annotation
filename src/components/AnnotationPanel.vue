@@ -23,6 +23,7 @@ import { useAuth } from '../composables/useAuth';
 import { useGlobalComments } from '../composables/useGlobalComments';
 import { useAnnotationFiltering } from '../composables/useAnnotationFiltering';
 import { useLabelCatalog } from '../composables/useLabelCatalog';
+import { useEscapeToClose } from '../composables/useEscapeToClose';
 import type { Comment } from '../types/database';
 import type { UseDrawingCanvas } from '../composables/useDrawingCanvas';
 import type { UseDrawingCoordinator } from '../composables/useDrawingCoordinator';
@@ -183,8 +184,10 @@ const {
   sortedAnnotations,
   availableCategories,
   activeCategory,
-  labelsInActiveCategory,
-  activeLabelId,
+  labelOptions,
+  activeLabelIds,
+  toggleLabel,
+  clearLabels,
 } = useAnnotationFiltering({
   annotations: annotationsRef,
   labelsById: labelColors,
@@ -193,14 +196,21 @@ const {
 });
 
 watch(
-  [activeCategory, sortedAnnotations],
+  [activeCategory, activeLabelIds, sortedAnnotations],
   () => {
-    emit(
-      'filter-change',
-      activeCategory.value === null ? null : sortedAnnotations.value.map((a) => String(a.id))
-    );
+    const filtered = activeCategory.value !== null || activeLabelIds.value.length > 0;
+    emit('filter-change', filtered ? sortedAnnotations.value.map((a) => String(a.id)) : null);
   },
   { immediate: true }
+);
+
+// The label checklist. Closes on Escape and on any click outside it.
+const showLabelFilter = ref(false);
+useEscapeToClose(
+  () => showLabelFilter.value,
+  () => {
+    showLabelFilter.value = false;
+  }
 );
 
 /**
@@ -466,50 +476,123 @@ watch(
       >
         {{ category }}
       </button>
-    </div>
 
-    <!-- Labels of the picked group, to narrow the list to one. Only while a
-         group is picked: every label of every group at once would be a wall
-         of pills. Same pills as the groups, each with its label's colour dot
-         so it can be matched to the cards below. -->
-    <div
-      v-if="activeCategory && labelsInActiveCategory.length > 0"
-      class="-mt-1 flex shrink-0 flex-wrap items-center gap-1 px-3 pb-3"
-    >
-      <button
-        type="button"
-        data-testid="filter-label"
-        :aria-pressed="activeLabelId === null"
-        class="rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] transition-colors"
-        :class="
-          activeLabelId === null
-            ? 'bg-gray-900 text-white dark:bg-gray-700 dark:text-white'
-            : 'text-gray-500 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-300'
-        "
-        @click="activeLabelId = null"
-      >
-        All {{ activeCategory }}
-      </button>
-      <button
-        v-for="label in labelsInActiveCategory"
-        :key="label.id"
-        type="button"
-        data-testid="filter-label"
-        :aria-pressed="activeLabelId === label.id"
-        class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] transition-colors"
-        :class="
-          activeLabelId === label.id
-            ? 'bg-gray-900 text-white dark:bg-gray-700 dark:text-white'
-            : 'text-gray-500 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-300'
-        "
-        @click="activeLabelId = label.id"
-      >
-        <span
-          class="h-1.5 w-1.5 shrink-0 rounded-full"
-          :style="{ backgroundColor: label.color }"
+      <!-- Label checklist: refines the current group (every label, grouped,
+           under All) to any mix of labels. Same card and rows as the
+           dashboard's filter. The count says the list is filtered even with
+           the checklist closed. -->
+      <div class="relative ml-auto">
+        <button
+          type="button"
+          data-testid="label-filter-toggle"
+          :aria-expanded="showLabelFilter"
+          aria-label="Filter by label"
+          title="Filter by label"
+          class="flex items-center gap-1 rounded px-1.5 py-1 transition-colors"
+          :class="
+            activeLabelIds.length > 0 || showLabelFilter
+              ? 'text-gray-900 dark:text-gray-200'
+              : 'text-gray-500 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-300'
+          "
+          @click="showLabelFilter = !showLabelFilter"
+        >
+          <svg
+            class="h-3.5 w-3.5"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+            />
+          </svg>
+          <span
+            v-if="activeLabelIds.length > 0"
+            class="font-mono text-[10px] tracking-wider"
+          >{{ activeLabelIds.length }}</span>
+        </button>
+        <div
+          v-if="showLabelFilter"
+          class="fixed inset-0 z-40"
+          @click="showLabelFilter = false"
         />
-        {{ label.name }}
-      </button>
+        <div
+          v-if="showLabelFilter"
+          data-testid="label-filter-menu"
+          class="absolute right-0 z-50 mt-2 max-h-80 w-64 overflow-y-auto rounded border border-gray-200 bg-white shadow-lg dark:border-white/10 dark:bg-gray-900"
+        >
+          <div
+            class="flex items-center justify-between border-b border-gray-200 px-3 py-2 dark:border-white/10"
+          >
+            <span
+              class="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-500"
+            >
+              Labels
+            </span>
+            <button
+              v-if="activeLabelIds.length > 0"
+              type="button"
+              class="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-300"
+              @click="clearLabels"
+            >
+              Clear
+            </button>
+          </div>
+          <div
+            v-for="option in labelOptions"
+            :key="option.group"
+            class="border-b border-gray-200 py-1 last:border-b-0 dark:border-white/10"
+          >
+            <div
+              class="px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-500"
+            >
+              {{ option.group }}
+            </div>
+            <button
+              v-for="label in option.labels"
+              :key="label.id"
+              type="button"
+              role="menuitemcheckbox"
+              data-testid="label-filter-option"
+              :aria-checked="activeLabelIds.includes(label.id)"
+              class="flex w-full items-center gap-2.5 px-3 py-1.5 text-left transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]"
+              @click="toggleLabel(label.id)"
+            >
+              <span
+                class="h-2 w-2 shrink-0 rounded-full"
+                :style="{ backgroundColor: label.color }"
+              />
+              <span
+                class="flex-1 truncate text-[12px]"
+                :class="
+                  activeLabelIds.includes(label.id)
+                    ? 'text-gray-900 dark:text-white'
+                    : 'text-gray-700 dark:text-gray-200'
+                "
+              >{{ label.name }}</span>
+              <span class="flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+                <svg
+                  v-if="activeLabelIds.includes(label.id)"
+                  class="h-3.5 w-3.5 text-gray-900 dark:text-white"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="m5 13 4 4L19 7"
+                  />
+                </svg>
+              </span>
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Edit Form -->
@@ -546,8 +629,8 @@ watch(
       >
         <p class="text-[12px] text-gray-600 dark:text-gray-400">
           {{
-            activeLabelId
-              ? 'Nothing with this label'
+            activeLabelIds.length > 0
+              ? 'Nothing with these labels'
               : activeCategory
                 ? 'Nothing in this category'
                 : 'No annotations yet'

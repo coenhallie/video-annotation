@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 //
-// The editor's annotation filter: group pills (EVT, PLR, ...), and once a group
-// is picked, a second row with that group's labels in this video so the list
-// can be narrowed to one label. The ordering and narrowing rules have their own
+// The editor's annotation filter: group pills (EVT, PLR, ...), and a filter
+// icon whose checklist refines the list to any mix of the current group's
+// labels (every label, grouped, under All). The ordering and narrowing rules have their own
 // tests in composables/__tests__/annotationFilteringLabels.test.ts; this covers
 // the wiring in the panel.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -92,8 +92,14 @@ const groupPill = (root: HTMLElement, name: string) =>
   [...root.querySelectorAll<HTMLButtonElement>('[data-testid="filter-group"]')].find(
     (b) => b.textContent?.trim() === name
   )!;
-const labelPills = (root: HTMLElement) =>
-  [...root.querySelectorAll<HTMLButtonElement>('[data-testid="filter-label"]')];
+const toggle = (root: HTMLElement) =>
+  root.querySelector<HTMLButtonElement>('[data-testid="label-filter-toggle"]')!;
+const menu = (root: HTMLElement) =>
+  root.querySelector<HTMLElement>('[data-testid="label-filter-menu"]');
+const options = (root: HTMLElement) =>
+  [...root.querySelectorAll<HTMLButtonElement>('[data-testid="label-filter-option"]')];
+const option = (root: HTMLElement, name: string) =>
+  options(root).find((b) => b.textContent?.trim() === name)!;
 const cards = (root: HTMLElement) =>
   [...root.querySelectorAll('[data-testid="card"]')].map((c) => c.textContent);
 
@@ -102,48 +108,78 @@ beforeEach(() => {
 });
 
 describe('AnnotationPanel label filter', () => {
-  it('shows no label row until a group is picked', async () => {
+  it('keeps the checklist closed until the filter icon is clicked', async () => {
     const panel = await mount();
-    expect(labelPills(panel.root)).toHaveLength(0);
+    expect(menu(panel.root)).toBeNull();
+    toggle(panel.root).click();
+    await flush();
+    expect(menu(panel.root)).not.toBeNull();
     panel.unmount();
   });
 
-  it("shows the group's labels once it is picked", async () => {
+  it('lists every label of this video under All, grouped', async () => {
+    const panel = await mount();
+    toggle(panel.root).click();
+    await flush();
+    expect(menu(panel.root)?.textContent?.replace(/\s+/g, ' ')).toContain('PLR');
+    expect(options(panel.root).map((b) => b.textContent?.trim())).toEqual([
+      'PLR DUPLICATE',
+      'PLR MISSED',
+      'BALL MISSED',
+    ]);
+    panel.unmount();
+  });
+
+  it("lists only the picked group's labels", async () => {
     const panel = await mount();
     groupPill(panel.root, 'PLR').click();
     await flush();
-    expect(labelPills(panel.root).map((b) => b.textContent?.trim())).toEqual([
-      'All PLR',
+    toggle(panel.root).click();
+    await flush();
+    expect(options(panel.root).map((b) => b.textContent?.trim())).toEqual([
       'PLR DUPLICATE',
       'PLR MISSED',
     ]);
-    expect(cards(panel.root)).toEqual(['a1', 'a2']);
     panel.unmount();
   });
 
-  it('narrows the list to the picked label, and back', async () => {
+  it('shows annotations with any of the ticked labels', async () => {
     const panel = await mount();
-    groupPill(panel.root, 'PLR').click();
+    toggle(panel.root).click();
     await flush();
-    labelPills(panel.root).find((b) => b.textContent?.includes('PLR MISSED'))!.click();
+    option(panel.root, 'PLR MISSED').click();
     await flush();
     expect(cards(panel.root)).toEqual(['a1']);
-
-    labelPills(panel.root).find((b) => b.textContent?.includes('All PLR'))!.click();
+    option(panel.root, 'BALL MISSED').click();
     await flush();
-    expect(cards(panel.root)).toEqual(['a1', 'a2']);
+    expect(cards(panel.root)).toEqual(['a1', 'a3']);
+    expect(option(panel.root, 'PLR MISSED').getAttribute('aria-checked')).toBe('true');
+    expect(option(panel.root, 'PLR DUPLICATE').getAttribute('aria-checked')).toBe('false');
     panel.unmount();
   });
 
-  it('marks the active label', async () => {
+  // The icon says the list is filtered even with the checklist closed.
+  it('shows how many labels are ticked on the icon', async () => {
     const panel = await mount();
-    groupPill(panel.root, 'PLR').click();
+    expect(toggle(panel.root).textContent?.trim()).toBe('');
+    toggle(panel.root).click();
     await flush();
-    const missed = () => labelPills(panel.root).find((b) => b.textContent?.includes('PLR MISSED'))!;
-    expect(missed().getAttribute('aria-pressed')).toBe('false');
-    missed().click();
+    option(panel.root, 'PLR MISSED').click();
+    option(panel.root, 'BALL MISSED').click();
     await flush();
-    expect(missed().getAttribute('aria-pressed')).toBe('true');
+    expect(toggle(panel.root).textContent?.trim()).toBe('2');
+    panel.unmount();
+  });
+
+  it('clears the ticks', async () => {
+    const panel = await mount();
+    toggle(panel.root).click();
+    await flush();
+    option(panel.root, 'PLR MISSED').click();
+    await flush();
+    [...menu(panel.root)!.querySelectorAll('button')].find((b) => /clear/i.test(b.textContent ?? ''))!.click();
+    await flush();
+    expect(cards(panel.root)).toEqual(['a1', 'a2', 'a3']);
     panel.unmount();
   });
 
@@ -157,7 +193,9 @@ describe('AnnotationPanel label filter', () => {
     await flush();
     expect(panel.filterChanges.at(-1)).toEqual(['a1', 'a2']);
 
-    labelPills(panel.root).find((b) => b.textContent?.includes('PLR MISSED'))!.click();
+    toggle(panel.root).click();
+    await flush();
+    option(panel.root, 'PLR MISSED').click();
     await flush();
     expect(panel.filterChanges.at(-1)).toEqual(['a1']);
 
@@ -166,5 +204,15 @@ describe('AnnotationPanel label filter', () => {
     expect(panel.filterChanges.at(-1)).toBeNull();
     panel.unmount();
   });
-});
 
+  // Ticking labels under All filters too, so the timeline must hear about it.
+  it('reports a label filter under All', async () => {
+    const panel = await mount();
+    toggle(panel.root).click();
+    await flush();
+    option(panel.root, 'BALL MISSED').click();
+    await flush();
+    expect(panel.filterChanges.at(-1)).toEqual(['a3']);
+    panel.unmount();
+  });
+});
