@@ -176,7 +176,13 @@ const showLabelManagement = ref(false);
 
 // Annotation filtering composable
 const annotationsRef = computed(() => props.annotations);
-const { sortedAnnotations, availableCategories, activeCategory } = useAnnotationFiltering({
+const {
+  sortedAnnotations,
+  availableCategories,
+  activeCategory,
+  labelsInActiveCategory,
+  activeLabelId,
+} = useAnnotationFiltering({
   annotations: annotationsRef,
   labelsById: labelColors,
   isDualMode: () => props.isDualMode,
@@ -424,6 +430,8 @@ watch(
             ? 'bg-gray-900 text-white dark:bg-gray-700 dark:text-white'
             : 'text-gray-500 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-300'
         "
+        data-testid="filter-group"
+        :aria-pressed="activeCategory === null"
         @click="activeCategory = null"
       >
         All
@@ -432,6 +440,8 @@ watch(
         v-for="category in availableCategories"
         :key="category"
         type="button"
+        data-testid="filter-group"
+        :aria-pressed="activeCategory === category"
         class="rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] transition-colors"
         :class="
           activeCategory === category
@@ -441,6 +451,50 @@ watch(
         @click="activeCategory = category"
       >
         {{ category }}
+      </button>
+    </div>
+
+    <!-- Labels of the picked group, to narrow the list to one. Only while a
+         group is picked: every label of every group at once would be a wall
+         of pills. Same pills as the groups, each with its label's colour dot
+         so it can be matched to the cards below. -->
+    <div
+      v-if="activeCategory && labelsInActiveCategory.length > 0"
+      class="-mt-1 flex shrink-0 flex-wrap items-center gap-1 px-3 pb-3"
+    >
+      <button
+        type="button"
+        data-testid="filter-label"
+        :aria-pressed="activeLabelId === null"
+        class="rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] transition-colors"
+        :class="
+          activeLabelId === null
+            ? 'bg-gray-900 text-white dark:bg-gray-700 dark:text-white'
+            : 'text-gray-500 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-300'
+        "
+        @click="activeLabelId = null"
+      >
+        All {{ activeCategory }}
+      </button>
+      <button
+        v-for="label in labelsInActiveCategory"
+        :key="label.id"
+        type="button"
+        data-testid="filter-label"
+        :aria-pressed="activeLabelId === label.id"
+        class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] transition-colors"
+        :class="
+          activeLabelId === label.id
+            ? 'bg-gray-900 text-white dark:bg-gray-700 dark:text-white'
+            : 'text-gray-500 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-300'
+        "
+        @click="activeLabelId = label.id"
+      >
+        <span
+          class="h-1.5 w-1.5 shrink-0 rounded-full"
+          :style="{ backgroundColor: label.color }"
+        />
+        {{ label.name }}
       </button>
     </div>
 
@@ -477,7 +531,13 @@ watch(
         class="px-4 py-10 text-center"
       >
         <p class="text-[12px] text-gray-600 dark:text-gray-400">
-          {{ activeCategory ? 'Nothing in this category' : 'No annotations yet' }}
+          {{
+            activeLabelId
+              ? 'Nothing with this label'
+              : activeCategory
+                ? 'Nothing in this category'
+                : 'No annotations yet'
+          }}
         </p>
         <p
           v-if="canAnnotate && !activeCategory"
