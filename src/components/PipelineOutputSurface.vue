@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted, computed } from 'vue';
 import { useRenderer2D, type GoalOverlay } from '@/lib/vis/useRenderer2D';
-import type { AttackGlow } from '@/lib/vis/attackGlow';
+import { CHEVRON_FLOW_PERIOD_S, type AttackGlow } from '@/lib/vis/attackGlow';
 import {
   goalCamera,
   goalCameraWeight,
@@ -489,6 +489,10 @@ const phaseDescription = computed(() =>
 // short attack is a gentle pulse rather than a flash. Anywhere else - a seek,
 // a step, a pause - it shows the frame's own state at once: a frame being
 // looked at should not be partway through a fade. Reduced motion never fades.
+//
+// The chevrons in it flow toward the goal with the replay's clock, so they are
+// still while paused and the same at a given moment however the replay got
+// there. Reduced motion holds them still.
 
 const GLOW_FADE_S = 1;
 
@@ -511,7 +515,13 @@ function glowTarget(): Omit<AttackGlow, 'intensity'> | null {
 
 function glowValue(): AttackGlow | undefined {
   if (!glow || glow.intensity <= 0) return undefined;
-  return { color: glow.color, direction: glow.direction, intensity: glow.intensity };
+  const cycles = props.replay.currentTime.value / CHEVRON_FLOW_PERIOD_S;
+  return {
+    color: glow.color,
+    direction: glow.direction,
+    intensity: glow.intensity,
+    flow: prefersReducedMotion() ? 0 : cycles - Math.floor(cycles),
+  };
 }
 
 function stopGlowLoop(): void {
@@ -571,15 +581,6 @@ function settleGlow(): void {
   if (glow.target === 0) glow = null;
 }
 
-watch(
-  () => props.replay.phase.value,
-  () => {
-    updateGlow(props.replay.isPlaying.value && lastStepWasPlayback && !prefersReducedMotion());
-    paint();
-  },
-  { flush: 'post' }
-);
-
 function ensureRenderer() {
   const canvas = canvasRef.value;
   if (!canvas || renderer) return;
@@ -603,15 +604,30 @@ function ensureRenderer() {
 // canvas is still behind v-else and canvasRef is null. The renderer would
 // never attach and the pitch would stay blank until an unrelated later frame
 // arrived.
+//
+// One watcher for everything a tick of the replay can change, so a tick paints
+// once however many of them changed. The record and its phase arrive together
+// on most ticks; the clock alone moves on the rest, as it ticks at display rate
+// and records arrive at the data's rate, and then only a glow needs a repaint,
+// for its chevrons to flow smoothly rather than in steps.
 watch(
-  () => props.replay.frame.value,
-  (frame) => {
+  [
+    () => props.replay.frame.value,
+    () => props.replay.phase.value,
+    () => props.replay.currentTime.value,
+  ],
+  ([frame, phase], [prevFrame, prevPhase]) => {
+    if (phase !== prevPhase) {
+      updateGlow(props.replay.isPlaying.value && lastStepWasPlayback && !prefersReducedMotion());
+    }
     if (!frame) return;
-    ensureRenderer();
-    const labelled = isGoalFrame(frame);
-    if (labelled && !goalLabelSeen && !goal && lastStepWasPlayback) startGoal(frame);
-    goalLabelSeen = labelled;
-    paint();
+    if (frame !== prevFrame) {
+      ensureRenderer();
+      const labelled = isGoalFrame(frame);
+      if (labelled && !goalLabelSeen && !goal && lastStepWasPlayback) startGoal(frame);
+      goalLabelSeen = labelled;
+    }
+    if (frame !== prevFrame || phase !== prevPhase || glowValue()) paint();
   },
   { flush: 'post' }
 );

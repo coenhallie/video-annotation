@@ -5,6 +5,7 @@ import PipelineOutputSurface from '@/components/PipelineOutputSurface.vue';
 import type { PipelineReplay, ReplayState } from '@/composables/usePipelineReplay';
 import { GOAL_SEQUENCE_MS } from '@/lib/vis/goalSequence';
 import { PERSON_COLORS } from '@/lib/vis/constants';
+import { CHEVRON_FLOW_PERIOD_S } from '@/lib/vis/attackGlow';
 
 /**
  * Declared through vi.hoisted because vi.mock is hoisted above the imports,
@@ -873,13 +874,13 @@ describe('PipelineOutputSurface', () => {
 
     const lastGlow = () =>
       renderFrame.mock.calls.at(-1)?.[2] as
-        | { color: string; direction: number; intensity: number }
+        | { color: string; direction: number; intensity: number; flow?: number }
         | undefined;
 
     it('glows for the attacking team, toward the goal it attacks', async () => {
       const { replay, m } = await ready();
       await arrive(replay, BLUE_ATTACKING, 30);
-      expect(lastGlow()).toEqual({ color: PERSON_COLORS.away.fill, direction: -1, intensity: 1 });
+      expect(lastGlow()).toMatchObject({ color: PERSON_COLORS.away.fill, direction: -1, intensity: 1 });
       m.unmount();
     });
 
@@ -925,6 +926,78 @@ describe('PipelineOutputSurface', () => {
       await animate(1200);
       expect(lastGlow()).toBeUndefined();
       m.unmount();
+    });
+
+    // The chevrons flow with the replay's own clock: still while paused, and
+    // the same at a given moment however the replay got there.
+    it('flows the chevrons with the replay clock', async () => {
+      const { replay, m } = await ready();
+      await arrive(replay, BLUE_ATTACKING, 30);
+      const t = replay.currentTime.value as number;
+      expect(lastGlow()!.flow).toBeCloseTo((t / CHEVRON_FLOW_PERIOD_S) % 1, 6);
+      m.unmount();
+    });
+
+    it('draws the same chevrons a whole flow period later', async () => {
+      const { replay, m } = await ready();
+      await arrive(replay, BLUE_ATTACKING, 30);
+      const before = lastGlow()!.flow!;
+      await arrive(replay, BLUE_ATTACKING, CHEVRON_FLOW_PERIOD_S * 4);
+      expect(lastGlow()!.flow).toBeCloseTo(before, 6);
+      m.unmount();
+    });
+
+    // The clock ticks at display rate, records arrive at the data's rate:
+    // painting only on new records would move the chevrons in steps.
+    it('repaints on every tick of the clock while a glow is showing', async () => {
+      const { replay, m } = await ready();
+      await arrive(replay, BLUE_ATTACKING, 30);
+      const before = lastGlow()!.flow!;
+      const calls = renderFrame.mock.calls.length;
+      set(replay.currentTime, (replay.currentTime.value as number) + 0.016);
+      await nextTick();
+      expect(renderFrame.mock.calls.length).toBe(calls + 1);
+      expect(lastGlow()!.flow).toBeGreaterThan(before);
+      m.unmount();
+    });
+
+    it('does not repaint on the clock alone when there is no glow', async () => {
+      const { replay, m } = await ready();
+      await arrive(replay, NOBODY, 30);
+      const calls = renderFrame.mock.calls.length;
+      set(replay.currentTime, (replay.currentTime.value as number) + 0.016);
+      await nextTick();
+      expect(renderFrame.mock.calls.length).toBe(calls);
+      m.unmount();
+    });
+
+    it('paints a new record once, not again for the clock that brought it', async () => {
+      const { replay, m } = await ready();
+      await arrive(replay, BLUE_ATTACKING, 30);
+      const calls = renderFrame.mock.calls.length;
+      await arrive(replay, BLUE_ATTACKING);
+      expect(renderFrame.mock.calls.length).toBe(calls + 1);
+      m.unmount();
+    });
+
+    it('holds the chevrons still under reduced motion', async () => {
+      const originalMatchMedia = window.matchMedia;
+      window.matchMedia = ((query: string) => ({
+        matches: query.includes('prefers-reduced-motion'),
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      })) as unknown as typeof window.matchMedia;
+      try {
+        const { replay, m } = await ready();
+        await arrive(replay, BLUE_ATTACKING, 30);
+        const first = lastGlow()!.flow;
+        await arrive(replay, BLUE_ATTACKING, 0.3);
+        expect(lastGlow()!.flow).toBe(first);
+        m.unmount();
+      } finally {
+        window.matchMedia = originalMatchMedia;
+      }
     });
 
     // A paused frame is looked at, and shows its own state, not a fade.

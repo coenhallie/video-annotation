@@ -475,10 +475,24 @@ describe('attack glow', () => {
     return shapes;
   }
 
-  it('draws three chevrons pointing at the goal being attacked', () => {
+  function renderWithBall(ballX: number, glow: Parameters<ReturnType<typeof useRenderer2D>['renderFrame']>[2]) {
+    const { canvas, ops } = fakeCanvas();
+    useRenderer2D(canvas).renderFrame(
+      { ...frame, balls: [{ projected_coordinates: { x: ballX, y: 0 } }] } as Frame,
+      undefined,
+      glow
+    );
+    return ops;
+  }
+  const centreX = (c: { points: Array<[number, number]> }) => {
+    const xs = c.points.map(([x]) => x);
+    return (Math.min(...xs) + Math.max(...xs)) / 2;
+  };
+
+  it('draws chevrons pointing at the goal being attacked', () => {
     for (const direction of [1, -1] as const) {
-      const shapes = chevrons(render({ color: BLUE, direction, intensity: 1 }));
-      expect(shapes).toHaveLength(3);
+      const shapes = chevrons(render({ color: BLUE, direction, intensity: 1, flow: 0.5 }));
+      expect(shapes.length).toBeGreaterThanOrEqual(3);
       for (const { points } of shapes) {
         const ys = points.map(([, y]) => y);
         const mid = (Math.min(...ys) + Math.max(...ys)) / 2;
@@ -490,17 +504,59 @@ describe('attack glow', () => {
     }
   });
 
-  it('centres the chevrons between the ball and the goal line', () => {
-    const shapes = chevrons(render({ color: BLUE, direction: 1, intensity: 1 }));
-    const xs = shapes.flatMap((c) => c.points.map(([x]) => x));
-    const [ballX] = px(10);
-    const [lineX] = px(PITCH.length / 2);
-    expect((Math.min(...xs) + Math.max(...xs)) / 2).toBeCloseTo((ballX + lineX) / 2, 6);
+  // The stagger: centred on the ball, the arrow moved with every jitter and
+  // pass of the tracked ball.
+  it('keeps the chevrons where they are however the ball moves', () => {
+    const glow = { color: BLUE, direction: 1 as const, intensity: 1, flow: 0.3 };
+    const at10 = chevrons(renderWithBall(10, glow));
+    expect(chevrons(renderWithBall(30, glow))).toEqual(at10);
+    expect(chevrons(renderWithBall(-20, glow))).toEqual(at10);
+  });
+
+  it('centres the stream of chevrons on the half being attacked', () => {
+    for (const direction of [1, -1] as const) {
+      const shapes = chevrons(render({ color: BLUE, direction, intensity: 1, flow: 0.5 }));
+      const mean = shapes.reduce((sum, c) => sum + centreX(c), 0) / shapes.length;
+      expect(mean).toBeCloseTo(px((direction * PITCH.length) / 4)[0], 6);
+    }
+  });
+
+  it('moves the chevrons toward the goal as the flow advances', () => {
+    for (const direction of [1, -1] as const) {
+      const a = chevrons(render({ color: BLUE, direction, intensity: 1, flow: 0.2 }));
+      const b = chevrons(render({ color: BLUE, direction, intensity: 1, flow: 0.3 }));
+      expect(b).toHaveLength(a.length);
+      a.forEach((c, i) => {
+        const moved = centreX(b[i]!) - centreX(c);
+        expect(Math.sign(moved)).toBe(direction);
+        expect(Math.abs(moved)).toBeGreaterThan(0);
+      });
+    }
+  });
+
+  // One flow cycle must end exactly where the next begins, or the stream
+  // would visibly jump once a cycle.
+  it('loops without a jump', () => {
+    const start = chevrons(render({ color: BLUE, direction: 1, intensity: 1, flow: 0 }));
+    const end = chevrons(render({ color: BLUE, direction: 1, intensity: 1, flow: 0.9999 }));
+    const visible = (cs: typeof start) => cs.filter((c) => c.alpha > 0.01);
+    expect(visible(end)).toHaveLength(visible(start).length);
+    visible(start).forEach((c) => {
+      expect(
+        visible(end).some((e) => Math.abs(centreX(e) - centreX(c)) < 0.1 && Math.abs(e.alpha - c.alpha) < 0.01)
+      ).toBe(true);
+    });
+  });
+
+  it('fades the chevrons in as they enter and out as they leave', () => {
+    const shapes = chevrons(render({ color: BLUE, direction: 1, intensity: 1, flow: 0.5 }));
+    const alphas = shapes.map((c) => c.alpha);
+    expect(Math.min(alphas[0]!, alphas.at(-1)!)).toBeLessThan(Math.max(...alphas));
   });
 
   it('fades the chevrons with the glow', () => {
-    const full = chevrons(render({ color: BLUE, direction: 1, intensity: 1 }))[0]!.alpha;
-    const half = chevrons(render({ color: BLUE, direction: 1, intensity: 0.5 }))[0]!.alpha;
+    const full = chevrons(render({ color: BLUE, direction: 1, intensity: 1, flow: 0.5 }))[1]!.alpha;
+    const half = chevrons(render({ color: BLUE, direction: 1, intensity: 0.5, flow: 0.5 }))[1]!.alpha;
     expect(half).toBeCloseTo(full / 2, 6);
   });
 
