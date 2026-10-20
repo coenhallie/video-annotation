@@ -2,6 +2,8 @@
 import { ref, watch, onMounted, onUnmounted, computed } from 'vue';
 import { useRenderer2D, type GoalOverlay } from '@/lib/vis/useRenderer2D';
 import {
+  goalCamera,
+  goalCameraWeight,
   goalStateAt,
   isGoalFrame,
   planGoal,
@@ -10,7 +12,13 @@ import {
   type GoalState,
 } from '@/lib/vis/goalSequence';
 import { FRAME_W, FRAME_H } from '@/lib/vis/constants';
-import { fitFrameBox, type FrameBox } from '@/lib/vis/viewTransform';
+import {
+  cameraFromView,
+  fitFrameBox,
+  viewFromCamera,
+  type Camera,
+  type FrameBox,
+} from '@/lib/vis/viewTransform';
 import type { PipelineReplay } from '@/composables/usePipelineReplay';
 import { replayDrawingFrame } from '@/utils/timelineBinding';
 
@@ -59,8 +67,7 @@ function pushView(): void {
     zoom: zoom.value,
     panX: panX.value,
     panY: panY.value,
-    renderedWidth:
-      frameBox.value?.width ?? canvasRef.value?.getBoundingClientRect().width ?? 0,
+    renderedWidth: renderedWidth(),
   });
   // The replay can be paused, so a view change has to repaint by itself rather
   // than waiting for the next frame.
@@ -157,6 +164,7 @@ function onPixelRatioChange(): void {
 function onWheel(e: WheelEvent) {
   const stage = stageRef.value;
   if (!stage) return;
+  releaseGoalCamera();
   const rect = stage.getBoundingClientRect();
   const mx = e.clientX - rect.left - rect.width / 2;
   const my = e.clientY - rect.top - rect.height / 2;
@@ -191,6 +199,7 @@ function onWheel(e: WheelEvent) {
 
 function onPointerDown(e: PointerEvent) {
   if (zoom.value <= MIN_ZOOM) return;
+  releaseGoalCamera();
   isPanning = true;
   panStartX = e.clientX;
   panStartY = e.clientY;
@@ -210,6 +219,7 @@ function onPointerUp() {
 }
 
 function resetZoom() {
+  releaseGoalCamera();
   zoom.value = 1;
   panX.value = 0;
   panY.value = 0;
@@ -273,11 +283,22 @@ function step(frames: number) {
 // It only ever plays during playback, and anything that means someone wants
 // the real frame - pausing, seeking, stepping, pressing on the drawing layer -
 // stops it at once. A frame looked at or annotated always shows the data.
+//
+// While it plays, the view zooms in on the shot and the net and eases back out
+// to the view the user had. Stopping it puts that view straight back; zooming
+// or panning during it hands the view to the user for good.
 
 /** Clock steps larger than this are a seek, not playback. */
 const MAX_PLAYBACK_STEP_S = 0.5;
 
-let goal: { plan: GoalPlan; startedMs: number | null; elapsedMs: number } | null = null;
+let goal: {
+  plan: GoalPlan;
+  startedMs: number | null;
+  elapsedMs: number;
+  // The user's view and the goal's framing. Null once the user takes the view
+  // over, and with reduced motion, when the view does not move at all.
+  camera: { from: Camera; to: Camera } | null;
+} | null = null;
 let goalRaf: number | null = null;
 // The label usually stays on for many frames: only its first one is a goal.
 let goalLabelSeen = false;
@@ -306,6 +327,26 @@ function goalOverlay(): GoalOverlay | undefined {
   };
 }
 
+function renderedWidth(): number {
+  return frameBox.value?.width ?? canvasRef.value?.getBoundingClientRect().width ?? 0;
+}
+
+function showCamera(cam: Camera): void {
+  const view = viewFromCamera(cam, renderedWidth());
+  zoom.value = view.zoom;
+  panX.value = view.panX;
+  panY.value = view.panY;
+}
+
+/** Between two cameras: zoom eased geometrically, so it feels even both ways. */
+function blendCamera(from: Camera, to: Camera, k: number): Camera {
+  return {
+    zoom: from.zoom * (to.zoom / from.zoom) ** k,
+    x: from.x + (to.x - from.x) * k,
+    y: from.y + (to.y - from.y) * k,
+  };
+}
+
 function goalStep(ms: number): void {
   goalRaf = null;
   if (!goal) return;
@@ -314,6 +355,10 @@ function goalStep(ms: number): void {
   if (goal.elapsedMs >= GOAL_SEQUENCE_MS) {
     stopGoal();
     return;
+  }
+  if (goal.camera) {
+    const { from, to } = goal.camera;
+    showCamera(blendCamera(from, to, goalCameraWeight(goal.elapsedMs)));
   }
   paint();
   goalRaf = window.requestAnimationFrame(goalStep);
@@ -324,15 +369,35 @@ function startGoal(frame: NonNullable<PipelineReplay['frame']['value']>): void {
   // the wrong end.
   const plan = planGoal(frame);
   if (!plan) return;
-  goal = { plan, startedMs: null, elapsedMs: 0 };
+  const from = cameraFromView({
+    zoom: zoom.value,
+    panX: panX.value,
+    panY: panY.value,
+    renderedWidth: renderedWidth(),
+  });
+  goal = {
+    plan,
+    startedMs: null,
+    elapsedMs: 0,
+    camera: prefersReducedMotion()
+      ? null
+      : { from, to: goalCamera(plan, frame.pitch_dimensions) },
+  };
   goalRaf = window.requestAnimationFrame(goalStep);
+}
+
+/** The user has zoomed or panned: the view is theirs, and stays where they put it. */
+function releaseGoalCamera(): void {
+  if (goal) goal.camera = null;
 }
 
 function stopGoal(): void {
   if (!goal && goalRaf === null) return;
   if (goalRaf !== null) window.cancelAnimationFrame(goalRaf);
   goalRaf = null;
+  const camera = goal?.camera;
   goal = null;
+  if (camera) showCamera(camera.from);
   paint();
 }
 

@@ -3,9 +3,13 @@ import {
   isGoalFrame,
   planGoal,
   goalStateAt,
+  goalCamera,
+  goalCameraWeight,
   GOAL_SEQUENCE_MS,
   NET_DEPTH_METRES,
 } from '@/lib/vis/goalSequence';
+import { build2DTransform, worldToPx } from '@/lib/vis/pitchGeometry';
+import { FRAME_W, FRAME_H } from '@/lib/vis/constants';
 import type { Frame } from '@/lib/vis/types';
 
 const PITCH = { length: 105, width: 68, goal_width: 7.32 };
@@ -125,5 +129,71 @@ describe('goalStateAt', () => {
 
   it('holds its final state past the end', () => {
     expect(goalStateAt(plan, GOAL_SEQUENCE_MS * 2)).toEqual(goalStateAt(plan, GOAL_SEQUENCE_MS));
+  });
+});
+
+describe('goalCamera', () => {
+  const T = build2DTransform(PITCH);
+  const visible = (cam: { zoom: number; x: number; y: number }, x: number, y: number) => {
+    const [px, py] = worldToPx(x, y, T);
+    const halfW = FRAME_W / (2 * cam.zoom);
+    const halfH = FRAME_H / (2 * cam.zoom);
+    return Math.abs(px - cam.x) <= halfW && Math.abs(py - cam.y) <= halfH;
+  };
+
+  for (const [name, ball] of [
+    ['a long shot', { x: 10, y: 18 }],
+    ['a close shot', { x: 40, y: -6 }],
+    ['the fallback start', { x: 228, y: 1 }],
+  ] as const) {
+    it(`frames the shot and the whole net for ${name}`, () => {
+      const plan = planGoal(frame({ ball }))!;
+      const cam = goalCamera(plan, PITCH);
+      expect(visible(cam, plan.start.x, plan.start.y)).toBe(true);
+      for (const y of [-PITCH.goal_width / 2, PITCH.goal_width / 2]) {
+        expect(visible(cam, plan.side * (HALF + NET_DEPTH_METRES), y)).toBe(true);
+      }
+    });
+  }
+
+  it('zooms in, but not so far that the play loses its context', () => {
+    for (const ball of [{ x: 10, y: 18 }, { x: 40, y: -6 }, { x: -44, y: 0 }]) {
+      const cam = goalCamera(planGoal(frame({ ball }))!, PITCH);
+      expect(cam.zoom).toBeGreaterThanOrEqual(1.4);
+      expect(cam.zoom).toBeLessThanOrEqual(3);
+    }
+  });
+
+  it('never shows past the edge of the frame', () => {
+    const cam = goalCamera(planGoal(frame({ ball: { x: 50, y: 30 } }))!, PITCH);
+    const halfW = FRAME_W / (2 * cam.zoom);
+    const halfH = FRAME_H / (2 * cam.zoom);
+    expect(cam.x - halfW).toBeGreaterThanOrEqual(-1e-9);
+    expect(cam.x + halfW).toBeLessThanOrEqual(FRAME_W + 1e-9);
+    expect(cam.y - halfH).toBeGreaterThanOrEqual(-1e-9);
+    expect(cam.y + halfH).toBeLessThanOrEqual(FRAME_H + 1e-9);
+  });
+});
+
+describe('goalCameraWeight', () => {
+  it('starts at the normal view and is fully zoomed in quickly', () => {
+    expect(goalCameraWeight(0)).toBe(0);
+    expect(goalCameraWeight(500)).toBe(1);
+  });
+
+  it('eases in, rather than jumping', () => {
+    const early = goalCameraWeight(60);
+    expect(early).toBeGreaterThan(0);
+    expect(early).toBeLessThan(0.6);
+  });
+
+  it('holds while the ball goes in and settles', () => {
+    for (const t of [600, 1200, 2000]) expect(goalCameraWeight(t)).toBe(1);
+  });
+
+  it('eases back out to the normal view by the end', () => {
+    const tail = [2700, 2850, 3000, 3150].map(goalCameraWeight);
+    for (let i = 1; i < tail.length; i++) expect(tail[i]).toBeLessThan(tail[i - 1]!);
+    expect(goalCameraWeight(GOAL_SEQUENCE_MS)).toBe(0);
   });
 });

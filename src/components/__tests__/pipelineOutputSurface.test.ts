@@ -10,7 +10,7 @@ import { GOAL_SEQUENCE_MS } from '@/lib/vis/goalSequence';
  * and plain const declarations would still be in their temporal dead zone
  * when the factory runs (see drawingCanvas.test.ts for the same pattern).
  */
-const { renderFrame, useRenderer2D } = vi.hoisted(() => {
+const { renderFrame, setView, useRenderer2D } = vi.hoisted(() => {
   const renderFrame = vi.fn();
   const invalidateCache = vi.fn();
   // Zoom and pan go through the renderer now, not a CSS transform on the
@@ -641,6 +641,54 @@ describe('PipelineOutputSurface', () => {
       await tick(replay, goalFrame(['GOAL']));
       await animate(300);
       expect(lastOverlay()).toBeDefined();
+      m.unmount();
+    });
+
+    const lastView = () =>
+      setView.mock.calls.at(-1)?.[0] as { zoom: number; panX: number; panY: number } | undefined;
+
+    it('zooms in on the goal while the sequence plays', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, goalFrame(['GOAL']));
+      await animate(1000);
+      expect(lastView()!.zoom).toBeGreaterThanOrEqual(1.4);
+      m.unmount();
+    });
+
+    it('eases back out to the view it started from', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, goalFrame(['GOAL']));
+      await animate(GOAL_SEQUENCE_MS + 200);
+      expect(lastView()).toMatchObject({ zoom: 1, panX: 0, panY: 0 });
+      m.unmount();
+    });
+
+    it('snaps back to the view it started from the moment playback pauses', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, goalFrame(['GOAL']));
+      await animate(800);
+      set(replay.isPlaying, false);
+      await nextTick();
+      expect(lastView()).toMatchObject({ zoom: 1, panX: 0, panY: 0 });
+      m.unmount();
+    });
+
+    it('hands the view over, and leaves it, when the user scrolls during it', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, goalFrame(['GOAL']));
+      await animate(800);
+      const zoomed = lastView()!.zoom;
+      at(m.root, 'pipeline-viewport')!.dispatchEvent(
+        new WheelEvent('wheel', { deltaY: -100, bubbles: true, cancelable: true })
+      );
+      await nextTick();
+      const own = lastView()!.zoom;
+      expect(own).toBeCloseTo(zoomed + 0.15, 6);
+
+      await animate(GOAL_SEQUENCE_MS);
+      expect(lastView()!.zoom).toBeCloseTo(own, 6);
+      // The shot itself still finished.
+      expect(lastOverlay()).toBeUndefined();
       m.unmount();
     });
 

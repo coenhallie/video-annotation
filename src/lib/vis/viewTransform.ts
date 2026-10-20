@@ -137,3 +137,42 @@ export function fitFrameBox(
     pixelHeight,
   };
 }
+
+/** A view described by what it looks at: a zoom and a centre in frame units. */
+export interface Camera {
+  zoom: number;
+  x: number;
+  y: number;
+}
+
+/**
+ * The surface's zoom and screen-pixel pan that centre the view on a camera.
+ *
+ * The view scales about the frame centre and then pans (computeViewMatrix), so
+ * a point p lands at zoom * (p - centre) + centre + pan. Putting the camera's
+ * point at the centre gives pan = -zoom * (p - centre) in frame units, which
+ * the rendered width converts to screen pixels.
+ */
+export function viewFromCamera(
+  cam: Camera,
+  renderedWidth: number
+): { zoom: number; panX: number; panY: number } {
+  const scale = renderedWidth > 0 ? renderedWidth / FRAME_W : 1;
+  // `|| 0` turns a centred camera's -0 into 0, which is what "no pan" means.
+  return {
+    zoom: cam.zoom,
+    panX: -cam.zoom * (cam.x - FRAME_W / 2) * scale || 0,
+    panY: -cam.zoom * (cam.y - FRAME_H / 2) * scale || 0,
+  };
+}
+
+/** The camera a surface view is showing: the inverse of viewFromCamera. */
+export function cameraFromView(view: PipelineView): Camera {
+  const scale = view.renderedWidth > 0 ? view.renderedWidth / FRAME_W : 1;
+  const zoom = view.zoom > 0 ? view.zoom : 1;
+  return {
+    zoom,
+    x: FRAME_W / 2 - view.panX / scale / zoom,
+    y: FRAME_H / 2 - view.panY / scale / zoom,
+  };
+}

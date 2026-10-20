@@ -1,5 +1,6 @@
-import type { Frame } from './types';
-import { resolvePitchDimensions } from './pitchGeometry';
+import type { Frame, PitchDimensions } from './types';
+import { build2DTransform, resolvePitchDimensions, worldToPx } from './pitchGeometry';
+import { FRAME_W, FRAME_H } from './constants';
 
 /**
  * The goal sequence: when the pipeline labels a frame GOAL, the replay shows a
@@ -182,4 +183,57 @@ export function goalStateAt(plan: GoalPlan, t: number): GoalState {
         2;
 
   return { ball, trail, netBulge };
+}
+
+/** How far in the camera may go for a goal: enough to matter, not so far play loses its context. */
+const CAMERA_MIN_ZOOM = 1.4;
+const CAMERA_MAX_ZOOM = 3;
+/** Room kept around the shot and the net when framing them. */
+const CAMERA_MARGIN_METRES = 5;
+/** Quick in, so the shot is close up while it is still travelling; a gentler way out. */
+const CAMERA_IN_MS = 400;
+const CAMERA_OUT_MS = 600;
+
+const easeInOutCubic = (u: number) => (u < 0.5 ? 4 * u ** 3 : 1 - (-2 * u + 2) ** 3 / 2);
+
+/**
+ * The view that frames a goal: from where the shot starts to the back of the
+ * net, in frame units (1280x720) like the surface's own zoom and pan. Never
+ * centred so near an edge that it would show past the frame.
+ */
+export function goalCamera(
+  plan: GoalPlan,
+  pd: Partial<PitchDimensions> | undefined
+): { zoom: number; x: number; y: number } {
+  const t = build2DTransform(pd);
+  const m = CAMERA_MARGIN_METRES;
+  const xs = [plan.start.x, plan.side * (plan.halfLength + NET_DEPTH_METRES)];
+  const ys = [plan.start.y, -plan.goalWidth / 2, plan.goalWidth / 2];
+  const [ax, ay] = worldToPx(Math.min(...xs) - m, Math.min(...ys) - m, t);
+  const [bx, by] = worldToPx(Math.max(...xs) + m, Math.max(...ys) + m, t);
+
+  const zoom = clamp(
+    Math.min(FRAME_W / Math.abs(bx - ax), FRAME_H / Math.abs(by - ay)),
+    CAMERA_MIN_ZOOM,
+    CAMERA_MAX_ZOOM
+  );
+  const halfW = FRAME_W / (2 * zoom);
+  const halfH = FRAME_H / (2 * zoom);
+  return {
+    zoom,
+    x: clamp((ax + bx) / 2, halfW, FRAME_W - halfW),
+    y: clamp((ay + by) / 2, halfH, FRAME_H - halfH),
+  };
+}
+
+/**
+ * How far the camera is towards goalCamera at time `t`: 0 is the view the
+ * user had, 1 is the goal framed. Eased both ways, so it never jumps.
+ */
+export function goalCameraWeight(t: number): number {
+  if (t <= 0 || t >= GOAL_SEQUENCE_MS) return 0;
+  if (t < CAMERA_IN_MS) return easeOutCubic(t / CAMERA_IN_MS);
+  const outFrom = GOAL_SEQUENCE_MS - CAMERA_OUT_MS;
+  if (t > outFrom) return 1 - easeInOutCubic((t - outFrom) / CAMERA_OUT_MS);
+  return 1;
 }

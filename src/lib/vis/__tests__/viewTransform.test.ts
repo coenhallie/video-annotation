@@ -4,6 +4,8 @@ import {
   applyViewMatrix,
   IDENTITY_VIEW,
   fitFrameBox,
+  viewFromCamera,
+  cameraFromView,
 } from '../viewTransform';
 import { FRAME_W, FRAME_H } from '../constants';
 
@@ -129,5 +131,34 @@ describe('fitFrameBox', () => {
   it('reports an empty box for a container with no size', () => {
     const box = fitFrameBox(at(0, 0, 0, 0), 2);
     expect(box.pixelWidth).toBe(0);
+  });
+});
+
+describe('viewFromCamera / cameraFromView', () => {
+  // The surface pans in screen pixels; the view maps them back through the
+  // rendered width. A camera centred on (x, y) must put that point mid-frame.
+  it('pans so the camera centre lands in the middle of the frame', () => {
+    const cam = { zoom: 1.8, x: 900, y: 300 };
+    const view = viewFromCamera(cam, 640);
+    const m = computeViewMatrix({ ...view, renderedWidth: 640 });
+    const p = applyViewMatrix(m, 900, 300);
+    expect(p.x).toBeCloseTo(CX, 6);
+    expect(p.y).toBeCloseTo(CY, 6);
+  });
+
+  it('round-trips', () => {
+    const cam = { zoom: 2.2, x: 700, y: 410 };
+    const back = cameraFromView({ ...viewFromCamera(cam, 900), renderedWidth: 900 });
+    expect(back.zoom).toBe(2.2);
+    expect(back.x).toBeCloseTo(700, 6);
+    expect(back.y).toBeCloseTo(410, 6);
+  });
+
+  it('reads the fit view as the whole frame', () => {
+    expect(cameraFromView({ zoom: 1, panX: 0, panY: 0, renderedWidth: 1096 })).toEqual({
+      zoom: 1,
+      x: CX,
+      y: CY,
+    });
   });
 });
