@@ -5,6 +5,7 @@ import {
   pipelineGameId,
   pipelineMatchDate,
   pipelineMatchTitle,
+  pipelineTeamNames,
   stashPendingPipelineMatch,
   takePendingPipelineMatch,
 } from '@/utils/pipelineTitle';
@@ -165,5 +166,48 @@ describe('pending pipeline match', () => {
       matchDate: null,
       gameId: null,
     });
+  });
+});
+
+describe('pipelineTeamNames', () => {
+  it('reads both teams from a title DALF named, first team first', () => {
+    expect(pipelineTeamNames('Manchester City vs PSG - Champions League - 14/10/2026')).toEqual([
+      'Manchester City',
+      'PSG',
+    ]);
+  });
+
+  it('reads the teams from a title with only the match in it', () => {
+    expect(pipelineTeamNames('Ajax vs Feyenoord')).toEqual(['Ajax', 'Feyenoord']);
+  });
+
+  it('accepts "VS" and "vs." and stray spaces', () => {
+    expect(pipelineTeamNames('  Ajax   VS.  Feyenoord ')).toEqual(['Ajax', 'Feyenoord']);
+  });
+
+  it('keeps a hyphen inside a team name', () => {
+    expect(pipelineTeamNames('Paris Saint-Germain vs Manchester City - Champions League')).toEqual([
+      'Paris Saint-Germain',
+      'Manchester City',
+    ]);
+  });
+
+  it('finds no teams in a title that names no match', () => {
+    expect(pipelineTeamNames('Pipeline Output - 9eddbba3')).toBeNull();
+    expect(pipelineTeamNames('Training session')).toBeNull();
+    expect(pipelineTeamNames('')).toBeNull();
+    expect(pipelineTeamNames(null)).toBeNull();
+    expect(pipelineTeamNames(undefined)).toBeNull();
+  });
+
+  // Better no names than a half-named pair.
+  it('finds no teams when either side is missing or there are more than two', () => {
+    expect(pipelineTeamNames('vs PSG')).toBeNull();
+    expect(pipelineTeamNames('Ajax vs ')).toBeNull();
+    expect(pipelineTeamNames('A vs B vs C')).toBeNull();
+  });
+
+  it('does not read "vs" inside a word as a separator', () => {
+    expect(pipelineTeamNames('Canvas review')).toBeNull();
   });
 });

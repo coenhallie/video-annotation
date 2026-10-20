@@ -33,7 +33,7 @@ import type { DrawingCanvasExpose } from '@/types/component-interfaces';
 import { resolveAnnotationDeepLink } from '@/utils/annotationDeepLink';
 import { canCreateAnnotations } from '@/utils/annotationPermissions';
 import { isPipelineSurfaceVisible } from '@/utils/pipelineSurface';
-import { takePendingPipelineMatch } from '@/utils/pipelineTitle';
+import { pipelineTeamNames, takePendingPipelineMatch } from '@/utils/pipelineTitle';
 import { timelineAnnotations } from '@/utils/timelineAnnotations';
 import { planHistorySelection } from '@/utils/historySelection';
 import {
@@ -2097,6 +2097,7 @@ watch(
             >
               <PipelineOutputSurface
                 :replay="pipelineReplay"
+                :team-names="pipelineTeamNames(currentVideoObject?.title)"
                 @context-menu="openQuickPick"
               >
                 <!--

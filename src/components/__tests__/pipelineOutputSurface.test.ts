@@ -46,12 +46,16 @@ function fakeReplay(state: ReplayState, message: string | null = null) {
   } as unknown as PipelineReplay;
 }
 
-function mount(replay: PipelineReplay) {
+function mount(replay: PipelineReplay, props: { teamNames?: [string, string] | null | undefined } = {}) {
   const root = document.createElement('div');
   document.body.appendChild(root);
   const app = createApp(
     defineComponent({
-      setup: () => () => h(PipelineOutputSurface, { replay }),
+      setup: () => () =>
+        h(PipelineOutputSurface, {
+          replay,
+          ...(props.teamNames !== undefined ? { teamNames: props.teamNames } : {}),
+        }),
     })
   );
   app.mount(root);
@@ -294,10 +298,10 @@ describe('PipelineOutputSurface', () => {
 
   describe('team phase labels', () => {
     type Phase = PipelineReplay['phase']['value'];
-    async function withPhase(phase: Phase) {
+    async function withPhase(phase: Phase, teamNames?: [string, string] | null) {
       const replay = fakeReplay('ready');
       (replay.phase as unknown as { value: Phase }).value = phase;
-      const m = mount(replay);
+      const m = mount(replay, { teamNames });
       await nextTick();
       return m;
     }
@@ -364,6 +368,54 @@ describe('PipelineOutputSurface', () => {
       expect(at(m.root, 'pipeline-phase')?.getAttribute('aria-label')).toBe(
         'Red attacking, Blue defending'
       );
+      m.unmount();
+    });
+
+    // Team 0 is taken to be the first team the match title names (see
+    // pipelineTeamNames): the export itself names neither team.
+    it('names the teams when the match is known, first-named as Red', async () => {
+      const m = await withPhase(
+        { possession: 0, attacks: { 0: 1, 1: -1 }, states: { 0: 'attacking', 1: 'defending' } },
+        ['Manchester City', 'PSG']
+      );
+      expect(label(m.root, 0)?.textContent).toMatch(/Manchester City\s*Attacking/i);
+      expect(label(m.root, 1)?.textContent).toMatch(/Defending\s*PSG/i);
+      expect(at(m.root, 'pipeline-phase')?.getAttribute('aria-label')).toBe(
+        'Manchester City attacking, PSG defending'
+      );
+      m.unmount();
+    });
+
+    it('keeps the colours for the names', async () => {
+      const m = await withPhase(
+        { possession: 1, attacks: { 0: 1, 1: -1 }, states: { 0: 'defending', 1: 'attacking' } },
+        ['Manchester City', 'PSG']
+      );
+      expect(label(m.root, 0)?.style.borderColor).toBe(PERSON_COLORS.home.fill);
+      // jsdom reports a background as rgb(), so compare it the same way.
+      const probe = document.createElement('div');
+      probe.style.backgroundColor = PERSON_COLORS.away.fill;
+      expect(label(m.root, 1)?.style.backgroundColor).toBe(probe.style.backgroundColor);
+      m.unmount();
+    });
+
+    // A long name is cut short on screen, so the whole of it goes on hover.
+    it('shows a team name in full on hover', async () => {
+      const m = await withPhase(
+        { possession: null, attacks: { 0: 1, 1: -1 }, states: { 0: null, 1: null } },
+        ['Borussia Mönchengladbach', 'PSG']
+      );
+      expect(label(m.root, 0)?.getAttribute('title')).toBe('Borussia Mönchengladbach');
+      m.unmount();
+    });
+
+    it('falls back to the colours when the match is not known', async () => {
+      const m = await withPhase(
+        { possession: null, attacks: { 0: 1, 1: -1 }, states: { 0: null, 1: null } },
+        null
+      );
+      expect(label(m.root, 0)?.textContent?.trim()).toMatch(/^Red$/i);
+      expect(label(m.root, 1)?.textContent?.trim()).toMatch(/^Blue$/i);
       m.unmount();
     });
 
