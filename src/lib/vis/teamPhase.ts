@@ -5,7 +5,7 @@ import type { Frame } from './types';
  * per-frame data. None of it is reported by the pipeline: it is derived here,
  * and anything that shows it should read as derived.
  *
- * Three things go into it, each measured on a full match before being chosen:
+ * Two things go into it, each measured on a full match before being chosen:
  *
  *  - Possession. The raw per-frame carrier flips about six times a minute, and
  *    most frames (61%) have no carrier at all. A team takes possession once it
@@ -15,9 +15,11 @@ import type { Frame } from './types';
  *  - Direction. The export has no attacking-direction field, and the teams do
  *    not swap ends where a fixed per-half rule would expect (on the February
  *    export the keepers swap at about minute 16). So a team attacks away from
- *    its own keeper, read from the frames themselves.
- *  - Where the ball is: in the opponent's half is attacking, in the team's own
- *    half is merely in possession.
+ *    its own keeper, read from the frames themselves. Nothing here needs it
+ *    to say who is attacking; it is for drawing which way they attack.
+ *
+ * The team in possession is attacking and the other is defending, wherever
+ * the ball is.
  *
  * Everything is computed from the frames within PHASE_LOOKBACK_S of the frame
  * asked about, and nothing older. That bounded memory is what makes a frame's
@@ -34,7 +36,7 @@ const KEEPER_MIN_ABS_X = 15;
 const EPSILON_S = 1e-6;
 
 export type TeamId = 0 | 1;
-export type TeamState = 'attacking' | 'possession' | 'defending';
+export type TeamState = 'attacking' | 'defending';
 
 export interface TeamPhase {
   /** The team in possession, or null when nobody clearly is. */
@@ -87,14 +89,6 @@ function directions(frame: Frame): Record<TeamId, 1 | -1 | null> {
   return out;
 }
 
-function ballX(frame: Frame): number | null {
-  for (const ball of frame.balls ?? []) {
-    const { x, y } = ball.projected_coordinates ?? {};
-    if (finite(x) && finite(y)) return x;
-  }
-  return null;
-}
-
 /**
  * The phase at `records[index]`, from that record and those before it within
  * PHASE_LOOKBACK_S. `records` must be in time order; anything older than the
@@ -116,7 +110,6 @@ export function teamPhaseAt(records: PhaseRecord[], index: number): TeamPhase {
   let candidate: TeamId | null = null;
   let candidateSince = 0;
   const attacks: Record<TeamId, 1 | -1 | null> = { 0: null, 1: null };
-  let ball: number | null = null;
 
   for (let i = start; i <= index; i++) {
     const record = records[i];
@@ -141,19 +134,13 @@ export function teamPhaseAt(records: PhaseRecord[], index: number): TeamPhase {
 
     const dir = directions(frame);
     for (const k of TEAMS) if (dir[k] !== null) attacks[k] = dir[k];
-
-    const x = ballX(frame);
-    if (x !== null) ball = x;
   }
 
   if (possession === null) return { ...none, attacks };
 
-  const towards = attacks[possession];
-  const inTheirHalf = towards !== null && ball !== null && ball * towards > 0;
-  const other: TeamId = possession === 0 ? 1 : 0;
-  const states = { [possession]: inTheirHalf ? 'attacking' : 'possession', [other]: 'defending' } as Record<
-    TeamId,
-    TeamState
-  >;
+  const states: Record<TeamId, TeamState> =
+    possession === 0
+      ? { 0: 'attacking', 1: 'defending' }
+      : { 0: 'defending', 1: 'attacking' };
   return { possession, attacks, states };
 }

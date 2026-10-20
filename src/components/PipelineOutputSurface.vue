@@ -451,7 +451,6 @@ const PHASE_TEAMS: Record<TeamId, { name: string; color: string }> = {
 
 const STATE_TEXT: Record<TeamState, string> = {
   attacking: 'Attacking',
-  possession: 'In possession',
   defending: 'Defending',
 };
 
@@ -684,7 +683,7 @@ onUnmounted(() => {
             data-testid="pipeline-phase"
             role="group"
             :aria-label="phaseDescription"
-            title="Worked out from the tracking data: a team has the ball once it has kept it for a second, and attacks once the ball is in the opponent's half."
+            title="Worked out from the tracking data: a team attacks once it has kept the ball for a second, and the other team defends."
             class="pointer-events-auto absolute inset-x-0 bottom-full mx-auto mb-1.5 flex w-max items-center gap-2"
           >
             <template
@@ -699,7 +698,7 @@ onUnmounted(() => {
               <div
                 :data-testid="`pipeline-phase-team-${l.team}`"
                 :data-state="l.state ?? 'none'"
-                class="flex w-[11rem] items-center gap-2 whitespace-nowrap rounded-md border-2 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-lg transition-colors duration-200 motion-reduce:transition-none"
+                class="flex w-[9.5rem] items-center gap-2 whitespace-nowrap rounded-md border-2 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-lg transition-colors duration-200 motion-reduce:transition-none"
                 :class="[l.filled ? '' : 'bg-black/60', l.team === 1 ? 'justify-end' : '']"
                 :style="{ borderColor: l.color, backgroundColor: l.filled ? l.color : undefined }"
                 aria-hidden="true"

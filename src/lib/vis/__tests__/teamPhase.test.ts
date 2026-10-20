@@ -136,32 +136,25 @@ describe('teamPhaseAt: direction', () => {
 });
 
 describe('teamPhaseAt: states', () => {
-  it('has the team with the ball attacking in the opponent half, and the other defending', () => {
+  it('has the team with the ball attacking and the other defending', () => {
     const p = last(records(hold(1.5, { carrier: 0, ball: { x: 20, y: 0 } })));
     expect(p.states).toEqual({ 0: 'attacking', 1: 'defending' });
   });
 
-  it('has the team with the ball merely in possession in its own half', () => {
+  // Two states only: where the ball is on the pitch does not matter.
+  it('has the team with the ball attacking in its own half too', () => {
     const p = last(records(hold(1.5, { carrier: 0, ball: { x: -20, y: 0 } })));
-    expect(p.states).toEqual({ 0: 'possession', 1: 'defending' });
+    expect(p.states).toEqual({ 0: 'attacking', 1: 'defending' });
   });
 
-  it('works for the other team and the other direction too', () => {
-    const p = last(records(hold(1.5, { carrier: 1, ball: { x: -20, y: 0 } })));
+  it('works for the other team too', () => {
+    const p = last(records(hold(1.5, { carrier: 1, ball: { x: 30, y: 0 } })));
     expect(p.states).toEqual({ 0: 'defending', 1: 'attacking' });
   });
 
-  it('uses the last ball position in the lookback when this frame has none', () => {
-    const recs = records([
-      ...hold(1.5, { carrier: 0, ball: { x: 20, y: 0 } }),
-      ...hold(0.2, { carrier: 0, ball: null }),
-    ]);
-    expect(last(recs).states[0]).toBe('attacking');
-  });
-
-  it('calls it possession, not attacking, when the direction is unknown', () => {
-    const p = last(records(hold(1.5, { carrier: 0, ball: { x: 20, y: 0 }, keepers: { 0: null, 1: null } })));
-    expect(p.states).toEqual({ 0: 'possession', 1: 'defending' });
+  it('does not need to know the direction to say who is attacking', () => {
+    const p = last(records(hold(1.5, { carrier: 0, keepers: { 0: null, 1: null } })));
+    expect(p.states).toEqual({ 0: 'attacking', 1: 'defending' });
   });
 
   it('gives neither team a state when nobody is in possession', () => {

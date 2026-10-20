@@ -315,16 +315,6 @@ describe('PipelineOutputSurface', () => {
       m.unmount();
     });
 
-    it('says in possession when the ball is in the team’s own half', async () => {
-      const m = await withPhase({
-        possession: 1,
-        attacks: { 0: 1, 1: -1 },
-        states: { 0: 'defending', 1: 'possession' },
-      });
-      expect(label(m.root, 1)?.textContent).toMatch(/In possession/i);
-      m.unmount();
-    });
-
     it('fills the label of the team with the ball in its colour', async () => {
       const m = await withPhase({
         possession: 1,
@@ -354,10 +344,10 @@ describe('PipelineOutputSurface', () => {
       const m = await withPhase({
         possession: 0,
         attacks: { 0: 1, 1: -1 },
-        states: { 0: 'possession', 1: 'defending' },
+        states: { 0: 'attacking', 1: 'defending' },
       });
       expect(at(m.root, 'pipeline-phase')?.getAttribute('aria-label')).toBe(
-        'Red in possession, Blue defending'
+        'Red attacking, Blue defending'
       );
       m.unmount();
     });
