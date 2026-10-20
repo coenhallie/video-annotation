@@ -10,7 +10,7 @@ import {
   type ComponentPublicInstance,
 } from 'vue';
 import DualTimeline from '@/components/DualTimeline.vue';
-import VideoTimeline from '@/components/VideoTimeline.vue';
+import LiveVideoTimeline from '@/components/LiveVideoTimeline.vue';
 import AnnotationPanel from '@/components/AnnotationPanel.vue';
 import SidebarTabs from '@/components/SidebarTabs.vue';
 import ActivityTimeline from '@/components/ActivityTimeline.vue';
@@ -346,6 +346,13 @@ const timeline = computed(() =>
   )
 );
 
+// The position in `timeline` changes on every tick of playback, so this
+// template must not read it: the whole editor would re-render each time.
+// LiveVideoTimeline reads it in its own render instead, and the frame rate,
+// which hardly ever changes, is read on its own.
+const readTimeline = () => timeline.value;
+const timelineFps = computed(() => timeline.value.fps);
+
 const onPipeline = computed(() => activeSurface.value === 'pipeline');
 
 const onTimelineSeek = (time: number) => {
@@ -487,7 +494,7 @@ const openQuickPick = (event: MouseEvent) => {
   quickPickOpen.value = true;
 };
 
-const videoTimelineRef = ref<InstanceType<typeof VideoTimeline> | null>(null);
+const videoTimelineRef = ref<InstanceType<typeof LiveVideoTimeline> | null>(null);
 
 // The timeline follows the annotation list's group/label filter: the panel
 // reports the ids it shows (null when nothing is filtered), and the timelines
@@ -2139,14 +2146,10 @@ watch(
         <!-- Timeline -->
         <div class="bg-gray-900 dark:bg-black p-2 lg:p-4 border-t border-gray-800 dark:border-gray-800">
           <!-- Single Video Timeline -->
-          <VideoTimeline
+          <LiveVideoTimeline
             v-if="playerMode === 'single'"
             ref="videoTimelineRef"
-            :current-time="timeline.currentTime"
-            :duration="timeline.duration"
-            :current-frame="timeline.currentFrame"
-            :total-frames="timeline.totalFrames"
-            :fps="timeline.fps"
+            :numbers="readTimeline"
             :annotations="timelineMarkers"
             :selected-annotation="selectedAnnotation"
             @seek-to-time="onTimelineSeek"
@@ -2254,7 +2257,7 @@ watch(
             :selected-annotation="selectedAnnotation"
             :current-time="currentTime || 0"
             :current-frame="currentFrame || 0"
-            :fps="timeline.fps"
+            :fps="timelineFps"
             :drawing-canvas="drawingCanvas"
             :read-only="(isSharedVideo || isSharedComparison) && !canComment()"
             :can-annotate="canAnnotate"
