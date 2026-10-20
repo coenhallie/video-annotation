@@ -77,20 +77,58 @@ export function parseWindow(
   text: string,
   opts: { startsAtBof: boolean; endsAtEof: boolean }
 ): ReplayRecord[] {
-  const lines = text.split('\n');
+  return parseWindowAt(text, opts).records;
+}
 
-  if (!opts.startsAtBof) lines.shift();
-  if (!opts.endsAtEof) lines.pop();
+/** A parsed range, with the positions that make it usable as byte bounds. */
+export interface ParsedWindow {
+  records: ReplayRecord[];
+  /**
+   * Where each record's line starts, as an index into the text. Taken from
+   * the lines themselves rather than assumed from the first one, so a line
+   * readRecord rejected cannot shift every position after it.
+   */
+  offsets: number[];
+  /**
+   * Where the line after the last whole one starts: the start of the fragment
+   * the range cut off, or the end of the text when the range reached EOF.
+   * Reading on from here continues the file with nothing skipped or repeated.
+   */
+  next: number;
+}
 
-  const out: ReplayRecord[] = [];
-  for (const raw of lines) {
-    const line = raw.trim();
-    // Load-bearing: this guard filters the empty final element that split('\n')
-    // produces when endsAtEof is true. Removing it silently reintroduces the
-    // off-by-one bug this function exists to prevent.
-    if (!line) continue;
-    const record = readRecord(line);
-    if (record) out.push(record);
+/** parseWindow, plus where in the text each record and the next one begin. */
+export function parseWindowAt(
+  text: string,
+  opts: { startsAtBof: boolean; endsAtEof: boolean }
+): ParsedWindow {
+  const records: ReplayRecord[] = [];
+  const offsets: number[] = [];
+  // Without `endsAtEof` the text past its last newline is a partial record,
+  // so the whole lines stop there. Reading through to the end of the text
+  // instead silently returns the second-to-last record as the last one.
+  const next = opts.endsAtEof ? text.length : text.lastIndexOf('\n') + 1;
+
+  let pos = 0;
+  if (!opts.startsAtBof) {
+    const newline = text.indexOf('\n');
+    if (newline < 0) return { records, offsets, next };
+    pos = newline + 1;
   }
-  return out;
+
+  while (pos < next) {
+    const newline = text.indexOf('\n', pos);
+    const lineEnd = newline < 0 ? text.length : newline;
+    // Blank lines - a trailing newline at EOF among them - hold no record.
+    const line = text.slice(pos, lineEnd).trim();
+    if (line) {
+      const record = readRecord(line);
+      if (record) {
+        records.push(record);
+        offsets.push(pos);
+      }
+    }
+    pos = lineEnd + 1;
+  }
+  return { records, offsets, next };
 }

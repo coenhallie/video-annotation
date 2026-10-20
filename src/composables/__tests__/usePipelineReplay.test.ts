@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { usePipelineReplay } from '@/composables/usePipelineReplay';
 import type { RangeFetcher } from '@/lib/pipelineData/jsonlIndex';
 import {
@@ -67,6 +67,52 @@ function manualClock() {
   };
 }
 
+/**
+ * A fetcher whose reads can be held in flight, the way a real network holds
+ * them. A fetcher that answers within the same microtask hides every bug that
+ * only exists while a read is still on its way.
+ */
+function gated(text: string) {
+  const calls: Array<{ start: number; end: number; signal: AbortSignal | undefined }> = [];
+  let holding = false;
+  const waiting: Array<() => void> = [];
+  const fetcher: RangeFetcher = {
+    async head() {
+      return { size: text.length, acceptsRanges: true };
+    },
+    async range(start, end, signal) {
+      calls.push({ start, end, signal });
+      if (holding) await new Promise<void>((resolve) => waiting.push(resolve));
+      return text.slice(start, end + 1);
+    },
+  };
+  return {
+    fetcher,
+    calls,
+    hold() {
+      holding = true;
+    },
+    release() {
+      holding = false;
+      waiting.splice(0).forEach((resolve) => resolve());
+    },
+  };
+}
+
+/**
+ * The frame fakeFile shows at a replay time: the last record whose stored
+ * (4 dp) timestamp is at or before it. Computed the way the replay compares,
+ * so a time a float's width either side of a record boundary still agrees.
+ */
+function frameAt(time: number, startFrame = 457, t0 = 1000, dt = 0.04): number {
+  const target = t0 + time;
+  const stamp = (i: number) => Number((t0 + i * dt).toFixed(4));
+  let i = Math.max(0, Math.floor(time / dt));
+  while (stamp(i + 1) <= target) i++;
+  while (i > 0 && stamp(i) > target) i--;
+  return startFrame + i;
+}
+
 describe('usePipelineReplay', () => {
   it('reports empty when no fetcher is available', async () => {
     const r = usePipelineReplay({ openFetcher: async () => null });
@@ -104,6 +150,43 @@ describe('usePipelineReplay', () => {
     expect(r.frame.value).not.toBeNull();
   });
 
+  // The index already knows exactly where the first record is, so finding it
+  // must not spend a round of probes spread across the whole file.
+  it('reads only the first frame and its window after building the index', async () => {
+    const { fetcher, calls } = counting(fakeFile(4000));
+    const r = usePipelineReplay({ openFetcher: async () => fetcher });
+    await r.load();
+    // Head, tail and eight probes for the index; then one probe and one window.
+    expect(calls.length).toBe(12);
+  });
+
+  // A server without range support can only hand over the whole object, so
+  // the replay has to read it once and serve every frame from that. Larger
+  // than one window on purpose: that is where a windowed read would be
+  // narrower than the object and the fetcher would refuse it.
+  it('plays a file served without range support from one whole read', async () => {
+    const text = fakeFile(2000);
+    const fetcher: RangeFetcher = {
+      async head() {
+        return { size: text.length, acceptsRanges: false };
+      },
+      async range(start, end) {
+        if (start !== 0 || end !== text.length - 1) {
+          throw new Error('only a whole-object read is valid');
+        }
+        return text;
+      },
+    };
+    const r = usePipelineReplay({ openFetcher: async () => fetcher });
+    await r.load();
+    expect(r.state.value).toBe('ready');
+    expect(r.currentFrame.value).toBe(457);
+
+    await r.seek(70);
+    expect(r.state.value).toBe('ready');
+    expect(r.currentFrame.value).toBe(frameAt(70));
+  });
+
   it('seeks to the record bracketing the requested time', async () => {
     const { fetcher } = counting(fakeFile(500));
     const r = usePipelineReplay({ openFetcher: async () => fetcher });
@@ -113,10 +196,10 @@ describe('usePipelineReplay', () => {
     expect(r.currentTime.value).toBeCloseTo(4, 2);
   });
 
-  // Also the regression test for the quarter-window backoff in recordAt.
+  // Also the regression test for centring the seek's probe on its estimate.
   // index.last.offset is the file size, so estimateOffset at the very end
-  // returns a byte past the last record; without the backoff the window is
-  // empty and currentFrame never reaches the final frame.
+  // returns a byte past the last record; a read starting there is empty and
+  // currentFrame never reaches the final frame.
   it('clamps a seek past the end and still finds the last record', async () => {
     const { fetcher } = counting(fakeFile(500));
     const r = usePipelineReplay({ openFetcher: async () => fetcher });
@@ -310,14 +393,14 @@ describe('usePipelineReplay', () => {
       release = resolve;
     });
     const text = fakeFile(2000);
-    let call = 0;
+    let stall = false;
     const fetcher = {
       async head() {
         return { size: text.length, acceptsRanges: true };
       },
       async range(start: number, end: number) {
-        // Let the index build normally; stall only the first window read.
-        if (++call > 12) await gate;
+        // Let the load complete normally; stall only the seek's reads.
+        if (stall) await gate;
         return text.slice(start, end + 1);
       },
     };
@@ -327,6 +410,7 @@ describe('usePipelineReplay', () => {
 
     const r = usePipelineReplay({ openFetcher: async () => fetcher });
     await r.load();
+    stall = true;
     const pending = r.seek(30);
     r.dispose();
     release();
@@ -491,7 +575,7 @@ describe('usePipelineReplay', () => {
     const second = r.load();
     await second;
 
-    // The fresh load's own buildIndex/recordAt calls prove the property so
+    // The fresh load's own index and first-frame reads prove the property so
     // far: nothing has reached the stale fetcher yet.
     expect(madeFetchers.length).toBeGreaterThan(0);
     expect(madeFetchers.every((name) => name === 'fresh')).toBe(true);
@@ -510,6 +594,159 @@ describe('usePipelineReplay', () => {
 
     expect(madeFetchers.length).toBeGreaterThan(0);
     expect(madeFetchers.every((name) => name === 'fresh')).toBe(true);
+  });
+});
+
+describe('usePipelineReplay under network latency', () => {
+  it('adds no reads for the frames that tick past a seek in flight', async () => {
+    const clock = manualClock();
+    const g = gated(fakeFile(20000));
+    const r = usePipelineReplay({
+      openFetcher: async () => g.fetcher,
+      raf: clock.raf,
+      caf: clock.caf,
+    });
+    await r.load();
+    r.play();
+    clock.tick(0);
+    clock.tick(16);
+
+    g.hold();
+    const before = g.calls.length;
+    void r.seek(600);
+    // The seek's own first round of probes.
+    const afterSeek = g.calls.length;
+    expect(afterSeek - before).toBeGreaterThan(0);
+    expect(afterSeek - before).toBeLessThanOrEqual(4);
+
+    for (let ms = 32; ms < 1000; ms += 16) clock.tick(ms);
+    expect(g.calls.length).toBe(afterSeek);
+    g.release();
+    await r.whenIdle();
+    r.pause();
+  });
+
+  it('holds the clock while the record it needs is still loading', async () => {
+    const clock = manualClock();
+    const g = gated(fakeFile(20000));
+    const r = usePipelineReplay({
+      openFetcher: async () => g.fetcher,
+      raf: clock.raf,
+      caf: clock.caf,
+    });
+    await r.load();
+    r.play();
+    clock.tick(0);
+
+    g.hold();
+    void r.seek(600);
+    for (let ms = 16; ms <= 1000; ms += 16) clock.tick(ms);
+    // The playhead must not run ahead of a frame that has not been drawn.
+    expect(r.currentTime.value).toBe(600);
+    expect(r.buffering.value).toBe(true);
+
+    g.release();
+    await r.whenIdle();
+    clock.tick(1016);
+    clock.tick(1116);
+    expect(r.currentTime.value).toBeGreaterThan(600);
+    expect(r.currentFrame.value).toBe(frameAt(r.currentTime.value));
+    expect(r.buffering.value).toBe(false);
+    r.pause();
+  });
+
+  it('aborts the reads of a seek a newer one has replaced', async () => {
+    const g = gated(fakeFile(20000));
+    const r = usePipelineReplay({ openFetcher: async () => g.fetcher });
+    await r.load();
+
+    g.hold();
+    void r.seek(200);
+    const superseded = g.calls[g.calls.length - 1];
+    const latest = r.seek(600);
+    expect(superseded?.signal?.aborted).toBe(true);
+
+    g.release();
+    await latest;
+    expect(r.currentFrame.value).toBe(frameAt(600));
+  });
+
+  it("shows a seek's frame before the window around it has arrived", async () => {
+    const text = fakeFile(20000);
+    let holdLarge = false;
+    const waiting: Array<() => void> = [];
+    const fetcher: RangeFetcher = {
+      async head() {
+        return { size: text.length, acceptsRanges: true };
+      },
+      async range(start, end) {
+        // Anything bigger than a probe is a window: hold it.
+        if (holdLarge && end - start + 1 > 100_000) {
+          await new Promise<void>((resolve) => waiting.push(resolve));
+        }
+        return text.slice(start, end + 1);
+      },
+    };
+    const r = usePipelineReplay({ openFetcher: async () => fetcher });
+    await r.load();
+
+    holdLarge = true;
+    const pending = r.seek(600);
+    await vi.waitFor(() => expect(r.currentFrame.value).toBe(frameAt(600)));
+
+    waiting.splice(0).forEach((resolve) => resolve());
+    await pending;
+  });
+
+  it('prefetches from the byte the playing window ends at', async () => {
+    const clock = manualClock();
+    const { fetcher, calls } = counting(fakeFile(4000));
+    const r = usePipelineReplay({
+      openFetcher: async () => fetcher,
+      raf: clock.raf,
+      caf: clock.caf,
+      windowSeconds: 10,
+    });
+    await r.load();
+    const playing = calls[calls.length - 1];
+    const before = calls.length;
+
+    r.play();
+    clock.tick(0);
+    clock.tick(2100);
+    await r.whenIdle();
+    r.pause();
+
+    const prefetch = calls[before];
+    expect(playing).toBeDefined();
+    expect(prefetch).toBeDefined();
+    // At most the record the playing window cut off is read again, plus the
+    // one byte a ranged read backs up by.
+    expect(prefetch![0]).toBeGreaterThanOrEqual(playing![1] - (RECORD_BYTES + 1));
+  });
+
+  it('plays across a prefetched window boundary without stalling', async () => {
+    const clock = manualClock();
+    const { fetcher } = counting(fakeFile(4000));
+    const r = usePipelineReplay({
+      openFetcher: async () => fetcher,
+      raf: clock.raf,
+      caf: clock.caf,
+      windowSeconds: 10,
+    });
+    await r.load();
+    r.play();
+    clock.tick(0);
+    clock.tick(2100);
+    await r.whenIdle();
+
+    // Through the end of the first window and into the second.
+    for (let ms = 2110; ms <= 12100; ms += 10) {
+      clock.tick(ms);
+      expect(r.buffering.value).toBe(false);
+      expect(r.currentFrame.value).toBe(frameAt(r.currentTime.value));
+    }
+    r.pause();
   });
 });
 
@@ -568,16 +805,128 @@ describe('usePipelineReplay seeking a file with uneven time per byte', () => {
     expect(fromAhead).toBe(457 + recordAtTime(half, { count }));
   });
 
-  it('converges on a far seek instead of crawling a window at a time', async () => {
-    const { fetcher, calls } = counting(text);
+  it('converges on a far seek in a few round trips instead of crawling', async () => {
+    // Reads go out in rounds, several at once, so what a user waits on is the
+    // number of rounds, not the number of reads. Each read here answers on a
+    // later macrotask, which keeps one round's reads together and the next
+    // round's apart.
+    let rounds = 0;
+    let roundOpen = false;
+    const fetcher: RangeFetcher = {
+      async head() {
+        return { size: text.length, acceptsRanges: true };
+      },
+      async range(start, end) {
+        if (!roundOpen) {
+          rounds += 1;
+          roundOpen = true;
+          setTimeout(() => {
+            roundOpen = false;
+          }, 0);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        return text.slice(start, end + 1);
+      },
+    };
     const r = usePipelineReplay({ openFetcher: async () => fetcher });
     await r.load();
 
-    calls.length = 0;
+    rounds = 0;
     await r.seek(r.duration.value * 0.55);
-    // Re-estimating from what the previous read observed narrows the target
-    // fast. The composable's read bound is a backstop against a pathological
-    // file, not a budget a normal seek is expected to spend.
-    expect(calls.length).toBeLessThanOrEqual(6);
+    // The rounds that find the record, plus one for the window after it. The
+    // composable's round bound is a backstop against a pathological file, not
+    // a budget a normal seek is expected to spend.
+    expect(rounds).toBeLessThanOrEqual(5);
   });
 });
+
+describe('usePipelineReplay team phase', () => {
+  /**
+   * Team 0 carries the ball until `switchAt` seconds, team 1 after. Keepers at
+   * -45 (team 0) and +45 (team 1), ball at x = 20. Records are padded wide,
+   * so the probes a seek makes carry well under a second of history on their
+   * own: the lookback has to be fetched on purpose.
+   */
+  function phaseFile(count: number, switchAt: number, width = 4000) {
+    const lines: string[] = [];
+    for (let i = 0; i < count; i++) {
+      const t = i * 0.04;
+      const carrier = t < switchAt ? 0 : 1;
+      const body: Record<string, unknown> = {
+        teams: [
+          {
+            team_id: 0,
+            players: [
+              { track_id: 1, person_type: 'PersonType.PLAYER', projected_coordinates: { x: 0, y: 5 }, in_possession: carrier === 0 },
+              { track_id: 2, person_type: 'PersonType.GOALKEEPER', projected_coordinates: { x: -45, y: 0 } },
+            ],
+          },
+          {
+            team_id: 1,
+            players: [
+              { track_id: 3, person_type: 'PersonType.PLAYER', projected_coordinates: { x: 0, y: -5 }, in_possession: carrier === 1 },
+              { track_id: 4, person_type: 'PersonType.GOALKEEPER', projected_coordinates: { x: 45, y: 0 } },
+            ],
+          },
+        ],
+        balls: [{ projected_coordinates: { x: 20, y: 0 } }],
+        state: { actions: [] },
+        frame_data: [{ frame_count: 457 + i, frame_uuid: [{ timestamp: Number((1000 + t).toFixed(4)), uuid: 'x' }] }],
+        pad: '',
+      };
+      body.pad = 'p'.repeat(Math.max(0, width - JSON.stringify(body).length));
+      lines.push(JSON.stringify(body));
+    }
+    return lines.join('\n');
+  }
+
+  // 300 s of play, the hand-over at 150 s: far from the window loaded first.
+  const text = phaseFile(7500, 150);
+
+  it('reports the phase of the frame on screen', async () => {
+    const r = usePipelineReplay({ openFetcher: async () => fetcherFor(text) });
+    await r.load();
+    await r.seek(100);
+    await r.whenIdle();
+    expect(r.phase.value).toMatchObject({ possession: 0, states: { 0: 'attacking', 1: 'defending' } });
+  });
+
+  // Just after the hand-over, team 1 has carried for 0.6 s: not yet enough,
+  // so team 0 is still in possession. Telling that needs the seconds before
+  // the frame, which a seek on its own does not load.
+  it('looks back before a seek target', async () => {
+    const r = usePipelineReplay({ openFetcher: async () => fetcherFor(text) });
+    await r.load();
+    await r.seek(150.6);
+    await r.whenIdle();
+    expect(r.phase.value?.possession).toBe(0);
+
+    await r.seek(151.5);
+    await r.whenIdle();
+    expect(r.phase.value?.possession).toBe(1);
+  });
+
+  it('gives a frame the same phase whether it was reached by playing or by seeking', async () => {
+    const clock = manualClock();
+    const played = usePipelineReplay({ openFetcher: async () => fetcherFor(text), raf: clock.raf, caf: clock.caf });
+    await played.load();
+    await played.seek(149);
+    await played.whenIdle();
+    played.play();
+    clock.tick(0);
+    for (let ms = 40; ms <= 1640; ms += 40) {
+      clock.tick(ms);
+      await played.whenIdle();
+    }
+    played.pause();
+
+    const sought = usePipelineReplay({ openFetcher: async () => fetcherFor(text) });
+    await sought.load();
+    await sought.seek(played.currentTime.value);
+    await sought.whenIdle();
+
+    expect(sought.currentFrame.value).toBe(played.currentFrame.value);
+    expect(sought.phase.value).toEqual(played.phase.value);
+  });
+});
+

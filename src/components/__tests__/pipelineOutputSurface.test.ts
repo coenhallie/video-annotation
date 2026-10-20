@@ -3,13 +3,16 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createApp, defineComponent, h, nextTick, ref } from 'vue';
 import PipelineOutputSurface from '@/components/PipelineOutputSurface.vue';
 import type { PipelineReplay, ReplayState } from '@/composables/usePipelineReplay';
+import { GOAL_SEQUENCE_MS } from '@/lib/vis/goalSequence';
+import { PERSON_COLORS } from '@/lib/vis/constants';
+import { CHEVRON_FLOW_PERIOD_S } from '@/lib/vis/attackGlow';
 
 /**
  * Declared through vi.hoisted because vi.mock is hoisted above the imports,
  * and plain const declarations would still be in their temporal dead zone
  * when the factory runs (see drawingCanvas.test.ts for the same pattern).
  */
-const { renderFrame, useRenderer2D } = vi.hoisted(() => {
+const { renderFrame, setView, useRenderer2D } = vi.hoisted(() => {
   const renderFrame = vi.fn();
   const invalidateCache = vi.fn();
   // Zoom and pan go through the renderer now, not a CSS transform on the
@@ -30,6 +33,8 @@ function fakeReplay(state: ReplayState, message: string | null = null) {
     fps: ref(25),
     isPlaying: ref(false),
     frame: ref(null),
+    buffering: ref(false),
+    phase: ref(null),
     state: ref(state),
     error: ref(message),
     load: vi.fn(async () => {}),
@@ -107,23 +112,145 @@ describe('PipelineOutputSurface', () => {
 
   /**
    * The overlay is where the drawing layer mounts, and strokes only land on the
-   * right pitch positions if it covers exactly the canvas's rendered rect. Both
-   * are absolutely positioned and letterboxed, and what makes them coincide is
-   * carrying the same clamps - so that is what is pinned here. jsdom does no
-   * layout, so comparing rects would compare two zeroes.
+   * right pitch positions if it covers exactly the canvas's rendered rect; the
+   * HUD has to sit on the pitch the same way. All three are placed from one
+   * computed box. Matching CSS clamps were not enough: a canvas and a div given
+   * the same clamps resolve differently once the stage is wider than 16:9.
+   *
+   * jsdom does no layout, so the stage's rect and the resize notification are
+   * supplied here.
    */
-  it('sizes the overlay with the same clamps as the canvas', async () => {
-    const m = mount(fakeReplay('ready'));
-    await nextTick();
+  describe('sizing', () => {
+    let observed: Array<() => void> = [];
+    const originalObserver = globalThis.ResizeObserver;
+    const originalDpr = window.devicePixelRatio;
 
-    const overlay = at(m.root, 'pipeline-overlay');
-    expect(overlay).not.toBeNull();
-    const cls = overlay!.className;
-    for (const clamp of ['aspect-video', 'max-h-full', 'max-w-full', 'w-[1280px]']) {
-      expect(cls).toContain(clamp);
-    }
+    beforeEach(() => {
+      observed = [];
+      globalThis.ResizeObserver = class {
+        private readonly notify: () => void;
+        constructor(cb: () => void) {
+          this.notify = cb;
+        }
+        observe() {
+          observed.push(this.notify);
+        }
+        unobserve() {}
+        disconnect() {}
+      } as unknown as typeof ResizeObserver;
+      Object.defineProperty(window, 'devicePixelRatio', { value: 2, configurable: true });
+      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+        function (this: HTMLElement) {
+          return this.dataset.testid === 'pipeline-viewport'
+            ? ({ left: 0, top: 0, width: 1096, height: 640 } as DOMRect)
+            : ({ left: 0, top: 0, width: 0, height: 0 } as DOMRect);
+        }
+      );
+    });
 
-    m.unmount();
+    afterEach(() => {
+      globalThis.ResizeObserver = originalObserver;
+      Object.defineProperty(window, 'devicePixelRatio', {
+        value: originalDpr,
+        configurable: true,
+      });
+      vi.mocked(HTMLElement.prototype.getBoundingClientRect).mockRestore();
+    });
+
+    const box = (el: Element | null) => {
+      const style = (el as HTMLElement | null)?.style;
+      return [style?.left, style?.top, style?.width, style?.height];
+    };
+
+    it('places the canvas, the drawing overlay and the HUD in one box', async () => {
+      const m = mount(fakeReplay('ready'));
+      await nextTick();
+      observed.forEach((notify) => notify());
+      await nextTick();
+
+      const canvasBox = box(at(m.root, 'pipeline-canvas'));
+      // 1096x640, less the 40 px row kept above the pitch for the team labels.
+      expect(canvasBox[2]).toBe('1066.5px');
+      expect(box(at(m.root, 'pipeline-overlay'))).toEqual(canvasBox);
+      expect(box(at(m.root, 'pipeline-hud'))).toEqual(canvasBox);
+      m.unmount();
+    });
+
+    // The labels sit above the pitch, never over it: anything standing on the
+    // near touchline would otherwise be hidden under them.
+    it('keeps a row above the pitch for the team labels', async () => {
+      const m = mount(fakeReplay('ready'));
+      await nextTick();
+      observed.forEach((notify) => notify());
+      await nextTick();
+
+      const style = (at(m.root, 'pipeline-canvas') as HTMLElement).style;
+      expect(parseFloat(style.top)).toBeGreaterThanOrEqual(40);
+      expect(parseFloat(style.top) + parseFloat(style.height)).toBeLessThanOrEqual(640);
+      m.unmount();
+    });
+
+    it('gives the canvas one bitmap pixel per device pixel', async () => {
+      const m = mount(fakeReplay('ready'));
+      await nextTick();
+      observed.forEach((notify) => notify());
+      await nextTick();
+
+      const canvas = at(m.root, 'pipeline-canvas') as HTMLCanvasElement;
+      expect([canvas.width, canvas.height]).toEqual([2133, 1200]);
+      m.unmount();
+    });
+
+    // Dragging the window to a display with another pixel ratio leaves its CSS
+    // size alone, so no resize is reported. The resolution query is what says.
+    it('resizes the bitmap when the device pixel ratio changes', async () => {
+      const listeners: Array<() => void> = [];
+      const originalMatchMedia = window.matchMedia;
+      window.matchMedia = ((query: string) => ({
+        media: query,
+        addEventListener: (_: string, cb: () => void) => listeners.push(cb),
+        removeEventListener: () => {},
+      })) as unknown as typeof window.matchMedia;
+      try {
+        const m = mount(fakeReplay('ready'));
+        await nextTick();
+        observed.forEach((notify) => notify());
+        await nextTick();
+
+        Object.defineProperty(window, 'devicePixelRatio', { value: 3, configurable: true });
+        listeners.splice(0).forEach((cb) => cb());
+        await nextTick();
+
+        const canvas = at(m.root, 'pipeline-canvas') as HTMLCanvasElement;
+        expect(canvas.width).toBe(3200);
+        m.unmount();
+      } finally {
+        window.matchMedia = originalMatchMedia;
+      }
+    });
+
+    it('draws the current frame again once the bitmap is resized', async () => {
+      // The order load() produces: mounted while loading, then a frame and
+      // ready together, which is what attaches the renderer.
+      const replay = fakeReplay('loading');
+      const m = mount(replay);
+      await nextTick();
+      (replay.frame as unknown as { value: unknown }).value = {
+        teams: [],
+        balls: [],
+        state: { actions: [] },
+        frame_data: [{ frame_count: 1 }],
+      };
+      (replay.state as unknown as { value: string }).value = 'ready';
+      await nextTick();
+      renderFrame.mockClear();
+      observed.forEach((notify) => notify());
+      await nextTick();
+
+      // Resizing a canvas clears it, so a paused replay would go blank.
+      expect(renderFrame).toHaveBeenCalled();
+      m.unmount();
+    });
   });
 
   // Zoom and pan live in the renderer now. A transform on the element would put
@@ -145,6 +272,106 @@ describe('PipelineOutputSurface', () => {
     expect(at(m.root, 'pipeline-canvas')).not.toBeNull();
     expect(at(m.root, 'pipeline-empty')).toBeNull();
     m.unmount();
+  });
+
+  // The replay holds its clock while it waits on data, and a playhead that
+  // stops with nothing on screen saying why reads as a freeze.
+  it('marks the frame label while the replay waits on data', async () => {
+    const replay = fakeReplay('ready');
+    const { root, unmount } = mount(replay);
+    await nextTick();
+    expect(at(root, 'pipeline-buffering')).toBeNull();
+
+    (replay.buffering as unknown as { value: boolean }).value = true;
+    await nextTick();
+    expect(at(root, 'pipeline-buffering')?.getAttribute('role')).toBe('status');
+
+    (replay.buffering as unknown as { value: boolean }).value = false;
+    await nextTick();
+    expect(at(root, 'pipeline-buffering')).toBeNull();
+    unmount();
+  });
+
+  describe('team phase labels', () => {
+    type Phase = PipelineReplay['phase']['value'];
+    async function withPhase(phase: Phase) {
+      const replay = fakeReplay('ready');
+      (replay.phase as unknown as { value: Phase }).value = phase;
+      const m = mount(replay);
+      await nextTick();
+      return m;
+    }
+    const label = (root: HTMLElement, team: 0 | 1) =>
+      root.querySelector(`[data-testid="pipeline-phase-team-${team}"]`) as HTMLElement | null;
+
+    it('shows each team with its state', async () => {
+      const m = await withPhase({
+        possession: 0,
+        attacks: { 0: 1, 1: -1 },
+        states: { 0: 'attacking', 1: 'defending' },
+      });
+      expect(label(m.root, 0)?.textContent).toMatch(/Red\s*Attacking/i);
+      expect(label(m.root, 1)?.textContent).toMatch(/Defending\s*Blue/i);
+      expect(label(m.root, 0)?.dataset.state).toBe('attacking');
+      expect(label(m.root, 1)?.dataset.state).toBe('defending');
+      m.unmount();
+    });
+
+    it('fills the label of the team with the ball in its colour', async () => {
+      const m = await withPhase({
+        possession: 1,
+        attacks: { 0: 1, 1: -1 },
+        states: { 0: 'defending', 1: 'attacking' },
+      });
+      expect(label(m.root, 1)?.style.backgroundColor).not.toBe('');
+      expect(label(m.root, 0)?.style.backgroundColor).toBe('');
+      m.unmount();
+    });
+
+    // A team keeping the ball for less than the attack hold is not attacking,
+    // and a filled label would say it was.
+    it('does not fill the label of a team that has the ball but is not attacking yet', async () => {
+      const m = await withPhase({
+        possession: 1,
+        attacks: { 0: 1, 1: -1 },
+        states: { 0: null, 1: null },
+      });
+      expect(label(m.root, 1)?.style.backgroundColor).toBe('');
+      expect(label(m.root, 1)?.textContent?.trim()).toMatch(/^Blue$/i);
+      m.unmount();
+    });
+
+    // A third of real frames have nobody clearly in possession: say nothing
+    // rather than guess.
+    it('shows both teams without a state when nobody is in possession', async () => {
+      const m = await withPhase({
+        possession: null,
+        attacks: { 0: 1, 1: -1 },
+        states: { 0: null, 1: null },
+      });
+      expect(label(m.root, 0)?.textContent?.trim()).toMatch(/^Red$/i);
+      expect(label(m.root, 1)?.textContent?.trim()).toMatch(/^Blue$/i);
+      expect(label(m.root, 0)?.dataset.state).toBe('none');
+      m.unmount();
+    });
+
+    it('describes the phase for screen readers', async () => {
+      const m = await withPhase({
+        possession: 0,
+        attacks: { 0: 1, 1: -1 },
+        states: { 0: 'attacking', 1: 'defending' },
+      });
+      expect(at(m.root, 'pipeline-phase')?.getAttribute('aria-label')).toBe(
+        'Red attacking, Blue defending'
+      );
+      m.unmount();
+    });
+
+    it('shows nothing before the first frame has a phase', async () => {
+      const m = await withPhase(null);
+      expect(at(m.root, 'pipeline-phase')).toBeNull();
+      m.unmount();
+    });
   });
 
   it('calls load on mount', async () => {
@@ -359,4 +586,437 @@ describe('PipelineOutputSurface', () => {
     app.unmount();
     root.remove();
   });
+
+  describe('goal sequence', () => {
+    let queued: Array<(ms: number) => void> = [];
+    let clockMs = 1000;
+    const originalRaf = window.requestAnimationFrame;
+    const originalCaf = window.cancelAnimationFrame;
+
+    beforeEach(() => {
+      queued = [];
+      clockMs = 1000;
+      renderFrame.mockClear();
+      window.requestAnimationFrame = ((cb: (ms: number) => void) => {
+        queued.push(cb);
+        return queued.length;
+      }) as typeof window.requestAnimationFrame;
+      window.cancelAnimationFrame = (() => {
+        queued = [];
+      }) as typeof window.cancelAnimationFrame;
+    });
+
+    afterEach(() => {
+      window.requestAnimationFrame = originalRaf;
+      window.cancelAnimationFrame = originalCaf;
+    });
+
+    async function animate(ms: number) {
+      const end = clockMs + ms;
+      while (clockMs < end) {
+        clockMs += 1000 / 60;
+        const cbs = queued;
+        queued = [];
+        cbs.forEach((cb) => cb(clockMs));
+      }
+      await nextTick();
+    }
+
+    function goalFrame(labels: string[], ball: { x: number; y: number } | null = { x: 30, y: 5 }) {
+      return {
+        pitch_dimensions: { length: 105, width: 68, goal_width: 7.32 },
+        teams: [],
+        balls: ball ? [{ projected_coordinates: ball }] : [],
+        state: { actions: labels.map((action_type) => ({ action_type })) },
+        frame_data: [{ frame_count: 1 }],
+      };
+    }
+
+    type Writable = { value: unknown };
+    const set = (r: unknown, v: unknown) => ((r as Writable).value = v);
+
+    /** Mounted the way load() leaves it, then playing at 10 s. */
+    async function playing() {
+      const replay = fakeReplay('loading');
+      const m = mount(replay);
+      await nextTick();
+      set(replay.currentTime, 10);
+      set(replay.frame, goalFrame(['other']));
+      set(replay.state, 'ready');
+      set(replay.isPlaying, true);
+      await nextTick();
+      return { replay, m };
+    }
+
+    /** One playback tick: the clock moves on a frame and the next record shows. */
+    async function tick(replay: PipelineReplay, frame: unknown, step = 0.04) {
+      set(replay.currentTime, (replay.currentTime.value as number) + step);
+      set(replay.frame, frame);
+      await nextTick();
+    }
+
+    const lastOverlay = () => renderFrame.mock.calls.at(-1)?.[1];
+
+    it('plays when playback runs into a GOAL label', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, goalFrame(['GOAL']));
+      await animate(1200);
+      expect(lastOverlay()).toBeDefined();
+      // Only the shot itself: no text over the pitch.
+      expect(m.root.textContent).not.toMatch(/GOAL/);
+      m.unmount();
+    });
+
+    it('ends by itself and goes back to the tracked ball', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, goalFrame(['GOAL']));
+      await animate(GOAL_SEQUENCE_MS + 200);
+      expect(lastOverlay()).toBeUndefined();
+      m.unmount();
+    });
+
+    // A seek is not a goal happening: it would replace the frame someone
+    // jumped to look at with an animation.
+    it('does not play when a seek lands on a GOAL label', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, goalFrame(['GOAL']), 250);
+      await animate(1200);
+      expect(lastOverlay()).toBeUndefined();
+      m.unmount();
+    });
+
+    it('does not play while paused, for example when stepping a frame', async () => {
+      const { replay, m } = await playing();
+      set(replay.isPlaying, false);
+      await nextTick();
+      await tick(replay, goalFrame(['GOAL']));
+      await animate(1200);
+      expect(lastOverlay()).toBeUndefined();
+      m.unmount();
+    });
+
+    it('stops and shows the real frame the moment playback pauses', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, goalFrame(['GOAL']));
+      await animate(500);
+      set(replay.isPlaying, false);
+      await nextTick();
+      expect(lastOverlay()).toBeUndefined();
+      m.unmount();
+    });
+
+    it('stops on a seek made while it plays', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, goalFrame(['GOAL']));
+      await animate(500);
+      await tick(replay, goalFrame(['other']), 120);
+      expect(lastOverlay()).toBeUndefined();
+      m.unmount();
+    });
+
+    // A drawing stamped on a frame whose ball is the animation's would record
+    // something the pipeline never produced.
+    it('stops the moment someone presses on the drawing layer', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, goalFrame(['GOAL']));
+      await animate(500);
+      at(m.root, 'pipeline-overlay')!.dispatchEvent(
+        new Event('pointerdown', { bubbles: true })
+      );
+      await nextTick();
+      expect(lastOverlay()).toBeUndefined();
+      m.unmount();
+    });
+
+    it('plays once per GOAL label, not again on its following frames', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, goalFrame(['GOAL']));
+      await animate(GOAL_SEQUENCE_MS + 200);
+      await tick(replay, goalFrame(['GOAL']));
+      await animate(300);
+      expect(lastOverlay()).toBeUndefined();
+
+      // A new label, after one without it, is a new goal.
+      await tick(replay, goalFrame(['other']));
+      await tick(replay, goalFrame(['GOAL']));
+      await animate(300);
+      expect(lastOverlay()).toBeDefined();
+      m.unmount();
+    });
+
+    const lastView = () =>
+      setView.mock.calls.at(-1)?.[0] as { zoom: number; panX: number; panY: number } | undefined;
+
+    it('zooms in on the goal while the sequence plays', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, goalFrame(['GOAL']));
+      await animate(1000);
+      expect(lastView()!.zoom).toBeGreaterThanOrEqual(1.4);
+      m.unmount();
+    });
+
+    it('eases back out to the view it started from', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, goalFrame(['GOAL']));
+      await animate(GOAL_SEQUENCE_MS + 200);
+      expect(lastView()).toMatchObject({ zoom: 1, panX: 0, panY: 0 });
+      m.unmount();
+    });
+
+    it('snaps back to the view it started from the moment playback pauses', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, goalFrame(['GOAL']));
+      await animate(800);
+      set(replay.isPlaying, false);
+      await nextTick();
+      expect(lastView()).toMatchObject({ zoom: 1, panX: 0, panY: 0 });
+      m.unmount();
+    });
+
+    it('hands the view over, and leaves it, when the user scrolls during it', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, goalFrame(['GOAL']));
+      await animate(800);
+      const zoomed = lastView()!.zoom;
+      at(m.root, 'pipeline-viewport')!.dispatchEvent(
+        new WheelEvent('wheel', { deltaY: -100, bubbles: true, cancelable: true })
+      );
+      await nextTick();
+      const own = lastView()!.zoom;
+      expect(own).toBeCloseTo(zoomed + 0.15, 6);
+
+      await animate(GOAL_SEQUENCE_MS);
+      expect(lastView()!.zoom).toBeCloseTo(own, 6);
+      // The shot itself still finished.
+      expect(lastOverlay()).toBeUndefined();
+      m.unmount();
+    });
+
+    it('does not play without a ball to tell which goal it went in', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, goalFrame(['GOAL'], null));
+      await animate(500);
+      expect(lastOverlay()).toBeUndefined();
+      m.unmount();
+    });
+  });
+
+  describe('attack glow', () => {
+    let queued: Array<(ms: number) => void> = [];
+    let clockMs = 1000;
+    const originalRaf = window.requestAnimationFrame;
+    const originalCaf = window.cancelAnimationFrame;
+
+    beforeEach(() => {
+      queued = [];
+      clockMs = 1000;
+      renderFrame.mockClear();
+      window.requestAnimationFrame = ((cb: (ms: number) => void) => {
+        queued.push(cb);
+        return queued.length;
+      }) as typeof window.requestAnimationFrame;
+      window.cancelAnimationFrame = (() => {
+        queued = [];
+      }) as typeof window.cancelAnimationFrame;
+    });
+
+    afterEach(() => {
+      window.requestAnimationFrame = originalRaf;
+      window.cancelAnimationFrame = originalCaf;
+    });
+
+    async function animate(ms: number) {
+      const end = clockMs + ms;
+      while (clockMs < end) {
+        clockMs += 1000 / 60;
+        const cbs = queued;
+        queued = [];
+        cbs.forEach((cb) => cb(clockMs));
+      }
+      await nextTick();
+    }
+
+    type Writable = { value: unknown };
+    const set = (r: unknown, v: unknown) => ((r as Writable).value = v);
+    const FRAME = {
+      pitch_dimensions: { length: 105, width: 68 },
+      teams: [],
+      balls: [{ projected_coordinates: { x: 10, y: 0 } }],
+      state: { actions: [] },
+      frame_data: [{ frame_count: 1 }],
+    };
+    const BLUE_ATTACKING = {
+      possession: 1,
+      attacks: { 0: 1, 1: -1 },
+      states: { 0: 'defending', 1: 'attacking' },
+    };
+    const NOBODY = { possession: null, attacks: { 0: 1, 1: -1 }, states: { 0: null, 1: null } };
+
+    async function ready() {
+      const replay = fakeReplay('loading');
+      const m = mount(replay);
+      await nextTick();
+      set(replay.currentTime, 10);
+      set(replay.frame, { ...FRAME });
+      set(replay.phase, NOBODY);
+      set(replay.state, 'ready');
+      await nextTick();
+      return { replay, m };
+    }
+
+    /** A new frame and phase, arrived at by playback (step s) or a seek. */
+    async function arrive(replay: PipelineReplay, phase: unknown, step = 0.04) {
+      set(replay.currentTime, (replay.currentTime.value as number) + step);
+      set(replay.frame, { ...FRAME });
+      set(replay.phase, phase);
+      await nextTick();
+    }
+
+    const lastGlow = () =>
+      renderFrame.mock.calls.at(-1)?.[2] as
+        | { color: string; direction: number; intensity: number; flow?: number }
+        | undefined;
+
+    it('glows for the attacking team, toward the goal it attacks', async () => {
+      const { replay, m } = await ready();
+      await arrive(replay, BLUE_ATTACKING, 30);
+      expect(lastGlow()).toMatchObject({
+        color: PERSON_COLORS.away.fill,
+        team: 1,
+        direction: -1,
+        intensity: 1,
+      });
+      m.unmount();
+    });
+
+    it('shows no glow while nobody is attacking', async () => {
+      const { replay, m } = await ready();
+      await arrive(replay, NOBODY, 30);
+      expect(lastGlow()).toBeUndefined();
+      m.unmount();
+    });
+
+    it('shows no glow when the attacking direction is unknown', async () => {
+      const { replay, m } = await ready();
+      await arrive(replay, { ...BLUE_ATTACKING, attacks: { 0: null, 1: null } }, 30);
+      expect(lastGlow()).toBeUndefined();
+      m.unmount();
+    });
+
+    it('fades in during playback, rather than appearing at once', async () => {
+      const { replay, m } = await ready();
+      set(replay.isPlaying, true);
+      await nextTick();
+      await arrive(replay, BLUE_ATTACKING);
+      await animate(300);
+      const partway = lastGlow()!.intensity;
+      expect(partway).toBeGreaterThan(0);
+      expect(partway).toBeLessThan(1);
+      await animate(1200);
+      expect(lastGlow()!.intensity).toBe(1);
+      m.unmount();
+    });
+
+    it('fades out when the attack ends during playback, in the attacking colour', async () => {
+      const { replay, m } = await ready();
+      await arrive(replay, BLUE_ATTACKING, 30);
+      set(replay.isPlaying, true);
+      await nextTick();
+      await arrive(replay, NOBODY);
+      await animate(300);
+      const fading = lastGlow()!;
+      expect(fading.color).toBe(PERSON_COLORS.away.fill);
+      expect(fading.intensity).toBeGreaterThan(0);
+      expect(fading.intensity).toBeLessThan(1);
+      await animate(1200);
+      expect(lastGlow()).toBeUndefined();
+      m.unmount();
+    });
+
+    // The chevrons flow with the replay's own clock: still while paused, and
+    // the same at a given moment however the replay got there.
+    it('flows the chevrons with the replay clock', async () => {
+      const { replay, m } = await ready();
+      await arrive(replay, BLUE_ATTACKING, 30);
+      const t = replay.currentTime.value as number;
+      expect(lastGlow()!.flow).toBeCloseTo((t / CHEVRON_FLOW_PERIOD_S) % 1, 6);
+      m.unmount();
+    });
+
+    it('draws the same chevrons a whole flow period later', async () => {
+      const { replay, m } = await ready();
+      await arrive(replay, BLUE_ATTACKING, 30);
+      const before = lastGlow()!.flow!;
+      await arrive(replay, BLUE_ATTACKING, CHEVRON_FLOW_PERIOD_S * 4);
+      expect(lastGlow()!.flow).toBeCloseTo(before, 6);
+      m.unmount();
+    });
+
+    // The clock ticks at display rate, records arrive at the data's rate:
+    // painting only on new records would move the chevrons in steps.
+    it('repaints on every tick of the clock while a glow is showing', async () => {
+      const { replay, m } = await ready();
+      await arrive(replay, BLUE_ATTACKING, 30);
+      const before = lastGlow()!.flow!;
+      const calls = renderFrame.mock.calls.length;
+      set(replay.currentTime, (replay.currentTime.value as number) + 0.016);
+      await nextTick();
+      expect(renderFrame.mock.calls.length).toBe(calls + 1);
+      expect(lastGlow()!.flow).toBeGreaterThan(before);
+      m.unmount();
+    });
+
+    it('does not repaint on the clock alone when there is no glow', async () => {
+      const { replay, m } = await ready();
+      await arrive(replay, NOBODY, 30);
+      const calls = renderFrame.mock.calls.length;
+      set(replay.currentTime, (replay.currentTime.value as number) + 0.016);
+      await nextTick();
+      expect(renderFrame.mock.calls.length).toBe(calls);
+      m.unmount();
+    });
+
+    it('paints a new record once, not again for the clock that brought it', async () => {
+      const { replay, m } = await ready();
+      await arrive(replay, BLUE_ATTACKING, 30);
+      const calls = renderFrame.mock.calls.length;
+      await arrive(replay, BLUE_ATTACKING);
+      expect(renderFrame.mock.calls.length).toBe(calls + 1);
+      m.unmount();
+    });
+
+    it('holds the chevrons still under reduced motion', async () => {
+      const originalMatchMedia = window.matchMedia;
+      window.matchMedia = ((query: string) => ({
+        matches: query.includes('prefers-reduced-motion'),
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      })) as unknown as typeof window.matchMedia;
+      try {
+        const { replay, m } = await ready();
+        await arrive(replay, BLUE_ATTACKING, 30);
+        const first = lastGlow()!.flow;
+        await arrive(replay, BLUE_ATTACKING, 0.3);
+        expect(lastGlow()!.flow).toBe(first);
+        m.unmount();
+      } finally {
+        window.matchMedia = originalMatchMedia;
+      }
+    });
+
+    // A paused frame is looked at, and shows its own state, not a fade.
+    it('settles at once when playback pauses partway through a fade', async () => {
+      const { replay, m } = await ready();
+      set(replay.isPlaying, true);
+      await nextTick();
+      await arrive(replay, BLUE_ATTACKING);
+      await animate(300);
+      set(replay.isPlaying, false);
+      await nextTick();
+      expect(lastGlow()!.intensity).toBe(1);
+      m.unmount();
+    });
+  });
 });
+

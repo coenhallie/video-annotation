@@ -21,7 +21,7 @@ export function httpRangeFetcher(
       return { size: meta.size, acceptsRanges: meta.acceptsRanges };
     },
 
-    async range(start: number, endInclusive: number) {
+    async range(start: number, endInclusive: number, signal?: AbortSignal) {
       // A server that ignores Range answers 200 with the whole object. Accepting
       // that as if it were the requested slice is worse than failing: every
       // offset the index computes from it would be wrong, and the corruption is
@@ -41,6 +41,7 @@ export function httpRangeFetcher(
 
       const res = await fetch(url, {
         cache: 'no-store',
+        signal: signal ?? null,
         ...(wantsWholeObject
           ? {}
           : { headers: { Range: `bytes=${start}-${endInclusive}` } }),

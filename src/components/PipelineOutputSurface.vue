@@ -1,7 +1,26 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted, computed } from 'vue';
-import { useRenderer2D } from '@/lib/vis/useRenderer2D';
-import { FRAME_W, FRAME_H } from '@/lib/vis/constants';
+import { useRenderer2D, type GoalOverlay } from '@/lib/vis/useRenderer2D';
+import { CHEVRON_FLOW_PERIOD_S, type AttackGlow } from '@/lib/vis/attackGlow';
+import {
+  goalCamera,
+  goalCameraWeight,
+  goalStateAt,
+  isGoalFrame,
+  planGoal,
+  GOAL_SEQUENCE_MS,
+  type GoalPlan,
+  type GoalState,
+} from '@/lib/vis/goalSequence';
+import { FRAME_W, FRAME_H, PERSON_COLORS } from '@/lib/vis/constants';
+import type { TeamId, TeamState } from '@/lib/vis/teamPhase';
+import {
+  cameraFromView,
+  fitFrameBox,
+  viewFromCamera,
+  type Camera,
+  type FrameBox,
+} from '@/lib/vis/viewTransform';
 import type { PipelineReplay } from '@/composables/usePipelineReplay';
 import { replayDrawingFrame } from '@/utils/timelineBinding';
 
@@ -50,19 +69,121 @@ function pushView(): void {
     zoom: zoom.value,
     panX: panX.value,
     panY: panY.value,
-    renderedWidth: canvasRef.value?.getBoundingClientRect().width ?? 0,
+    renderedWidth: renderedWidth(),
   });
   // The replay can be paused, so a view change has to repaint by itself rather
   // than waiting for the next frame.
+  paint();
+}
+
+/**
+ * Draw the current frame, with the goal sequence over it while one is playing.
+ * Every repaint goes through here, so none of them can draw a frame mid-sequence
+ * without it.
+ */
+function paint(): void {
   const frame = props.replay.frame.value;
-  if (frame) renderer?.renderFrame(frame);
+  if (frame) renderer?.renderFrame(frame, goalOverlay(), glowValue());
 }
 
 watch([zoom, panX, panY], pushView, { flush: 'post' });
 
+// ── Sizing ──────────────────────────────────────────────────────────────────
+//
+// The canvas, the drawing overlay and the HUD are all placed from one computed
+// box, and the canvas bitmap is sized to that box in device pixels. A 1280x720
+// bitmap stretched to the display was soft on any 2x screen; see fitFrameBox
+// for why CSS clamps could not do either job.
+
+const viewportRef = ref<HTMLElement | null>(null);
+const frameBox = ref<FrameBox | null>(null);
+
+const boxStyle = computed(() => {
+  const box = frameBox.value;
+  if (!box) return undefined;
+  return {
+    left: `${box.left}px`,
+    top: `${box.top}px`,
+    width: `${box.width}px`,
+    height: `${box.height}px`,
+  };
+});
+
+/**
+ * A row kept clear above the pitch for the team phase labels, so they never
+ * sit over it: anything on the near touchline would be hidden under them.
+ */
+const LABEL_ROW_PX = 40;
+
+function measure(): void {
+  const el = viewportRef.value;
+  if (!el) return;
+  const rect = el.getBoundingClientRect();
+  const fitted = fitFrameBox(
+    {
+      left: rect.left,
+      top: rect.top + LABEL_ROW_PX,
+      width: rect.width,
+      height: Math.max(0, rect.height - LABEL_ROW_PX),
+    },
+    window.devicePixelRatio || 1
+  );
+  // fitFrameBox places the box within the area it was given, below the row.
+  const next = { ...fitted, top: fitted.top + LABEL_ROW_PX };
+  // A hidden surface measures as nothing. Keep the last box rather than
+  // collapse the bitmap to zero, which has nothing to draw into.
+  if (next.pixelWidth < 1 || next.pixelHeight < 1) return;
+  frameBox.value = next;
+  applyBitmapSize();
+}
+
+function applyBitmapSize(): void {
+  const canvas = canvasRef.value;
+  const box = frameBox.value;
+  if (!canvas || !box) return;
+  // Assigning a canvas's size clears it even when the value is unchanged.
+  if (canvas.width !== box.pixelWidth || canvas.height !== box.pixelHeight) {
+    canvas.width = box.pixelWidth;
+    canvas.height = box.pixelHeight;
+  }
+  // Repaints too, which a cleared canvas needs while the replay is paused.
+  pushView();
+}
+
+watch(
+  viewportRef,
+  (el, _old, onCleanup) => {
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => measure());
+    observer.observe(el);
+    measure();
+    onCleanup(() => observer.disconnect());
+  },
+  { flush: 'post' }
+);
+
+// Moving the window to a display with a different pixel ratio changes the
+// bitmap the box needs without changing its CSS size, so a resize observer
+// never hears of it. A resolution media query does, once per ratio.
+let dprQuery: MediaQueryList | null = null;
+
+function watchPixelRatio(): void {
+  dprQuery?.removeEventListener('change', onPixelRatioChange);
+  dprQuery = null;
+  if (typeof window.matchMedia !== 'function') return;
+  dprQuery = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+  dprQuery.addEventListener('change', onPixelRatioChange);
+}
+
+function onPixelRatioChange(): void {
+  measure();
+  watchPixelRatio();
+}
+
 function onWheel(e: WheelEvent) {
   const stage = stageRef.value;
   if (!stage) return;
+  releaseGoalCamera();
   const rect = stage.getBoundingClientRect();
   const mx = e.clientX - rect.left - rect.width / 2;
   const my = e.clientY - rect.top - rect.height / 2;
@@ -97,6 +218,7 @@ function onWheel(e: WheelEvent) {
 
 function onPointerDown(e: PointerEvent) {
   if (zoom.value <= MIN_ZOOM) return;
+  releaseGoalCamera();
   isPanning = true;
   panStartX = e.clientX;
   panStartY = e.clientY;
@@ -116,6 +238,7 @@ function onPointerUp() {
 }
 
 function resetZoom() {
+  releaseGoalCamera();
   zoom.value = 1;
   panX.value = 0;
   panY.value = 0;
@@ -171,16 +294,309 @@ function step(frames: number) {
   void replay.seek(grid / fps + 0.001);
 }
 
+// ── Goal sequence ───────────────────────────────────────────────────────────
+//
+// When playback runs into a frame the pipeline labels GOAL, a ball is shot into
+// the net and settles there, in place of the tracked ball. See goalSequence.ts.
+//
+// It only ever plays during playback, and anything that means someone wants
+// the real frame - pausing, seeking, stepping, pressing on the drawing layer -
+// stops it at once. A frame looked at or annotated always shows the data.
+//
+// While it plays, the view zooms in on the shot and the net and eases back out
+// to the view the user had. Stopping it puts that view straight back; zooming
+// or panning during it hands the view to the user for good.
+
+/** Clock steps larger than this are a seek, not playback. */
+const MAX_PLAYBACK_STEP_S = 0.5;
+
+let goal: {
+  plan: GoalPlan;
+  startedMs: number | null;
+  elapsedMs: number;
+  // The user's view and the goal's framing. Null once the user takes the view
+  // over, and with reduced motion, when the view does not move at all.
+  camera: { from: Camera; to: Camera } | null;
+} | null = null;
+let goalRaf: number | null = null;
+// The label usually stays on for many frames: only its first one is a goal.
+let goalLabelSeen = false;
+let lastStepWasPlayback = false;
+
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  );
+}
+
+function goalState(): GoalState | null {
+  if (!goal) return null;
+  // With reduced motion the ball is simply in the net.
+  return goalStateAt(goal.plan, prefersReducedMotion() ? GOAL_SEQUENCE_MS : goal.elapsedMs);
+}
+
+function goalOverlay(): GoalOverlay | undefined {
+  const state = goalState();
+  if (!goal || !state) return undefined;
+  return {
+    ball: state.ball,
+    trail: state.trail,
+    net: { side: goal.plan.side, y: goal.plan.impact.y, metres: state.netBulge },
+  };
+}
+
+function renderedWidth(): number {
+  return frameBox.value?.width ?? canvasRef.value?.getBoundingClientRect().width ?? 0;
+}
+
+function showCamera(cam: Camera): void {
+  const view = viewFromCamera(cam, renderedWidth());
+  zoom.value = view.zoom;
+  panX.value = view.panX;
+  panY.value = view.panY;
+}
+
+/** Between two cameras: zoom eased geometrically, so it feels even both ways. */
+function blendCamera(from: Camera, to: Camera, k: number): Camera {
+  return {
+    zoom: from.zoom * (to.zoom / from.zoom) ** k,
+    x: from.x + (to.x - from.x) * k,
+    y: from.y + (to.y - from.y) * k,
+  };
+}
+
+function goalStep(ms: number): void {
+  goalRaf = null;
+  if (!goal) return;
+  if (goal.startedMs === null) goal.startedMs = ms;
+  goal.elapsedMs = ms - goal.startedMs;
+  if (goal.elapsedMs >= GOAL_SEQUENCE_MS) {
+    stopGoal();
+    return;
+  }
+  if (goal.camera) {
+    const { from, to } = goal.camera;
+    showCamera(blendCamera(from, to, goalCameraWeight(goal.elapsedMs)));
+  }
+  paint();
+  goalRaf = window.requestAnimationFrame(goalStep);
+}
+
+function startGoal(frame: NonNullable<PipelineReplay['frame']['value']>): void {
+  // No ball, no telling which goal it went in: better no sequence than one at
+  // the wrong end.
+  const plan = planGoal(frame);
+  if (!plan) return;
+  const from = cameraFromView({
+    zoom: zoom.value,
+    panX: panX.value,
+    panY: panY.value,
+    renderedWidth: renderedWidth(),
+  });
+  goal = {
+    plan,
+    startedMs: null,
+    elapsedMs: 0,
+    camera: prefersReducedMotion()
+      ? null
+      : { from, to: goalCamera(plan, frame.pitch_dimensions) },
+  };
+  goalRaf = window.requestAnimationFrame(goalStep);
+}
+
+/** The user has zoomed or panned: the view is theirs, and stays where they put it. */
+function releaseGoalCamera(): void {
+  if (goal) goal.camera = null;
+}
+
+function stopGoal(): void {
+  if (!goal && goalRaf === null) return;
+  if (goalRaf !== null) window.cancelAnimationFrame(goalRaf);
+  goalRaf = null;
+  const camera = goal?.camera;
+  goal = null;
+  if (camera) showCamera(camera.from);
+  paint();
+}
+
+// Synchronous, so it has seen the clock move before the frame watcher sees the
+// record that movement brought in.
+watch(
+  () => props.replay.currentTime.value,
+  (now, before) => {
+    lastStepWasPlayback =
+      props.replay.isPlaying.value && now > before && now - before <= MAX_PLAYBACK_STEP_S;
+    if (!lastStepWasPlayback) stopGoal();
+  },
+  { flush: 'sync' }
+);
+
+watch(
+  () => props.replay.isPlaying.value,
+  (playing) => {
+    if (playing) return;
+    stopGoal();
+    settleGlow();
+    paint();
+  }
+);
+
+// ── Team phase labels ───────────────────────────────────────────────────────
+//
+// Which team is attacking and which defending, from the replay's phase (see
+// teamPhase.ts). Named Red and Blue, the colours they are drawn in, rather
+// than home and away: the export does not say which team is at home.
+
+const PHASE_TEAMS: Record<TeamId, { name: string; color: string }> = {
+  0: { name: 'Red', color: PERSON_COLORS.home.fill },
+  1: { name: 'Blue', color: PERSON_COLORS.away.fill },
+};
+
+const STATE_TEXT: Record<TeamState, string> = {
+  attacking: 'Attacking',
+  defending: 'Defending',
+};
+
+const phaseLabels = computed(() => {
+  const phase = props.replay.phase.value;
+  if (!phase) return null;
+  return ([0, 1] as const).map((team) => {
+    const state = phase.states[team];
+    return {
+      team,
+      ...PHASE_TEAMS[team],
+      state,
+      text: state ? STATE_TEXT[state] : null,
+      // Only an attacking team is filled: a team that merely has the ball,
+      // or nobody clearly having it, leaves both labels plain.
+      filled: state === 'attacking',
+    };
+  });
+});
+
+const phaseDescription = computed(() =>
+  (phaseLabels.value ?? [])
+    .map((l) => (l.text ? `${l.name} ${l.text.toLowerCase()}` : l.name))
+    .join(', ')
+);
+
+// ── Attack glow ─────────────────────────────────────────────────────────────
+//
+// While a team is attacking (see teamPhase.ts), a glow across the pitch toward
+// the goal it attacks, a lit bar beyond that goal and a halo round the ball
+// (attackGlow.ts). During playback it fades in and out over GLOW_FADE_S, so a
+// short attack is a gentle pulse rather than a flash. Anywhere else - a seek,
+// a step, a pause - it shows the frame's own state at once: a frame being
+// looked at should not be partway through a fade. Reduced motion never fades.
+//
+// The chevrons in it flow toward the goal with the replay's clock, so they are
+// still while paused and the same at a given moment however the replay got
+// there. Reduced motion holds them still.
+
+const GLOW_FADE_S = 1;
+
+let glow: (AttackGlow & { target: 0 | 1 }) | null = null;
+let glowRaf: number | null = null;
+let lastGlowMs: number | null = null;
+
+/** The glow the current phase calls for, before any fading. */
+function glowTarget(): Omit<AttackGlow, 'intensity'> | null {
+  const phase = props.replay.phase.value;
+  if (!phase) return null;
+  const team =
+    phase.states[0] === 'attacking' ? 0 : phase.states[1] === 'attacking' ? 1 : null;
+  if (team === null) return null;
+  const direction = phase.attacks[team];
+  // Without a direction there is no goal to glow towards.
+  if (direction === null) return null;
+  return { color: PHASE_TEAMS[team].color, team, direction };
+}
+
+function glowValue(): AttackGlow | undefined {
+  if (!glow || glow.intensity <= 0) return undefined;
+  const cycles = props.replay.currentTime.value / CHEVRON_FLOW_PERIOD_S;
+  return {
+    color: glow.color,
+    team: glow.team,
+    direction: glow.direction,
+    intensity: glow.intensity,
+    flow: prefersReducedMotion() ? 0 : cycles - Math.floor(cycles),
+  };
+}
+
+function stopGlowLoop(): void {
+  if (glowRaf !== null) window.cancelAnimationFrame(glowRaf);
+  glowRaf = null;
+  lastGlowMs = null;
+}
+
+function glowStep(ms: number): void {
+  glowRaf = null;
+  if (!glow) return;
+  // Capped, so a tab that was in the background does not jump to the end.
+  const dt = lastGlowMs === null ? 0 : Math.min(0.1, (ms - lastGlowMs) / 1000);
+  lastGlowMs = ms;
+  const step = dt / GLOW_FADE_S;
+  glow.intensity =
+    glow.target > glow.intensity
+      ? Math.min(glow.target, glow.intensity + step)
+      : Math.max(glow.target, glow.intensity - step);
+  if (glow.intensity === glow.target) {
+    lastGlowMs = null;
+    if (glow.target === 0) glow = null;
+    paint();
+    return;
+  }
+  paint();
+  glowRaf = window.requestAnimationFrame(glowStep);
+}
+
+/** Bring the glow in line with the phase, fading if `fade`, else at once. */
+function updateGlow(fade: boolean): void {
+  const target = glowTarget();
+  if (!fade) {
+    stopGlowLoop();
+    glow = target ? { ...target, intensity: 1, target: 1 } : null;
+    return;
+  }
+  if (target) {
+    // The same attack carries on from wherever its fade has got to; a new one
+    // starts from nothing.
+    const same = glow?.team === target.team && glow.direction === target.direction;
+    glow = { ...target, intensity: same && glow ? glow.intensity : 0, target: 1 };
+  } else if (glow) {
+    // Fading out keeps the colour and direction of the attack that ended.
+    glow.target = 0;
+  }
+  if (glow && glow.intensity !== glow.target && glowRaf === null) {
+    glowRaf = window.requestAnimationFrame(glowStep);
+  }
+}
+
+/** Finish any fade at once: the frame on screen shows its own state. */
+function settleGlow(): void {
+  stopGlowLoop();
+  if (!glow) return;
+  glow.intensity = glow.target;
+  if (glow.target === 0) glow = null;
+}
+
 function ensureRenderer() {
   const canvas = canvasRef.value;
   if (!canvas || renderer) return;
   // jsdom has no 2D context, so this is null under test. The component still
   // mounts and its states still render; only drawing is skipped.
   if (!canvas.getContext('2d')) return;
-  canvas.width = FRAME_W;
-  canvas.height = FRAME_H;
   renderer = useRenderer2D(canvas);
-  pushView();
+  if (frameBox.value) {
+    applyBitmapSize();
+  } else {
+    // Not laid out yet. Frame size is a sane bitmap until the box arrives.
+    canvas.width = FRAME_W;
+    canvas.height = FRAME_H;
+    pushView();
+  }
 }
 
 // flush: 'post' is load-bearing. Vue's default pre-flush timing runs the
@@ -189,12 +605,30 @@ function ensureRenderer() {
 // canvas is still behind v-else and canvasRef is null. The renderer would
 // never attach and the pitch would stay blank until an unrelated later frame
 // arrived.
+//
+// One watcher for everything a tick of the replay can change, so a tick paints
+// once however many of them changed. The record and its phase arrive together
+// on most ticks; the clock alone moves on the rest, as it ticks at display rate
+// and records arrive at the data's rate, and then only a glow needs a repaint,
+// for its chevrons to flow smoothly rather than in steps.
 watch(
-  () => props.replay.frame.value,
-  (frame) => {
+  [
+    () => props.replay.frame.value,
+    () => props.replay.phase.value,
+    () => props.replay.currentTime.value,
+  ],
+  ([frame, phase], [prevFrame, prevPhase]) => {
+    if (phase !== prevPhase) {
+      updateGlow(props.replay.isPlaying.value && lastStepWasPlayback && !prefersReducedMotion());
+    }
     if (!frame) return;
-    ensureRenderer();
-    renderer?.renderFrame(frame);
+    if (frame !== prevFrame) {
+      ensureRenderer();
+      const labelled = isGoalFrame(frame);
+      if (labelled && !goalLabelSeen && !goal && lastStepWasPlayback) startGoal(frame);
+      goalLabelSeen = labelled;
+    }
+    if (frame !== prevFrame || phase !== prevPhase || glowValue()) paint();
   },
   { flush: 'post' }
 );
@@ -204,17 +638,21 @@ watch(
   (state) => {
     if (state !== 'ready') return;
     ensureRenderer();
-    const frame = props.replay.frame.value;
-    if (frame) renderer?.renderFrame(frame);
+    paint();
   },
   { flush: 'post' }
 );
 
 onMounted(() => {
+  watchPixelRatio();
   void props.replay.load();
 });
 
 onUnmounted(() => {
+  stopGoal();
+  stopGlowLoop();
+  dprQuery?.removeEventListener('change', onPixelRatioChange);
+  dprQuery = null;
   props.replay.dispose();
   renderer = null;
 });
@@ -291,6 +729,8 @@ onUnmounted(() => {
 
     <template v-else>
       <div
+        ref="viewportRef"
+        data-testid="pipeline-viewport"
         class="absolute inset-0 overflow-hidden"
         :class="{ 'cursor-grab': zoom > 1 }"
         @wheel.prevent="onWheel"
@@ -300,32 +740,34 @@ onUnmounted(() => {
         @pointercancel="onPointerUp"
         @dblclick="resetZoom"
       >
+        <!--
+          No width/height attributes: the bitmap is sized in script, to the
+          box in device pixels, and the box sets the displayed size.
+        -->
         <canvas
           ref="canvasRef"
           data-testid="pipeline-canvas"
-          :width="FRAME_W"
-          :height="FRAME_H"
-          class="absolute left-1/2 top-1/2 max-h-full max-w-full -translate-x-1/2 -translate-y-1/2 object-contain"
-          style="aspect-ratio: 1280 / 720"
+          class="absolute"
+          :style="boxStyle"
         />
 
         <!--
-          Overlay slot, sized to the canvas's rendered rect by the same width
-          cap, aspect ratio and max-* clamps the canvas carries. A drawing layer
-          mounted here shares the canvas's coordinate system exactly, which is
-          what the zoom/pan move into the renderer made possible.
+          Overlay slot, placed in the same computed box as the canvas. A
+          drawing layer mounted here shares the canvas's coordinate system
+          exactly, which is what the zoom/pan move into the renderer made
+          possible.
 
           pointer-events-none by default so panning and zooming still work
           through it; the drawing layer turns them back on for itself only while
           drawing mode is active.
         -->
-        <div
-          class="pointer-events-none absolute inset-0 flex items-center justify-center"
-        >
+        <div class="pointer-events-none absolute inset-0">
           <div
             ref="overlayRef"
             data-testid="pipeline-overlay"
-            class="relative aspect-video max-h-full w-[1280px] max-w-full"
+            class="absolute"
+            :style="boxStyle"
+            @pointerdown.capture="stopGoal"
           >
             <!--
               Not replay.currentFrame: that is the pipeline's own frame_count,
@@ -343,19 +785,79 @@ onUnmounted(() => {
       <!--
         The HUD is anchored to the pitch, not to the stage. The canvas is
         letterboxed inside the stage, so stage-relative badges float in the
-        black band beside it. This box carries the same width cap, aspect ratio
-        and max-* clamps as the canvas, which resolves it to exactly the
-        canvas's rendered rect at any editor size.
+        black band beside it. This box is the canvas's own computed box, so it
+        is exactly the canvas's rendered rect at any editor size.
       -->
-      <div class="pointer-events-none absolute inset-0 flex items-center justify-center">
+      <div class="pointer-events-none absolute inset-0">
         <div
-          class="relative aspect-video max-h-full w-[1280px] max-w-full"
+          class="absolute"
+          :style="boxStyle"
           data-testid="pipeline-hud"
         >
+          <!--
+            In the row kept clear above the pitch (LABEL_ROW_PX), centred on
+            it. Worked out by the app rather than reported by the pipeline,
+            which the title says on hover.
+          -->
           <div
-            class="absolute bottom-2 left-2 rounded bg-black/60 px-2.5 py-1 font-mono text-[11px] text-white"
+            v-if="phaseLabels"
+            data-testid="pipeline-phase"
+            role="group"
+            :aria-label="phaseDescription"
+            title="Worked out from the tracking data: a team is attacking once it has kept the ball for 3 seconds, and the other team is then defending."
+            class="pointer-events-auto absolute inset-x-0 bottom-full mx-auto mb-1.5 flex w-max items-center gap-2"
+          >
+            <template
+              v-for="(l, i) in phaseLabels"
+              :key="l.team"
+            >
+              <span
+                v-if="i === 1"
+                class="text-[10px] font-semibold uppercase tracking-widest text-white/60"
+                aria-hidden="true"
+              >vs</span>
+              <div
+                :data-testid="`pipeline-phase-team-${l.team}`"
+                :data-state="l.state ?? 'none'"
+                class="flex w-[9.5rem] items-center gap-2 whitespace-nowrap rounded-md border-2 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-lg transition-colors duration-200 motion-reduce:transition-none"
+                :class="[l.filled ? '' : 'bg-black/60', l.team === 1 ? 'justify-end' : '']"
+                :style="{ borderColor: l.color, backgroundColor: l.filled ? l.color : undefined }"
+                aria-hidden="true"
+              >
+                <!-- Mirrored for Blue, so both states sit either side of "vs". -->
+                <span
+                  v-if="l.team === 0"
+                  class="font-bold"
+                >{{ l.name }}</span>
+                <span
+                  v-if="l.text"
+                  class="text-[10px] tracking-widest"
+                  :class="l.team === 0 ? 'ml-auto' : 'mr-auto'"
+                >{{ l.text }}</span>
+                <span
+                  v-if="l.team === 1"
+                  class="font-bold"
+                >{{ l.name }}</span>
+              </div>
+            </template>
+          </div>
+
+          <div
+            class="absolute bottom-2 left-2 flex items-center gap-1.5 rounded bg-black/60 px-2.5 py-1 font-mono text-[11px] text-white"
           >
             F{{ replay.currentFrame.value }}
+            <!--
+              The replay holds its clock while data is on its way, so the
+              playhead stops. This says why, beside the frame it is holding.
+            -->
+            <span
+              v-if="replay.buffering.value"
+              data-testid="pipeline-buffering"
+              role="status"
+              aria-label="Loading pipeline data"
+              title="Loading pipeline data"
+              class="h-2.5 w-2.5 animate-spin rounded-full border border-white/25 border-t-white motion-reduce:animate-none"
+            />
           </div>
 
           <div

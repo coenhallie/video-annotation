@@ -40,8 +40,16 @@ export function recordingCtx() {
       });
     },
     beginPath() {},
-    moveTo() {},
-    lineTo() {},
+    closePath() {},
+    moveTo(...args: unknown[]) {
+      ctx.snap('moveTo', args);
+    },
+    lineTo(...args: unknown[]) {
+      ctx.snap('lineTo', args);
+    },
+    quadraticCurveTo(...args: unknown[]) {
+      ctx.snap('quadraticCurveTo', args);
+    },
     arc(...args: unknown[]) {
       ctx.snap('arc', args);
     },
@@ -53,6 +61,21 @@ export function recordingCtx() {
     },
     fillRect(...args: unknown[]) {
       ctx.snap('fillRect', args);
+    },
+    shadowBlur: 0,
+    shadowColor: '',
+    // A gradient that records its geometry and stops, and reads back as a
+    // string describing them, so a fillStyle set to it can be asserted on.
+    createLinearGradient(x0: number, y0: number, x1: number, y1: number) {
+      const stops: Array<[number, string]> = [];
+      return {
+        addColorStop(offset: number, color: string) {
+          stops.push([offset, color]);
+        },
+        toString() {
+          return `gradient(${x0},${y0}->${x1},${y1}|${stops.map(([o, c]) => `${o}:${c}`).join(',')})`;
+        },
+      };
     },
     strokeRect(...args: unknown[]) {
       ctx.snap('strokeRect', args);
@@ -88,17 +111,31 @@ export function fakeCanvas() {
  * the ops it collects. jsdom does not implement OffscreenCanvas at all, so the
  * pitch cache cannot be built without this.
  */
-export function stubOffscreenCanvas(): { ops: Op[]; restore: () => void } {
+export function stubOffscreenCanvas(): {
+  ops: Op[];
+  /** The size each OffscreenCanvas was created at, in order. */
+  sizes: Array<[number, number]>;
+  restore: () => void;
+} {
   const g = globalThis as Record<string, unknown>;
   const original = g.OffscreenCanvas;
   const { ctx, ops } = recordingCtx();
+  const sizes: Array<[number, number]> = [];
   g.OffscreenCanvas = class {
+    width: number;
+    height: number;
+    constructor(width: number, height: number) {
+      this.width = width;
+      this.height = height;
+      sizes.push([width, height]);
+    }
     getContext() {
       return ctx;
     }
   };
   return {
     ops,
+    sizes,
     restore: () => {
       g.OffscreenCanvas = original;
     },

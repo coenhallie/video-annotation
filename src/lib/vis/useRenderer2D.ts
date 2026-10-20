@@ -8,6 +8,22 @@
 //  - zoom/pan is applied here via setView() rather than as a CSS transform on
 //    the canvas element. The element has to stay unscaled so a drawing layer
 //    can share its coordinate system; see viewTransform.ts.
+//  - the canvas bitmap is whatever size the surface gives it - one pixel per
+//    device pixel - and drawing is scaled from frame units into it. The pitch
+//    cache is built at that size through the current view, and rebuilt when
+//    either changes, instead of once at 1280x720 and then magnified.
+//  - players are coloured by role from fixed colours (constants.ts,
+//    PERSON_COLORS): home red, away blue, goalkeepers yellow ringed in their
+//    team's colour, officials magenta. The vendored copy coloured each team
+//    from the kit colours the pipeline detected; that resolver is gone.
+//  - players further than FOCUS_METRES from the ball are faded
+//    (DIMMED_PLAYER_ALPHA) and drawn underneath the rest, and while a team has
+//    the ball the carrier and their teammates within NEARBY_METRES are
+//    outlined in white.
+//  - goals (posts and a faint net) are drawn on every frame, and renderFrame
+//    takes an optional goal-sequence overlay whose ball replaces the tracked
+//    one (goalNets.ts, goalSequence.ts), and an optional attack glow drawn
+//    under the players (attackGlow.ts).
 
 // ---------------------------------------------------------------------------
 // 2D canvas rendering composable.
@@ -18,16 +34,36 @@
 //   const { renderFrame, invalidateCache } = useRenderer2D(canvas)
 // ---------------------------------------------------------------------------
 
-import type { Player, Ball, TeamColors, Frame, Transform2D } from './types'
-import { FRAME_H, PLAYER_RADIUS } from './constants'
-import { build2DTransform, worldToPx, buildPitchCache } from './pitchGeometry'
-import { resolveTeamColors } from './useColorResolver'
+import type { Player, Ball, Frame, Transform2D } from './types'
+import {
+  FRAME_W,
+  FRAME_H,
+  PLAYER_RADIUS,
+  PERSON_COLORS,
+  DIMMED_PLAYER_ALPHA,
+  FOCUS_METRES,
+  NEARBY_OUTLINE,
+  NEARBY_METRES,
+} from './constants'
+import { build2DTransform, worldToPx, buildPitchCache, PITCH_GRASS } from './pitchGeometry'
+import { drawGoalNets, type NetBulge } from './goalNets'
+import { attackFront, drawAttackGlow, type AttackGlow } from './attackGlow'
 import {
   computeViewMatrix,
   IDENTITY_VIEW,
   type PipelineView,
   type ViewMatrix,
 } from './viewTransform'
+
+/**
+ * What the goal sequence draws over a frame: its own ball, where that ball just
+ * was, and the net it hit. Positions in pitch metres. See goalSequence.ts.
+ */
+export interface GoalOverlay {
+  ball: { x: number; y: number }
+  trail: { x: number; y: number }[]
+  net: NetBulge
+}
 
 /**
  * Create a 2D renderer bound to a specific canvas element.
@@ -49,6 +85,9 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
   // invalidateCache().
   let transform2d: Transform2D | null = null
   let pitchCache: OffscreenCanvas | null = null
+  // The bitmap size and matrix the cache was drawn for. A pan, a zoom or a
+  // resize changes it, and only then is the pitch drawn again.
+  let pitchKey = ''
 
   // ── Public API ─────────────────────────────────────────────────────────────
 
@@ -56,37 +95,105 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
    * Render a single frame.  Draws the cached pitch background,
    * iterates teams/players/balls, and paints the HUD overlay.
    */
-  function renderFrame(frame: Frame): void {
+  function renderFrame(frame: Frame, overlay?: GoalOverlay, glow?: AttackGlow): void {
     if (!frame) return
 
     const pd = frame.pitch_dimensions
 
-    // Lazily build / cache transform and pitch image
     if (!transform2d) transform2d = build2DTransform(pd)
-    if (!pitchCache) pitchCache = buildPitchCache(pd, transform2d)
+
+    // Everything is drawn in frame units (1280x720). The bitmap is sized to
+    // the display, so scale frame units into it, then apply the view.
+    const sx = canvas.width / FRAME_W
+    const sy = canvas.height / FRAME_H
+    const matrix: [number, number, number, number, number, number] = [
+      sx * view.a,
+      sy * view.b,
+      sx * view.c,
+      sy * view.d,
+      sx * view.e,
+      sy * view.f,
+    ]
+
+    const key = `${canvas.width}x${canvas.height}:${matrix.join(',')}`
+    if (!pitchCache || key !== pitchKey) {
+      // The markings alone: the grass is drawn per frame, so the attack glow
+      // can go between it and the lines.
+      pitchCache = buildPitchCache(pd, transform2d, {
+        width: canvas.width,
+        height: canvas.height,
+        matrix,
+        grass: false,
+      })
+      pitchKey = key
+    }
 
     // Cleared to transparent, not filled: panning used to slide the canvas
     // element and reveal the stage behind it, and letting the stage show
     // through here keeps that looking the same.
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.clearRect(0, 0, canvas.width, canvas.height)
-    ctx.setTransform(view.a, view.b, view.c, view.d, view.e, view.f)
 
-    // Blit the pre-rendered pitch
-    ctx.drawImage(pitchCache, 0, 0)
+    // Grass, then the attack glow on it, then the markings over both, so the
+    // lines read white through the glow.
+    ctx.setTransform(...matrix)
+    ctx.fillStyle = PITCH_GRASS
+    ctx.fillRect(0, 0, FRAME_W, FRAME_H)
 
-    // ── Teams + players ────────────────────────────────────────────────────
-    for (const team of frame.teams ?? []) {
-      const tid = team.team_id ?? -1
-      const colors = resolveTeamColors(team, tid)
-      for (const player of team.players ?? []) {
-        draw2DPlayer(player, colors, tid)
-      }
+    // The shaded area reaches back to the attacking team's most advanced
+    // player, or to the ball with none tracked. The halo follows the goal
+    // sequence's ball while that plays, like everything else that follows
+    // the ball.
+    const glowBall = overlay?.ball ?? trackedBall(frame)
+    if (glow && glowBall) {
+      const front = attackFront(frame, glow.team, glow.direction) ?? glowBall.x
+      drawAttackGlow(ctx as CanvasRenderingContext2D, pd, transform2d, glow, glowBall, front)
     }
 
-    // ── Balls ──────────────────────────────────────────────────────────────
-    for (const ball of frame.balls ?? []) {
-      draw2DBall(ball)
+    // The markings are already drawn through the view, pixel for pixel.
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.drawImage(pitchCache, 0, 0)
+
+    ctx.setTransform(...matrix)
+
+    // Goals, faint, on every frame; a struck net bows out while it is hit.
+    drawGoalNets(ctx as CanvasRenderingContext2D, pd, transform2d, overlay?.net)
+
+    // ── Teams + players ────────────────────────────────────────────────────
+    // Players far from the ball are faded and drawn first, so the play around
+    // the ball sits on top where markers overlap. Officials are never faded.
+    // During the goal sequence the focus follows its ball, not the tracked one.
+    const focus = overlay?.ball ?? trackedBall(frame)
+    const carrier = ballCarrier(frame)
+    const withBall = carrier?.teamId ?? null
+    const people = (frame.teams ?? []).flatMap((team) => {
+      const tid = team.team_id ?? -1
+      return (team.players ?? []).map((player) => ({
+        player,
+        tid,
+        faded: isFarFromBall(player, tid, focus),
+      }))
+    })
+    for (const faded of [true, false]) {
+      ctx.globalAlpha = faded ? DIMMED_PLAYER_ALPHA : 1
+      for (const p of people) {
+        if (p.faded !== faded) continue
+        draw2DPlayer(p.player, p.tid, p.tid === withBall && isNearCarrier(p.player, carrier))
+      }
+    }
+    ctx.globalAlpha = 1
+
+    // During the goal sequence its ball replaces the tracked one, which near a
+    // goal tends to jump about or go straight through the net.
+    if (overlay) {
+      overlay.trail.forEach((p, i) => {
+        draw2DBall({ projected_coordinates: p }, 0.45 / (i + 1))
+      })
+      draw2DBall({ projected_coordinates: overlay.ball })
+    } else {
+      for (const ball of frame.balls ?? []) {
+        draw2DBall(ball)
+      }
     }
 
     // ── Overlay HUD ────────────────────────────────────────────────────────
@@ -106,11 +213,61 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
 
   // ── Internal drawing helpers ──────────────────────────────────────────────
 
+  /** The player with the ball in this frame and their team, or null. */
+  function ballCarrier(
+    frame: Frame,
+  ): { teamId: number; x: number; y: number } | null {
+    for (const team of frame.teams ?? []) {
+      const tid = team.team_id ?? -1
+      if (tid === -1) continue
+      const player = (team.players ?? []).find((p) => p.in_possession)
+      if (!player) continue
+      const { x, y } = player.projected_coordinates ?? {}
+      // Possession still counts without a usable position; only "nearby" needs one.
+      return { teamId: tid, x: x ?? NaN, y: y ?? NaN }
+    }
+    return null
+  }
+
+  /** The tracked ball's position, or null when the frame has none usable. */
+  function trackedBall(frame: Frame): { x: number; y: number } | null {
+    for (const ball of frame.balls ?? []) {
+      const { x, y } = ball.projected_coordinates ?? {}
+      if (x != null && y != null && !isNaN(x) && !isNaN(y)) return { x, y }
+    }
+    return null
+  }
+
+  /** A player, not an official, further than FOCUS_METRES from the ball. */
+  function isFarFromBall(
+    player: Player,
+    teamId: number,
+    ball: { x: number; y: number } | null,
+  ): boolean {
+    if (!ball || teamId === -1) return false
+    if (String(player.person_type ?? '').toUpperCase().includes('OFFICIAL')) return false
+    const x = player.projected_coordinates?.x
+    const y = player.projected_coordinates?.y
+    if (x == null || y == null) return false
+    return Math.hypot(x - ball.x, y - ball.y) > FOCUS_METRES
+  }
+
+  /** Within NEARBY_METRES of the carrier, on the pitch (the carrier included). */
+  function isNearCarrier(
+    player: Player,
+    carrier: { x: number; y: number } | null,
+  ): boolean {
+    const x = player.projected_coordinates?.x
+    const y = player.projected_coordinates?.y
+    if (!carrier || x == null || y == null) return false
+    return Math.hypot(x - carrier.x, y - carrier.y) <= NEARBY_METRES
+  }
+
   /**
    * Draw a single player as a filled circle with shadow, outline, optional
    * possession ring, jersey number, and track ID label.
    */
-  function draw2DPlayer(player: Player, colors: TeamColors, teamId: number): void {
+  function draw2DPlayer(player: Player, teamId: number, nearBall = false): void {
     const coords = player.projected_coordinates
     const x = coords?.x
     const y = coords?.y
@@ -119,31 +276,24 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
 
     const [px, py] = worldToPx(x, y, transform2d)
     const pt = String(player.person_type ?? '').toUpperCase()
-    const tid = teamId
 
-    // Resolve fill / outline / text colours based on person type
-    let fill: string
-    let outline: string
-    let textColor: string
-    // Dashed means "the frame reported no colour for this team". Only the
-    // team-coloured branch can be undetected: the other two are keyed on
-    // person_type, which the frame does state.
-    let undetected = false
-
+    // Fixed colours by role; see PERSON_COLORS. Team 0 is home, team 1 away.
+    const team =
+      teamId === 0 ? PERSON_COLORS.home : teamId === 1 ? PERSON_COLORS.away : null
+    let colors = team ?? PERSON_COLORS.unknown
+    let outline = colors.outline
+    let outlineWidth = 2
     if (pt.includes('GOALKEEPER')) {
-      fill = '#00af4b'
-      outline = '#000'
-      textColor = '#000'
-    } else if (pt.includes('OFFICIAL') || tid === -1) {
-      fill = '#323232'
-      outline = '#000'
-      textColor = '#f0f0f0'
-    } else {
-      fill = colors.fill
+      colors = PERSON_COLORS.goalkeeper
+      // Ringed in their team's colour, so which team they keep for still shows.
+      outline = team?.fill ?? colors.outline
+      outlineWidth = 3
+    } else if (pt.includes('OFFICIAL') || teamId === -1) {
+      colors = PERSON_COLORS.official
       outline = colors.outline
-      textColor = colors.text
-      undetected = !colors.detected
     }
+    // White marks the players around the ball, and only them.
+    if (nearBall) outline = NEARBY_OUTLINE
 
     // Shadow (offset 1px down-right)
     ctx.beginPath()
@@ -154,13 +304,11 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     // Player circle
     ctx.beginPath()
     ctx.arc(px, py, PLAYER_RADIUS, 0, Math.PI * 2)
-    ctx.fillStyle = fill
+    ctx.fillStyle = colors.fill
     ctx.fill()
     ctx.strokeStyle = outline
-    ctx.lineWidth = 2
-    if (undetected) ctx.setLineDash([3, 3])
+    ctx.lineWidth = outlineWidth
     ctx.stroke()
-    if (undetected) ctx.setLineDash([])
 
     // Possession ring (gold)
     if (player.in_possession) {
@@ -174,7 +322,7 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     // Jersey number (centred inside the circle)
     const num = player.player_number
     if (num != null && Number(num) > 0) {
-      ctx.fillStyle = textColor
+      ctx.fillStyle = colors.text
       ctx.font = 'bold 10px sans-serif'
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
@@ -196,7 +344,7 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
    * Draw a single ball.  Radius and colour vary with the z (height)
    * coordinate: taller balls are slightly larger and tinted cyan.
    */
-  function draw2DBall(ball: Ball): void {
+  function draw2DBall(ball: Ball, alpha = 1): void {
     const coords = ball.projected_coordinates
     const x = coords?.x
     const y = coords?.y
@@ -209,6 +357,8 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     // Radius grows with z (clamped 0-6), base radius 4px, min 3px
     const r = Math.max(3, Math.round(4 + Math.min(6, Math.max(0, z)) * 0.6))
 
+    const before = ctx.globalAlpha
+    ctx.globalAlpha = alpha
     ctx.beginPath()
     ctx.arc(px, py, r, 0, Math.PI * 2)
     ctx.fillStyle = z <= 0.5 ? '#ffffff' : '#c8ffff'
@@ -216,6 +366,7 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     ctx.strokeStyle = '#000'
     ctx.lineWidth = 1
     ctx.stroke()
+    ctx.globalAlpha = before
   }
 
   /**

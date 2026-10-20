@@ -36,6 +36,18 @@ describe('httpRangeFetcher', () => {
     expect(init?.headers?.Range).toBe('bytes=10-20');
   });
 
+  // A seek a newer one has replaced cancels its reads, so the request has to
+  // carry the signal through to fetch() for the browser to stop downloading.
+  it('passes the abort signal through to the request', async () => {
+    const f = mockFetch(206, 'hello');
+    vi.stubGlobal('fetch', f);
+    const fetcher = httpRangeFetcher(URL, { size: 100, acceptsRanges: true });
+    const controller = new AbortController();
+    await fetcher.range(10, 20, controller.signal);
+    const init = f.mock.calls[0]?.[1] as { signal?: AbortSignal };
+    expect(init?.signal).toBe(controller.signal);
+  });
+
   it('rejects a 200 answer to a ranged request rather than treating it as the slice', async () => {
     const f = mockFetch(200, 'the whole object');
     vi.stubGlobal('fetch', f);

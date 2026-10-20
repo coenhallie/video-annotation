@@ -7,9 +7,9 @@ export const PROBE_BYTES = 65536;
  * Ceiling on reading a no-ranges object whole.
  *
  * When the server won't serve byte ranges, the fallback below reads the
- * entire object into memory once to build the index - and then `load()`'s
- * first `recordAt` reads it again in full, since the index it builds keeps
- * only the first record's offset. The producer emits files on the order of a
+ * entire object into memory once to build the index - and then the replay
+ * reads it again in full to hold as its one window, since the index it builds
+ * keeps only the first record's offset. The producer emits files on the order of a
  * gigabyte; two full downloads of one of those would stall the tab. A file
  * small enough to read whole twice without anyone noticing is fine. One that
  * is not, is not - so refuse rather than attempt it.
@@ -29,7 +29,11 @@ export interface IndexEntry {
 
 export interface RangeFetcher {
   head(): Promise<{ size: number; acceptsRanges: boolean }>;
-  range(start: number, endInclusive: number): Promise<string>;
+  /**
+   * `signal` lets a read nobody needs any more be cancelled, so it stops
+   * downloading rather than holding a connection until it completes.
+   */
+  range(start: number, endInclusive: number, signal?: AbortSignal): Promise<string>;
 }
 
 export interface JsonlIndex {
@@ -67,7 +71,7 @@ function entryFrom(record: ReplayRecord, offset: number): IndexEntry {
 }
 
 /**
- * Build the index with about ten small reads.
+ * Build the index with about ten small reads, made concurrently.
  *
  * When ranges are unsupported the whole object is read once instead, and the
  * index is built from that. Same shape either way, so nothing downstream has to
@@ -106,7 +110,26 @@ export async function buildIndex(
     };
   }
 
-  const head = await fetcher.range(0, Math.min(PROBE_BYTES, size) - 1);
+  // Every read below is independent of the others, so they all go out at
+  // once. Made one after another they put a round trip each - ten of them -
+  // in front of the first frame.
+  const tailStart = Math.max(0, size - PROBE_BYTES);
+  const probeOffsets: number[] = [];
+  for (let i = 1; i <= probes; i++) {
+    const at = Math.floor((size * i) / (probes + 1));
+    if (at > 0 && at < size) probeOffsets.push(at);
+  }
+  const headRead = fetcher.range(0, Math.min(PROBE_BYTES, size) - 1);
+  const [head, tail, probeTexts] = await Promise.all([
+    headRead,
+    tailStart === 0 ? headRead : fetcher.range(tailStart, size - 1),
+    Promise.all(
+      probeOffsets.map((at) =>
+        fetcher.range(at, Math.min(size, at + PROBE_BYTES) - 1)
+      )
+    ),
+  ]);
+
   const headRecords = parseWindow(head, {
     startsAtBof: true,
     endsAtEof: size <= PROBE_BYTES,
@@ -134,9 +157,6 @@ export async function buildIndex(
   const headBytes = size <= PROBE_BYTES ? size : head.lastIndexOf('\n') + 1;
   const sampledMeans = [headBytes / headRecords.length];
 
-  const tailStart = Math.max(0, size - PROBE_BYTES);
-  const tail =
-    tailStart === 0 ? head : await fetcher.range(tailStart, size - 1);
   const tailRecords = parseWindow(tail, {
     startsAtBof: tailStart === 0,
     endsAtEof: true,
@@ -147,19 +167,18 @@ export async function buildIndex(
 
   const entries: [IndexEntry, ...IndexEntry[]] = [entryFrom(headFirst, 0)];
 
-  for (let i = 1; i <= probes; i++) {
-    const at = Math.floor((size * i) / (probes + 1));
-    if (at <= 0 || at >= size) continue;
+  probeOffsets.forEach((at, i) => {
+    const text = probeTexts[i];
+    if (text === undefined) return;
     const end = Math.min(size, at + PROBE_BYTES) - 1;
-    const text = await fetcher.range(at, end);
     const newlineAt = text.indexOf('\n');
-    if (newlineAt < 0) continue;
+    if (newlineAt < 0) return;
     const records = parseWindow(text, {
       startsAtBof: false,
       endsAtEof: end === size - 1,
     });
     const probeFirst = records[0];
-    if (!probeFirst) continue;
+    if (!probeFirst) return;
     insertEntryInto(entries, entryFrom(probeFirst, at + newlineAt + 1));
 
     // The bytes this probe's complete records actually occupy: from the first
@@ -172,7 +191,7 @@ export async function buildIndex(
     if (bodyEnd > bodyStart) {
       sampledMeans.push((bodyEnd - bodyStart) / records.length);
     }
-  }
+  });
 
   return {
     size,
