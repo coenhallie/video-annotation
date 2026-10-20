@@ -1,4 +1,4 @@
-import type { PitchDimensions, Transform2D } from './types';
+import type { Frame, PitchDimensions, Transform2D } from './types';
 import { resolvePitchDimensions, worldToPx } from './pitchGeometry';
 import { NET_DEPTH_METRES } from './goalSequence';
 
@@ -6,6 +6,8 @@ import { NET_DEPTH_METRES } from './goalSequence';
 export interface AttackGlow {
   /** The attacking team's colour, as a #rrggbb hex. */
   color: string;
+  /** The attacking team's team_id in the frame. */
+  team: 0 | 1;
   /** The direction along x the team attacks in. */
   direction: 1 | -1;
   /** 0 to 1: how far the glow has faded in. */
@@ -17,8 +19,8 @@ export interface AttackGlow {
   flow?: number;
 }
 
-/** Peak opacity of the glow across the pitch. */
-const GLOW_ALPHA = 0.55;
+/** Opacity of the shaded area in front of the attack. */
+const AREA_ALPHA = 0.3;
 /** Peak opacity of the halo around the ball. */
 const HALO_ALPHA = 0.35;
 const HALO_RADIUS = 20;
@@ -42,9 +44,21 @@ const BAR_GAP_METRES = 0.5;
 const BAR_WIDTH_METRES = 0.6;
 const BAR_BLUR = 16;
 
-function transparent(hex: string): string {
-  const n = parseInt(hex.replace('#', ''), 16);
-  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},0)`;
+/**
+ * How far up the pitch the attack reaches: the x of the attacking team's
+ * player furthest toward the goal it attacks, or null with none tracked.
+ */
+export function attackFront(frame: Frame, team: 0 | 1, direction: 1 | -1): number | null {
+  let front: number | null = null;
+  for (const t of frame.teams ?? []) {
+    if (t.team_id !== team) continue;
+    for (const player of t.players ?? []) {
+      const x = player.projected_coordinates?.x;
+      if (typeof x !== 'number' || !Number.isFinite(x)) continue;
+      if (front === null || direction * x > direction * front) front = x;
+    }
+  }
+  return front;
 }
 
 /**
@@ -100,11 +114,11 @@ function drawChevrons(
 }
 
 /**
- * Show the attack: a glow across the pitch from the ball to the goal being
- * attacked, chevrons flowing toward that goal through the half under attack,
- * a lit bar beyond that goal's net, and a halo around the ball, in the
- * attacking team's colour (the chevrons white) and all scaled by the glow's
- * intensity.
+ * Show the attack: the pitch shaded from `frontX`, how far up the pitch the
+ * attack reaches (see attackFront), to the goal being attacked, chevrons
+ * flowing toward that goal through the half under attack, a lit bar beyond
+ * that goal's net, and a halo around the ball, in the attacking team's colour
+ * (the chevrons white) and all scaled by the glow's intensity.
  *
  * Drawn in frame units through the context's current transform, before the
  * players, so it never covers them. Where the team is attacking is worked out
@@ -115,7 +129,8 @@ export function drawAttackGlow(
   pd: Partial<PitchDimensions> | undefined,
   t: Transform2D,
   glow: AttackGlow,
-  ball: { x: number; y: number }
+  ball: { x: number; y: number },
+  frontX: number
 ): void {
   if (glow.intensity <= 0) return;
   const dims = resolvePitchDimensions(pd);
@@ -127,16 +142,14 @@ export function drawAttackGlow(
   const [, top] = p(0, -halfWidth);
   const [, bottom] = p(0, halfWidth);
   const [ballX, ballY] = p(Math.min(half, Math.max(-half, ball.x)), ball.y);
+  const [frontPx] = p(Math.min(half, Math.max(-half, frontX)), 0);
   const [lineX] = p(glow.direction * half, 0);
 
-  // Clear at the ball, the team's colour at the goal line.
-  if (lineX !== ballX) {
-    const gradient = ctx.createLinearGradient(ballX, 0, lineX, 0);
-    gradient.addColorStop(0, transparent(glow.color));
-    gradient.addColorStop(1, glow.color);
-    ctx.globalAlpha = GLOW_ALPHA * glow.intensity;
-    ctx.fillStyle = gradient;
-    ctx.fillRect(Math.min(ballX, lineX), top, Math.abs(lineX - ballX), bottom - top);
+  // One flat shade, from the front of the attack to the goal line.
+  if (lineX !== frontPx) {
+    ctx.globalAlpha = AREA_ALPHA * glow.intensity;
+    ctx.fillStyle = glow.color;
+    ctx.fillRect(Math.min(frontPx, lineX), top, Math.abs(lineX - frontPx), bottom - top);
   }
 
   // The direction of the attack, flowing through the middle of the half

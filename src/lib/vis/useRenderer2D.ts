@@ -47,7 +47,7 @@ import {
 } from './constants'
 import { build2DTransform, worldToPx, buildPitchCache, PITCH_GRASS } from './pitchGeometry'
 import { drawGoalNets, type NetBulge } from './goalNets'
-import { drawAttackGlow, type AttackGlow } from './attackGlow'
+import { attackFront, drawAttackGlow, type AttackGlow } from './attackGlow'
 import {
   computeViewMatrix,
   IDENTITY_VIEW,
@@ -140,11 +140,14 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     ctx.fillStyle = PITCH_GRASS
     ctx.fillRect(0, 0, FRAME_W, FRAME_H)
 
-    // The glow starts from the goal sequence's ball while that plays, like
-    // everything else that follows the ball.
+    // The shaded area reaches back to the attacking team's most advanced
+    // player, or to the ball with none tracked. The halo follows the goal
+    // sequence's ball while that plays, like everything else that follows
+    // the ball.
     const glowBall = overlay?.ball ?? trackedBall(frame)
     if (glow && glowBall) {
-      drawAttackGlow(ctx as CanvasRenderingContext2D, pd, transform2d, glow, glowBall)
+      const front = attackFront(frame, glow.team, glow.direction) ?? glowBall.x
+      drawAttackGlow(ctx as CanvasRenderingContext2D, pd, transform2d, glow, glowBall, front)
     }
 
     // The markings are already drawn through the view, pixel for pixel.

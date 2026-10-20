@@ -510,7 +510,7 @@ function glowTarget(): Omit<AttackGlow, 'intensity'> | null {
   const direction = phase.attacks[team];
   // Without a direction there is no goal to glow towards.
   if (direction === null) return null;
-  return { color: PHASE_TEAMS[team].color, direction };
+  return { color: PHASE_TEAMS[team].color, team, direction };
 }
 
 function glowValue(): AttackGlow | undefined {
@@ -518,6 +518,7 @@ function glowValue(): AttackGlow | undefined {
   const cycles = props.replay.currentTime.value / CHEVRON_FLOW_PERIOD_S;
   return {
     color: glow.color,
+    team: glow.team,
     direction: glow.direction,
     intensity: glow.intensity,
     flow: prefersReducedMotion() ? 0 : cycles - Math.floor(cycles),
@@ -562,7 +563,7 @@ function updateGlow(fade: boolean): void {
   if (target) {
     // The same attack carries on from wherever its fade has got to; a new one
     // starts from nothing.
-    const same = glow?.color === target.color && glow.direction === target.direction;
+    const same = glow?.team === target.team && glow.direction === target.direction;
     glow = { ...target, intensity: same && glow ? glow.intensity : 0, target: 1 };
   } else if (glow) {
     // Fading out keeps the colour and direction of the attack that ended.

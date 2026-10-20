@@ -880,7 +880,12 @@ describe('PipelineOutputSurface', () => {
     it('glows for the attacking team, toward the goal it attacks', async () => {
       const { replay, m } = await ready();
       await arrive(replay, BLUE_ATTACKING, 30);
-      expect(lastGlow()).toMatchObject({ color: PERSON_COLORS.away.fill, direction: -1, intensity: 1 });
+      expect(lastGlow()).toMatchObject({
+        color: PERSON_COLORS.away.fill,
+        team: 1,
+        direction: -1,
+        intensity: 1,
+      });
       m.unmount();
     });
 
