@@ -839,3 +839,94 @@ describe('usePipelineReplay seeking a file with uneven time per byte', () => {
     expect(rounds).toBeLessThanOrEqual(5);
   });
 });
+
+describe('usePipelineReplay team phase', () => {
+  /**
+   * Team 0 carries the ball until `switchAt` seconds, team 1 after. Keepers at
+   * -45 (team 0) and +45 (team 1), ball at x = 20. Records are padded wide,
+   * so the probes a seek makes carry well under a second of history on their
+   * own: the lookback has to be fetched on purpose.
+   */
+  function phaseFile(count: number, switchAt: number, width = 4000) {
+    const lines: string[] = [];
+    for (let i = 0; i < count; i++) {
+      const t = i * 0.04;
+      const carrier = t < switchAt ? 0 : 1;
+      const body: Record<string, unknown> = {
+        teams: [
+          {
+            team_id: 0,
+            players: [
+              { track_id: 1, person_type: 'PersonType.PLAYER', projected_coordinates: { x: 0, y: 5 }, in_possession: carrier === 0 },
+              { track_id: 2, person_type: 'PersonType.GOALKEEPER', projected_coordinates: { x: -45, y: 0 } },
+            ],
+          },
+          {
+            team_id: 1,
+            players: [
+              { track_id: 3, person_type: 'PersonType.PLAYER', projected_coordinates: { x: 0, y: -5 }, in_possession: carrier === 1 },
+              { track_id: 4, person_type: 'PersonType.GOALKEEPER', projected_coordinates: { x: 45, y: 0 } },
+            ],
+          },
+        ],
+        balls: [{ projected_coordinates: { x: 20, y: 0 } }],
+        state: { actions: [] },
+        frame_data: [{ frame_count: 457 + i, frame_uuid: [{ timestamp: Number((1000 + t).toFixed(4)), uuid: 'x' }] }],
+        pad: '',
+      };
+      body.pad = 'p'.repeat(Math.max(0, width - JSON.stringify(body).length));
+      lines.push(JSON.stringify(body));
+    }
+    return lines.join('\n');
+  }
+
+  // 300 s of play, the hand-over at 150 s: far from the window loaded first.
+  const text = phaseFile(7500, 150);
+
+  it('reports the phase of the frame on screen', async () => {
+    const r = usePipelineReplay({ openFetcher: async () => fetcherFor(text) });
+    await r.load();
+    await r.seek(100);
+    await r.whenIdle();
+    expect(r.phase.value).toMatchObject({ possession: 0, states: { 0: 'attacking', 1: 'defending' } });
+  });
+
+  // Just after the hand-over, team 1 has carried for 0.6 s: not yet enough,
+  // so team 0 is still in possession. Telling that needs the seconds before
+  // the frame, which a seek on its own does not load.
+  it('looks back before a seek target', async () => {
+    const r = usePipelineReplay({ openFetcher: async () => fetcherFor(text) });
+    await r.load();
+    await r.seek(150.6);
+    await r.whenIdle();
+    expect(r.phase.value?.possession).toBe(0);
+
+    await r.seek(151.5);
+    await r.whenIdle();
+    expect(r.phase.value?.possession).toBe(1);
+  });
+
+  it('gives a frame the same phase whether it was reached by playing or by seeking', async () => {
+    const clock = manualClock();
+    const played = usePipelineReplay({ openFetcher: async () => fetcherFor(text), raf: clock.raf, caf: clock.caf });
+    await played.load();
+    await played.seek(149);
+    await played.whenIdle();
+    played.play();
+    clock.tick(0);
+    for (let ms = 40; ms <= 1640; ms += 40) {
+      clock.tick(ms);
+      await played.whenIdle();
+    }
+    played.pause();
+
+    const sought = usePipelineReplay({ openFetcher: async () => fetcherFor(text) });
+    await sought.load();
+    await sought.seek(played.currentTime.value);
+    await sought.whenIdle();
+
+    expect(sought.currentFrame.value).toBe(played.currentFrame.value);
+    expect(sought.phase.value).toEqual(played.phase.value);
+  });
+});
+

@@ -1,6 +1,7 @@
 import { computed, ref, type Ref } from 'vue';
 import type { Frame } from '@/lib/vis/types';
 import { parseWindowAt, type ReplayRecord } from '@/lib/pipelineData/frameWindow';
+import { teamPhaseAt, PHASE_LOOKBACK_S, type TeamPhase } from '@/lib/vis/teamPhase';
 import {
   buildIndex,
   estimateOffset,
@@ -25,6 +26,12 @@ export interface PipelineReplay {
    * holding the clock until it arrives.
    */
   buffering: Readonly<Ref<boolean>>;
+  /**
+   * Who is attacking and who is defending at the frame on screen, derived from
+   * the frames up to PHASE_LOOKBACK_S before it (see teamPhase.ts). Null until
+   * a frame is shown.
+   */
+  phase: Ref<TeamPhase | null>;
   state: Ref<ReplayState>;
   error: Ref<string | null>;
   load(): Promise<void>;
@@ -151,6 +158,10 @@ export function usePipelineReplay(opts: {
   const awaitingFrame = ref(false);
   const held = ref(false);
   const buffering = computed(() => awaitingFrame.value || held.value);
+  const phase = ref<TeamPhase | null>(null);
+  // The record on screen, so its phase can be worked out again when the frames
+  // before it arrive after it does.
+  let shown: ReplayRecord | null = null;
 
   let fetcher: RangeFetcher | null = null;
   let index: JsonlIndex | null = null;
@@ -278,7 +289,12 @@ export function usePipelineReplay(opts: {
       nextOffset: endsAtEof ? index.size : from + parsed.next,
       records: parsed.records,
     };
-    if (cache) touch(win);
+    if (cache) {
+      touch(win);
+      // A window that arrives after its frame was shown may hold the history
+      // that frame's phase was missing.
+      if (shown) phase.value = phaseFor(shown);
+    }
     return { from, end, first, last, firstOffset, lastOffset, win };
   }
 
@@ -414,9 +430,17 @@ export function usePipelineReplay(opts: {
       if (!found || controller.signal.aborted || startEpoch !== epoch) return;
       onLocated?.(found.record);
       fg.fillFrom = found.read.first.t;
+      // Started far enough back to hold the lookback the team phase reads, so
+      // a frame reached by a seek has the same history as one reached by
+      // playing into it. The mean record size is the largest sampled, which
+      // keeps this on the generous side.
+      const lookback = index
+        ? Math.round(fps.value * index.meanRecordBytes * (PHASE_LOOKBACK_S + 1))
+        : 0;
+      const fillFrom = Math.max(0, found.read.firstOffset - lookback);
       await readWindow(
-        found.read.firstOffset,
-        windowBytes(),
+        fillFrom,
+        windowBytes() + (found.read.firstOffset - fillFrom),
         startEpoch,
         controller.signal,
         true
@@ -428,9 +452,28 @@ export function usePipelineReplay(opts: {
     return fg;
   }
 
+  /** The cached records up to PHASE_LOOKBACK_S before this one, then its phase. */
+  function phaseFor(record: ReplayRecord): TeamPhase {
+    const from = record.t - PHASE_LOOKBACK_S;
+    const byFrame = new Map<number, ReplayRecord>([[record.frameCount, record]]);
+    for (const win of windows) {
+      for (const r of win.records) {
+        if (r.t >= from && r.t <= record.t) byFrame.set(r.frameCount, r);
+      }
+    }
+    const recent = [...byFrame.values()].sort((a, b) => a.t - b.t);
+    // By frame number: a cached window holds its own copy of the record shown.
+    return teamPhaseAt(
+      recent,
+      recent.findIndex((r) => r.frameCount === record.frameCount)
+    );
+  }
+
   function show(record: ReplayRecord): void {
+    shown = record;
     frame.value = record.frame;
     currentFrame.value = record.frameCount;
+    phase.value = phaseFor(record);
   }
 
   function fail(err: unknown): void {
@@ -683,6 +726,8 @@ export function usePipelineReplay(opts: {
     windows = [];
     index = null;
     fetcher = null;
+    shown = null;
+    phase.value = null;
     awaitingFrame.value = false;
     // Not just bookkeeping: play() guards on state === 'ready', so leaving it
     // there would let a stray play() after unmount re-arm the clock over no
@@ -699,6 +744,7 @@ export function usePipelineReplay(opts: {
     isPlaying,
     frame,
     buffering,
+    phase,
     state,
     error,
     load,
