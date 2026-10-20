@@ -17,7 +17,8 @@
 //    team's colour, officials magenta. The vendored copy coloured each team
 //    from the kit colours the pipeline detected; that resolver is gone.
 //  - while a team has the ball, the other team is drawn dimmed and underneath
-//    it (DIMMED_TEAM_ALPHA).
+//    it (DIMMED_TEAM_ALPHA), and the carrier and their teammates within
+//    NEARBY_METRES are outlined in white.
 
 // ---------------------------------------------------------------------------
 // 2D canvas rendering composable.
@@ -35,6 +36,8 @@ import {
   PLAYER_RADIUS,
   PERSON_COLORS,
   DIMMED_TEAM_ALPHA,
+  NEARBY_OUTLINE,
+  NEARBY_METRES,
 } from './constants'
 import { build2DTransform, worldToPx, buildPitchCache } from './pitchGeometry'
 import {
@@ -118,7 +121,8 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     // ── Teams + players ────────────────────────────────────────────────────
     // The team without the ball is dimmed, and the team with it is drawn last
     // so it stays on top where players overlap. Officials are never dimmed.
-    const withBall = possessingTeam(frame)
+    const carrier = ballCarrier(frame)
+    const withBall = carrier?.teamId ?? null
     const teams = [...(frame.teams ?? [])].sort(
       (a, b) =>
         Number((a.team_id ?? -1) === withBall) - Number((b.team_id ?? -1) === withBall),
@@ -128,7 +132,7 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
       const dimmed = withBall !== null && tid !== withBall && tid !== -1
       ctx.globalAlpha = dimmed ? DIMMED_TEAM_ALPHA : 1
       for (const player of team.players ?? []) {
-        draw2DPlayer(player, tid)
+        draw2DPlayer(player, tid, tid === withBall && isNearCarrier(player, carrier))
       }
     }
     ctx.globalAlpha = 1
@@ -155,21 +159,38 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
 
   // ── Internal drawing helpers ──────────────────────────────────────────────
 
-  /** The team whose player has the ball in this frame, or null if none does. */
-  function possessingTeam(frame: Frame): number | null {
+  /** The player with the ball in this frame and their team, or null. */
+  function ballCarrier(
+    frame: Frame,
+  ): { teamId: number; x: number; y: number } | null {
     for (const team of frame.teams ?? []) {
       const tid = team.team_id ?? -1
       if (tid === -1) continue
-      if ((team.players ?? []).some((p) => p.in_possession)) return tid
+      const player = (team.players ?? []).find((p) => p.in_possession)
+      if (!player) continue
+      const { x, y } = player.projected_coordinates ?? {}
+      // Possession still counts without a usable position; only "nearby" needs one.
+      return { teamId: tid, x: x ?? NaN, y: y ?? NaN }
     }
     return null
+  }
+
+  /** Within NEARBY_METRES of the carrier, on the pitch (the carrier included). */
+  function isNearCarrier(
+    player: Player,
+    carrier: { x: number; y: number } | null,
+  ): boolean {
+    const x = player.projected_coordinates?.x
+    const y = player.projected_coordinates?.y
+    if (!carrier || x == null || y == null) return false
+    return Math.hypot(x - carrier.x, y - carrier.y) <= NEARBY_METRES
   }
 
   /**
    * Draw a single player as a filled circle with shadow, outline, optional
    * possession ring, jersey number, and track ID label.
    */
-  function draw2DPlayer(player: Player, teamId: number): void {
+  function draw2DPlayer(player: Player, teamId: number, nearBall = false): void {
     const coords = player.projected_coordinates
     const x = coords?.x
     const y = coords?.y
@@ -194,6 +215,8 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
       colors = PERSON_COLORS.official
       outline = colors.outline
     }
+    // White marks the players around the ball, and only them.
+    if (nearBall) outline = NEARBY_OUTLINE
 
     // Shadow (offset 1px down-right)
     ctx.beginPath()

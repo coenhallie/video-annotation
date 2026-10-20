@@ -1,7 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { useRenderer2D } from '@/lib/vis/useRenderer2D';
 import type { Frame } from '@/lib/vis/types';
-import { PERSON_COLORS, DIMMED_TEAM_ALPHA } from '@/lib/vis/constants';
+import {
+  PERSON_COLORS,
+  DIMMED_TEAM_ALPHA,
+  NEARBY_OUTLINE,
+  PLAYER_RADIUS,
+} from '@/lib/vis/constants';
+import { build2DTransform, worldToPx } from '@/lib/vis/pitchGeometry';
 import { fakeCanvas, stubOffscreenCanvas, type Op } from './recordingCtx';
 
 const PITCH = { length: 105, width: 68 };
@@ -210,6 +216,91 @@ describe('possession emphasis', () => {
     const lastAway = fills.lastIndexOf(circles(ops, away.fill).at(-1)!);
     const firstHome = fills.indexOf(circles(ops, home.fill)[0]!);
     expect(firstHome).toBeGreaterThan(lastAway);
+  });
+});
+
+describe('nearby highlight', () => {
+  type Who = { team: number; x: number; y?: number; type?: string; ball?: boolean };
+
+  function frame(people: Who[]): Frame {
+    const teams = new Map<number, unknown[]>();
+    people.forEach((p, i) => {
+      const list = teams.get(p.team) ?? [];
+      list.push({
+        track_id: i + 1,
+        person_type: p.type ?? 'PersonType.PLAYER',
+        projected_coordinates: { x: p.x, y: p.y ?? 0 },
+        in_possession: Boolean(p.ball),
+      });
+      teams.set(p.team, list);
+    });
+    return {
+      pitch_dimensions: PITCH,
+      teams: [...teams].map(([team_id, players]) => ({ team_id, players })),
+      balls: [],
+    } as unknown as Frame;
+  }
+
+  /** The outline drawn around the marker of the person standing at (x, y). */
+  function outlineOf(f: Frame, x: number, y = 0): string | undefined {
+    const { canvas, ops } = fakeCanvas();
+    useRenderer2D(canvas).renderFrame(f);
+    const [px, py] = worldToPx(x, y, build2DTransform(PITCH));
+    const at = ops.findIndex(
+      (o) => o.op === 'arc' && o.args[0] === px && o.args[1] === py && o.args[2] === PLAYER_RADIUS
+    );
+    return ops.slice(at).find((o) => o.op === 'stroke')?.strokeStyle;
+  }
+
+  const { home, away, goalkeeper } = PERSON_COLORS;
+
+  it('rings teammates within 15 m of the ball carrier in white', () => {
+    const f = frame([{ team: 0, x: 0, ball: true }, { team: 0, x: 14 }, { team: 0, x: -9, y: 11 }]);
+    expect(outlineOf(f, 14)).toBe(NEARBY_OUTLINE);
+    expect(outlineOf(f, -9, 11)).toBe(NEARBY_OUTLINE);
+  });
+
+  it('rings the ball carrier too', () => {
+    expect(outlineOf(frame([{ team: 0, x: 0, ball: true }]), 0)).toBe(NEARBY_OUTLINE);
+  });
+
+  it('does not ring a teammate further than 15 m away', () => {
+    const f = frame([{ team: 0, x: 0, ball: true }, { team: 0, x: 16 }]);
+    expect(outlineOf(f, 16)).toBe(home.outline);
+  });
+
+  it('never rings the other team, however close', () => {
+    const f = frame([{ team: 0, x: 0, ball: true }, { team: 1, x: 3 }]);
+    expect(outlineOf(f, 3)).toBe(away.outline);
+  });
+
+  it('rings nobody when nobody has the ball', () => {
+    const f = frame([{ team: 0, x: 0 }, { team: 0, x: 5 }]);
+    expect(outlineOf(f, 0)).toBe(home.outline);
+    expect(outlineOf(f, 5)).toBe(home.outline);
+  });
+
+  it('rings a nearby goalkeeper white instead of in their team colour', () => {
+    const f = frame([
+      { team: 1, x: 40, ball: true },
+      { team: 1, x: 50, type: 'PersonType.GOALKEEPER' },
+    ]);
+    expect(outlineOf(f, 50)).toBe(NEARBY_OUTLINE);
+  });
+
+  it('keeps a distant goalkeeper ringed in their team colour', () => {
+    const f = frame([
+      { team: 1, x: 0, ball: true },
+      { team: 1, x: 50, type: 'PersonType.GOALKEEPER' },
+    ]);
+    expect(outlineOf(f, 50)).toBe(away.fill);
+    expect(goalkeeper.fill).not.toBe(away.fill);
+  });
+
+  // White is the highlight now, so it cannot also be every marker's edge.
+  it('outlines everyone else in a dark shade of their own colour, not white', () => {
+    expect(home.outline).not.toBe(NEARBY_OUTLINE);
+    expect(away.outline).not.toBe(NEARBY_OUTLINE);
   });
 });
 

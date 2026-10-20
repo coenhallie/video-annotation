@@ -34,16 +34,17 @@ export interface PersonColors {
  *
  * Goalkeepers and officials get colours that cannot be mistaken for either
  * team or for the green pitch. A goalkeeper's outline is their team's colour,
- * which keeps their team visible. Outfield outlines are white because red and
- * the pitch green are close in brightness, so a dark outline would leave red
- * players hard to pick out for anyone who cannot tell red from green.
+ * which keeps their team visible. Outfield outlines are a dark shade of the
+ * team colour: red and the pitch green are close in brightness, so without an
+ * edge red players blend into the pitch for anyone who cannot tell red from
+ * green. White is kept for NEARBY_OUTLINE.
  */
 export const PERSON_COLORS: Record<
   'home' | 'away' | 'goalkeeper' | 'official' | 'unknown',
   PersonColors
 > = {
-  home: { fill: '#dc2626', outline: '#ffffff', text: '#ffffff' },
-  away: { fill: '#2563eb', outline: '#ffffff', text: '#ffffff' },
+  home: { fill: '#dc2626', outline: '#7f1d1d', text: '#ffffff' },
+  away: { fill: '#2563eb', outline: '#1e3a8a', text: '#ffffff' },
   goalkeeper: { fill: '#facc15', outline: '#000000', text: '#000000' },
   official: { fill: '#d946ef', outline: '#000000', text: '#000000' },
   // A team id the export does not define has no home or away to be coloured as.
@@ -58,3 +59,18 @@ export const PERSON_COLORS: Record<
  * exactly the flicker a reviewer is meant to see.
  */
 export const DIMMED_TEAM_ALPHA = 0.6
+
+/**
+ * Outline of the players near the ball: the ball carrier and their teammates
+ * within NEARBY_METRES of them. White is used for nothing else, so it reads as
+ * the highlight. "Nearby" is worked out here, not reported by the pipeline,
+ * which is why it does not borrow the gold possession ring.
+ */
+export const NEARBY_OUTLINE = '#ffffff'
+
+/**
+ * How close to the ball carrier a teammate has to be to be highlighted.
+ * Measured on a full match: at 15 m the median is 2 teammates and most frames
+ * have 1 to 5. At 10 m 39% of frames have none; from 20 m it is half the team.
+ */
+export const NEARBY_METRES = 15
