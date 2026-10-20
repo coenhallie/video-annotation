@@ -80,12 +80,16 @@ describe('draw2DPlayer colours', () => {
   function draw(frame: Frame) {
     const { canvas, ops } = fakeCanvas();
     useRenderer2D(canvas).renderFrame(frame);
-    const fills = ops.filter((o) => o.op === 'fill');
-    const circleAt = ops.indexOf(fills[1]!);
+    // The person stands at the pitch centre; their circle is the arc there at
+    // full player radius (the drop shadow is offset by a pixel).
+    const [px, py] = worldToPx(0, 0, build2DTransform(PITCH));
+    const circleAt = ops.findIndex(
+      (o) => o.op === 'arc' && o.args[0] === px && o.args[1] === py && o.args[2] === PLAYER_RADIUS
+    );
+    const after = ops.slice(circleAt);
     return {
-      // The first fill is the drop shadow; the second is the circle itself.
-      fill: fills[1]?.fillStyle,
-      strokes: ops.slice(circleAt).filter((o) => o.op === 'stroke'),
+      fill: after.find((o) => o.op === 'fill')?.fillStyle,
+      strokes: after.filter((o) => o.op === 'stroke'),
       ops,
     };
   }
@@ -196,7 +200,10 @@ describe('possession emphasis', () => {
       match([{ team: 0, ball: true }, { team: 1 }, { team: -1, type: 'PersonType.OFFICIAL' }])
     );
     expect(circles(ops, official.fill)[0]?.globalAlpha).toBe(1);
-    expect(circles(ops, '#ffffff').every((o) => o.globalAlpha === 1)).toBe(true);
+    // The ball sits at (30, 5); its fill is the first one after its arc.
+    const [bx, by] = worldToPx(30, 5, build2DTransform(PITCH));
+    const ballAt = ops.findIndex((o) => o.op === 'arc' && o.args[0] === bx && o.args[1] === by);
+    expect(ops.slice(ballAt).find((o) => o.op === 'fill')?.globalAlpha).toBe(1);
   });
 
   it('follows possession from one frame to the next', () => {
@@ -301,6 +308,64 @@ describe('nearby highlight', () => {
   it('outlines everyone else in a dark shade of their own colour, not white', () => {
     expect(home.outline).not.toBe(NEARBY_OUTLINE);
     expect(away.outline).not.toBe(NEARBY_OUTLINE);
+  });
+});
+
+describe('goals and the goal sequence', () => {
+  const at = (x: number, y: number) => worldToPx(x, y, build2DTransform(PITCH));
+  const ballFrame = {
+    pitch_dimensions: PITCH,
+    teams: [],
+    balls: [{ projected_coordinates: { x: 10, y: 4 } }],
+  } as unknown as Frame;
+
+  function render(overlay?: Parameters<ReturnType<typeof useRenderer2D>['renderFrame']>[1]) {
+    const { canvas, ops } = fakeCanvas();
+    useRenderer2D(canvas).renderFrame(ballFrame, overlay);
+    return ops;
+  }
+  const arcAt = (ops: Op[], x: number, y: number) => {
+    const [px, py] = at(x, y);
+    return ops.filter((o) => o.op === 'arc' && o.args[0] === px && o.args[1] === py);
+  };
+
+  it('draws both goals on every frame', () => {
+    const posts = render().filter((o) => o.op === 'arc' && o.args[2] === 2.5);
+    expect(posts).toHaveLength(4);
+  });
+
+  it('draws the sequence ball in place of the tracked one', () => {
+    const ops = render({ ball: { x: 53, y: 1 }, trail: [], net: { side: 1, y: 1, metres: 0 } });
+    expect(arcAt(ops, 53, 1)).toHaveLength(1);
+    expect(arcAt(ops, 10, 4)).toHaveLength(0);
+  });
+
+  it('draws the tracked ball when there is no sequence', () => {
+    expect(arcAt(render(), 10, 4)).toHaveLength(1);
+  });
+
+  it('draws a fading trail behind a fast ball', () => {
+    const ops = render({
+      ball: { x: 40, y: 0 },
+      trail: [
+        { x: 39, y: 0 },
+        { x: 38, y: 0 },
+      ],
+      net: { side: 1, y: 0, metres: 0 },
+    });
+    const near = arcAt(ops, 39, 0)[0]!;
+    const far = arcAt(ops, 38, 0)[0]!;
+    const fillAfter = (o: Op) => ops.slice(ops.indexOf(o)).find((x) => x.op === 'fill')!;
+    expect(fillAfter(near).globalAlpha).toBeGreaterThan(fillAfter(far).globalAlpha);
+    expect(fillAfter(near).globalAlpha).toBeLessThan(1);
+  });
+
+  it('bows the struck net', () => {
+    const curve = (ops: Op[]) =>
+      ops.filter((o) => o.op === 'quadraticCurveTo' && Number(o.args[2]) > 640)[0]!.args[0];
+    const still = render({ ball: { x: 54, y: 0 }, trail: [], net: { side: 1, y: 0, metres: 0 } });
+    const struck = render({ ball: { x: 54, y: 0 }, trail: [], net: { side: 1, y: 0, metres: 0.5 } });
+    expect(Number(curve(struck))).toBeGreaterThan(Number(curve(still)));
   });
 });
 

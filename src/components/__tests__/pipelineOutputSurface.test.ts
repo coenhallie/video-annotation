@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createApp, defineComponent, h, nextTick, ref } from 'vue';
 import PipelineOutputSurface from '@/components/PipelineOutputSurface.vue';
 import type { PipelineReplay, ReplayState } from '@/composables/usePipelineReplay';
+import { GOAL_SEQUENCE_MS } from '@/lib/vis/goalSequence';
 
 /**
  * Declared through vi.hoisted because vi.mock is hoisted above the imports,
@@ -484,5 +485,173 @@ describe('PipelineOutputSurface', () => {
     expect(seen).toMatchObject({ currentFrame: 100 });
     app.unmount();
     root.remove();
+  });
+
+  describe('goal sequence', () => {
+    let queued: Array<(ms: number) => void> = [];
+    let clockMs = 1000;
+    const originalRaf = window.requestAnimationFrame;
+    const originalCaf = window.cancelAnimationFrame;
+
+    beforeEach(() => {
+      queued = [];
+      clockMs = 1000;
+      renderFrame.mockClear();
+      window.requestAnimationFrame = ((cb: (ms: number) => void) => {
+        queued.push(cb);
+        return queued.length;
+      }) as typeof window.requestAnimationFrame;
+      window.cancelAnimationFrame = (() => {
+        queued = [];
+      }) as typeof window.cancelAnimationFrame;
+    });
+
+    afterEach(() => {
+      window.requestAnimationFrame = originalRaf;
+      window.cancelAnimationFrame = originalCaf;
+    });
+
+    async function animate(ms: number) {
+      const end = clockMs + ms;
+      while (clockMs < end) {
+        clockMs += 1000 / 60;
+        const cbs = queued;
+        queued = [];
+        cbs.forEach((cb) => cb(clockMs));
+      }
+      await nextTick();
+    }
+
+    function goalFrame(labels: string[], ball: { x: number; y: number } | null = { x: 30, y: 5 }) {
+      return {
+        pitch_dimensions: { length: 105, width: 68, goal_width: 7.32 },
+        teams: [],
+        balls: ball ? [{ projected_coordinates: ball }] : [],
+        state: { actions: labels.map((action_type) => ({ action_type })) },
+        frame_data: [{ frame_count: 1 }],
+      };
+    }
+
+    type Writable = { value: unknown };
+    const set = (r: unknown, v: unknown) => ((r as Writable).value = v);
+
+    /** Mounted the way load() leaves it, then playing at 10 s. */
+    async function playing() {
+      const replay = fakeReplay('loading');
+      const m = mount(replay);
+      await nextTick();
+      set(replay.currentTime, 10);
+      set(replay.frame, goalFrame(['other']));
+      set(replay.state, 'ready');
+      set(replay.isPlaying, true);
+      await nextTick();
+      return { replay, m };
+    }
+
+    /** One playback tick: the clock moves on a frame and the next record shows. */
+    async function tick(replay: PipelineReplay, frame: unknown, step = 0.04) {
+      set(replay.currentTime, (replay.currentTime.value as number) + step);
+      set(replay.frame, frame);
+      await nextTick();
+    }
+
+    const lastOverlay = () => renderFrame.mock.calls.at(-1)?.[1];
+    const banner = (root: HTMLElement) => at(root, 'pipeline-goal-banner');
+
+    it('plays when playback runs into a GOAL label', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, goalFrame(['GOAL']));
+      await animate(1200);
+      expect(lastOverlay()).toBeDefined();
+      expect(banner(m.root)).not.toBeNull();
+      m.unmount();
+    });
+
+    it('ends by itself and goes back to the tracked ball', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, goalFrame(['GOAL']));
+      await animate(GOAL_SEQUENCE_MS + 200);
+      expect(lastOverlay()).toBeUndefined();
+      expect(banner(m.root)).toBeNull();
+      m.unmount();
+    });
+
+    // A seek is not a goal happening: it would replace the frame someone
+    // jumped to look at with an animation.
+    it('does not play when a seek lands on a GOAL label', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, goalFrame(['GOAL']), 250);
+      await animate(1200);
+      expect(lastOverlay()).toBeUndefined();
+      m.unmount();
+    });
+
+    it('does not play while paused, for example when stepping a frame', async () => {
+      const { replay, m } = await playing();
+      set(replay.isPlaying, false);
+      await nextTick();
+      await tick(replay, goalFrame(['GOAL']));
+      await animate(1200);
+      expect(lastOverlay()).toBeUndefined();
+      m.unmount();
+    });
+
+    it('stops and shows the real frame the moment playback pauses', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, goalFrame(['GOAL']));
+      await animate(500);
+      set(replay.isPlaying, false);
+      await nextTick();
+      expect(lastOverlay()).toBeUndefined();
+      expect(banner(m.root)).toBeNull();
+      m.unmount();
+    });
+
+    it('stops on a seek made while it plays', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, goalFrame(['GOAL']));
+      await animate(500);
+      await tick(replay, goalFrame(['other']), 120);
+      expect(lastOverlay()).toBeUndefined();
+      m.unmount();
+    });
+
+    // A drawing stamped on a frame whose ball is the animation's would record
+    // something the pipeline never produced.
+    it('stops the moment someone presses on the drawing layer', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, goalFrame(['GOAL']));
+      await animate(500);
+      at(m.root, 'pipeline-overlay')!.dispatchEvent(
+        new Event('pointerdown', { bubbles: true })
+      );
+      await nextTick();
+      expect(lastOverlay()).toBeUndefined();
+      m.unmount();
+    });
+
+    it('plays once per GOAL label, not again on its following frames', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, goalFrame(['GOAL']));
+      await animate(GOAL_SEQUENCE_MS + 200);
+      await tick(replay, goalFrame(['GOAL']));
+      await animate(300);
+      expect(lastOverlay()).toBeUndefined();
+
+      // A new label, after one without it, is a new goal.
+      await tick(replay, goalFrame(['other']));
+      await tick(replay, goalFrame(['GOAL']));
+      await animate(300);
+      expect(lastOverlay()).toBeDefined();
+      m.unmount();
+    });
+
+    it('does not play without a ball to tell which goal it went in', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, goalFrame(['GOAL'], null));
+      await animate(500);
+      expect(lastOverlay()).toBeUndefined();
+      m.unmount();
+    });
   });
 });

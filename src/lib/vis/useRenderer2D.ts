@@ -19,6 +19,9 @@
 //  - while a team has the ball, the other team is drawn dimmed and underneath
 //    it (DIMMED_TEAM_ALPHA), and the carrier and their teammates within
 //    NEARBY_METRES are outlined in white.
+//  - goals (posts and a faint net) are drawn on every frame, and renderFrame
+//    takes an optional goal-sequence overlay whose ball replaces the tracked
+//    one (goalNets.ts, goalSequence.ts).
 
 // ---------------------------------------------------------------------------
 // 2D canvas rendering composable.
@@ -40,12 +43,23 @@ import {
   NEARBY_METRES,
 } from './constants'
 import { build2DTransform, worldToPx, buildPitchCache } from './pitchGeometry'
+import { drawGoalNets, type NetBulge } from './goalNets'
 import {
   computeViewMatrix,
   IDENTITY_VIEW,
   type PipelineView,
   type ViewMatrix,
 } from './viewTransform'
+
+/**
+ * What the goal sequence draws over a frame: its own ball, where that ball just
+ * was, and the net it hit. Positions in pitch metres. See goalSequence.ts.
+ */
+export interface GoalOverlay {
+  ball: { x: number; y: number }
+  trail: { x: number; y: number }[]
+  net: NetBulge
+}
 
 /**
  * Create a 2D renderer bound to a specific canvas element.
@@ -77,7 +91,7 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
    * Render a single frame.  Draws the cached pitch background,
    * iterates teams/players/balls, and paints the HUD overlay.
    */
-  function renderFrame(frame: Frame): void {
+  function renderFrame(frame: Frame, overlay?: GoalOverlay): void {
     if (!frame) return
 
     const pd = frame.pitch_dimensions
@@ -118,6 +132,9 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
 
     ctx.setTransform(...matrix)
 
+    // Goals, faint, on every frame; a struck net bows out while it is hit.
+    drawGoalNets(ctx as CanvasRenderingContext2D, pd, transform2d, overlay?.net)
+
     // ── Teams + players ────────────────────────────────────────────────────
     // The team without the ball is dimmed, and the team with it is drawn last
     // so it stays on top where players overlap. Officials are never dimmed.
@@ -138,8 +155,17 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     ctx.globalAlpha = 1
 
     // ── Balls ──────────────────────────────────────────────────────────────
-    for (const ball of frame.balls ?? []) {
-      draw2DBall(ball)
+    // During the goal sequence its ball replaces the tracked one, which near a
+    // goal tends to jump about or go straight through the net.
+    if (overlay) {
+      overlay.trail.forEach((p, i) => {
+        draw2DBall({ projected_coordinates: p }, 0.45 / (i + 1))
+      })
+      draw2DBall({ projected_coordinates: overlay.ball })
+    } else {
+      for (const ball of frame.balls ?? []) {
+        draw2DBall(ball)
+      }
     }
 
     // ── Overlay HUD ────────────────────────────────────────────────────────
@@ -267,7 +293,7 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
    * Draw a single ball.  Radius and colour vary with the z (height)
    * coordinate: taller balls are slightly larger and tinted cyan.
    */
-  function draw2DBall(ball: Ball): void {
+  function draw2DBall(ball: Ball, alpha = 1): void {
     const coords = ball.projected_coordinates
     const x = coords?.x
     const y = coords?.y
@@ -280,6 +306,8 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     // Radius grows with z (clamped 0-6), base radius 4px, min 3px
     const r = Math.max(3, Math.round(4 + Math.min(6, Math.max(0, z)) * 0.6))
 
+    const before = ctx.globalAlpha
+    ctx.globalAlpha = alpha
     ctx.beginPath()
     ctx.arc(px, py, r, 0, Math.PI * 2)
     ctx.fillStyle = z <= 0.5 ? '#ffffff' : '#c8ffff'
@@ -287,6 +315,7 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     ctx.strokeStyle = '#000'
     ctx.lineWidth = 1
     ctx.stroke()
+    ctx.globalAlpha = before
   }
 
   /**

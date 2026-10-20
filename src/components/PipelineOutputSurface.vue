@@ -1,6 +1,14 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted, computed } from 'vue';
-import { useRenderer2D } from '@/lib/vis/useRenderer2D';
+import { useRenderer2D, type GoalOverlay } from '@/lib/vis/useRenderer2D';
+import {
+  goalStateAt,
+  isGoalFrame,
+  planGoal,
+  GOAL_SEQUENCE_MS,
+  type GoalPlan,
+  type GoalState,
+} from '@/lib/vis/goalSequence';
 import { FRAME_W, FRAME_H } from '@/lib/vis/constants';
 import { fitFrameBox, type FrameBox } from '@/lib/vis/viewTransform';
 import type { PipelineReplay } from '@/composables/usePipelineReplay';
@@ -56,8 +64,17 @@ function pushView(): void {
   });
   // The replay can be paused, so a view change has to repaint by itself rather
   // than waiting for the next frame.
+  paint();
+}
+
+/**
+ * Draw the current frame, with the goal sequence over it while one is playing.
+ * Every repaint goes through here, so none of them can draw a frame mid-sequence
+ * without it.
+ */
+function paint(): void {
   const frame = props.replay.frame.value;
-  if (frame) renderer?.renderFrame(frame);
+  if (frame) renderer?.renderFrame(frame, goalOverlay());
 }
 
 watch([zoom, panX, panY], pushView, { flush: 'post' });
@@ -248,6 +265,112 @@ function step(frames: number) {
   void replay.seek(grid / fps + 0.001);
 }
 
+// ── Goal sequence ───────────────────────────────────────────────────────────
+//
+// When playback runs into a frame the pipeline labels GOAL, a ball is shot into
+// the net and settles there, in place of the tracked ball, with a GOAL banner
+// over the pitch. See goalSequence.ts.
+//
+// It only ever plays during playback, and anything that means someone wants
+// the real frame - pausing, seeking, stepping, pressing on the drawing layer -
+// stops it at once. A frame looked at or annotated always shows the data.
+
+/** Clock steps larger than this are a seek, not playback. */
+const MAX_PLAYBACK_STEP_S = 0.5;
+
+const goalBanner = ref(0);
+let goal: { plan: GoalPlan; startedMs: number | null; elapsedMs: number } | null = null;
+let goalRaf: number | null = null;
+// The label usually stays on for many frames: only its first one is a goal.
+let goalLabelSeen = false;
+let lastStepWasPlayback = false;
+
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  );
+}
+
+function goalState(): GoalState | null {
+  if (!goal) return null;
+  const now = goalStateAt(goal.plan, goal.elapsedMs);
+  // With reduced motion the ball is simply in the net; only the banner fades.
+  if (!prefersReducedMotion()) return now;
+  return { ...goalStateAt(goal.plan, GOAL_SEQUENCE_MS), banner: now.banner };
+}
+
+function goalOverlay(): GoalOverlay | undefined {
+  const state = goalState();
+  if (!goal || !state) return undefined;
+  return {
+    ball: state.ball,
+    trail: state.trail,
+    net: { side: goal.plan.side, y: goal.plan.impact.y, metres: state.netBulge },
+  };
+}
+
+function goalStep(ms: number): void {
+  goalRaf = null;
+  if (!goal) return;
+  if (goal.startedMs === null) goal.startedMs = ms;
+  goal.elapsedMs = ms - goal.startedMs;
+  if (goal.elapsedMs >= GOAL_SEQUENCE_MS) {
+    stopGoal();
+    return;
+  }
+  goalBanner.value = goalState()?.banner ?? 0;
+  paint();
+  goalRaf = window.requestAnimationFrame(goalStep);
+}
+
+function startGoal(frame: NonNullable<PipelineReplay['frame']['value']>): void {
+  // No ball, no telling which goal it went in: better no sequence than one at
+  // the wrong end.
+  const plan = planGoal(frame);
+  if (!plan) return;
+  goal = { plan, startedMs: null, elapsedMs: 0 };
+  goalRaf = window.requestAnimationFrame(goalStep);
+}
+
+function stopGoal(): void {
+  if (!goal && goalRaf === null) return;
+  if (goalRaf !== null) window.cancelAnimationFrame(goalRaf);
+  goalRaf = null;
+  goal = null;
+  goalBanner.value = 0;
+  paint();
+}
+
+const bannerStyle = computed(() => {
+  const k = goalBanner.value;
+  const width = frameBox.value?.width ?? FRAME_W;
+  return {
+    opacity: String(k),
+    fontSize: `${Math.round(width * 0.11)}px`,
+    transform: prefersReducedMotion() ? undefined : `scale(${0.85 + 0.15 * k})`,
+  };
+});
+
+// Synchronous, so it has seen the clock move before the frame watcher sees the
+// record that movement brought in.
+watch(
+  () => props.replay.currentTime.value,
+  (now, before) => {
+    lastStepWasPlayback =
+      props.replay.isPlaying.value && now > before && now - before <= MAX_PLAYBACK_STEP_S;
+    if (!lastStepWasPlayback) stopGoal();
+  },
+  { flush: 'sync' }
+);
+
+watch(
+  () => props.replay.isPlaying.value,
+  (playing) => {
+    if (!playing) stopGoal();
+  }
+);
+
 function ensureRenderer() {
   const canvas = canvasRef.value;
   if (!canvas || renderer) return;
@@ -276,7 +399,10 @@ watch(
   (frame) => {
     if (!frame) return;
     ensureRenderer();
-    renderer?.renderFrame(frame);
+    const labelled = isGoalFrame(frame);
+    if (labelled && !goalLabelSeen && !goal && lastStepWasPlayback) startGoal(frame);
+    goalLabelSeen = labelled;
+    paint();
   },
   { flush: 'post' }
 );
@@ -286,8 +412,7 @@ watch(
   (state) => {
     if (state !== 'ready') return;
     ensureRenderer();
-    const frame = props.replay.frame.value;
-    if (frame) renderer?.renderFrame(frame);
+    paint();
   },
   { flush: 'post' }
 );
@@ -298,6 +423,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  stopGoal();
   dprQuery?.removeEventListener('change', onPixelRatioChange);
   dprQuery = null;
   props.replay.dispose();
@@ -414,6 +540,7 @@ onUnmounted(() => {
             data-testid="pipeline-overlay"
             class="absolute"
             :style="boxStyle"
+            @pointerdown.capture="stopGoal"
           >
             <!--
               Not replay.currentFrame: that is the pipeline's own frame_count,
@@ -440,6 +567,22 @@ onUnmounted(() => {
           :style="boxStyle"
           data-testid="pipeline-hud"
         >
+          <!--
+            Over the pitch's middle, clear of the frame label and the transport
+            controls along the bottom.
+          -->
+          <div
+            v-if="goalBanner > 0"
+            data-testid="pipeline-goal-banner"
+            role="status"
+            class="absolute inset-0 flex items-center justify-center"
+          >
+            <span
+              class="select-none font-black italic leading-none tracking-[0.08em] text-white [text-shadow:0_3px_0_rgba(0,0,0,0.35),0_0_32px_rgba(0,0,0,0.55)]"
+              :style="bannerStyle"
+            >GOAL</span>
+          </div>
+
           <div
             class="absolute bottom-2 left-2 flex items-center gap-1.5 rounded bg-black/60 px-2.5 py-1 font-mono text-[11px] text-white"
           >

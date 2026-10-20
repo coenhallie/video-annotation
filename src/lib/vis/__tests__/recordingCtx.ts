@@ -40,8 +40,16 @@ export function recordingCtx() {
       });
     },
     beginPath() {},
-    moveTo() {},
-    lineTo() {},
+    closePath() {},
+    moveTo(...args: unknown[]) {
+      ctx.snap('moveTo', args);
+    },
+    lineTo(...args: unknown[]) {
+      ctx.snap('lineTo', args);
+    },
+    quadraticCurveTo(...args: unknown[]) {
+      ctx.snap('quadraticCurveTo', args);
+    },
     arc(...args: unknown[]) {
       ctx.snap('arc', args);
     },
