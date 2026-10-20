@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted, computed } from 'vue';
 import { useRenderer2D, type GoalOverlay } from '@/lib/vis/useRenderer2D';
+import type { AttackGlow } from '@/lib/vis/attackGlow';
 import {
   goalCamera,
   goalCameraWeight,
@@ -82,7 +83,7 @@ function pushView(): void {
  */
 function paint(): void {
   const frame = props.replay.frame.value;
-  if (frame) renderer?.renderFrame(frame, goalOverlay());
+  if (frame) renderer?.renderFrame(frame, goalOverlay(), glowValue());
 }
 
 watch([zoom, panX, panY], pushView, { flush: 'post' });
@@ -434,7 +435,10 @@ watch(
 watch(
   () => props.replay.isPlaying.value,
   (playing) => {
-    if (!playing) stopGoal();
+    if (playing) return;
+    stopGoal();
+    settleGlow();
+    paint();
   }
 );
 
@@ -475,6 +479,105 @@ const phaseDescription = computed(() =>
   (phaseLabels.value ?? [])
     .map((l) => (l.text ? `${l.name} ${l.text.toLowerCase()}` : l.name))
     .join(', ')
+);
+
+// ── Attack glow ─────────────────────────────────────────────────────────────
+//
+// While a team is attacking (see teamPhase.ts), a glow across the pitch toward
+// the goal it attacks, a lit bar beyond that goal and a halo round the ball
+// (attackGlow.ts). During playback it fades in and out over GLOW_FADE_S, so a
+// short attack is a gentle pulse rather than a flash. Anywhere else - a seek,
+// a step, a pause - it shows the frame's own state at once: a frame being
+// looked at should not be partway through a fade. Reduced motion never fades.
+
+const GLOW_FADE_S = 1;
+
+let glow: (AttackGlow & { target: 0 | 1 }) | null = null;
+let glowRaf: number | null = null;
+let lastGlowMs: number | null = null;
+
+/** The glow the current phase calls for, before any fading. */
+function glowTarget(): Omit<AttackGlow, 'intensity'> | null {
+  const phase = props.replay.phase.value;
+  if (!phase) return null;
+  const team =
+    phase.states[0] === 'attacking' ? 0 : phase.states[1] === 'attacking' ? 1 : null;
+  if (team === null) return null;
+  const direction = phase.attacks[team];
+  // Without a direction there is no goal to glow towards.
+  if (direction === null) return null;
+  return { color: PHASE_TEAMS[team].color, direction };
+}
+
+function glowValue(): AttackGlow | undefined {
+  if (!glow || glow.intensity <= 0) return undefined;
+  return { color: glow.color, direction: glow.direction, intensity: glow.intensity };
+}
+
+function stopGlowLoop(): void {
+  if (glowRaf !== null) window.cancelAnimationFrame(glowRaf);
+  glowRaf = null;
+  lastGlowMs = null;
+}
+
+function glowStep(ms: number): void {
+  glowRaf = null;
+  if (!glow) return;
+  // Capped, so a tab that was in the background does not jump to the end.
+  const dt = lastGlowMs === null ? 0 : Math.min(0.1, (ms - lastGlowMs) / 1000);
+  lastGlowMs = ms;
+  const step = dt / GLOW_FADE_S;
+  glow.intensity =
+    glow.target > glow.intensity
+      ? Math.min(glow.target, glow.intensity + step)
+      : Math.max(glow.target, glow.intensity - step);
+  if (glow.intensity === glow.target) {
+    lastGlowMs = null;
+    if (glow.target === 0) glow = null;
+    paint();
+    return;
+  }
+  paint();
+  glowRaf = window.requestAnimationFrame(glowStep);
+}
+
+/** Bring the glow in line with the phase, fading if `fade`, else at once. */
+function updateGlow(fade: boolean): void {
+  const target = glowTarget();
+  if (!fade) {
+    stopGlowLoop();
+    glow = target ? { ...target, intensity: 1, target: 1 } : null;
+    return;
+  }
+  if (target) {
+    // The same attack carries on from wherever its fade has got to; a new one
+    // starts from nothing.
+    const same = glow?.color === target.color && glow.direction === target.direction;
+    glow = { ...target, intensity: same && glow ? glow.intensity : 0, target: 1 };
+  } else if (glow) {
+    // Fading out keeps the colour and direction of the attack that ended.
+    glow.target = 0;
+  }
+  if (glow && glow.intensity !== glow.target && glowRaf === null) {
+    glowRaf = window.requestAnimationFrame(glowStep);
+  }
+}
+
+/** Finish any fade at once: the frame on screen shows its own state. */
+function settleGlow(): void {
+  stopGlowLoop();
+  if (!glow) return;
+  glow.intensity = glow.target;
+  if (glow.target === 0) glow = null;
+}
+
+watch(
+  () => props.replay.phase.value,
+  () => {
+    updateGlow(props.replay.isPlaying.value && lastStepWasPlayback && !prefersReducedMotion());
+    paint();
+  },
+  { flush: 'post' }
 );
 
 function ensureRenderer() {
@@ -530,6 +633,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   stopGoal();
+  stopGlowLoop();
   dprQuery?.removeEventListener('change', onPixelRatioChange);
   dprQuery = null;
   props.replay.dispose();

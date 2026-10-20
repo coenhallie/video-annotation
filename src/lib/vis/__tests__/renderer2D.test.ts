@@ -7,7 +7,8 @@ import {
   NEARBY_OUTLINE,
   PLAYER_RADIUS,
 } from '@/lib/vis/constants';
-import { build2DTransform, worldToPx } from '@/lib/vis/pitchGeometry';
+import { build2DTransform, worldToPx, PITCH_GRASS } from '@/lib/vis/pitchGeometry';
+import { NET_DEPTH_METRES } from '@/lib/vis/goalSequence';
 import { fakeCanvas, stubOffscreenCanvas, type Op } from './recordingCtx';
 
 const PITCH = { length: 105, width: 68 };
@@ -369,6 +370,102 @@ describe('goals and the goal sequence', () => {
     const still = render({ ball: { x: 54, y: 0 }, trail: [], net: { side: 1, y: 0, metres: 0 } });
     const struck = render({ ball: { x: 54, y: 0 }, trail: [], net: { side: 1, y: 0, metres: 0.5 } });
     expect(Number(curve(struck))).toBeGreaterThan(Number(curve(still)));
+  });
+});
+
+describe('attack glow', () => {
+  const T = build2DTransform(PITCH);
+  const px = (x: number, y = 0) => worldToPx(x, y, T);
+  const frame = {
+    pitch_dimensions: PITCH,
+    teams: [
+      {
+        team_id: 1,
+        players: [{ track_id: 7, person_type: 'PersonType.PLAYER', projected_coordinates: { x: 5, y: 3 } }],
+      },
+    ],
+    balls: [{ projected_coordinates: { x: 10, y: 0 } }],
+  } as unknown as Frame;
+  const BLUE = PERSON_COLORS.away.fill;
+
+  function render(glow?: Parameters<ReturnType<typeof useRenderer2D>['renderFrame']>[2], overlay?: Parameters<ReturnType<typeof useRenderer2D>['renderFrame']>[1]) {
+    const { canvas, ops } = fakeCanvas();
+    useRenderer2D(canvas).renderFrame(frame, overlay, glow);
+    return ops;
+  }
+  const gradientFills = (ops: Op[]) => ops.filter((o) => o.op === 'fillRect' && o.fillStyle.startsWith('gradient('));
+
+  it('glows from the ball to the goal line being attacked', () => {
+    const ops = render({ color: BLUE, direction: 1, intensity: 1 });
+    const glow = gradientFills(ops)[0]!;
+    const [ballX] = px(10);
+    const [lineX] = px(PITCH.length / 2);
+    // fillRect(x, y, w, h): from the ball to the goal line.
+    expect(glow.args[0]).toBeCloseTo(ballX, 6);
+    expect(Number(glow.args[0]) + Number(glow.args[2])).toBeCloseTo(lineX, 6);
+    // Clear at the ball, the team's colour at the goal.
+    expect(glow.fillStyle).toMatch(new RegExp(`^gradient\\(${ballX},.*->${lineX},.*\\|0:.*,1:${BLUE.replace('#', '\\#')}`));
+  });
+
+  it('glows the other way for a team attacking the other goal', () => {
+    const glow = gradientFills(render({ color: BLUE, direction: -1, intensity: 1 }))[0]!;
+    const [ballX] = px(10);
+    const [lineX] = px(-PITCH.length / 2);
+    expect(glow.args[0]).toBeCloseTo(lineX, 6);
+    expect(Number(glow.args[0]) + Number(glow.args[2])).toBeCloseTo(ballX, 6);
+  });
+
+  it('lights a bar beyond the goal under attack, outside the net', () => {
+    const ops = render({ color: BLUE, direction: 1, intensity: 1 });
+    const [netBackX] = px(PITCH.length / 2 + NET_DEPTH_METRES);
+    const bars = ops.filter((o) => o.op === 'fillRect' && o.fillStyle === BLUE && Number(o.args[0]) > netBackX);
+    expect(bars).toHaveLength(1);
+  });
+
+  it('puts a halo in the team colour around the ball', () => {
+    const ops = render({ color: BLUE, direction: 1, intensity: 1 });
+    const [bx, by] = px(10);
+    const halo = ops.findIndex((o) => o.op === 'arc' && o.args[0] === bx && o.args[1] === by && Number(o.args[2]) > 10);
+    expect(halo).toBeGreaterThanOrEqual(0);
+    expect(ops.slice(halo).find((o) => o.op === 'fill')?.fillStyle).toBe(BLUE);
+  });
+
+  it('fades with its intensity', () => {
+    const half = gradientFills(render({ color: BLUE, direction: 1, intensity: 0.5 }))[0]!;
+    const full = gradientFills(render({ color: BLUE, direction: 1, intensity: 1 }))[0]!;
+    expect(half.globalAlpha).toBeCloseTo(full.globalAlpha / 2, 6);
+  });
+
+  it('draws nothing at zero intensity, or with no glow at all', () => {
+    expect(gradientFills(render({ color: BLUE, direction: 1, intensity: 0 }))).toHaveLength(0);
+    expect(gradientFills(render())).toHaveLength(0);
+  });
+
+  it('lies under the players', () => {
+    const ops = render({ color: BLUE, direction: 1, intensity: 1 });
+    const glowAt = ops.indexOf(gradientFills(ops)[0]!);
+    const [pxX, pxY] = px(5, 3);
+    const playerAt = ops.findIndex((o) => o.op === 'arc' && o.args[0] === pxX && o.args[1] === pxY);
+    expect(glowAt).toBeLessThan(playerAt);
+  });
+
+  // The lines must read white through the glow, as on the mockup: the glow
+  // goes on the grass, and the markings over it.
+  it('lies under the pitch lines, over the grass', () => {
+    const ops = render({ color: BLUE, direction: 1, intensity: 1 });
+    const glowAt = ops.indexOf(gradientFills(ops)[0]!);
+    const grassAt = ops.findIndex((o) => o.op === 'fillRect' && o.fillStyle === PITCH_GRASS);
+    const linesAt = ops.findIndex((o) => o.op === 'drawImage');
+    expect(grassAt).toBeGreaterThanOrEqual(0);
+    expect(grassAt).toBeLessThan(glowAt);
+    expect(linesAt).toBeGreaterThan(glowAt);
+  });
+
+  it('starts from the goal-sequence ball while that plays', () => {
+    const glow = gradientFills(
+      render({ color: BLUE, direction: 1, intensity: 1 }, { ball: { x: 30, y: 0 }, trail: [], net: { side: 1, y: 0, metres: 0 } })
+    )[0]!;
+    expect(glow.args[0]).toBeCloseTo(px(30)[0], 6);
   });
 });
 

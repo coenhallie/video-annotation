@@ -22,7 +22,8 @@
 //    outlined in white.
 //  - goals (posts and a faint net) are drawn on every frame, and renderFrame
 //    takes an optional goal-sequence overlay whose ball replaces the tracked
-//    one (goalNets.ts, goalSequence.ts).
+//    one (goalNets.ts, goalSequence.ts), and an optional attack glow drawn
+//    under the players (attackGlow.ts).
 
 // ---------------------------------------------------------------------------
 // 2D canvas rendering composable.
@@ -44,8 +45,9 @@ import {
   NEARBY_OUTLINE,
   NEARBY_METRES,
 } from './constants'
-import { build2DTransform, worldToPx, buildPitchCache } from './pitchGeometry'
+import { build2DTransform, worldToPx, buildPitchCache, PITCH_GRASS } from './pitchGeometry'
 import { drawGoalNets, type NetBulge } from './goalNets'
+import { drawAttackGlow, type AttackGlow } from './attackGlow'
 import {
   computeViewMatrix,
   IDENTITY_VIEW,
@@ -93,7 +95,7 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
    * Render a single frame.  Draws the cached pitch background,
    * iterates teams/players/balls, and paints the HUD overlay.
    */
-  function renderFrame(frame: Frame, overlay?: GoalOverlay): void {
+  function renderFrame(frame: Frame, overlay?: GoalOverlay, glow?: AttackGlow): void {
     if (!frame) return
 
     const pd = frame.pitch_dimensions
@@ -115,10 +117,13 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
 
     const key = `${canvas.width}x${canvas.height}:${matrix.join(',')}`
     if (!pitchCache || key !== pitchKey) {
+      // The markings alone: the grass is drawn per frame, so the attack glow
+      // can go between it and the lines.
       pitchCache = buildPitchCache(pd, transform2d, {
         width: canvas.width,
         height: canvas.height,
         matrix,
+        grass: false,
       })
       pitchKey = key
     }
@@ -129,7 +134,21 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.clearRect(0, 0, canvas.width, canvas.height)
 
-    // The pitch is already drawn through the view, pixel for pixel.
+    // Grass, then the attack glow on it, then the markings over both, so the
+    // lines read white through the glow.
+    ctx.setTransform(...matrix)
+    ctx.fillStyle = PITCH_GRASS
+    ctx.fillRect(0, 0, FRAME_W, FRAME_H)
+
+    // The glow starts from the goal sequence's ball while that plays, like
+    // everything else that follows the ball.
+    const glowBall = overlay?.ball ?? trackedBall(frame)
+    if (glow && glowBall) {
+      drawAttackGlow(ctx as CanvasRenderingContext2D, pd, transform2d, glow, glowBall)
+    }
+
+    // The markings are already drawn through the view, pixel for pixel.
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.drawImage(pitchCache, 0, 0)
 
     ctx.setTransform(...matrix)

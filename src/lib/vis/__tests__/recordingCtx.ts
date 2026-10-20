@@ -62,6 +62,21 @@ export function recordingCtx() {
     fillRect(...args: unknown[]) {
       ctx.snap('fillRect', args);
     },
+    shadowBlur: 0,
+    shadowColor: '',
+    // A gradient that records its geometry and stops, and reads back as a
+    // string describing them, so a fillStyle set to it can be asserted on.
+    createLinearGradient(x0: number, y0: number, x1: number, y1: number) {
+      const stops: Array<[number, string]> = [];
+      return {
+        addColorStop(offset: number, color: string) {
+          stops.push([offset, color]);
+        },
+        toString() {
+          return `gradient(${x0},${y0}->${x1},${y1}|${stops.map(([o, c]) => `${o}:${c}`).join(',')})`;
+        },
+      };
+    },
     strokeRect(...args: unknown[]) {
       ctx.snap('strokeRect', args);
     },

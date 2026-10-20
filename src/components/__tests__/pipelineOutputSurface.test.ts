@@ -4,6 +4,7 @@ import { createApp, defineComponent, h, nextTick, ref } from 'vue';
 import PipelineOutputSurface from '@/components/PipelineOutputSurface.vue';
 import type { PipelineReplay, ReplayState } from '@/composables/usePipelineReplay';
 import { GOAL_SEQUENCE_MS } from '@/lib/vis/goalSequence';
+import { PERSON_COLORS } from '@/lib/vis/constants';
 
 /**
  * Declared through vi.hoisted because vi.mock is hoisted above the imports,
@@ -798,4 +799,146 @@ describe('PipelineOutputSurface', () => {
       m.unmount();
     });
   });
+
+  describe('attack glow', () => {
+    let queued: Array<(ms: number) => void> = [];
+    let clockMs = 1000;
+    const originalRaf = window.requestAnimationFrame;
+    const originalCaf = window.cancelAnimationFrame;
+
+    beforeEach(() => {
+      queued = [];
+      clockMs = 1000;
+      renderFrame.mockClear();
+      window.requestAnimationFrame = ((cb: (ms: number) => void) => {
+        queued.push(cb);
+        return queued.length;
+      }) as typeof window.requestAnimationFrame;
+      window.cancelAnimationFrame = (() => {
+        queued = [];
+      }) as typeof window.cancelAnimationFrame;
+    });
+
+    afterEach(() => {
+      window.requestAnimationFrame = originalRaf;
+      window.cancelAnimationFrame = originalCaf;
+    });
+
+    async function animate(ms: number) {
+      const end = clockMs + ms;
+      while (clockMs < end) {
+        clockMs += 1000 / 60;
+        const cbs = queued;
+        queued = [];
+        cbs.forEach((cb) => cb(clockMs));
+      }
+      await nextTick();
+    }
+
+    type Writable = { value: unknown };
+    const set = (r: unknown, v: unknown) => ((r as Writable).value = v);
+    const FRAME = {
+      pitch_dimensions: { length: 105, width: 68 },
+      teams: [],
+      balls: [{ projected_coordinates: { x: 10, y: 0 } }],
+      state: { actions: [] },
+      frame_data: [{ frame_count: 1 }],
+    };
+    const BLUE_ATTACKING = {
+      possession: 1,
+      attacks: { 0: 1, 1: -1 },
+      states: { 0: 'defending', 1: 'attacking' },
+    };
+    const NOBODY = { possession: null, attacks: { 0: 1, 1: -1 }, states: { 0: null, 1: null } };
+
+    async function ready() {
+      const replay = fakeReplay('loading');
+      const m = mount(replay);
+      await nextTick();
+      set(replay.currentTime, 10);
+      set(replay.frame, { ...FRAME });
+      set(replay.phase, NOBODY);
+      set(replay.state, 'ready');
+      await nextTick();
+      return { replay, m };
+    }
+
+    /** A new frame and phase, arrived at by playback (step s) or a seek. */
+    async function arrive(replay: PipelineReplay, phase: unknown, step = 0.04) {
+      set(replay.currentTime, (replay.currentTime.value as number) + step);
+      set(replay.frame, { ...FRAME });
+      set(replay.phase, phase);
+      await nextTick();
+    }
+
+    const lastGlow = () =>
+      renderFrame.mock.calls.at(-1)?.[2] as
+        | { color: string; direction: number; intensity: number }
+        | undefined;
+
+    it('glows for the attacking team, toward the goal it attacks', async () => {
+      const { replay, m } = await ready();
+      await arrive(replay, BLUE_ATTACKING, 30);
+      expect(lastGlow()).toEqual({ color: PERSON_COLORS.away.fill, direction: -1, intensity: 1 });
+      m.unmount();
+    });
+
+    it('shows no glow while nobody is attacking', async () => {
+      const { replay, m } = await ready();
+      await arrive(replay, NOBODY, 30);
+      expect(lastGlow()).toBeUndefined();
+      m.unmount();
+    });
+
+    it('shows no glow when the attacking direction is unknown', async () => {
+      const { replay, m } = await ready();
+      await arrive(replay, { ...BLUE_ATTACKING, attacks: { 0: null, 1: null } }, 30);
+      expect(lastGlow()).toBeUndefined();
+      m.unmount();
+    });
+
+    it('fades in during playback, rather than appearing at once', async () => {
+      const { replay, m } = await ready();
+      set(replay.isPlaying, true);
+      await nextTick();
+      await arrive(replay, BLUE_ATTACKING);
+      await animate(300);
+      const partway = lastGlow()!.intensity;
+      expect(partway).toBeGreaterThan(0);
+      expect(partway).toBeLessThan(1);
+      await animate(1200);
+      expect(lastGlow()!.intensity).toBe(1);
+      m.unmount();
+    });
+
+    it('fades out when the attack ends during playback, in the attacking colour', async () => {
+      const { replay, m } = await ready();
+      await arrive(replay, BLUE_ATTACKING, 30);
+      set(replay.isPlaying, true);
+      await nextTick();
+      await arrive(replay, NOBODY);
+      await animate(300);
+      const fading = lastGlow()!;
+      expect(fading.color).toBe(PERSON_COLORS.away.fill);
+      expect(fading.intensity).toBeGreaterThan(0);
+      expect(fading.intensity).toBeLessThan(1);
+      await animate(1200);
+      expect(lastGlow()).toBeUndefined();
+      m.unmount();
+    });
+
+    // A paused frame is looked at, and shows its own state, not a fade.
+    it('settles at once when playback pauses partway through a fade', async () => {
+      const { replay, m } = await ready();
+      set(replay.isPlaying, true);
+      await nextTick();
+      await arrive(replay, BLUE_ATTACKING);
+      await animate(300);
+      set(replay.isPlaying, false);
+      await nextTick();
+      expect(lastGlow()!.intensity).toBe(1);
+      m.unmount();
+    });
+  });
 });
+

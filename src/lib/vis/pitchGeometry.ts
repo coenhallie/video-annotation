@@ -14,7 +14,8 @@
 //    to draw through. The vendored cache is always 1280x720, which the browser
 //    then stretched to the display (soft on any 2x screen) and magnified up to
 //    6x under zoom. Drawn at the display's own resolution through the current
-//    view instead, the lines stay sharp.
+//    view instead, the lines stay sharp. The surface can also leave the grass
+//    out, so the renderer can draw between the grass and the markings.
 
 // ---------------------------------------------------------------------------
 // Pitch geometry utilities for the 2D canvas renderer.
@@ -125,12 +126,20 @@ export function worldToPx(x: number, y: number, t: Transform2D): [number, number
  *  - Penalty marks
  *  - Goal-line emphasis
  */
+/** The colour of the grass under the pitch markings. */
+export const PITCH_GRASS = '#1e7a1e'
+
 /** The bitmap a pitch cache is drawn into, and the matrix to draw through. */
 export interface PitchSurface {
   width: number
   height: number
   /** ctx.setTransform order: a, b, c, d, e, f. Maps frame units to bitmap pixels. */
   matrix: [number, number, number, number, number, number]
+  /**
+   * Whether to fill the grass under the markings. Off when something is drawn
+   * between the grass and the markings, so the cache holds the lines alone.
+   */
+  grass?: boolean
 }
 
 const FRAME_SURFACE: PitchSurface = {
@@ -150,8 +159,10 @@ export function buildPitchCache(
   c.setTransform(...surface.matrix)
 
   // Background
-  c.fillStyle = '#1e7a1e'
-  c.fillRect(0, 0, FRAME_W, FRAME_H)
+  if (surface.grass !== false) {
+    c.fillStyle = PITCH_GRASS
+    c.fillRect(0, 0, FRAME_W, FRAME_H)
+  }
 
   // Resolved dimensions, each carrying whether the frame stated it
   const R = resolvePitchDimensions(pd)
