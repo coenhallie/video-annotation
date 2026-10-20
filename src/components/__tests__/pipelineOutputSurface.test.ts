@@ -32,6 +32,7 @@ function fakeReplay(state: ReplayState, message: string | null = null) {
     isPlaying: ref(false),
     frame: ref(null),
     buffering: ref(false),
+    phase: ref(null),
     state: ref(state),
     error: ref(message),
     load: vi.fn(async () => {}),
@@ -166,9 +167,24 @@ describe('PipelineOutputSurface', () => {
       await nextTick();
 
       const canvasBox = box(at(m.root, 'pipeline-canvas'));
-      expect(canvasBox[2]).toBe('1096px');
+      // 1096x640, less the 40 px row kept above the pitch for the team labels.
+      expect(canvasBox[2]).toBe('1066.5px');
       expect(box(at(m.root, 'pipeline-overlay'))).toEqual(canvasBox);
       expect(box(at(m.root, 'pipeline-hud'))).toEqual(canvasBox);
+      m.unmount();
+    });
+
+    // The labels sit above the pitch, never over it: anything standing on the
+    // near touchline would otherwise be hidden under them.
+    it('keeps a row above the pitch for the team labels', async () => {
+      const m = mount(fakeReplay('ready'));
+      await nextTick();
+      observed.forEach((notify) => notify());
+      await nextTick();
+
+      const style = (at(m.root, 'pipeline-canvas') as HTMLElement).style;
+      expect(parseFloat(style.top)).toBeGreaterThanOrEqual(40);
+      expect(parseFloat(style.top) + parseFloat(style.height)).toBeLessThanOrEqual(640);
       m.unmount();
     });
 
@@ -179,7 +195,7 @@ describe('PipelineOutputSurface', () => {
       await nextTick();
 
       const canvas = at(m.root, 'pipeline-canvas') as HTMLCanvasElement;
-      expect([canvas.width, canvas.height]).toEqual([2192, 1233]);
+      expect([canvas.width, canvas.height]).toEqual([2133, 1200]);
       m.unmount();
     });
 
@@ -204,7 +220,7 @@ describe('PipelineOutputSurface', () => {
         await nextTick();
 
         const canvas = at(m.root, 'pipeline-canvas') as HTMLCanvasElement;
-        expect(canvas.width).toBe(3288);
+        expect(canvas.width).toBe(3200);
         m.unmount();
       } finally {
         window.matchMedia = originalMatchMedia;
@@ -272,6 +288,85 @@ describe('PipelineOutputSurface', () => {
     await nextTick();
     expect(at(root, 'pipeline-buffering')).toBeNull();
     unmount();
+  });
+
+  describe('team phase labels', () => {
+    type Phase = PipelineReplay['phase']['value'];
+    async function withPhase(phase: Phase) {
+      const replay = fakeReplay('ready');
+      (replay.phase as unknown as { value: Phase }).value = phase;
+      const m = mount(replay);
+      await nextTick();
+      return m;
+    }
+    const label = (root: HTMLElement, team: 0 | 1) =>
+      root.querySelector(`[data-testid="pipeline-phase-team-${team}"]`) as HTMLElement | null;
+
+    it('shows each team with its state', async () => {
+      const m = await withPhase({
+        possession: 0,
+        attacks: { 0: 1, 1: -1 },
+        states: { 0: 'attacking', 1: 'defending' },
+      });
+      expect(label(m.root, 0)?.textContent).toMatch(/Red\s*Attacking/i);
+      expect(label(m.root, 1)?.textContent).toMatch(/Defending\s*Blue/i);
+      expect(label(m.root, 0)?.dataset.state).toBe('attacking');
+      expect(label(m.root, 1)?.dataset.state).toBe('defending');
+      m.unmount();
+    });
+
+    it('says in possession when the ball is in the team’s own half', async () => {
+      const m = await withPhase({
+        possession: 1,
+        attacks: { 0: 1, 1: -1 },
+        states: { 0: 'defending', 1: 'possession' },
+      });
+      expect(label(m.root, 1)?.textContent).toMatch(/In possession/i);
+      m.unmount();
+    });
+
+    it('fills the label of the team with the ball in its colour', async () => {
+      const m = await withPhase({
+        possession: 1,
+        attacks: { 0: 1, 1: -1 },
+        states: { 0: 'defending', 1: 'attacking' },
+      });
+      expect(label(m.root, 1)?.style.backgroundColor).not.toBe('');
+      expect(label(m.root, 0)?.style.backgroundColor).toBe('');
+      m.unmount();
+    });
+
+    // A third of real frames have nobody clearly in possession: say nothing
+    // rather than guess.
+    it('shows both teams without a state when nobody is in possession', async () => {
+      const m = await withPhase({
+        possession: null,
+        attacks: { 0: 1, 1: -1 },
+        states: { 0: null, 1: null },
+      });
+      expect(label(m.root, 0)?.textContent?.trim()).toMatch(/^Red$/i);
+      expect(label(m.root, 1)?.textContent?.trim()).toMatch(/^Blue$/i);
+      expect(label(m.root, 0)?.dataset.state).toBe('none');
+      m.unmount();
+    });
+
+    it('describes the phase for screen readers', async () => {
+      const m = await withPhase({
+        possession: 0,
+        attacks: { 0: 1, 1: -1 },
+        states: { 0: 'possession', 1: 'defending' },
+      });
+      expect(at(m.root, 'pipeline-phase')?.getAttribute('aria-label')).toBe(
+        'Red in possession, Blue defending'
+      );
+      m.unmount();
+    });
+
+    it('shows nothing before the first frame has a phase', async () => {
+      const m = await withPhase(null);
+      expect(at(m.root, 'pipeline-phase')).toBeNull();
+      m.unmount();
+    });
   });
 
   it('calls load on mount', async () => {

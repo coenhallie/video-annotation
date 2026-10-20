@@ -11,7 +11,8 @@ import {
   type GoalPlan,
   type GoalState,
 } from '@/lib/vis/goalSequence';
-import { FRAME_W, FRAME_H } from '@/lib/vis/constants';
+import { FRAME_W, FRAME_H, PERSON_COLORS } from '@/lib/vis/constants';
+import type { TeamId, TeamState } from '@/lib/vis/teamPhase';
 import {
   cameraFromView,
   fitFrameBox,
@@ -107,10 +108,27 @@ const boxStyle = computed(() => {
   };
 });
 
+/**
+ * A row kept clear above the pitch for the team phase labels, so they never
+ * sit over it: anything on the near touchline would be hidden under them.
+ */
+const LABEL_ROW_PX = 40;
+
 function measure(): void {
   const el = viewportRef.value;
   if (!el) return;
-  const next = fitFrameBox(el.getBoundingClientRect(), window.devicePixelRatio || 1);
+  const rect = el.getBoundingClientRect();
+  const fitted = fitFrameBox(
+    {
+      left: rect.left,
+      top: rect.top + LABEL_ROW_PX,
+      width: rect.width,
+      height: Math.max(0, rect.height - LABEL_ROW_PX),
+    },
+    window.devicePixelRatio || 1
+  );
+  // fitFrameBox places the box within the area it was given, below the row.
+  const next = { ...fitted, top: fitted.top + LABEL_ROW_PX };
   // A hidden surface measures as nothing. Keep the last box rather than
   // collapse the bitmap to zero, which has nothing to draw into.
   if (next.pixelWidth < 1 || next.pixelHeight < 1) return;
@@ -420,6 +438,46 @@ watch(
   }
 );
 
+// ── Team phase labels ───────────────────────────────────────────────────────
+//
+// Which team is attacking and which defending, from the replay's phase (see
+// teamPhase.ts). Named Red and Blue, the colours they are drawn in, rather
+// than home and away: the export does not say which team is at home.
+
+const PHASE_TEAMS: Record<TeamId, { name: string; color: string }> = {
+  0: { name: 'Red', color: PERSON_COLORS.home.fill },
+  1: { name: 'Blue', color: PERSON_COLORS.away.fill },
+};
+
+const STATE_TEXT: Record<TeamState, string> = {
+  attacking: 'Attacking',
+  possession: 'In possession',
+  defending: 'Defending',
+};
+
+const phaseLabels = computed(() => {
+  const phase = props.replay.phase.value;
+  if (!phase) return null;
+  return ([0, 1] as const).map((team) => {
+    const state = phase.states[team];
+    return {
+      team,
+      ...PHASE_TEAMS[team],
+      state,
+      text: state ? STATE_TEXT[state] : null,
+      // Nobody clearly in possession leaves both teams unlabelled, rather than
+      // guessing.
+      filled: phase.possession === team,
+    };
+  });
+});
+
+const phaseDescription = computed(() =>
+  (phaseLabels.value ?? [])
+    .map((l) => (l.text ? `${l.name} ${l.text.toLowerCase()}` : l.name))
+    .join(', ')
+);
+
 function ensureRenderer() {
   const canvas = canvasRef.value;
   if (!canvas || renderer) return;
@@ -616,6 +674,54 @@ onUnmounted(() => {
           :style="boxStyle"
           data-testid="pipeline-hud"
         >
+          <!--
+            In the row kept clear above the pitch (LABEL_ROW_PX), centred on
+            it. Worked out by the app rather than reported by the pipeline,
+            which the title says on hover.
+          -->
+          <div
+            v-if="phaseLabels"
+            data-testid="pipeline-phase"
+            role="group"
+            :aria-label="phaseDescription"
+            title="Worked out from the tracking data: a team has the ball once it has kept it for a second, and attacks once the ball is in the opponent's half."
+            class="pointer-events-auto absolute inset-x-0 bottom-full mx-auto mb-1.5 flex w-max items-center gap-2"
+          >
+            <template
+              v-for="(l, i) in phaseLabels"
+              :key="l.team"
+            >
+              <span
+                v-if="i === 1"
+                class="text-[10px] font-semibold uppercase tracking-widest text-white/60"
+                aria-hidden="true"
+              >vs</span>
+              <div
+                :data-testid="`pipeline-phase-team-${l.team}`"
+                :data-state="l.state ?? 'none'"
+                class="flex w-[11rem] items-center gap-2 whitespace-nowrap rounded-md border-2 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-lg transition-colors duration-200 motion-reduce:transition-none"
+                :class="[l.filled ? '' : 'bg-black/60', l.team === 1 ? 'justify-end' : '']"
+                :style="{ borderColor: l.color, backgroundColor: l.filled ? l.color : undefined }"
+                aria-hidden="true"
+              >
+                <!-- Mirrored for Blue, so both states sit either side of "vs". -->
+                <span
+                  v-if="l.team === 0"
+                  class="font-bold"
+                >{{ l.name }}</span>
+                <span
+                  v-if="l.text"
+                  class="text-[10px] tracking-widest"
+                  :class="l.team === 0 ? 'ml-auto' : 'mr-auto'"
+                >{{ l.text }}</span>
+                <span
+                  v-if="l.team === 1"
+                  class="font-bold"
+                >{{ l.name }}</span>
+              </div>
+            </template>
+          </div>
+
           <div
             class="absolute bottom-2 left-2 flex items-center gap-1.5 rounded bg-black/60 px-2.5 py-1 font-mono text-[11px] text-white"
           >
