@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { useRenderer2D } from '@/lib/vis/useRenderer2D';
 import type { Frame } from '@/lib/vis/types';
-import { PERSON_COLORS } from '@/lib/vis/constants';
+import { PERSON_COLORS, DIMMED_TEAM_ALPHA } from '@/lib/vis/constants';
 import { fakeCanvas, stubOffscreenCanvas, type Op } from './recordingCtx';
 
 const PITCH = { length: 105, width: 68 };
@@ -124,6 +124,92 @@ describe('draw2DPlayer colours', () => {
     for (const frame of [person(0, 'PersonType.PLAYER'), person(1, 'PersonType.GOALKEEPER')]) {
       for (const stroke of draw(frame).strokes) expect(stroke.lineDash).toEqual([]);
     }
+  });
+});
+
+describe('possession emphasis', () => {
+  type Who = { team: number; type?: string; ball?: boolean };
+
+  function match(people: Who[], ball = true): Frame {
+    const teams = new Map<number, unknown[]>();
+    people.forEach((p, i) => {
+      const list = teams.get(p.team) ?? [];
+      list.push({
+        track_id: i + 1,
+        person_type: p.type ?? 'PersonType.PLAYER',
+        projected_coordinates: { x: -40 + i * 10, y: 0 },
+        in_possession: Boolean(p.ball),
+      });
+      teams.set(p.team, list);
+    });
+    return {
+      pitch_dimensions: PITCH,
+      teams: [...teams].map(([team_id, players]) => ({ team_id, players })),
+      balls: ball ? [{ projected_coordinates: { x: 30, y: 5 } }] : [],
+    } as unknown as Frame;
+  }
+
+  /** The circle fill of every person drawn with this colour, in draw order. */
+  const circles = (ops: Op[], fill: string) =>
+    ops.filter((o) => o.op === 'fill' && o.fillStyle === fill);
+
+  function render(...frames: Frame[]) {
+    const { canvas, ops } = fakeCanvas();
+    const renderer = useRenderer2D(canvas);
+    for (const frame of frames) {
+      ops.length = 0;
+      renderer.renderFrame(frame);
+    }
+    return ops;
+  }
+
+  const { home, away, goalkeeper, official } = PERSON_COLORS;
+
+  it('dims the team without the ball', () => {
+    const ops = render(match([{ team: 0, ball: true }, { team: 0 }, { team: 1 }, { team: 1 }]));
+    for (const o of circles(ops, home.fill)) expect(o.globalAlpha).toBe(1);
+    for (const o of circles(ops, away.fill)) expect(o.globalAlpha).toBe(DIMMED_TEAM_ALPHA);
+  });
+
+  it("dims that team's goalkeeper too", () => {
+    const ops = render(
+      match([{ team: 1, ball: true }, { team: 0, type: 'PersonType.GOALKEEPER' }])
+    );
+    expect(circles(ops, goalkeeper.fill)[0]?.globalAlpha).toBe(DIMMED_TEAM_ALPHA);
+  });
+
+  it('dims nobody when nobody has the ball', () => {
+    const ops = render(match([{ team: 0 }, { team: 1 }]));
+    for (const o of [...circles(ops, home.fill), ...circles(ops, away.fill)]) {
+      expect(o.globalAlpha).toBe(1);
+    }
+  });
+
+  it('never dims the officials or the ball', () => {
+    const ops = render(
+      match([{ team: 0, ball: true }, { team: 1 }, { team: -1, type: 'PersonType.OFFICIAL' }])
+    );
+    expect(circles(ops, official.fill)[0]?.globalAlpha).toBe(1);
+    expect(circles(ops, '#ffffff').every((o) => o.globalAlpha === 1)).toBe(true);
+  });
+
+  it('follows possession from one frame to the next', () => {
+    const ops = render(
+      match([{ team: 0, ball: true }, { team: 1 }]),
+      match([{ team: 0 }, { team: 1, ball: true }])
+    );
+    expect(circles(ops, home.fill)[0]?.globalAlpha).toBe(DIMMED_TEAM_ALPHA);
+    expect(circles(ops, away.fill)[0]?.globalAlpha).toBe(1);
+  });
+
+  // Where players overlap, the team with the ball must not be hidden behind
+  // the dimmed one.
+  it('draws the team with the ball on top', () => {
+    const ops = render(match([{ team: 0, ball: true }, { team: 1 }]));
+    const fills = ops.filter((o) => o.op === 'fill');
+    const lastAway = fills.lastIndexOf(circles(ops, away.fill).at(-1)!);
+    const firstHome = fills.indexOf(circles(ops, home.fill)[0]!);
+    expect(firstHome).toBeGreaterThan(lastAway);
   });
 });
 

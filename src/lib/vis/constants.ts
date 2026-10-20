@@ -49,3 +49,12 @@ export const PERSON_COLORS: Record<
   // A team id the export does not define has no home or away to be coloured as.
   unknown: { fill: '#9ca3af', outline: '#000000', text: '#000000' },
 }
+
+/**
+ * Opacity of the team without the ball, so the eye goes to the team that has
+ * it. Not lower: below about 0.7 the green pitch shows through red enough to
+ * read as brown, which looks like a third team rather than a faded red. Applied only while a team has possession, frame by frame and without a
+ * fade: possession spells can be a single frame long, and a fade would blur
+ * exactly the flicker a reviewer is meant to see.
+ */
+export const DIMMED_TEAM_ALPHA = 0.7

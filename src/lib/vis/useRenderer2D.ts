@@ -16,6 +16,8 @@
 //    PERSON_COLORS): home red, away blue, goalkeepers yellow ringed in their
 //    team's colour, officials magenta. The vendored copy coloured each team
 //    from the kit colours the pipeline detected; that resolver is gone.
+//  - while a team has the ball, the other team is drawn dimmed and underneath
+//    it (DIMMED_TEAM_ALPHA).
 
 // ---------------------------------------------------------------------------
 // 2D canvas rendering composable.
@@ -27,7 +29,13 @@
 // ---------------------------------------------------------------------------
 
 import type { Player, Ball, Frame, Transform2D } from './types'
-import { FRAME_W, FRAME_H, PLAYER_RADIUS, PERSON_COLORS } from './constants'
+import {
+  FRAME_W,
+  FRAME_H,
+  PLAYER_RADIUS,
+  PERSON_COLORS,
+  DIMMED_TEAM_ALPHA,
+} from './constants'
 import { build2DTransform, worldToPx, buildPitchCache } from './pitchGeometry'
 import {
   computeViewMatrix,
@@ -108,12 +116,22 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     ctx.setTransform(...matrix)
 
     // ── Teams + players ────────────────────────────────────────────────────
-    for (const team of frame.teams ?? []) {
+    // The team without the ball is dimmed, and the team with it is drawn last
+    // so it stays on top where players overlap. Officials are never dimmed.
+    const withBall = possessingTeam(frame)
+    const teams = [...(frame.teams ?? [])].sort(
+      (a, b) =>
+        Number((a.team_id ?? -1) === withBall) - Number((b.team_id ?? -1) === withBall),
+    )
+    for (const team of teams) {
       const tid = team.team_id ?? -1
+      const dimmed = withBall !== null && tid !== withBall && tid !== -1
+      ctx.globalAlpha = dimmed ? DIMMED_TEAM_ALPHA : 1
       for (const player of team.players ?? []) {
         draw2DPlayer(player, tid)
       }
     }
+    ctx.globalAlpha = 1
 
     // ── Balls ──────────────────────────────────────────────────────────────
     for (const ball of frame.balls ?? []) {
@@ -136,6 +154,16 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
   }
 
   // ── Internal drawing helpers ──────────────────────────────────────────────
+
+  /** The team whose player has the ball in this frame, or null if none does. */
+  function possessingTeam(frame: Frame): number | null {
+    for (const team of frame.teams ?? []) {
+      const tid = team.team_id ?? -1
+      if (tid === -1) continue
+      if ((team.players ?? []).some((p) => p.in_possession)) return tid
+    }
+    return null
+  }
 
   /**
    * Draw a single player as a filled circle with shadow, outline, optional
