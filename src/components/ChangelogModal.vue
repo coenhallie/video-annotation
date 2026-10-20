@@ -117,6 +117,18 @@ useEscapeToClose(() => props.isVisible, closeModal);
 // Add new entries to the TOP of this array
 const changelogEntries = ref([
   {
+    version: 'Beta v3.20',
+    date: 'October 20, 2026',
+    changes: [
+      'The Pipeline output replay loads and seeks much faster on long matches, and draws sharply on high-resolution screens',
+      'Fixed colours on the 2D replay: home team red, away team blue, goalkeepers yellow and officials magenta',
+      'Players far from the ball are faded, and teammates close to the ball carrier are ringed in white',
+      'Attacking and defending labels above the pitch, worked out from possession: a team counts as attacking once it has kept the ball for 3 seconds',
+      'While a team attacks, the pitch is shaded from its most advanced player to the goal it attacks, with arrows flowing toward that goal',
+      'A GOAL label in the pipeline output plays a goal animation that zooms in on the goal',
+    ],
+  },
+  {
     version: 'Beta v3.19',
     date: 'October 19, 2026',
     changes: [
