@@ -53,11 +53,14 @@ export const PERSON_COLORS: Record<
 
 /**
  * Opacity of players far from the ball, so the eye goes to the play around it.
- * Applied frame by frame with no fade, following the data as it is. Not lower:
- * at 0.5 the green pitch shows through red enough to read as brown, which
- * looks like a third team rather than a faded red.
+ * Applied frame by frame with no fade, following the data as it is.
+ *
+ * Chosen low on purpose (tried 0.6 and 0.4 first): the faded players recede
+ * strongly. The cost, accepted: this much green showing through turns faded
+ * red towards olive and faded blue towards teal, so their team reads less
+ * clearly than the solid players'.
  */
-export const DIMMED_PLAYER_ALPHA = 0.6
+export const DIMMED_PLAYER_ALPHA = 0.3
 
 /**
  * Players further than this from the ball are faded (DIMMED_PLAYER_ALPHA).
