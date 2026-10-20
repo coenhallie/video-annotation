@@ -461,6 +461,49 @@ describe('attack glow', () => {
     expect(linesAt).toBeGreaterThan(glowAt);
   });
 
+  /** The white chevron shapes drawn as part of the glow, as point lists. */
+  function chevrons(ops: Op[]) {
+    const from = ops.indexOf(gradientFills(ops)[0]!);
+    const to = ops.findIndex((o) => o.op === 'drawImage');
+    const shapes: Array<{ points: Array<[number, number]>; alpha: number }> = [];
+    let points: Array<[number, number]> = [];
+    for (const o of ops.slice(from, to)) {
+      if (o.op === 'moveTo') points = [[Number(o.args[0]), Number(o.args[1])]];
+      else if (o.op === 'lineTo') points.push([Number(o.args[0]), Number(o.args[1])]);
+      else if (o.op === 'fill' && o.fillStyle === '#ffffff') shapes.push({ points, alpha: o.globalAlpha });
+    }
+    return shapes;
+  }
+
+  it('draws three chevrons pointing at the goal being attacked', () => {
+    for (const direction of [1, -1] as const) {
+      const shapes = chevrons(render({ color: BLUE, direction, intensity: 1 }));
+      expect(shapes).toHaveLength(3);
+      for (const { points } of shapes) {
+        const ys = points.map(([, y]) => y);
+        const mid = (Math.min(...ys) + Math.max(...ys)) / 2;
+        const xs = points.map(([x]) => x);
+        // The point of the chevron sits on its middle row, furthest towards the goal.
+        const tip = direction === 1 ? Math.max(...xs) : Math.min(...xs);
+        expect(points.some(([x, y]) => x === tip && Math.abs(y - mid) < 1e-6)).toBe(true);
+      }
+    }
+  });
+
+  it('centres the chevrons between the ball and the goal line', () => {
+    const shapes = chevrons(render({ color: BLUE, direction: 1, intensity: 1 }));
+    const xs = shapes.flatMap((c) => c.points.map(([x]) => x));
+    const [ballX] = px(10);
+    const [lineX] = px(PITCH.length / 2);
+    expect((Math.min(...xs) + Math.max(...xs)) / 2).toBeCloseTo((ballX + lineX) / 2, 6);
+  });
+
+  it('fades the chevrons with the glow', () => {
+    const full = chevrons(render({ color: BLUE, direction: 1, intensity: 1 }))[0]!.alpha;
+    const half = chevrons(render({ color: BLUE, direction: 1, intensity: 0.5 }))[0]!.alpha;
+    expect(half).toBeCloseTo(full / 2, 6);
+  });
+
   it('starts from the goal-sequence ball while that plays', () => {
     const glow = gradientFills(
       render({ color: BLUE, direction: 1, intensity: 1 }, { ball: { x: 30, y: 0 }, trail: [], net: { side: 1, y: 0, metres: 0 } })
