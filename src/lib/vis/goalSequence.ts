@@ -14,7 +14,7 @@ import { resolvePitchDimensions } from './pitchGeometry';
 /** Depth of the net behind the goal line. The export does not state one. */
 export const NET_DEPTH_METRES = 2;
 
-/** Length of the whole sequence, shot to banner fade. */
+/** Length of the whole sequence, from the shot until the ball has settled. */
 export const GOAL_SEQUENCE_MS = 3200;
 
 /** How far in front of the goal a shot starts when the ball gives no usable start. */
@@ -30,8 +30,6 @@ const SETTLE_METRES = 0.15;
 
 const REBOUND_MS = 450;
 const SETTLE_MS = 600;
-const BANNER_IN_MS = 180;
-const BANNER_OUT_MS = 450;
 
 /** Peak outward bulge of the back of the net, in metres, and how it dies away. */
 const BULGE_METRES = 1.0;
@@ -56,8 +54,6 @@ export interface GoalPlan {
   rest: Point;
   /** Duration of the shot itself, from the start to the back of the net. */
   shotMs: number;
-  /** When, within the shot, the ball crosses the goal line. */
-  inMs: number;
   halfLength: number;
   goalWidth: number;
 }
@@ -68,8 +64,6 @@ export interface GoalState {
   trail: Point[];
   /** Outward bulge of the back of the net at the impact point, in metres. */
   netBulge: number;
-  /** Opacity of the GOAL banner, 0 to 1. */
-  banner: number;
 }
 
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
@@ -137,10 +131,8 @@ export function planGoal(frame: Frame): GoalPlan | null {
   // Longer shots take a little longer, within what still reads as a strike.
   const shotLength = dist(start, impact) + dist(impact, back);
   const shotMs = clamp(380 + shotLength * 14, 450, 900);
-  // easeOutQuad(u) = fraction of the distance covered, solved for the line.
-  const inMs = shotMs * (1 - Math.sqrt(1 - dist(start, impact) / shotLength));
 
-  return { side, start, impact, back, rest, shotMs, inMs, halfLength, goalWidth };
+  return { side, start, impact, back, rest, shotMs, halfLength, goalWidth };
 }
 
 function shotPosition(plan: GoalPlan, t: number): Point {
@@ -189,9 +181,5 @@ export function goalStateAt(plan: GoalPlan, t: number): GoalState {
         (1 + Math.cos((2 * Math.PI * sinceHit) / BULGE_PERIOD_MS)) /
         2;
 
-  const fadeIn = clamp((time - plan.inMs) / BANNER_IN_MS, 0, 1);
-  const fadeOut = clamp((GOAL_SEQUENCE_MS - time) / BANNER_OUT_MS, 0, 1);
-  const banner = time < plan.inMs ? 0 : Math.min(fadeIn, fadeOut);
-
-  return { ball, trail, netBulge, banner };
+  return { ball, trail, netBulge };
 }

@@ -123,12 +123,6 @@ describe('goalStateAt', () => {
     expect(Math.abs(goalStateAt(plan, GOAL_SEQUENCE_MS).netBulge)).toBeLessThan(0.02);
   });
 
-  it('shows the banner from the moment the ball goes in, and fades it out by the end', () => {
-    expect(goalStateAt(plan, 0).banner).toBe(0);
-    expect(Math.max(...samples.map((t) => goalStateAt(plan, t).banner))).toBe(1);
-    expect(goalStateAt(plan, GOAL_SEQUENCE_MS).banner).toBe(0);
-  });
-
   it('holds its final state past the end', () => {
     expect(goalStateAt(plan, GOAL_SEQUENCE_MS * 2)).toEqual(goalStateAt(plan, GOAL_SEQUENCE_MS));
   });

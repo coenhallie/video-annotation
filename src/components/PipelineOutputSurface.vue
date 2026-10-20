@@ -268,8 +268,7 @@ function step(frames: number) {
 // ── Goal sequence ───────────────────────────────────────────────────────────
 //
 // When playback runs into a frame the pipeline labels GOAL, a ball is shot into
-// the net and settles there, in place of the tracked ball, with a GOAL banner
-// over the pitch. See goalSequence.ts.
+// the net and settles there, in place of the tracked ball. See goalSequence.ts.
 //
 // It only ever plays during playback, and anything that means someone wants
 // the real frame - pausing, seeking, stepping, pressing on the drawing layer -
@@ -278,7 +277,6 @@ function step(frames: number) {
 /** Clock steps larger than this are a seek, not playback. */
 const MAX_PLAYBACK_STEP_S = 0.5;
 
-const goalBanner = ref(0);
 let goal: { plan: GoalPlan; startedMs: number | null; elapsedMs: number } | null = null;
 let goalRaf: number | null = null;
 // The label usually stays on for many frames: only its first one is a goal.
@@ -294,10 +292,8 @@ function prefersReducedMotion(): boolean {
 
 function goalState(): GoalState | null {
   if (!goal) return null;
-  const now = goalStateAt(goal.plan, goal.elapsedMs);
-  // With reduced motion the ball is simply in the net; only the banner fades.
-  if (!prefersReducedMotion()) return now;
-  return { ...goalStateAt(goal.plan, GOAL_SEQUENCE_MS), banner: now.banner };
+  // With reduced motion the ball is simply in the net.
+  return goalStateAt(goal.plan, prefersReducedMotion() ? GOAL_SEQUENCE_MS : goal.elapsedMs);
 }
 
 function goalOverlay(): GoalOverlay | undefined {
@@ -319,7 +315,6 @@ function goalStep(ms: number): void {
     stopGoal();
     return;
   }
-  goalBanner.value = goalState()?.banner ?? 0;
   paint();
   goalRaf = window.requestAnimationFrame(goalStep);
 }
@@ -338,19 +333,8 @@ function stopGoal(): void {
   if (goalRaf !== null) window.cancelAnimationFrame(goalRaf);
   goalRaf = null;
   goal = null;
-  goalBanner.value = 0;
   paint();
 }
-
-const bannerStyle = computed(() => {
-  const k = goalBanner.value;
-  const width = frameBox.value?.width ?? FRAME_W;
-  return {
-    opacity: String(k),
-    fontSize: `${Math.round(width * 0.11)}px`,
-    transform: prefersReducedMotion() ? undefined : `scale(${0.85 + 0.15 * k})`,
-  };
-});
 
 // Synchronous, so it has seen the clock move before the frame watcher sees the
 // record that movement brought in.
@@ -567,22 +551,6 @@ onUnmounted(() => {
           :style="boxStyle"
           data-testid="pipeline-hud"
         >
-          <!--
-            Over the pitch's middle, clear of the frame label and the transport
-            controls along the bottom.
-          -->
-          <div
-            v-if="goalBanner > 0"
-            data-testid="pipeline-goal-banner"
-            role="status"
-            class="absolute inset-0 flex items-center justify-center"
-          >
-            <span
-              class="select-none font-black italic leading-none tracking-[0.08em] text-white [text-shadow:0_3px_0_rgba(0,0,0,0.35),0_0_32px_rgba(0,0,0,0.55)]"
-              :style="bannerStyle"
-            >GOAL</span>
-          </div>
-
           <div
             class="absolute bottom-2 left-2 flex items-center gap-1.5 rounded bg-black/60 px-2.5 py-1 font-mono text-[11px] text-white"
           >

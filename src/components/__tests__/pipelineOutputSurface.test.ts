@@ -556,14 +556,14 @@ describe('PipelineOutputSurface', () => {
     }
 
     const lastOverlay = () => renderFrame.mock.calls.at(-1)?.[1];
-    const banner = (root: HTMLElement) => at(root, 'pipeline-goal-banner');
 
     it('plays when playback runs into a GOAL label', async () => {
       const { replay, m } = await playing();
       await tick(replay, goalFrame(['GOAL']));
       await animate(1200);
       expect(lastOverlay()).toBeDefined();
-      expect(banner(m.root)).not.toBeNull();
+      // Only the shot itself: no text over the pitch.
+      expect(m.root.textContent).not.toMatch(/GOAL/);
       m.unmount();
     });
 
@@ -572,7 +572,6 @@ describe('PipelineOutputSurface', () => {
       await tick(replay, goalFrame(['GOAL']));
       await animate(GOAL_SEQUENCE_MS + 200);
       expect(lastOverlay()).toBeUndefined();
-      expect(banner(m.root)).toBeNull();
       m.unmount();
     });
 
@@ -603,7 +602,6 @@ describe('PipelineOutputSurface', () => {
       set(replay.isPlaying, false);
       await nextTick();
       expect(lastOverlay()).toBeUndefined();
-      expect(banner(m.root)).toBeNull();
       m.unmount();
     });
 
