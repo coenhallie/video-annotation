@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { watch } from 'vue';
 import { usePipelineReplay } from '@/composables/usePipelineReplay';
 import type { RangeFetcher } from '@/lib/pipelineData/jsonlIndex';
 import {
@@ -903,6 +904,50 @@ describe('usePipelineReplay team phase', () => {
 
     await r.seek(151.5);
     await r.whenIdle();
+    expect(r.phase.value?.possession).toBe(1);
+  });
+
+  // The clock ticks at display rate and records arrive at the data's rate, so
+  // most ticks bring no new record, and the phase itself holds for seconds at
+  // a time. A new phase object on every tick re-rendered and repainted
+  // everything that shows it, 120 times a second.
+  it('keeps the same phase while playing on through a stretch where it does not change', async () => {
+    const clock = manualClock();
+    const r = usePipelineReplay({ openFetcher: async () => fetcherFor(text), raf: clock.raf, caf: clock.caf });
+    await r.load();
+    await r.seek(100);
+    await r.whenIdle();
+    const before = r.phase.value;
+    let changes = 0;
+    const stop = watch(r.phase, () => changes++, { flush: 'sync' });
+    r.play();
+    clock.tick(0);
+    for (let ms = 8; ms <= 2000; ms += 8) {
+      clock.tick(ms);
+      await r.whenIdle();
+    }
+    r.pause();
+    stop();
+    expect(r.currentTime.value).toBeGreaterThan(101.9);
+    expect(changes).toBe(0);
+    expect(r.phase.value).toBe(before);
+  });
+
+  it('still changes the phase while playing, the moment it changes', async () => {
+    const clock = manualClock();
+    const r = usePipelineReplay({ openFetcher: async () => fetcherFor(text), raf: clock.raf, caf: clock.caf });
+    await r.load();
+    await r.seek(150.5);
+    await r.whenIdle();
+    expect(r.phase.value?.possession).toBe(0);
+    r.play();
+    clock.tick(0);
+    for (let ms = 8; ms <= 1200; ms += 8) {
+      clock.tick(ms);
+      await r.whenIdle();
+    }
+    r.pause();
+    // Team 1 has carried since 150 s: possession passes once it has for 1 s.
     expect(r.phase.value?.possession).toBe(1);
   });
 

@@ -62,6 +62,18 @@ export interface TeamPhase {
   states: Record<TeamId, TeamState | null>;
 }
 
+/**
+ * Whether two phases say the same thing. A phase is worked out afresh for
+ * every frame, but holds for seconds at a time, so whatever shows it can keep
+ * the one it has rather than redraw for an identical copy.
+ */
+export function samePhase(a: TeamPhase, b: TeamPhase): boolean {
+  return (
+    a.possession === b.possession &&
+    TEAMS.every((k) => a.attacks[k] === b.attacks[k] && a.states[k] === b.states[k])
+  );
+}
+
 /** The two parts of a replay record the calculation reads. */
 export interface PhaseRecord {
   t: number;
