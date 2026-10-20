@@ -24,7 +24,14 @@ import {
 import type { PipelineReplay } from '@/composables/usePipelineReplay';
 import { replayDrawingFrame } from '@/utils/timelineBinding';
 
-const props = defineProps<{ replay: PipelineReplay }>();
+const props = defineProps<{
+  replay: PipelineReplay;
+  /**
+   * The teams the match title names, first-named first (pipelineTeamNames),
+   * or null when it names none. Team 0 is taken to be the first-named.
+   */
+  teamNames?: [string, string] | null;
+}>();
 
 const overlayFrame = computed(() =>
   replayDrawingFrame({
@@ -445,8 +452,11 @@ watch(
 // ── Team phase labels ───────────────────────────────────────────────────────
 //
 // Which team is attacking and which defending, from the replay's phase (see
-// teamPhase.ts). Named Red and Blue, the colours they are drawn in, rather
-// than home and away: the export does not say which team is at home.
+// teamPhase.ts). Named after the match title's teams when it names them, the
+// first-named as team 0: the export names neither team, and DALF names the
+// home team first, which is also the team drawn red. An assumption, as
+// nothing says which team the pipeline numbered 0. Without a match in the
+// title the teams are called Red and Blue, the colours they are drawn in.
 
 const PHASE_TEAMS: Record<TeamId, { name: string; color: string }> = {
   0: { name: 'Red', color: PERSON_COLORS.home.fill },
@@ -466,6 +476,7 @@ const phaseLabels = computed(() => {
     return {
       team,
       ...PHASE_TEAMS[team],
+      name: props.teamNames?.[team] ?? PHASE_TEAMS[team].name,
       state,
       text: state ? STATE_TEXT[state] : null,
       // Only an attacking team is filled: a team that merely has the ball,
@@ -805,8 +816,13 @@ onUnmounted(() => {
             role="group"
             :aria-label="phaseDescription"
             title="Worked out from the tracking data: a team is attacking once it has kept the ball for 3 seconds, and the other team is then defending."
-            class="pointer-events-auto absolute inset-x-0 bottom-full mx-auto mb-1.5 flex w-max items-center gap-2"
+            class="pointer-events-auto absolute inset-x-0 bottom-full mx-auto mb-1.5 grid w-max max-w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2"
           >
+            <!--
+              Two equal columns either side of "vs", as wide as the longer
+              label needs, so "vs" stays centred; a name too long for the row
+              is cut short, and shown in full on hover.
+            -->
             <template
               v-for="(l, i) in phaseLabels"
               :key="l.team"
@@ -819,24 +835,25 @@ onUnmounted(() => {
               <div
                 :data-testid="`pipeline-phase-team-${l.team}`"
                 :data-state="l.state ?? 'none'"
-                class="flex w-[9.5rem] items-center gap-2 whitespace-nowrap rounded-md border-2 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-lg transition-colors duration-200 motion-reduce:transition-none"
+                :title="l.name"
+                class="flex min-w-[9.5rem] items-center gap-3 whitespace-nowrap rounded-md border-2 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-lg transition-colors duration-200 motion-reduce:transition-none"
                 :class="[l.filled ? '' : 'bg-black/60', l.team === 1 ? 'justify-end' : '']"
                 :style="{ borderColor: l.color, backgroundColor: l.filled ? l.color : undefined }"
                 aria-hidden="true"
               >
-                <!-- Mirrored for Blue, so both states sit either side of "vs". -->
+                <!-- Mirrored for team 1, so both states sit either side of "vs". -->
                 <span
                   v-if="l.team === 0"
-                  class="font-bold"
+                  class="min-w-0 truncate font-bold"
                 >{{ l.name }}</span>
                 <span
                   v-if="l.text"
-                  class="text-[10px] tracking-widest"
+                  class="shrink-0 text-[10px] tracking-widest"
                   :class="l.team === 0 ? 'ml-auto' : 'mr-auto'"
                 >{{ l.text }}</span>
                 <span
                   v-if="l.team === 1"
-                  class="font-bold"
+                  class="min-w-0 truncate font-bold"
                 >{{ l.name }}</span>
               </div>
             </template>

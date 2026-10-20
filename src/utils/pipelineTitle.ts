@@ -92,6 +92,24 @@ export function pipelineMatchTitle(fields: PipelineMatchFields): string | null {
 }
 
 /**
+ * The two teams a match title names, in the order it names them, or null when
+ * it does not name exactly two. Read from the title rather than stored, as
+ * the title is the only place the match DALF sent is kept: the match is the
+ * part before the first " - " (see pipelineMatchTitle), so a title someone
+ * renamed still gives teams as long as it starts "<team> vs <team>".
+ */
+export function pipelineTeamNames(title: string | null | undefined): [string, string] | null {
+  const match = (title ?? '').split(' - ')[0] ?? '';
+  const teams = match
+    .replace(/\s+/g, ' ')
+    .trim()
+    .split(/\svs\.?\s/i)
+    .map((team) => team.trim());
+  if (teams.length !== 2 || !teams[0] || !teams[1]) return null;
+  return [teams[0], teams[1]];
+}
+
+/**
  * DALF's game id, as the link sends it, or null. It is shown in every
  * dashboard row and comes from a URL anyone can write, so only an id-shaped
  * value is kept: letters, digits, `-`, `_`, `.` and `:`, at most 64 of them.

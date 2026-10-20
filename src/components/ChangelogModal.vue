@@ -117,6 +117,13 @@ useEscapeToClose(() => props.isVisible, closeModal);
 // Add new entries to the TOP of this array
 const changelogEntries = ref([
   {
+    version: 'Beta v3.21',
+    date: 'October 20, 2026',
+    changes: [
+      'The attacking and defending labels above the 2D replay show the team names from the match title, such as Manchester City and PSG, instead of Red and Blue',
+    ],
+  },
+  {
     version: 'Beta v3.20',
     date: 'October 20, 2026',
     changes: [
