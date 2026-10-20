@@ -52,13 +52,19 @@ export const PERSON_COLORS: Record<
 }
 
 /**
- * Opacity of the team without the ball, so the eye goes to the team that has
- * it. Not lower: at 0.5 the green pitch shows through red enough to read as
- * brown, which looks like a third team rather than a faded red. Applied only while a team has possession, frame by frame and without a
- * fade: possession spells can be a single frame long, and a fade would blur
- * exactly the flicker a reviewer is meant to see.
+ * Opacity of players far from the ball, so the eye goes to the play around it.
+ * Applied frame by frame with no fade, following the data as it is. Not lower:
+ * at 0.5 the green pitch shows through red enough to read as brown, which
+ * looks like a third team rather than a faded red.
  */
-export const DIMMED_TEAM_ALPHA = 0.6
+export const DIMMED_PLAYER_ALPHA = 0.6
+
+/**
+ * Players further than this from the ball are faded (DIMMED_PLAYER_ALPHA).
+ * The same distance as NEARBY_METRES, so the solid players and the white rings
+ * describe one area: the play around the ball.
+ */
+export const FOCUS_METRES = 15
 
 /**
  * Outline of the players near the ball: the ball carrier and their teammates

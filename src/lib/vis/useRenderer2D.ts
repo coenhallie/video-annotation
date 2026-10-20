@@ -16,9 +16,10 @@
 //    PERSON_COLORS): home red, away blue, goalkeepers yellow ringed in their
 //    team's colour, officials magenta. The vendored copy coloured each team
 //    from the kit colours the pipeline detected; that resolver is gone.
-//  - while a team has the ball, the other team is drawn dimmed and underneath
-//    it (DIMMED_TEAM_ALPHA), and the carrier and their teammates within
-//    NEARBY_METRES are outlined in white.
+//  - players further than FOCUS_METRES from the ball are faded
+//    (DIMMED_PLAYER_ALPHA) and drawn underneath the rest, and while a team has
+//    the ball the carrier and their teammates within NEARBY_METRES are
+//    outlined in white.
 //  - goals (posts and a faint net) are drawn on every frame, and renderFrame
 //    takes an optional goal-sequence overlay whose ball replaces the tracked
 //    one (goalNets.ts, goalSequence.ts).
@@ -38,7 +39,8 @@ import {
   FRAME_H,
   PLAYER_RADIUS,
   PERSON_COLORS,
-  DIMMED_TEAM_ALPHA,
+  DIMMED_PLAYER_ALPHA,
+  FOCUS_METRES,
   NEARBY_OUTLINE,
   NEARBY_METRES,
 } from './constants'
@@ -136,25 +138,29 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     drawGoalNets(ctx as CanvasRenderingContext2D, pd, transform2d, overlay?.net)
 
     // ── Teams + players ────────────────────────────────────────────────────
-    // The team without the ball is dimmed, and the team with it is drawn last
-    // so it stays on top where players overlap. Officials are never dimmed.
+    // Players far from the ball are faded and drawn first, so the play around
+    // the ball sits on top where markers overlap. Officials are never faded.
+    // During the goal sequence the focus follows its ball, not the tracked one.
+    const focus = overlay?.ball ?? trackedBall(frame)
     const carrier = ballCarrier(frame)
     const withBall = carrier?.teamId ?? null
-    const teams = [...(frame.teams ?? [])].sort(
-      (a, b) =>
-        Number((a.team_id ?? -1) === withBall) - Number((b.team_id ?? -1) === withBall),
-    )
-    for (const team of teams) {
+    const people = (frame.teams ?? []).flatMap((team) => {
       const tid = team.team_id ?? -1
-      const dimmed = withBall !== null && tid !== withBall && tid !== -1
-      ctx.globalAlpha = dimmed ? DIMMED_TEAM_ALPHA : 1
-      for (const player of team.players ?? []) {
-        draw2DPlayer(player, tid, tid === withBall && isNearCarrier(player, carrier))
+      return (team.players ?? []).map((player) => ({
+        player,
+        tid,
+        faded: isFarFromBall(player, tid, focus),
+      }))
+    })
+    for (const faded of [true, false]) {
+      ctx.globalAlpha = faded ? DIMMED_PLAYER_ALPHA : 1
+      for (const p of people) {
+        if (p.faded !== faded) continue
+        draw2DPlayer(p.player, p.tid, p.tid === withBall && isNearCarrier(p.player, carrier))
       }
     }
     ctx.globalAlpha = 1
 
-    // ── Balls ──────────────────────────────────────────────────────────────
     // During the goal sequence its ball replaces the tracked one, which near a
     // goal tends to jump about or go straight through the net.
     if (overlay) {
@@ -199,6 +205,29 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
       return { teamId: tid, x: x ?? NaN, y: y ?? NaN }
     }
     return null
+  }
+
+  /** The tracked ball's position, or null when the frame has none usable. */
+  function trackedBall(frame: Frame): { x: number; y: number } | null {
+    for (const ball of frame.balls ?? []) {
+      const { x, y } = ball.projected_coordinates ?? {}
+      if (x != null && y != null && !isNaN(x) && !isNaN(y)) return { x, y }
+    }
+    return null
+  }
+
+  /** A player, not an official, further than FOCUS_METRES from the ball. */
+  function isFarFromBall(
+    player: Player,
+    teamId: number,
+    ball: { x: number; y: number } | null,
+  ): boolean {
+    if (!ball || teamId === -1) return false
+    if (String(player.person_type ?? '').toUpperCase().includes('OFFICIAL')) return false
+    const x = player.projected_coordinates?.x
+    const y = player.projected_coordinates?.y
+    if (x == null || y == null) return false
+    return Math.hypot(x - ball.x, y - ball.y) > FOCUS_METRES
   }
 
   /** Within NEARBY_METRES of the carrier, on the pitch (the carrier included). */
