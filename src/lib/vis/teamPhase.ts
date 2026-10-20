@@ -10,26 +10,40 @@ import type { Frame } from './types';
  *  - Possession. The raw per-frame carrier flips about six times a minute, and
  *    most frames (61%) have no carrier at all. A team takes possession once it
  *    has been the carrier for POSSESSION_HOLD_S with no carrier from the other
- *    team in between; frames without a carrier change nothing. That brings it
- *    down to about 2.4 changes a minute.
+ *    team in between; frames without a carrier change nothing, until the
+ *    team has gone POSSESSION_FORGET_S without the ball, when nobody has it.
+ *    That brings it down to about 2.4 changes a minute.
  *  - Direction. The export has no attacking-direction field, and the teams do
  *    not swap ends where a fixed per-half rule would expect (on the February
  *    export the keepers swap at about minute 16). So a team attacks away from
  *    its own keeper, read from the frames themselves. Nothing here needs it
  *    to say who is attacking; it is for drawing which way they attack.
  *
- * The team in possession is attacking and the other is defending, wherever
- * the ball is.
+ * A team is attacking once it has kept possession for ATTACK_HOLD_S, and the
+ * other team is then defending, wherever the ball is. Before that neither has
+ * a state: keeping the ball is not the same as attacking, and a team can play
+ * it around at the back. Measured on the February export, 5 s puts an attack
+ * on screen about twice a minute for about 10 s at a time, and leaves out the
+ * 44% of possessions that are shorter.
  *
  * Everything is computed from the frames within PHASE_LOOKBACK_S of the frame
  * asked about, and nothing older. That bounded memory is what makes a frame's
  * answer the same however the replay arrived at it, by playing or by seeking.
+ * It reaches back further than anything that can still affect the answer
+ * (taking possession, then keeping it for the attack hold, with quiet spells
+ * of up to the forget time), so the answer is also what unlimited memory
+ * would give. A shorter window made long attacks drop out halfway through
+ * whenever its start fell in a quiet spell.
  */
 
 /** How long a team must keep the ball before possession passes to it. */
 export const POSSESSION_HOLD_S = 1;
-/** How far back the calculation looks, and the most it ever needs. */
-export const PHASE_LOOKBACK_S = 5;
+/** How long a team must keep possession before it counts as attacking. */
+export const ATTACK_HOLD_S = 5;
+/** How long a team keeps possession without touching the ball. */
+export const POSSESSION_FORGET_S = 5;
+/** How far back the calculation looks: past everything that can still matter. */
+export const PHASE_LOOKBACK_S = POSSESSION_HOLD_S + ATTACK_HOLD_S + POSSESSION_FORGET_S + 1;
 /** A keeper this close to the halfway line says nothing about which end is theirs. */
 const KEEPER_MIN_ABS_X = 15;
 /** Slack for timestamps that land a hair short of a whole hold time. */
@@ -43,7 +57,7 @@ export interface TeamPhase {
   possession: TeamId | null;
   /** The direction along x each team attacks in, or null when unknown. */
   attacks: Record<TeamId, 1 | -1 | null>;
-  /** Each team's state, or null for both when nobody is in possession. */
+  /** Each team's state, or null for both until a possession becomes an attack. */
   states: Record<TeamId, TeamState | null>;
 }
 
@@ -107,6 +121,8 @@ export function teamPhaseAt(records: PhaseRecord[], index: number): TeamPhase {
   while (start > 0 && (records[start - 1]?.t ?? -Infinity) >= now.t - PHASE_LOOKBACK_S) start--;
 
   let possession: TeamId | null = null;
+  let possessionSince = 0;
+  let lastTouch = 0;
   let candidate: TeamId | null = null;
   let candidateSince = 0;
   const attacks: Record<TeamId, 1 | -1 | null> = { 0: null, 1: null };
@@ -117,9 +133,13 @@ export function teamPhaseAt(records: PhaseRecord[], index: number): TeamPhase {
     const { t, frame } = record;
 
     const carrier = carrierTeam(frame);
+    if (possession !== null && carrier !== possession && t - lastTouch > POSSESSION_FORGET_S) {
+      possession = null;
+    }
     if (carrier !== null) {
       if (carrier === possession) {
         candidate = null;
+        lastTouch = t;
       } else {
         if (candidate !== carrier) {
           candidate = carrier;
@@ -127,6 +147,8 @@ export function teamPhaseAt(records: PhaseRecord[], index: number): TeamPhase {
         }
         if (t - candidateSince >= POSSESSION_HOLD_S - EPSILON_S) {
           possession = carrier;
+          possessionSince = t;
+          lastTouch = t;
           candidate = null;
         }
       }
@@ -137,6 +159,9 @@ export function teamPhaseAt(records: PhaseRecord[], index: number): TeamPhase {
   }
 
   if (possession === null) return { ...none, attacks };
+  if (now.t - possessionSince < ATTACK_HOLD_S - EPSILON_S) {
+    return { ...none, possession, attacks };
+  }
 
   const states: Record<TeamId, TeamState> =
     possession === 0

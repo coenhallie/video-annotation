@@ -326,6 +326,19 @@ describe('PipelineOutputSurface', () => {
       m.unmount();
     });
 
+    // A team keeping the ball for less than the attack hold is not attacking,
+    // and a filled label would say it was.
+    it('does not fill the label of a team that has the ball but is not attacking yet', async () => {
+      const m = await withPhase({
+        possession: 1,
+        attacks: { 0: 1, 1: -1 },
+        states: { 0: null, 1: null },
+      });
+      expect(label(m.root, 1)?.style.backgroundColor).toBe('');
+      expect(label(m.root, 1)?.textContent?.trim()).toMatch(/^Blue$/i);
+      m.unmount();
+    });
+
     // A third of real frames have nobody clearly in possession: say nothing
     // rather than guess.
     it('shows both teams without a state when nobody is in possession', async () => {
