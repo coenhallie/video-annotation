@@ -22,9 +22,10 @@ import type { Frame } from './types';
  * A team is attacking once it has kept possession for ATTACK_HOLD_S, and the
  * other team is then defending, wherever the ball is. Before that neither has
  * a state: keeping the ball is not the same as attacking, and a team can play
- * it around at the back. Measured on the February export, 5 s puts an attack
- * on screen about twice a minute for about 10 s at a time, and leaves out the
- * 44% of possessions that are shorter.
+ * it around at the back. Measured on the February export, 3 s puts an attack
+ * on screen 2.6 times a minute for a median 5 s, leaves out the 18% of
+ * possessions that are shorter, and has attacking shown on 54% of frames
+ * (5 s was tried first, and felt too slow to call an attack).
  *
  * Everything is computed from the frames within PHASE_LOOKBACK_S of the frame
  * asked about, and nothing older. That bounded memory is what makes a frame's
@@ -39,7 +40,7 @@ import type { Frame } from './types';
 /** How long a team must keep the ball before possession passes to it. */
 export const POSSESSION_HOLD_S = 1;
 /** How long a team must keep possession before it counts as attacking. */
-export const ATTACK_HOLD_S = 5;
+export const ATTACK_HOLD_S = 3;
 /** How long a team keeps possession without touching the ball. */
 export const POSSESSION_FORGET_S = 5;
 /** How far back the calculation looks: past everything that can still matter. */

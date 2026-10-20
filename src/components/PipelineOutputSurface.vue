@@ -787,7 +787,7 @@ onUnmounted(() => {
             data-testid="pipeline-phase"
             role="group"
             :aria-label="phaseDescription"
-            title="Worked out from the tracking data: a team is attacking once it has kept the ball for 5 seconds, and the other team is then defending."
+            title="Worked out from the tracking data: a team is attacking once it has kept the ball for 3 seconds, and the other team is then defending."
             class="pointer-events-auto absolute inset-x-0 bottom-full mx-auto mb-1.5 flex w-max items-center gap-2"
           >
             <template
