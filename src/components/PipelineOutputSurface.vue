@@ -2,6 +2,7 @@
 import { ref, watch, onMounted, onUnmounted, computed } from 'vue';
 import {
   nearbyTrackIds,
+  possessionTrackIds,
   useRenderer2D,
   type GoalOverlay,
   type TrackId,
@@ -17,7 +18,7 @@ import {
   type GoalPlan,
   type GoalState,
 } from '@/lib/vis/goalSequence';
-import { FRAME_W, FRAME_H, NEARBY_FADE_S, PERSON_COLORS } from '@/lib/vis/constants';
+import { FRAME_W, FRAME_H, PERSON_COLORS, RING_FADE_S } from '@/lib/vis/constants';
 import type { TeamId, TeamState } from '@/lib/vis/teamPhase';
 import {
   cameraFromView,
@@ -95,7 +96,12 @@ function pushView(): void {
  */
 function paint(): void {
   const frame = props.replay.frame.value;
-  if (frame) renderer?.renderFrame(frame, goalOverlay(), glowValue(), new Map(rings));
+  if (frame) {
+    renderer?.renderFrame(frame, goalOverlay(), glowValue(), {
+      nearby: new Map(nearbyRings),
+      possession: new Map(possessionRings),
+    });
+  }
 }
 
 watch([zoom, panX, panY], pushView, { flush: 'post' });
@@ -599,39 +605,49 @@ function settleGlow(): void {
   if (glow.target === 0) glow = null;
 }
 
-// ── Nearby rings ────────────────────────────────────────────────────────────
+// ── Rings ───────────────────────────────────────────────────────────────────
 //
-// The white rings on the players near the ball (nearbyTrackIds). Who that is
-// changes many times a minute, and rings snapping on and off with it were
-// jarring, so during playback each fades in and out over NEARBY_FADE_S of
-// replay time. Anywhere else they show the frame's own rings at once, like the
-// glow, and reduced motion never fades.
+// The white rings on the players near the ball (nearbyTrackIds) and the gold
+// possession ring on the carrier (possessionTrackIds). Who has the ball, and
+// so who is near it, changes many times a minute, and the data loses the
+// carrier for a frame or two at a time: rings snapping on and off with it were
+// jarring. So during playback each fades in and out over RING_FADE_S of replay
+// time. Anywhere else they show the frame's own rings at once, like the glow,
+// and reduced motion never fades.
 
 /** How strong each ring is, by track id. Absent means no ring. */
-const rings = new Map<TrackId, number>();
+const nearbyRings = new Map<TrackId, number>();
+const possessionRings = new Map<TrackId, number>();
 
 /** Rings partway through a fade, which need a repaint as the clock moves. */
 function ringsFading(): boolean {
-  for (const strength of rings.values()) if (strength < 1) return true;
+  for (const rings of [nearbyRings, possessionRings]) {
+    for (const strength of rings.values()) if (strength < 1) return true;
+  }
   return false;
 }
 
-/** Fade the rings toward the frame's own by `dt` seconds, or set them at once. */
-function updateRings(dt: number | null): void {
-  const frame = props.replay.frame.value;
-  const near = frame ? nearbyTrackIds(frame) : new Set<TrackId>();
+/** Fade `rings` toward `target` by `dt` seconds, or set them to it at once. */
+function fadeRings(rings: Map<TrackId, number>, target: Set<TrackId>, dt: number | null): void {
   if (dt === null) {
     rings.clear();
-    for (const id of near) rings.set(id, 1);
+    for (const id of target) rings.set(id, 1);
     return;
   }
-  const step = dt / NEARBY_FADE_S;
-  for (const id of near) if (!rings.has(id)) rings.set(id, 0);
+  const step = dt / RING_FADE_S;
+  for (const id of target) if (!rings.has(id)) rings.set(id, 0);
   for (const [id, strength] of rings) {
-    const next = near.has(id) ? Math.min(1, strength + step) : Math.max(0, strength - step);
+    const next = target.has(id) ? Math.min(1, strength + step) : Math.max(0, strength - step);
     if (next > 0) rings.set(id, next);
     else rings.delete(id);
   }
+}
+
+/** Fade both kinds of ring toward the frame's own by `dt` seconds, or set them. */
+function updateRings(dt: number | null): void {
+  const frame = props.replay.frame.value;
+  fadeRings(nearbyRings, frame ? nearbyTrackIds(frame) : new Set(), dt);
+  fadeRings(possessionRings, frame ? possessionTrackIds(frame) : new Set(), dt);
 }
 
 /** Finish any fade at once: the frame on screen shows its own rings. */

@@ -4,7 +4,7 @@ import { createApp, defineComponent, h, nextTick, ref } from 'vue';
 import PipelineOutputSurface from '@/components/PipelineOutputSurface.vue';
 import type { PipelineReplay, ReplayState } from '@/composables/usePipelineReplay';
 import { GOAL_SEQUENCE_MS } from '@/lib/vis/goalSequence';
-import { NEARBY_FADE_S, PERSON_COLORS } from '@/lib/vis/constants';
+import { PERSON_COLORS, RING_FADE_S } from '@/lib/vis/constants';
 import { CHEVRON_FLOW_PERIOD_S } from '@/lib/vis/attackGlow';
 
 /**
@@ -1084,10 +1084,13 @@ describe('PipelineOutputSurface', () => {
       projected_coordinates: { x, y: 0 },
       in_possession: ball,
     });
-    /** Red's carrier (track 1) at x = 0, and track 2 at `x`: ringed within 15 m. */
-    const frameWith = (x: number) => ({
+    /**
+     * Red's carrier (track 1) at x = 0, and track 2 at `x`: ringed within
+     * 15 m. Without `carrier`, nobody has the ball.
+     */
+    const frameWith = (x: number, carrier = true) => ({
       pitch_dimensions: { length: 105, width: 68 },
-      teams: [{ team_id: 0, players: [person(1, 0, true), person(2, x)] }],
+      teams: [{ team_id: 0, players: [person(1, 0, carrier), person(2, x)] }],
       balls: [{ projected_coordinates: { x: 0, y: 0 } }],
       state: { actions: [] },
       frame_data: [{ frame_count: 1 }],
@@ -1107,14 +1110,18 @@ describe('PipelineOutputSurface', () => {
     }
 
     /** One step of playback, `step` seconds on, showing a fresh record. */
-    async function step(replay: PipelineReplay, x: number, by = 0.04) {
+    async function step(replay: PipelineReplay, x: number, by = 0.04, carrier = true) {
       set(replay.currentTime, (replay.currentTime.value as number) + by);
-      set(replay.frame, frameWith(x));
+      set(replay.frame, frameWith(x, carrier));
       await nextTick();
     }
 
-    const ring = (id: number) =>
-      (renderFrame.mock.calls.at(-1)?.[3] as Map<number, number> | undefined)?.get(id) ?? 0;
+    type Rings = { nearby: Map<number, number>; possession: Map<number, number> };
+    const rings = () => renderFrame.mock.calls.at(-1)?.[3] as Rings | undefined;
+    /** The white ring's strength on track `id`. */
+    const ring = (id: number) => rings()?.nearby.get(id) ?? 0;
+    /** The possession ring's strength on track `id`. */
+    const held = (id: number) => rings()?.possession.get(id) ?? 0;
 
     beforeEach(() => renderFrame.mockClear());
 
@@ -1135,7 +1142,7 @@ describe('PipelineOutputSurface', () => {
       await step(replay, NEAR);
       expect(ring(2)).toBeGreaterThan(0);
       expect(ring(2)).toBeLessThan(1);
-      for (let t = 0; t < NEARBY_FADE_S; t += 0.04) await step(replay, NEAR);
+      for (let t = 0; t < RING_FADE_S; t += 0.04) await step(replay, NEAR);
       expect(ring(2)).toBe(1);
       m.unmount();
     });
@@ -1147,7 +1154,7 @@ describe('PipelineOutputSurface', () => {
       await step(replay, FAR);
       expect(ring(2)).toBeGreaterThan(0);
       expect(ring(2)).toBeLessThan(1);
-      for (let t = 0; t < NEARBY_FADE_S; t += 0.04) await step(replay, FAR);
+      for (let t = 0; t < RING_FADE_S; t += 0.04) await step(replay, FAR);
       expect(ring(2)).toBe(0);
       m.unmount();
     });
@@ -1174,6 +1181,44 @@ describe('PipelineOutputSurface', () => {
       set(replay.isPlaying, false);
       await nextTick();
       expect(ring(2)).toBe(1);
+      m.unmount();
+    });
+
+    // The data loses the carrier for a frame or two at a time, and the
+    // possession ring blinked with it.
+    it('fades the possession ring out when nobody has the ball, and back in', async () => {
+      const { replay, m } = await ready(NEAR);
+      expect(held(1)).toBe(1);
+      set(replay.isPlaying, true);
+      await nextTick();
+      await step(replay, NEAR, 0.04, false);
+      expect(held(1)).toBeGreaterThan(0);
+      expect(held(1)).toBeLessThan(1);
+      const dipped = held(1);
+      await step(replay, NEAR, 0.04, true);
+      expect(held(1)).toBeGreaterThan(dipped);
+      for (let t = 0; t < RING_FADE_S; t += 0.04) await step(replay, NEAR);
+      expect(held(1)).toBe(1);
+      m.unmount();
+    });
+
+    it('shows the possession ring at once on a frame reached by a seek', async () => {
+      const { replay, m } = await ready(NEAR);
+      await step(replay, NEAR, 30, false);
+      expect(held(1)).toBe(0);
+      await step(replay, NEAR, 30, true);
+      expect(held(1)).toBe(1);
+      m.unmount();
+    });
+
+    it('settles the possession ring at once when playback pauses', async () => {
+      const { replay, m } = await ready(NEAR);
+      set(replay.isPlaying, true);
+      await nextTick();
+      await step(replay, NEAR, 0.04, false);
+      set(replay.isPlaying, false);
+      await nextTick();
+      expect(held(1)).toBe(0);
       m.unmount();
     });
 
