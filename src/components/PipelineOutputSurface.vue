@@ -4,9 +4,23 @@ import {
   nearbyTrackIds,
   possessionTrackIds,
   useRenderer2D,
+  type BallPulse,
   type GoalOverlay,
   type TrackId,
 } from '@/lib/vis/useRenderer2D';
+import {
+  isThrowInFrame,
+  isValidFrame,
+  throwInBall,
+  throwInCamera,
+  throwInWeight,
+  throwInHolds,
+  throwInPulse,
+  throwInSpot,
+  type ThrowInEase,
+  THROW_IN_REPEAT_S,
+  THROW_IN_STALE_S,
+} from '@/lib/vis/throwInSequence';
 import { CHEVRON_FLOW_PERIOD_S, type AttackGlow } from '@/lib/vis/attackGlow';
 import {
   goalCamera,
@@ -97,9 +111,11 @@ function pushView(): void {
 function paint(): void {
   const frame = props.replay.frame.value;
   if (frame) {
-    renderer?.renderFrame(frame, goalOverlay(), glowValue(), {
-      nearby: new Map(nearbyRings),
-      possession: new Map(possessionRings),
+    renderer?.renderFrame(frame, {
+      goal: goalOverlay(),
+      glow: glowValue(),
+      rings: { nearby: new Map(nearbyRings), possession: new Map(possessionRings) },
+      ballPulse: throwInPulseLayer(),
     });
   }
 }
@@ -201,7 +217,7 @@ function onPixelRatioChange(): void {
 function onWheel(e: WheelEvent) {
   const stage = stageRef.value;
   if (!stage) return;
-  releaseGoalCamera();
+  releaseSequenceCamera();
   const rect = stage.getBoundingClientRect();
   const mx = e.clientX - rect.left - rect.width / 2;
   const my = e.clientY - rect.top - rect.height / 2;
@@ -236,7 +252,7 @@ function onWheel(e: WheelEvent) {
 
 function onPointerDown(e: PointerEvent) {
   if (zoom.value <= MIN_ZOOM) return;
-  releaseGoalCamera();
+  releaseSequenceCamera();
   isPanning = true;
   panStartX = e.clientX;
   panStartY = e.clientY;
@@ -256,7 +272,7 @@ function onPointerUp() {
 }
 
 function resetZoom() {
-  releaseGoalCamera();
+  releaseSequenceCamera();
   zoom.value = 1;
   panX.value = 0;
   panY.value = 0;
@@ -424,8 +440,9 @@ function startGoal(frame: NonNullable<PipelineReplay['frame']['value']>): void {
 }
 
 /** The user has zoomed or panned: the view is theirs, and stays where they put it. */
-function releaseGoalCamera(): void {
+function releaseSequenceCamera(): void {
   if (goal) goal.camera = null;
+  if (throwIn) throwIn.camera = null;
 }
 
 function stopGoal(): void {
@@ -445,7 +462,13 @@ watch(
   (now, before) => {
     lastStepWasPlayback =
       props.replay.isPlaying.value && now > before && now - before <= MAX_PLAYBACK_STEP_S;
-    if (!lastStepWasPlayback) stopGoal();
+    if (!lastStepWasPlayback) {
+      stopGoal();
+      stopThrowIn();
+      // After a seek, back or forward, a label is not the last throw-in
+      // labelled again, however close in time.
+      throwInEndedAt = null;
+    }
   },
   { flush: 'sync' }
 );
@@ -455,11 +478,131 @@ watch(
   (playing) => {
     if (playing) return;
     stopGoal();
+    stopThrowIn();
     settleGlow();
     settleRings();
     paint();
   }
 );
+
+// ── Throw-in sequence ───────────────────────────────────────────────────────
+//
+// When playback runs into a frame the pipeline labels a throw-in, the view
+// zooms in on the spot it is taken from, on the touchline level with the ball,
+// and a ring pulses there, until play is back on:
+// the label is over and valid frames have been flowing again for a few
+// seconds, not a cutaway (see throwInSequence.ts). Then it eases back out to the view the user had.
+//
+// Unlike the goal sequence it draws nothing in place of the data, but it does
+// move the view, so the same things stop it: pausing, seeking, stepping and
+// pressing on the drawing layer put the user's view straight back, and
+// zooming or panning hands the view to the user. Reduced motion keeps the
+// view where it is and holds the ring still.
+
+let throwIn: {
+  /** Where the throw-in is taken from, on the touchline, and the view zooms in. */
+  spot: { x: number; y: number };
+  startedMs: number | null;
+  elapsedMs: number;
+  /** Which way the view is easing: in, or back out once it lets go. */
+  ease: ThrowInEase;
+  /** Replay time the label, a gap or an empty frame last held it. */
+  busyAt: number;
+  camera: { from: Camera; to: Camera } | null;
+} | null = null;
+let throwInRaf: number | null = null;
+// The label stays on for many frames: only its first one starts a sequence.
+let throwInLabelSeen = false;
+/** Replay time the last sequence ended at, for THROW_IN_REPEAT_S. */
+let throwInEndedAt: number | null = null;
+/** Replay time the record on screen arrived: a gap in the data leaves it behind. */
+let frameArrivedAt = 0;
+/** Where the ball was last seen, for a label frame that has none. */
+let lastBallSeen: { x: number; y: number } | null = null;
+
+/** The ring pulsing on the throw-in spot while a sequence plays. */
+function throwInPulseLayer(): BallPulse | undefined {
+  if (!throwIn) return undefined;
+  return {
+    ...throwIn.spot,
+    phase: prefersReducedMotion() ? 0.3 : throwInPulse(throwIn.elapsedMs),
+  };
+}
+
+function throwInStep(ms: number): void {
+  throwInRaf = null;
+  if (!throwIn) return;
+  if (throwIn.startedMs === null) throwIn.startedMs = ms;
+  throwIn.elapsedMs = ms - throwIn.startedMs;
+  const frame = props.replay.frame.value;
+  const now = props.replay.currentTime.value;
+  let weight = throwInWeight(throwIn.ease, throwIn.elapsedMs);
+  if (frame) {
+    const state = {
+      labelled: isThrowInFrame(frame),
+      valid: isValidFrame(frame),
+      stale: now - frameArrivedAt > THROW_IN_STALE_S,
+    };
+    const busy = state.labelled || !state.valid || state.stale;
+    if (busy) throwIn.busyAt = now;
+    const holds = throwInHolds({ ...state, quietS: now - throwIn.busyAt });
+    // Labelled again, or cut away from, while easing out: turn back in from
+    // where the zoom has got to. Let go after holding: start back out.
+    const towards = throwIn.ease.towards === 0 ? (busy ? 1 : 0) : holds ? 1 : 0;
+    if (towards !== throwIn.ease.towards) {
+      throwIn.ease = { towards, fromWeight: weight, startMs: throwIn.elapsedMs };
+      weight = throwInWeight(throwIn.ease, throwIn.elapsedMs);
+    }
+  }
+  if (throwIn.ease.towards === 0 && weight === 0) {
+    stopThrowIn();
+    return;
+  }
+  if (throwIn.camera) showCamera(blendCamera(throwIn.camera.from, throwIn.camera.to, weight));
+  paint();
+  throwInRaf = window.requestAnimationFrame(throwInStep);
+}
+
+function startThrowIn(frame: NonNullable<PipelineReplay['frame']['value']>): void {
+  const ball = throwInBall(frame, lastBallSeen);
+  if (!ball) return;
+  const spot = throwInSpot(ball, frame.pitch_dimensions);
+  const from = cameraFromView({
+    zoom: zoom.value,
+    panX: panX.value,
+    panY: panY.value,
+    renderedWidth: renderedWidth(),
+  });
+  throwIn = {
+    spot,
+    startedMs: null,
+    elapsedMs: 0,
+    ease: { towards: 1, fromWeight: 0, startMs: 0 },
+    busyAt: props.replay.currentTime.value,
+    camera: prefersReducedMotion()
+      ? null
+      : { from, to: throwInCamera(spot, frame.pitch_dimensions) },
+  };
+  throwInRaf = window.requestAnimationFrame(throwInStep);
+}
+
+/** End the sequence, putting back the view it started from unless the user took it over. */
+function stopThrowIn(): void {
+  if (!throwIn && throwInRaf === null) return;
+  if (throwInRaf !== null) window.cancelAnimationFrame(throwInRaf);
+  throwInRaf = null;
+  const camera = throwIn?.camera;
+  throwIn = null;
+  throwInEndedAt = props.replay.currentTime.value;
+  if (camera) showCamera(camera.from);
+  paint();
+}
+
+/** Someone wants the real frame and their own view: end both sequences. */
+function stopSequences(): void {
+  stopGoal();
+  stopThrowIn();
+}
 
 // ── Team phase labels ───────────────────────────────────────────────────────
 //
@@ -697,9 +840,27 @@ watch(
     if (!frame) return;
     if (frame !== prevFrame) {
       ensureRenderer();
+      frameArrivedAt = now;
       const labelled = isGoalFrame(frame);
-      if (labelled && !goalLabelSeen && !goal && lastStepWasPlayback) startGoal(frame);
+      if (labelled && !goalLabelSeen && !goal && lastStepWasPlayback) {
+        // The goal frames the shot from the user's own view, not a throw-in's.
+        stopThrowIn();
+        startGoal(frame);
+      }
       goalLabelSeen = labelled;
+      const thrown = isThrowInFrame(frame);
+      if (
+        thrown &&
+        !throwInLabelSeen &&
+        !throwIn &&
+        !goal &&
+        lastStepWasPlayback &&
+        (throwInEndedAt === null || now - throwInEndedAt >= THROW_IN_REPEAT_S)
+      ) {
+        startThrowIn(frame);
+      }
+      throwInLabelSeen = thrown;
+      lastBallSeen = throwInBall(frame, lastBallSeen);
     }
     // A fade that has just finished still needs the paint that shows its end.
     const wasFading = ringsFading();
@@ -734,6 +895,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   stopGoal();
+  stopThrowIn();
   stopGlowLoop();
   dprQuery?.removeEventListener('change', onPixelRatioChange);
   dprQuery = null;
@@ -851,7 +1013,7 @@ onUnmounted(() => {
             data-testid="pipeline-overlay"
             class="absolute"
             :style="boxStyle"
-            @pointerdown.capture="stopGoal"
+            @pointerdown.capture="stopSequences"
           >
             <!--
               Not replay.currentFrame: that is the pipeline's own frame_count,

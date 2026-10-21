@@ -1,7 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { nearbyTrackIds, possessionTrackIds, useRenderer2D } from '@/lib/vis/useRenderer2D';
+import {
+  nearbyTrackIds,
+  possessionTrackIds,
+  useRenderer2D,
+  type GoalOverlay,
+} from '@/lib/vis/useRenderer2D';
+import type { AttackGlow } from '@/lib/vis/attackGlow';
 import type { Frame } from '@/lib/vis/types';
 import {
+  THROW_IN_PULSE_COLOR,
   PERSON_COLORS,
   DIMMED_PLAYER_ALPHA,
   NEARBY_OUTLINE,
@@ -161,9 +168,9 @@ describe('focus around the ball', () => {
     } as unknown as Frame;
   }
 
-  function render(frame: Frame, overlay?: Parameters<ReturnType<typeof useRenderer2D>['renderFrame']>[1]) {
+  function render(frame: Frame, overlay?: GoalOverlay | undefined) {
     const { canvas, ops } = fakeCanvas();
-    useRenderer2D(canvas).renderFrame(frame, overlay);
+    useRenderer2D(canvas).renderFrame(frame, { goal: overlay });
     return ops;
   }
 
@@ -311,7 +318,7 @@ describe('nearby highlight', () => {
   /** Every stroke drawn around the marker at (x, y), in order, with its opacity. */
   function strokesOf(f: Frame, nearby: ReadonlyMap<number, number>, x: number, y = 0) {
     const { canvas, ops } = fakeCanvas();
-    useRenderer2D(canvas).renderFrame(f, undefined, undefined, { nearby, possession: new Map() });
+    useRenderer2D(canvas).renderFrame(f, { rings: { nearby, possession: new Map() } });
     const [px, py] = worldToPx(x, y, build2DTransform(PITCH));
     const at = ops.findIndex(
       (o) => o.op === 'arc' && o.args[0] === px && o.args[1] === py && o.args[2] === PLAYER_RADIUS
@@ -371,9 +378,7 @@ describe('nearby highlight', () => {
     const { canvas, ops } = fakeCanvas();
     useRenderer2D(canvas).renderFrame(
       f,
-      undefined,
-      undefined,
-      possession ? { nearby: new Map(), possession } : undefined
+      possession ? { rings: { nearby: new Map(), possession } } : {}
     );
     const [px, py] = worldToPx(x, 0, build2DTransform(PITCH));
     const at = ops.findIndex(
@@ -420,9 +425,9 @@ describe('goals and the goal sequence', () => {
     balls: [{ projected_coordinates: { x: 10, y: 4 } }],
   } as unknown as Frame;
 
-  function render(overlay?: Parameters<ReturnType<typeof useRenderer2D>['renderFrame']>[1]) {
+  function render(overlay?: GoalOverlay | undefined) {
     const { canvas, ops } = fakeCanvas();
-    useRenderer2D(canvas).renderFrame(ballFrame, overlay);
+    useRenderer2D(canvas).renderFrame(ballFrame, { goal: overlay });
     return ops;
   }
   const arcAt = (ops: Op[], x: number, y: number) => {
@@ -493,9 +498,9 @@ describe('attack glow', () => {
   const [lineLeft] = px(-PITCH.length / 2);
   const [lineRight] = px(PITCH.length / 2);
 
-  function render(glow?: Parameters<ReturnType<typeof useRenderer2D>['renderFrame']>[2], overlay?: Parameters<ReturnType<typeof useRenderer2D>['renderFrame']>[1], f: Frame = frame) {
+  function render(glow?: AttackGlow | undefined, overlay?: GoalOverlay | undefined, f: Frame = frame) {
     const { canvas, ops } = fakeCanvas();
-    useRenderer2D(canvas).renderFrame(f, overlay, glow);
+    useRenderer2D(canvas).renderFrame(f, { goal: overlay, glow });
     return ops;
   }
   /** The shaded attack area: a fill in the team colour inside the goal lines. */
@@ -605,12 +610,11 @@ describe('attack glow', () => {
     return shapes;
   }
 
-  function renderWithBall(ballX: number, glow: Parameters<ReturnType<typeof useRenderer2D>['renderFrame']>[2]) {
+  function renderWithBall(ballX: number, glow: AttackGlow | undefined) {
     const { canvas, ops } = fakeCanvas();
     useRenderer2D(canvas).renderFrame(
       { ...frame, balls: [{ projected_coordinates: { x: ballX, y: 0 } }] } as Frame,
-      undefined,
-      glow
+      { glow }
     );
     return ops;
   }
@@ -776,5 +780,60 @@ describe('resolution', () => {
     Object.assign(canvas, { width: 1280, height: 720 });
     renderer.renderFrame(frameWith({}));
     expect(offscreen.sizes.at(-1)).toEqual([1280, 720]);
+  });
+});
+
+describe('throw-in pulse', () => {
+  const T = build2DTransform(PITCH);
+  const frame = {
+    pitch_dimensions: PITCH,
+    teams: [],
+    balls: [{ projected_coordinates: { x: 10, y: -30 } }],
+  } as unknown as Frame;
+
+  /** The pulse rings drawn: arcs stroked in the pulse colour, after the ball. */
+  function pulses(ballPulse?: { x: number; y: number; phase: number }) {
+    const { canvas, ops } = fakeCanvas();
+    useRenderer2D(canvas).renderFrame(frame, ballPulse ? { ballPulse } : {});
+    const rings: Array<{ x: number; y: number; r: number; alpha: number }> = [];
+    let arc: Op | null = null;
+    for (const o of ops) {
+      if (o.op === 'arc') arc = o;
+      else if (o.op === 'stroke' && o.strokeStyle === THROW_IN_PULSE_COLOR && arc) {
+        rings.push({
+          x: Number(arc.args[0]),
+          y: Number(arc.args[1]),
+          r: Number(arc.args[2]),
+          alpha: o.globalAlpha,
+        });
+      }
+    }
+    return rings;
+  }
+
+  it('draws nothing without a pulse', () => {
+    expect(pulses()).toHaveLength(0);
+  });
+
+  it('rings the point it is given', () => {
+    const [px, py] = worldToPx(10, -30, T);
+    const [ring] = pulses({ x: 10, y: -30, phase: 0.3 });
+    expect(ring).toMatchObject({ x: px, y: py });
+  });
+
+  // A ring that grows out from the ball and fades as it goes: the pulse.
+  it('grows and fades as the pulse runs', () => {
+    const early = pulses({ x: 10, y: -30, phase: 0.1 })[0]!;
+    const late = pulses({ x: 10, y: -30, phase: 0.8 })[0]!;
+    expect(late.r).toBeGreaterThan(early.r);
+    expect(late.alpha).toBeLessThan(early.alpha);
+  });
+
+  it('starts each pulse where the last one ended without a jump', () => {
+    const start = pulses({ x: 10, y: -30, phase: 0 })[0]!;
+    const end = pulses({ x: 10, y: -30, phase: 0.9999 })[0];
+    // Fully faded at the end of one pulse, so the next starting small is not seen to jump.
+    expect(end === undefined || end.alpha < 0.01).toBe(true);
+    expect(start.alpha).toBeGreaterThan(0.5);
   });
 });

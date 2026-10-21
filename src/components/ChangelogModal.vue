@@ -117,6 +117,13 @@ useEscapeToClose(() => props.isVisible, closeModal);
 // Add new entries to the TOP of this array
 const changelogEntries = ref([
   {
+    version: 'Beta v3.24',
+    date: 'October 21, 2026',
+    changes: [
+      'Throw-ins on the 2D replay: the view zooms in on the spot on the touchline where the throw-in is taken, with a pulsing ring, and eases back out once play is back on. It stays zoomed in while the broadcast cuts away',
+    ],
+  },
+  {
     version: 'Beta v3.23',
     date: 'October 21, 2026',
     changes: [
