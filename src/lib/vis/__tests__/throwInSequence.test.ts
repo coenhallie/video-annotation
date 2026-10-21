@@ -7,6 +7,7 @@ import {
   throwInWeight,
   throwInHolds,
   throwInPulse,
+  throwInSpot,
   THROW_IN_IN_MS,
   THROW_IN_OUT_MS,
   THROW_IN_SETTLE_S,
@@ -82,6 +83,26 @@ describe('throwInBall', () => {
       y: 33,
     });
     expect(throwInBall(frame({ ball: null }), null)).toBeNull();
+  });
+});
+
+// A throw-in is taken from the touchline, wherever the tracked ball is.
+describe('throwInSpot', () => {
+  it('is on the nearer touchline, level with the ball', () => {
+    expect(throwInSpot({ x: 10, y: -30 }, PITCH)).toEqual({ x: 10, y: -34 });
+    expect(throwInSpot({ x: -20, y: 12 }, PITCH)).toEqual({ x: -20, y: 34 });
+  });
+
+  it('brings a ball tracked beyond the touchline back onto it', () => {
+    expect(throwInSpot({ x: 3, y: -41 }, PITCH)).toEqual({ x: 3, y: -34 });
+  });
+
+  it('stays between the goal lines', () => {
+    expect(throwInSpot({ x: 60, y: 30 }, PITCH)).toEqual({ x: 52.5, y: 34 });
+  });
+
+  it('follows the pitch it is given', () => {
+    expect(throwInSpot({ x: 0, y: 5 }, { length: 100, width: 60 })).toEqual({ x: 0, y: 30 });
   });
 });
 

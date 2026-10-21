@@ -1,11 +1,11 @@
 import type { Frame, PitchDimensions } from './types';
-import { build2DTransform, worldToPx } from './pitchGeometry';
+import { build2DTransform, resolvePitchDimensions, worldToPx } from './pitchGeometry';
 import { FRAME_W, FRAME_H } from './constants';
 
 /**
  * The throw-in sequence: when the pipeline labels a frame a throw-in, the view
- * zooms in on the ball, a ring pulses around it, and the view eases back out
- * once play is back on.
+ * zooms in on the spot it is taken from, on the touchline level with the ball,
+ * a ring pulses there, and the view eases back out once play is back on.
  *
  * "Back on" is not the ball crossing back over the touchline: measured on a
  * full match, the tracked ball goes over the touchline before only 11 of 60
@@ -103,15 +103,31 @@ export function throwInBall(frame: Frame, lastSeen: Point | null): Point | null 
 }
 
 /**
- * The view centred on the ball, in frame units (1280x720) like the surface's
- * own zoom and pan. Never centred so near an edge that it would show past the
- * frame, which a ball at or beyond the touchline would otherwise do.
+ * Where the throw-in is taken from: on the touchline nearer the ball, level
+ * with it, and between the goal lines. A throw-in is never taken inside the
+ * pitch, wherever the tracked ball is: on a full match it is well inside the
+ * pitch when most throw-in labels begin.
+ */
+export function throwInSpot(ball: Point, pd: Partial<PitchDimensions> | undefined): Point {
+  const dims = resolvePitchDimensions(pd);
+  const halfLength = dims.length.value / 2;
+  const halfWidth = dims.width.value / 2;
+  return {
+    x: clamp(ball.x, -halfLength, halfLength),
+    y: ball.y < 0 ? -halfWidth : halfWidth,
+  };
+}
+
+/**
+ * The view centred on `spot` (throwInSpot), in frame units (1280x720) like
+ * the surface's own zoom and pan. Never centred so near an edge that it would
+ * show past the frame, which a spot on the touchline would otherwise do.
  */
 export function throwInCamera(
-  ball: Point,
+  spot: Point,
   pd: Partial<PitchDimensions> | undefined,
 ): { zoom: number; x: number; y: number } {
-  const [bx, by] = worldToPx(ball.x, ball.y, build2DTransform(pd));
+  const [bx, by] = worldToPx(spot.x, spot.y, build2DTransform(pd));
   const halfW = FRAME_W / (2 * THROW_IN_ZOOM);
   const halfH = FRAME_H / (2 * THROW_IN_ZOOM);
   return {

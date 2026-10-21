@@ -137,8 +137,9 @@ export interface RingStrengths {
 }
 
 /**
- * A ring pulsing around the ball during a throw-in: where, in pitch metres,
- * and how far through one pulse it is, from 0 to 1. See throwInSequence.ts.
+ * A ring pulsing on the throw-in spot during a throw-in: where, in pitch
+ * metres, and how far through one pulse it is, from 0 to 1. See
+ * throwInSequence.ts.
  */
 export interface BallPulse {
   x: number
@@ -154,7 +155,7 @@ export interface FrameLayers {
   glow?: AttackGlow | undefined
   /** Ring strengths, for a caller that fades the rings in and out. */
   rings?: RingStrengths | undefined
-  /** The throw-in pulse, over the ball. */
+  /** The throw-in pulse, over the players and ball. */
   ballPulse?: BallPulse | undefined
 }
 
@@ -468,7 +469,7 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     ctx.globalAlpha = before
   }
 
-  /** One ring of the throw-in pulse: growing out from the ball and fading. */
+  /** One ring of the throw-in pulse: growing out from its spot and fading. */
   function drawBallPulse(pulse: BallPulse): void {
     if (!transform2d || !Number.isFinite(pulse.x) || !Number.isFinite(pulse.y)) return
     const [px, py] = worldToPx(pulse.x, pulse.y, transform2d)

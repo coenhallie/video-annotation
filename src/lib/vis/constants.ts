@@ -93,7 +93,7 @@ export const NEARBY_METRES = 15
 export const RING_FADE_S = 0.6
 
 /**
- * The ring that pulses around the ball during a throw-in (throwInSequence.ts).
+ * The ring that pulses on the throw-in spot (throwInSequence.ts).
  * Cyan, as every other colour on the pitch already means something: white is
  * the players near the ball, gold the ball carrier, yellow and magenta the
  * keepers and officials, red and blue the teams.

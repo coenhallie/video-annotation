@@ -1355,7 +1355,17 @@ describe('PipelineOutputSurface', () => {
       await tick(replay, THROW_IN());
       await play(replay, 800, THROW_IN);
       expect(lastView()!.zoom).toBeCloseTo(THROW_IN_ZOOM, 6);
-      expect(lastPulse()).toMatchObject({ x: 10, y: -30 });
+      // On the touchline, level with the ball at (10, -30).
+      expect(lastPulse()).toMatchObject({ x: 10, y: -34 });
+      m.unmount();
+    });
+
+    // The spot is fixed, wherever the tracked ball goes while it plays.
+    it('keeps the ring on the throw-in spot as the ball moves', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, THROW_IN());
+      await play(replay, 400, () => matchFrame({ labels: ['Throw in'], ball: { x: 14, y: -20 } }));
+      expect(lastPulse()).toMatchObject({ x: 10, y: -34 });
       m.unmount();
     });
 
@@ -1453,7 +1463,7 @@ describe('PipelineOutputSurface', () => {
       await tick(replay, matchFrame({ ball: { x: -20, y: 31 } }));
       await tick(replay, matchFrame({ labels: ['Throw in'], ball: null }));
       await animate(800);
-      expect(lastPulse()).toMatchObject({ x: -20, y: 31 });
+      expect(lastPulse()).toMatchObject({ x: -20, y: 34 });
       m.unmount();
     });
 

@@ -16,6 +16,7 @@ import {
   throwInWeight,
   throwInHolds,
   throwInPulse,
+  throwInSpot,
   type ThrowInEase,
   THROW_IN_REPEAT_S,
   THROW_IN_STALE_S,
@@ -487,7 +488,8 @@ watch(
 // ── Throw-in sequence ───────────────────────────────────────────────────────
 //
 // When playback runs into a frame the pipeline labels a throw-in, the view
-// zooms in on the ball and a ring pulses around it, until play is back on:
+// zooms in on the spot it is taken from, on the touchline level with the ball,
+// and a ring pulses there, until play is back on:
 // the label is over and valid frames have been flowing again for a few
 // seconds, not a cutaway (see throwInSequence.ts). Then it eases back out to the view the user had.
 //
@@ -498,8 +500,8 @@ watch(
 // view where it is and holds the ring still.
 
 let throwIn: {
-  /** Where the view zooms in: the ball when the label began. */
-  ball: { x: number; y: number };
+  /** Where the throw-in is taken from, on the touchline, and the view zooms in. */
+  spot: { x: number; y: number };
   startedMs: number | null;
   elapsedMs: number;
   /** Which way the view is easing: in, or back out once it lets go. */
@@ -518,13 +520,11 @@ let frameArrivedAt = 0;
 /** Where the ball was last seen, for a label frame that has none. */
 let lastBallSeen: { x: number; y: number } | null = null;
 
-/** The pulse around the ball while a sequence plays: the ball on screen, or where it began. */
+/** The ring pulsing on the throw-in spot while a sequence plays. */
 function throwInPulseLayer(): BallPulse | undefined {
   if (!throwIn) return undefined;
-  const frame = props.replay.frame.value;
-  const ball = (frame && throwInBall(frame, null)) ?? throwIn.ball;
   return {
-    ...ball,
+    ...throwIn.spot,
     phase: prefersReducedMotion() ? 0.3 : throwInPulse(throwIn.elapsedMs),
   };
 }
@@ -566,6 +566,7 @@ function throwInStep(ms: number): void {
 function startThrowIn(frame: NonNullable<PipelineReplay['frame']['value']>): void {
   const ball = throwInBall(frame, lastBallSeen);
   if (!ball) return;
+  const spot = throwInSpot(ball, frame.pitch_dimensions);
   const from = cameraFromView({
     zoom: zoom.value,
     panX: panX.value,
@@ -573,14 +574,14 @@ function startThrowIn(frame: NonNullable<PipelineReplay['frame']['value']>): voi
     renderedWidth: renderedWidth(),
   });
   throwIn = {
-    ball,
+    spot,
     startedMs: null,
     elapsedMs: 0,
     ease: { towards: 1, fromWeight: 0, startMs: 0 },
     busyAt: props.replay.currentTime.value,
     camera: prefersReducedMotion()
       ? null
-      : { from, to: throwInCamera(ball, frame.pitch_dimensions) },
+      : { from, to: throwInCamera(spot, frame.pitch_dimensions) },
   };
   throwInRaf = window.requestAnimationFrame(throwInStep);
 }
