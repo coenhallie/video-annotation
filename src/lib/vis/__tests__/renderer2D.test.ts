@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { useRenderer2D } from '@/lib/vis/useRenderer2D';
+import { nearbyTrackIds, useRenderer2D } from '@/lib/vis/useRenderer2D';
 import type { Frame } from '@/lib/vis/types';
 import {
   PERSON_COLORS,
@@ -306,6 +306,64 @@ describe('nearby highlight', () => {
     ]);
     expect(outlineOf(f, 50)).toBe(away.fill);
     expect(goalkeeper.fill).not.toBe(away.fill);
+  });
+
+  /** Every stroke drawn around the marker at (x, y), in order, with its opacity. */
+  function strokesOf(f: Frame, rings: ReadonlyMap<number, number>, x: number, y = 0) {
+    const { canvas, ops } = fakeCanvas();
+    useRenderer2D(canvas).renderFrame(f, undefined, undefined, rings);
+    const [px, py] = worldToPx(x, y, build2DTransform(PITCH));
+    const at = ops.findIndex(
+      (o) => o.op === 'arc' && o.args[0] === px && o.args[1] === py && o.args[2] === PLAYER_RADIUS
+    );
+    const end = ops.findIndex((o, i) => i > at && o.op === 'fillText');
+    return ops
+      .slice(at, end === -1 ? undefined : end)
+      .filter((o) => o.op === 'stroke' && o.strokeStyle !== '#ffd700')
+      .map((o) => ({ color: o.strokeStyle, alpha: o.globalAlpha }));
+  }
+
+  // Track ids are 1, 2, ... in the order the people are listed.
+  it('lays a ring that is fading in over the usual outline, at its strength', () => {
+    const f = frame([{ team: 0, x: 0, ball: true }, { team: 0, x: 14 }]);
+    expect(strokesOf(f, new Map([[2, 0.4]]), 14)).toEqual([
+      { color: home.outline, alpha: 1 },
+      { color: NEARBY_OUTLINE, alpha: 0.4 },
+    ]);
+  });
+
+  it('draws a ring at full strength in white alone', () => {
+    const f = frame([{ team: 0, x: 0, ball: true }, { team: 0, x: 14 }]);
+    expect(strokesOf(f, new Map([[2, 1]]), 14)).toEqual([{ color: NEARBY_OUTLINE, alpha: 1 }]);
+  });
+
+  // The strengths say who is ringed: one fading out is still drawn after the
+  // player has left the area, and one not yet faded in is not drawn at all.
+  it('follows the strengths it is given rather than the frame', () => {
+    const f = frame([{ team: 0, x: 0, ball: true }, { team: 0, x: 14 }, { team: 0, x: 30 }]);
+    expect(strokesOf(f, new Map([[3, 0.5]]), 30)).toEqual([
+      { color: home.outline, alpha: 1 },
+      { color: NEARBY_OUTLINE, alpha: 0.5 },
+    ]);
+    expect(strokesOf(f, new Map(), 14)).toEqual([{ color: home.outline, alpha: 1 }]);
+  });
+
+  it('fades a ring with its player', () => {
+    // Far from the ball, so the marker itself is faded.
+    const f = { ...frame([{ team: 0, x: 0, ball: true }, { team: 0, x: 30 }]), balls: [{ projected_coordinates: { x: 0, y: 0 } }] } as Frame;
+    const strokes = strokesOf(f, new Map([[2, 0.5]]), 30);
+    expect(strokes[1]!.alpha).toBeCloseTo(DIMMED_PLAYER_ALPHA * 0.5, 6);
+  });
+
+  it('names the players near the ball carrier by track id', () => {
+    const f = frame([
+      { team: 0, x: 0, ball: true },
+      { team: 0, x: 14 },
+      { team: 0, x: 16 },
+      { team: 1, x: 3 },
+    ]);
+    expect([...nearbyTrackIds(f)].sort()).toEqual([1, 2]);
+    expect(nearbyTrackIds(frame([{ team: 0, x: 0 }, { team: 0, x: 5 }])).size).toBe(0);
   });
 
   // White is the highlight now, so it cannot also be every marker's edge.

@@ -5,7 +5,9 @@ import {
   ATTACK_HOLD_S,
   POSSESSION_FORGET_S,
   PHASE_LOOKBACK_S,
+  samePhase,
   type PhaseRecord,
+  type TeamPhase,
 } from '@/lib/vis/teamPhase';
 import type { Frame } from '@/lib/vis/types';
 
@@ -210,5 +212,33 @@ describe('teamPhaseAt: states', () => {
   // still affect the answer, so it never differs from unlimited memory.
   it('remembers far enough back for the answer never to depend on the window', () => {
     expect(PHASE_LOOKBACK_S).toBeGreaterThan(POSSESSION_HOLD_S + ATTACK_HOLD_S + POSSESSION_FORGET_S);
+  });
+});
+
+describe('samePhase', () => {
+  const base: TeamPhase = {
+    possession: 0,
+    attacks: { 0: 1, 1: -1 },
+    states: { 0: 'attacking', 1: 'defending' },
+  };
+  const copy = (): TeamPhase => JSON.parse(JSON.stringify(base));
+
+  it('is true for two phases that say the same thing', () => {
+    expect(samePhase(base, copy())).toBe(true);
+  });
+
+  it('tells apart a change of possession', () => {
+    expect(samePhase(base, { ...copy(), possession: 1 })).toBe(false);
+    expect(samePhase(base, { ...copy(), possession: null })).toBe(false);
+  });
+
+  it('tells apart a change of direction', () => {
+    expect(samePhase(base, { ...copy(), attacks: { 0: -1, 1: -1 } })).toBe(false);
+    expect(samePhase(base, { ...copy(), attacks: { 0: 1, 1: null } })).toBe(false);
+  });
+
+  it('tells apart a change of state', () => {
+    expect(samePhase(base, { ...copy(), states: { 0: null, 1: 'defending' } })).toBe(false);
+    expect(samePhase(base, { ...copy(), states: { 0: 'attacking', 1: null } })).toBe(false);
   });
 });

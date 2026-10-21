@@ -117,6 +117,15 @@ useEscapeToClose(() => props.isVisible, closeModal);
 // Add new entries to the TOP of this array
 const changelogEntries = ref([
   {
+    version: 'Beta v3.22',
+    date: 'October 21, 2026',
+    changes: [
+      'The 2D replay uses much less processing power while it plays, so it runs more smoothly on slower computers',
+      'Players far from the ball are faded further, so the play around the ball stands out more',
+      'The white rings on the players near the ball fade in and out instead of switching on and off',
+    ],
+  },
+  {
     version: 'Beta v3.21',
     date: 'October 20, 2026',
     changes: [

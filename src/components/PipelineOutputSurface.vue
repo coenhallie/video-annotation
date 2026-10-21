@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted, computed } from 'vue';
-import { useRenderer2D, type GoalOverlay } from '@/lib/vis/useRenderer2D';
+import {
+  nearbyTrackIds,
+  useRenderer2D,
+  type GoalOverlay,
+  type TrackId,
+} from '@/lib/vis/useRenderer2D';
 import { CHEVRON_FLOW_PERIOD_S, type AttackGlow } from '@/lib/vis/attackGlow';
 import {
   goalCamera,
@@ -12,7 +17,7 @@ import {
   type GoalPlan,
   type GoalState,
 } from '@/lib/vis/goalSequence';
-import { FRAME_W, FRAME_H, PERSON_COLORS } from '@/lib/vis/constants';
+import { FRAME_W, FRAME_H, NEARBY_FADE_S, PERSON_COLORS } from '@/lib/vis/constants';
 import type { TeamId, TeamState } from '@/lib/vis/teamPhase';
 import {
   cameraFromView,
@@ -90,7 +95,7 @@ function pushView(): void {
  */
 function paint(): void {
   const frame = props.replay.frame.value;
-  if (frame) renderer?.renderFrame(frame, goalOverlay(), glowValue());
+  if (frame) renderer?.renderFrame(frame, goalOverlay(), glowValue(), new Map(rings));
 }
 
 watch([zoom, panX, panY], pushView, { flush: 'post' });
@@ -445,6 +450,7 @@ watch(
     if (playing) return;
     stopGoal();
     settleGlow();
+    settleRings();
     paint();
   }
 );
@@ -593,6 +599,46 @@ function settleGlow(): void {
   if (glow.target === 0) glow = null;
 }
 
+// ── Nearby rings ────────────────────────────────────────────────────────────
+//
+// The white rings on the players near the ball (nearbyTrackIds). Who that is
+// changes many times a minute, and rings snapping on and off with it were
+// jarring, so during playback each fades in and out over NEARBY_FADE_S of
+// replay time. Anywhere else they show the frame's own rings at once, like the
+// glow, and reduced motion never fades.
+
+/** How strong each ring is, by track id. Absent means no ring. */
+const rings = new Map<TrackId, number>();
+
+/** Rings partway through a fade, which need a repaint as the clock moves. */
+function ringsFading(): boolean {
+  for (const strength of rings.values()) if (strength < 1) return true;
+  return false;
+}
+
+/** Fade the rings toward the frame's own by `dt` seconds, or set them at once. */
+function updateRings(dt: number | null): void {
+  const frame = props.replay.frame.value;
+  const near = frame ? nearbyTrackIds(frame) : new Set<TrackId>();
+  if (dt === null) {
+    rings.clear();
+    for (const id of near) rings.set(id, 1);
+    return;
+  }
+  const step = dt / NEARBY_FADE_S;
+  for (const id of near) if (!rings.has(id)) rings.set(id, 0);
+  for (const [id, strength] of rings) {
+    const next = near.has(id) ? Math.min(1, strength + step) : Math.max(0, strength - step);
+    if (next > 0) rings.set(id, next);
+    else rings.delete(id);
+  }
+}
+
+/** Finish any fade at once: the frame on screen shows its own rings. */
+function settleRings(): void {
+  updateRings(null);
+}
+
 function ensureRenderer() {
   const canvas = canvasRef.value;
   if (!canvas || renderer) return;
@@ -628,10 +674,10 @@ watch(
     () => props.replay.phase.value,
     () => props.replay.currentTime.value,
   ],
-  ([frame, phase], [prevFrame, prevPhase]) => {
-    if (phase !== prevPhase) {
-      updateGlow(props.replay.isPlaying.value && lastStepWasPlayback && !prefersReducedMotion());
-    }
+  ([frame, phase, now], [prevFrame, prevPhase, before]) => {
+    const playing =
+      props.replay.isPlaying.value && lastStepWasPlayback && !prefersReducedMotion();
+    if (phase !== prevPhase) updateGlow(playing);
     if (!frame) return;
     if (frame !== prevFrame) {
       ensureRenderer();
@@ -639,7 +685,18 @@ watch(
       if (labelled && !goalLabelSeen && !goal && lastStepWasPlayback) startGoal(frame);
       goalLabelSeen = labelled;
     }
-    if (frame !== prevFrame || phase !== prevPhase || glowValue()) paint();
+    // A fade that has just finished still needs the paint that shows its end.
+    const wasFading = ringsFading();
+    updateRings(playing ? Math.max(0, now - before) : null);
+    if (
+      frame !== prevFrame ||
+      phase !== prevPhase ||
+      glowValue() ||
+      wasFading ||
+      ringsFading()
+    ) {
+      paint();
+    }
   },
   { flush: 'post' }
 );

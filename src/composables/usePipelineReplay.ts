@@ -1,7 +1,7 @@
 import { computed, ref, type Ref } from 'vue';
 import type { Frame } from '@/lib/vis/types';
 import { parseWindowAt, type ReplayRecord } from '@/lib/pipelineData/frameWindow';
-import { teamPhaseAt, PHASE_LOOKBACK_S, type TeamPhase } from '@/lib/vis/teamPhase';
+import { samePhase, teamPhaseAt, PHASE_LOOKBACK_S, type TeamPhase } from '@/lib/vis/teamPhase';
 import {
   buildIndex,
   estimateOffset,
@@ -293,7 +293,7 @@ export function usePipelineReplay(opts: {
       touch(win);
       // A window that arrives after its frame was shown may hold the history
       // that frame's phase was missing.
-      if (shown) phase.value = phaseFor(shown);
+      if (shown) setPhase(phaseFor(shown));
     }
     return { from, end, first, last, firstOffset, lastOffset, win };
   }
@@ -469,11 +469,24 @@ export function usePipelineReplay(opts: {
     );
   }
 
+  /**
+   * Replace the phase only when it says something new. It is worked out for
+   * every record but holds for seconds at a time, and every replacement
+   * re-renders and repaints whatever shows it.
+   */
+  function setPhase(next: TeamPhase): void {
+    if (!phase.value || !samePhase(phase.value, next)) phase.value = next;
+  }
+
   function show(record: ReplayRecord): void {
+    // The clock ticks at display rate, faster than records arrive, so most
+    // ticks show the record already on screen: nothing about it has changed.
+    // When the history behind it does, readWindow works the phase out again.
+    if (record === shown) return;
     shown = record;
     frame.value = record.frame;
     currentFrame.value = record.frameCount;
-    phase.value = phaseFor(record);
+    setPhase(phaseFor(record));
   }
 
   function fail(err: unknown): void {
