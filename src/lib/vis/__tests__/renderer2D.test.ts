@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { nearbyTrackIds, useRenderer2D } from '@/lib/vis/useRenderer2D';
+import { nearbyTrackIds, possessionTrackIds, useRenderer2D } from '@/lib/vis/useRenderer2D';
 import type { Frame } from '@/lib/vis/types';
 import {
   PERSON_COLORS,
@@ -309,9 +309,9 @@ describe('nearby highlight', () => {
   });
 
   /** Every stroke drawn around the marker at (x, y), in order, with its opacity. */
-  function strokesOf(f: Frame, rings: ReadonlyMap<number, number>, x: number, y = 0) {
+  function strokesOf(f: Frame, nearby: ReadonlyMap<number, number>, x: number, y = 0) {
     const { canvas, ops } = fakeCanvas();
-    useRenderer2D(canvas).renderFrame(f, undefined, undefined, rings);
+    useRenderer2D(canvas).renderFrame(f, undefined, undefined, { nearby, possession: new Map() });
     const [px, py] = worldToPx(x, y, build2DTransform(PITCH));
     const at = ops.findIndex(
       (o) => o.op === 'arc' && o.args[0] === px && o.args[1] === py && o.args[2] === PLAYER_RADIUS
@@ -364,6 +364,45 @@ describe('nearby highlight', () => {
     ]);
     expect([...nearbyTrackIds(f)].sort()).toEqual([1, 2]);
     expect(nearbyTrackIds(frame([{ team: 0, x: 0 }, { team: 0, x: 5 }])).size).toBe(0);
+  });
+
+  /** The gold possession ring drawn around the marker at (x, y), if any. */
+  function possessionRingOf(f: Frame, possession: ReadonlyMap<number, number> | null, x: number) {
+    const { canvas, ops } = fakeCanvas();
+    useRenderer2D(canvas).renderFrame(
+      f,
+      undefined,
+      undefined,
+      possession ? { nearby: new Map(), possession } : undefined
+    );
+    const [px, py] = worldToPx(x, 0, build2DTransform(PITCH));
+    const at = ops.findIndex(
+      (o) => o.op === 'arc' && o.args[0] === px && o.args[1] === py && o.args[2] === PLAYER_RADIUS + 4
+    );
+    if (at === -1) return null;
+    const stroke = ops.slice(at).find((o) => o.op === 'stroke');
+    return stroke?.strokeStyle === '#ffd700' ? { alpha: stroke.globalAlpha } : null;
+  }
+
+  it('draws the possession ring on the carrier at once without strengths', () => {
+    const f = frame([{ team: 0, x: 0, ball: true }, { team: 0, x: 14 }]);
+    expect(possessionRingOf(f, null, 0)).toEqual({ alpha: 1 });
+    expect(possessionRingOf(f, null, 14)).toBeNull();
+  });
+
+  // As with the white rings, the strengths say who has one: a ring fading out
+  // after the ball has gone, and none yet on a player who has just got it.
+  it('draws the possession ring at the strength it is given', () => {
+    const f = frame([{ team: 0, x: 0, ball: true }, { team: 0, x: 14 }]);
+    expect(possessionRingOf(f, new Map([[1, 0.5]]), 0)).toEqual({ alpha: 0.5 });
+    expect(possessionRingOf(f, new Map([[2, 0.3]]), 14)).toEqual({ alpha: 0.3 });
+    expect(possessionRingOf(f, new Map(), 0)).toBeNull();
+  });
+
+  it('names the players with the ball by track id', () => {
+    const f = frame([{ team: 0, x: 0, ball: true }, { team: 0, x: 14 }, { team: 1, x: 3 }]);
+    expect([...possessionTrackIds(f)]).toEqual([1]);
+    expect(possessionTrackIds(frame([{ team: 0, x: 0 }])).size).toBe(0);
   });
 
   // White is the highlight now, so it cannot also be every marker's edge.

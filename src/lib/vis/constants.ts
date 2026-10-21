@@ -85,8 +85,9 @@ export const NEARBY_OUTLINE = '#ffffff'
 export const NEARBY_METRES = 15
 
 /**
- * Seconds for a white ring to fade in or out during playback. Who is near the
- * ball changes many times a minute, and rings snapping on and off with it were
- * jarring. Short, so a ring still follows the play.
+ * Seconds for a ring, the white one on the players near the ball or the gold
+ * possession ring, to fade in or out during playback. Who has the ball, and
+ * so who is near it, changes many times a minute, and rings snapping on and
+ * off with it were jarring. Tried 0.4 s first, which still felt abrupt.
  */
-export const NEARBY_FADE_S = 0.4
+export const RING_FADE_S = 0.6

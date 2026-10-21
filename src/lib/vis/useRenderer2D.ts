@@ -112,6 +112,30 @@ export function nearbyTrackIds(frame: Frame): Set<TrackId> {
 }
 
 /**
+ * The track ids of the players with the ball: those drawn with the gold
+ * possession ring.
+ */
+export function possessionTrackIds(frame: Frame): Set<TrackId> {
+  const ids = new Set<TrackId>()
+  for (const team of frame.teams ?? []) {
+    for (const player of team.players ?? []) {
+      if (player.in_possession && player.track_id != null) ids.add(player.track_id)
+    }
+  }
+  return ids
+}
+
+/**
+ * How strong each ring is, by track id, for a caller that fades them: the
+ * white one on the players near the ball and the gold possession ring. A
+ * player missing from a map has no such ring.
+ */
+export interface RingStrengths {
+  nearby: ReadonlyMap<TrackId, number>
+  possession: ReadonlyMap<TrackId, number>
+}
+
+/**
  * Create a 2D renderer bound to a specific canvas element.
  *
  * Returns:
@@ -145,7 +169,7 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     frame: Frame,
     overlay?: GoalOverlay,
     glow?: AttackGlow,
-    rings?: ReadonlyMap<TrackId, number>,
+    rings?: RingStrengths,
   ): void {
     if (!frame) return
 
@@ -225,18 +249,23 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
         faded: isFarFromBall(player, tid, focus),
       }))
     })
-    // The white rings: how strong each is, by track id, when the caller fades
-    // them in and out; otherwise full on the players near the ball now.
-    const ringOf = (p: { player: Player; tid: number }): number => {
+    // The rings: how strong each is, by track id, when the caller fades them
+    // in and out; otherwise full on whoever has them in this frame.
+    const nearbyOf = (p: { player: Player; tid: number }): number => {
       const id = p.player.track_id
-      if (rings && id != null) return rings.get(id) ?? 0
+      if (rings && id != null) return rings.nearby.get(id) ?? 0
       return p.tid === withBall && isNearCarrier(p.player, carrier) ? 1 : 0
+    }
+    const possessionOf = (p: { player: Player }): number => {
+      const id = p.player.track_id
+      if (rings && id != null) return rings.possession.get(id) ?? 0
+      return p.player.in_possession ? 1 : 0
     }
     for (const faded of [true, false]) {
       ctx.globalAlpha = faded ? DIMMED_PLAYER_ALPHA : 1
       for (const p of people) {
         if (p.faded !== faded) continue
-        draw2DPlayer(p.player, p.tid, ringOf(p))
+        draw2DPlayer(p.player, p.tid, nearbyOf(p), possessionOf(p))
       }
     }
     ctx.globalAlpha = 1
@@ -299,7 +328,7 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
    * Draw a single player as a filled circle with shadow, outline, optional
    * possession ring, jersey number, and track ID label.
    */
-  function draw2DPlayer(player: Player, teamId: number, ring = 0): void {
+  function draw2DPlayer(player: Player, teamId: number, ring = 0, possession = 0): void {
     const coords = player.projected_coordinates
     const x = coords?.x
     const y = coords?.y
@@ -351,13 +380,16 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
       ctx.globalAlpha = alpha
     }
 
-    // Possession ring (gold)
-    if (player.in_possession) {
+    // Possession ring (gold), at its strength
+    if (possession > 0) {
+      const alpha = ctx.globalAlpha
+      ctx.globalAlpha = alpha * possession
       ctx.beginPath()
       ctx.arc(px, py, PLAYER_RADIUS + 4, 0, Math.PI * 2)
       ctx.strokeStyle = '#ffd700'
       ctx.lineWidth = 2
       ctx.stroke()
+      ctx.globalAlpha = alpha
     }
 
     // Jersey number (centred inside the circle)
