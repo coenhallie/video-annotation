@@ -117,6 +117,14 @@ useEscapeToClose(() => props.isVisible, closeModal);
 // Add new entries to the TOP of this array
 const changelogEntries = ref([
   {
+    version: 'Beta v3.25',
+    date: 'October 21, 2026',
+    changes: [
+      'A Layers menu on the 2D replay shows or hides each visual added on top of the data: the goal and throw-in animations, the attack shading and arrows, the attacking and defending labels, the rings near the ball, the fading of distant players and smooth ring changes. Your choice is remembered in this browser',
+      'Throw-in and goal animations now recognise the labels in the current pipeline output, so throw-ins play on this match',
+    ],
+  },
+  {
     version: 'Beta v3.24',
     date: 'October 21, 2026',
     changes: [
