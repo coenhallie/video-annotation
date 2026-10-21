@@ -200,6 +200,12 @@ describe('focus around the ball', () => {
     expect(fillAt(ops, 40)?.globalAlpha).toBe(1);
   });
 
+  it('draws far players solid when the fade is switched off', () => {
+    const { canvas, ops } = fakeCanvas();
+    useRenderer2D(canvas).renderFrame(match([{ team: 0, x: 30 }]), { fadeFar: false });
+    expect(fillAt(ops, 30)?.globalAlpha).toBe(1);
+  });
+
   it('dims a goalkeeper far from the ball like any other player', () => {
     const ops = render(match([{ team: 1, x: 50, type: 'PersonType.GOALKEEPER' }]));
     expect(fillAt(ops, 50)?.globalAlpha).toBe(DIMMED_PLAYER_ALPHA);
@@ -622,6 +628,25 @@ describe('attack glow', () => {
     const xs = c.points.map(([x]) => x);
     return (Math.min(...xs) + Math.max(...xs)) / 2;
   };
+
+  // The layers menu can hide the shading and the arrows separately.
+  it('draws only the arrows when the shading is switched off', () => {
+    const ops = render({ color: BLUE, team: 1, direction: 1, intensity: 1, flow: 0.5, shading: false });
+    expect(areaFills(ops)).toHaveLength(0);
+    expect(ops.some((o) => o.op === 'fillRect' && o.fillStyle === BLUE)).toBe(false);
+    // No halo: the team's players are blue too, so look for the halo's arc.
+    const [bx, by] = px(10);
+    expect(ops.some((o) => o.op === 'arc' && o.args[0] === bx && o.args[1] === by && Number(o.args[2]) > 10)).toBe(false);
+    expect(ops.filter((o) => o.op === 'fill' && o.fillStyle === '#ffffff').length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('draws only the shading when the arrows are switched off', () => {
+    const ops = render({ color: BLUE, team: 1, direction: 1, intensity: 1, flow: 0.5, arrows: false });
+    expect(areaFills(ops)).toHaveLength(1);
+    const from = ops.indexOf(areaFills(ops)[0]!);
+    const to = ops.findIndex((o) => o.op === 'drawImage');
+    expect(ops.slice(from, to).some((o) => o.op === 'fill' && o.fillStyle === '#ffffff')).toBe(false);
+  });
 
   it('draws chevrons pointing at the goal being attacked', () => {
     for (const direction of [1, -1] as const) {
