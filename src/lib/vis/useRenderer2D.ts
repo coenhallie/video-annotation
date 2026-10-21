@@ -44,6 +44,7 @@ import {
   FOCUS_METRES,
   NEARBY_OUTLINE,
   NEARBY_METRES,
+  THROW_IN_PULSE_COLOR,
 } from './constants'
 import { build2DTransform, worldToPx, buildPitchCache, PITCH_GRASS } from './pitchGeometry'
 import { drawGoalNets, type NetBulge } from './goalNets'
@@ -136,10 +137,37 @@ export interface RingStrengths {
 }
 
 /**
+ * A ring pulsing around the ball during a throw-in: where, in pitch metres,
+ * and how far through one pulse it is, from 0 to 1. See throwInSequence.ts.
+ */
+export interface BallPulse {
+  x: number
+  y: number
+  phase: number
+}
+
+/** Everything a frame can be drawn with besides its own data. */
+export interface FrameLayers {
+  /** The goal sequence's ball and net, drawn in place of the tracked ball. */
+  goal?: GoalOverlay | undefined
+  /** The attack glow, under the players. */
+  glow?: AttackGlow | undefined
+  /** Ring strengths, for a caller that fades the rings in and out. */
+  rings?: RingStrengths | undefined
+  /** The throw-in pulse, over the ball. */
+  ballPulse?: BallPulse | undefined
+}
+
+/** How far a pulse ring grows past the ball, and how thick it is, in frame px. */
+const PULSE_GROWTH_PX = 16
+const PULSE_LINE_PX = 2.5
+
+/**
  * Create a 2D renderer bound to a specific canvas element.
  *
  * Returns:
- *  - `renderFrame(frame)` — draws the given Frame.
+ *  - `renderFrame(frame, layers)` — draws the given Frame, with any layers
+ *     drawn over or under it (FrameLayers).
  *  - `invalidateCache()` — clears the cached pitch image and transform so
  *     they are rebuilt on the next render (call when switching back from 3D).
  */
@@ -165,12 +193,8 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
    * Render a single frame.  Draws the cached pitch background,
    * iterates teams/players/balls, and paints the HUD overlay.
    */
-  function renderFrame(
-    frame: Frame,
-    overlay?: GoalOverlay,
-    glow?: AttackGlow,
-    rings?: RingStrengths,
-  ): void {
+  function renderFrame(frame: Frame, layers: FrameLayers = {}): void {
+    const { goal: overlay, glow, rings, ballPulse } = layers
     if (!frame) return
 
     const pd = frame.pitch_dimensions
@@ -282,6 +306,8 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
         draw2DBall(ball)
       }
     }
+
+    if (ballPulse) drawBallPulse(ballPulse)
 
     // ── Overlay HUD ────────────────────────────────────────────────────────
     const fc = frame.frame_data?.[0]?.frame_count ?? null
@@ -438,6 +464,21 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     ctx.fill()
     ctx.strokeStyle = '#000'
     ctx.lineWidth = 1
+    ctx.stroke()
+    ctx.globalAlpha = before
+  }
+
+  /** One ring of the throw-in pulse: growing out from the ball and fading. */
+  function drawBallPulse(pulse: BallPulse): void {
+    if (!transform2d || !Number.isFinite(pulse.x) || !Number.isFinite(pulse.y)) return
+    const [px, py] = worldToPx(pulse.x, pulse.y, transform2d)
+    const phase = Math.min(1, Math.max(0, pulse.phase))
+    const before = ctx.globalAlpha
+    ctx.globalAlpha = (1 - phase) ** 2
+    ctx.beginPath()
+    ctx.arc(px, py, 6 + phase * PULSE_GROWTH_PX, 0, Math.PI * 2)
+    ctx.strokeStyle = THROW_IN_PULSE_COLOR
+    ctx.lineWidth = PULSE_LINE_PX
     ctx.stroke()
     ctx.globalAlpha = before
   }

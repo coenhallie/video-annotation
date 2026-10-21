@@ -4,6 +4,12 @@ import { createApp, defineComponent, h, nextTick, ref } from 'vue';
 import PipelineOutputSurface from '@/components/PipelineOutputSurface.vue';
 import type { PipelineReplay, ReplayState } from '@/composables/usePipelineReplay';
 import { GOAL_SEQUENCE_MS } from '@/lib/vis/goalSequence';
+import {
+  THROW_IN_SETTLE_S,
+  THROW_IN_OUT_MS,
+  THROW_IN_REPEAT_S,
+  THROW_IN_ZOOM,
+} from '@/lib/vis/throwInSequence';
 import { PERSON_COLORS, RING_FADE_S } from '@/lib/vis/constants';
 import { CHEVRON_FLOW_PERIOD_S } from '@/lib/vis/attackGlow';
 
@@ -712,7 +718,7 @@ describe('PipelineOutputSurface', () => {
       await nextTick();
     }
 
-    const lastOverlay = () => renderFrame.mock.calls.at(-1)?.[1];
+    const lastOverlay = () => renderFrame.mock.calls.at(-1)?.[1]?.goal;
 
     it('plays when playback runs into a GOAL label', async () => {
       const { replay, m } = await playing();
@@ -930,7 +936,7 @@ describe('PipelineOutputSurface', () => {
     }
 
     const lastGlow = () =>
-      renderFrame.mock.calls.at(-1)?.[2] as
+      renderFrame.mock.calls.at(-1)?.[1]?.glow as
         | { color: string; direction: number; intensity: number; flow?: number }
         | undefined;
 
@@ -1117,7 +1123,7 @@ describe('PipelineOutputSurface', () => {
     }
 
     type Rings = { nearby: Map<number, number>; possession: Map<number, number> };
-    const rings = () => renderFrame.mock.calls.at(-1)?.[3] as Rings | undefined;
+    const rings = () => renderFrame.mock.calls.at(-1)?.[1]?.rings as Rings | undefined;
     /** The white ring's strength on track `id`. */
     const ring = (id: number) => rings()?.nearby.get(id) ?? 0;
     /** The possession ring's strength on track `id`. */
@@ -1236,6 +1242,308 @@ describe('PipelineOutputSurface', () => {
         await nextTick();
         await step(replay, NEAR);
         expect(ring(2)).toBe(1);
+        m.unmount();
+      } finally {
+        window.matchMedia = originalMatchMedia;
+      }
+    });
+  });
+  describe('throw-in sequence', () => {
+    let queued: Array<(ms: number) => void> = [];
+    let clockMs = 1000;
+    const originalRaf = window.requestAnimationFrame;
+    const originalCaf = window.cancelAnimationFrame;
+
+    beforeEach(() => {
+      queued = [];
+      clockMs = 1000;
+      renderFrame.mockClear();
+      setView.mockClear();
+      window.requestAnimationFrame = ((cb: (ms: number) => void) => {
+        queued.push(cb);
+        return queued.length;
+      }) as typeof window.requestAnimationFrame;
+      window.cancelAnimationFrame = (() => {
+        queued = [];
+      }) as typeof window.cancelAnimationFrame;
+    });
+
+    afterEach(() => {
+      window.requestAnimationFrame = originalRaf;
+      window.cancelAnimationFrame = originalCaf;
+    });
+
+    async function animate(ms: number) {
+      const end = clockMs + ms;
+      while (clockMs < end) {
+        clockMs += 1000 / 60;
+        const cbs = queued;
+        queued = [];
+        cbs.forEach((cb) => cb(clockMs));
+      }
+      await nextTick();
+    }
+
+    type Writable = { value: unknown };
+    const set = (r: unknown, v: unknown) => ((r as Writable).value = v);
+
+    /**
+     * A frame of the match: two tracked players and the ball, unless a test
+     * says otherwise. A cutaway tracks nobody.
+     */
+    function matchFrame({
+      labels = [] as string[],
+      ball = { x: 10, y: -30 } as { x: number; y: number } | null,
+      players = 2,
+    } = {}) {
+      return {
+        pitch_dimensions: { length: 105, width: 68 },
+        teams: [
+          {
+            team_id: 0,
+            players: Array.from({ length: players }, (_, i) => ({
+              track_id: i + 1,
+              person_type: 'PersonType.PLAYER',
+              projected_coordinates: { x: i * 3, y: 0 },
+            })),
+          },
+        ],
+        balls: ball ? [{ projected_coordinates: ball }] : [],
+        state: { actions: labels.map((action_type) => ({ action_type })) },
+        frame_data: [{ frame_count: 1 }],
+      };
+    }
+    const THROW_IN = () => matchFrame({ labels: ['Throw in'] });
+    const PLAY = () => matchFrame();
+
+    async function playing() {
+      const replay = fakeReplay('loading');
+      const m = mount(replay);
+      await nextTick();
+      set(replay.currentTime, 10);
+      set(replay.frame, PLAY());
+      set(replay.state, 'ready');
+      set(replay.isPlaying, true);
+      await nextTick();
+      return { replay, m };
+    }
+
+    /** One playback tick: the clock moves on and, unless null, a new record shows. */
+    async function tick(replay: PipelineReplay, frame: unknown, step = 0.04) {
+      set(replay.currentTime, (replay.currentTime.value as number) + step);
+      if (frame !== null) set(replay.frame, frame);
+      await nextTick();
+    }
+
+    /** `ms` of playback in 40 ms ticks, new records from `next` (null: none come). */
+    async function play(replay: PipelineReplay, ms: number, next: (() => unknown) | null) {
+      for (let t = 0; t < ms; t += 40) {
+        await tick(replay, next ? next() : null);
+        await animate(40);
+      }
+    }
+
+    const lastView = () =>
+      setView.mock.calls.at(-1)?.[0] as { zoom: number; panX: number; panY: number } | undefined;
+    const lastPulse = () =>
+      renderFrame.mock.calls.at(-1)?.[1]?.ballPulse as
+        | { x: number; y: number; phase: number }
+        | undefined;
+
+    it('zooms in on the ball, with a pulse around it, when playback runs into one', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, THROW_IN());
+      await play(replay, 800, THROW_IN);
+      expect(lastView()!.zoom).toBeCloseTo(THROW_IN_ZOOM, 6);
+      expect(lastPulse()).toMatchObject({ x: 10, y: -30 });
+      m.unmount();
+    });
+
+    it('pulses: the ring moves on with the clock', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, THROW_IN());
+      await animate(200);
+      const a = lastPulse()!.phase;
+      await animate(300);
+      expect(lastPulse()!.phase).not.toBeCloseTo(a, 3);
+      m.unmount();
+    });
+
+    it('stays in while the label is on', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, THROW_IN());
+      await play(replay, 4000, THROW_IN);
+      expect(lastView()!.zoom).toBeCloseTo(THROW_IN_ZOOM, 6);
+      m.unmount();
+    });
+
+    // The broadcast cut away: no records arrive while the clock runs on.
+    it('stays in through a gap in the data, however long', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, THROW_IN());
+      await play(replay, 8000, null);
+      expect(lastView()!.zoom).toBeCloseTo(THROW_IN_ZOOM, 6);
+      expect(lastPulse()).toBeDefined();
+      m.unmount();
+    });
+
+    it('stays in through frames that track nobody', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, THROW_IN());
+      await play(replay, 4000, () => matchFrame({ players: 0, ball: null }));
+      expect(lastView()!.zoom).toBeCloseTo(THROW_IN_ZOOM, 6);
+      m.unmount();
+    });
+
+    it('eases back out to the view it started from once valid frames flow again', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, THROW_IN());
+      await play(replay, 2000, THROW_IN);
+      await play(replay, 3000, null);
+      // play() runs the animation clock a quarter ahead of the replay's, so
+      // the zoom out has run for a little over 300 of its ms here.
+      await play(replay, THROW_IN_SETTLE_S * 1000 + 250, PLAY);
+      const partway = lastView()!.zoom;
+      expect(partway).toBeGreaterThan(1);
+      expect(partway).toBeLessThan(THROW_IN_ZOOM);
+      await play(replay, THROW_IN_OUT_MS, PLAY);
+      expect(lastView()).toMatchObject({ zoom: 1, panX: 0, panY: 0 });
+      expect(lastPulse()).toBeUndefined();
+      m.unmount();
+    });
+
+    it('stays in until play has been back on for the settle time', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, THROW_IN());
+      await play(replay, THROW_IN_SETTLE_S * 1000 - 400, PLAY);
+      expect(lastView()!.zoom).toBeCloseTo(THROW_IN_ZOOM, 6);
+      await play(replay, 400 + THROW_IN_OUT_MS + 200, PLAY);
+      expect(lastView()!.zoom).toBe(1);
+      m.unmount();
+    });
+
+    // Measured on a full match: the same throw-in is often labelled again a
+    // couple of seconds after its label goes off.
+    it('stays in when the throw-in is labelled again soon after', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, THROW_IN());
+      await play(replay, 2000, PLAY);
+      await play(replay, 1000, THROW_IN);
+      await play(replay, 2000, PLAY);
+      expect(lastView()!.zoom).toBeCloseTo(THROW_IN_ZOOM, 6);
+      m.unmount();
+    });
+
+    it('eases back in when the throw-in is labelled again while it eases out', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, THROW_IN());
+      await play(replay, THROW_IN_SETTLE_S * 1000 + 250, PLAY);
+      const turning = lastView()!.zoom;
+      expect(turning).toBeLessThan(THROW_IN_ZOOM);
+      expect(turning).toBeGreaterThan(1);
+      await play(replay, 80, THROW_IN);
+      expect(lastView()!.zoom).toBeGreaterThan(turning);
+      await play(replay, 1000, THROW_IN);
+      expect(lastView()!.zoom).toBeCloseTo(THROW_IN_ZOOM, 6);
+      m.unmount();
+    });
+
+    it('zooms in on where the ball was last seen when the label frame has none', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, matchFrame({ ball: { x: -20, y: 31 } }));
+      await tick(replay, matchFrame({ labels: ['Throw in'], ball: null }));
+      await animate(800);
+      expect(lastPulse()).toMatchObject({ x: -20, y: 31 });
+      m.unmount();
+    });
+
+    it('does not start on a seek', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, THROW_IN(), 30);
+      await animate(800);
+      expect(lastView()?.zoom ?? 1).toBe(1);
+      expect(lastPulse()).toBeUndefined();
+      m.unmount();
+    });
+
+    it('does not start while paused', async () => {
+      const { replay, m } = await playing();
+      set(replay.isPlaying, false);
+      await nextTick();
+      await tick(replay, THROW_IN());
+      await animate(800);
+      expect(lastPulse()).toBeUndefined();
+      m.unmount();
+    });
+
+    it('snaps back to the view it started from the moment playback pauses', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, THROW_IN());
+      await play(replay, 800, THROW_IN);
+      set(replay.isPlaying, false);
+      await nextTick();
+      expect(lastView()).toMatchObject({ zoom: 1, panX: 0, panY: 0 });
+      expect(lastPulse()).toBeUndefined();
+      m.unmount();
+    });
+
+    it('stops the moment someone presses on the drawing layer', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, THROW_IN());
+      await play(replay, 800, THROW_IN);
+      at(m.root, 'pipeline-overlay')!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      await nextTick();
+      expect(lastView()).toMatchObject({ zoom: 1, panX: 0, panY: 0 });
+      expect(lastPulse()).toBeUndefined();
+      m.unmount();
+    });
+
+    // The same throw-in is often labelled again a few seconds later.
+    it('does not start again for a label soon after the last one ended', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, THROW_IN());
+      await play(replay, THROW_IN_SETTLE_S * 1000 + THROW_IN_OUT_MS + 200, PLAY);
+      expect(lastView()!.zoom).toBe(1);
+      await play(replay, 1000, THROW_IN);
+      expect(lastPulse()).toBeUndefined();
+
+      // Long enough after, a label is a new throw-in.
+      await play(replay, THROW_IN_REPEAT_S * 1000, PLAY);
+      await play(replay, 800, THROW_IN);
+      expect(lastPulse()).toBeDefined();
+      m.unmount();
+    });
+
+    // The clock can go back: a seek to just before a throw-in already seen
+    // must play it again.
+    it('plays again after a seek back to just before it', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, THROW_IN());
+      await play(replay, THROW_IN_SETTLE_S * 1000 + THROW_IN_OUT_MS + 200, PLAY);
+      expect(lastView()!.zoom).toBe(1);
+      set(replay.currentTime, 9);
+      set(replay.frame, PLAY());
+      await nextTick();
+      await play(replay, 200, PLAY);
+      await play(replay, 800, THROW_IN);
+      expect(lastPulse()).toBeDefined();
+      m.unmount();
+    });
+
+    it('does not move the view under reduced motion, but still marks the ball', async () => {
+      const originalMatchMedia = window.matchMedia;
+      window.matchMedia = ((query: string) => ({
+        matches: query.includes('prefers-reduced-motion'),
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      })) as unknown as typeof window.matchMedia;
+      try {
+        const { replay, m } = await playing();
+        await tick(replay, THROW_IN());
+        await play(replay, 800, THROW_IN);
+        expect(lastView()?.zoom ?? 1).toBe(1);
+        expect(lastPulse()).toBeDefined();
         m.unmount();
       } finally {
         window.matchMedia = originalMatchMedia;
