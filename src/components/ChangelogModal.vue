@@ -117,6 +117,14 @@ useEscapeToClose(() => props.isVisible, closeModal);
 // Add new entries to the TOP of this array
 const changelogEntries = ref([
   {
+    version: 'Beta v3.23',
+    date: 'October 21, 2026',
+    changes: [
+      'The yellow ring on the player with the ball fades in and out too, instead of blinking',
+      'Both rings on the 2D replay fade a little more slowly',
+    ],
+  },
+  {
     version: 'Beta v3.22',
     date: 'October 21, 2026',
     changes: [
