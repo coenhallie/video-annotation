@@ -1,6 +1,7 @@
 import type { Frame, PitchDimensions } from './types';
 import { build2DTransform, resolvePitchDimensions, worldToPx } from './pitchGeometry';
 import { FRAME_W, FRAME_H } from './constants';
+import { frameHasAction } from './actionLabels';
 
 /**
  * The goal sequence: when the pipeline labels a frame GOAL, the replay shows a
@@ -78,13 +79,12 @@ const easeOutQuad = (u: number) => 1 - (1 - u) * (1 - u);
 const easeOutCubic = (u: number) => 1 - (1 - u) ** 3;
 
 /**
- * Whether the pipeline labelled this frame a goal. Matched whole, ignoring case
- * and padding, so "Goal kick" (a restart, and common) never counts.
+ * Whether the pipeline labelled this frame a goal, however the export writes it
+ * ("GOAL", "EventType.GOAL"; see actionName). Matched whole, so a goal kick
+ * (a restart, and common) never counts.
  */
 export function isGoalFrame(frame: Frame): boolean {
-  return (frame.state?.actions ?? []).some(
-    (a) => String(a.action_type ?? '').trim().toUpperCase() === 'GOAL'
-  );
+  return frameHasAction(frame, 'goal');
 }
 
 /**
