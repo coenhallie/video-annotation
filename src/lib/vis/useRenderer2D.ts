@@ -157,6 +157,8 @@ export interface FrameLayers {
   rings?: RingStrengths | undefined
   /** The throw-in pulse, over the players and ball. */
   ballPulse?: BallPulse | undefined
+  /** Whether players far from the ball are drawn faint. Default on. */
+  fadeFar?: boolean | undefined
 }
 
 /** How far a pulse ring grows past the ball, and how thick it is, in frame px. */
@@ -196,6 +198,7 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
    */
   function renderFrame(frame: Frame, layers: FrameLayers = {}): void {
     const { goal: overlay, glow, rings, ballPulse } = layers
+    const fadeFar = layers.fadeFar !== false
     if (!frame) return
 
     const pd = frame.pitch_dimensions
@@ -287,7 +290,7 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
       return p.player.in_possession ? 1 : 0
     }
     for (const faded of [true, false]) {
-      ctx.globalAlpha = faded ? DIMMED_PLAYER_ALPHA : 1
+      ctx.globalAlpha = faded && fadeFar ? DIMMED_PLAYER_ALPHA : 1
       for (const p of people) {
         if (p.faded !== faded) continue
         draw2DPlayer(p.player, p.tid, nearbyOf(p), possessionOf(p))

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted, computed } from 'vue';
+import { ref, reactive, watch, onMounted, onUnmounted, computed } from 'vue';
 import {
   nearbyTrackIds,
   possessionTrackIds,
@@ -22,6 +22,12 @@ import {
   THROW_IN_STALE_S,
 } from '@/lib/vis/throwInSequence';
 import { CHEVRON_FLOW_PERIOD_S, type AttackGlow } from '@/lib/vis/attackGlow';
+import {
+  REPLAY_LAYERS,
+  readReplayLayers,
+  writeReplayLayers,
+  type ReplayLayerKey,
+} from '@/lib/vis/replayLayers';
 import {
   goalCamera,
   goalCameraWeight,
@@ -52,6 +58,42 @@ const props = defineProps<{
    */
   teamNames?: [string, string] | null;
 }>();
+
+// ── Layers ──────────────────────────────────────────────────────────────────
+//
+// What the replay draws over the data can be shown or hidden piece by piece
+// from the layers menu (replayLayers.ts). Hiding a layer only stops it being
+// drawn: the data, and what is worked out from it, stay as they are.
+
+function layerStorage(): Storage | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+const layers = reactive(readReplayLayers(layerStorage()));
+const layersOpen = ref(false);
+
+function toggleLayer(key: ReplayLayerKey): void {
+  layers[key] = !layers[key];
+  writeReplayLayers(layerStorage(), { ...layers });
+  // A sequence switched off mid-way ends now, putting the user's view back.
+  if (key === 'goal' && !layers.goal) stopGoal();
+  if (key === 'throwIn' && !layers.throwIn) stopThrowIn();
+  if (key === 'ringFades' && !layers.ringFades) settleRings();
+  paint();
+}
+
+function onLayersKeydown(e: KeyboardEvent): void {
+  if (e.key === 'Escape') layersOpen.value = false;
+}
+
+watch(layersOpen, (open) => {
+  if (open) document.addEventListener('keydown', onLayersKeydown);
+  else document.removeEventListener('keydown', onLayersKeydown);
+});
 
 const overlayFrame = computed(() =>
   replayDrawingFrame({
@@ -114,8 +156,12 @@ function paint(): void {
     renderer?.renderFrame(frame, {
       goal: goalOverlay(),
       glow: glowValue(),
-      rings: { nearby: new Map(nearbyRings), possession: new Map(possessionRings) },
+      rings: {
+        nearby: layers.nearbyRings ? new Map(nearbyRings) : new Map(),
+        possession: new Map(possessionRings),
+      },
       ballPulse: throwInPulseLayer(),
+      fadeFar: layers.farFade,
     });
   }
 }
@@ -681,6 +727,7 @@ function glowTarget(): Omit<AttackGlow, 'intensity'> | null {
 
 function glowValue(): AttackGlow | undefined {
   if (!glow || glow.intensity <= 0) return undefined;
+  if (!layers.attackShading && !layers.attackArrows) return undefined;
   const cycles = props.replay.currentTime.value / CHEVRON_FLOW_PERIOD_S;
   return {
     color: glow.color,
@@ -688,6 +735,8 @@ function glowValue(): AttackGlow | undefined {
     direction: glow.direction,
     intensity: glow.intensity,
     flow: prefersReducedMotion() ? 0 : cycles - Math.floor(cycles),
+    shading: layers.attackShading,
+    arrows: layers.attackArrows,
   };
 }
 
@@ -842,7 +891,7 @@ watch(
       ensureRenderer();
       frameArrivedAt = now;
       const labelled = isGoalFrame(frame);
-      if (labelled && !goalLabelSeen && !goal && lastStepWasPlayback) {
+      if (labelled && layers.goal && !goalLabelSeen && !goal && lastStepWasPlayback) {
         // The goal frames the shot from the user's own view, not a throw-in's.
         stopThrowIn();
         startGoal(frame);
@@ -851,6 +900,7 @@ watch(
       const thrown = isThrowInFrame(frame);
       if (
         thrown &&
+        layers.throwIn &&
         !throwInLabelSeen &&
         !throwIn &&
         !goal &&
@@ -864,11 +914,11 @@ watch(
     }
     // A fade that has just finished still needs the paint that shows its end.
     const wasFading = ringsFading();
-    updateRings(playing ? Math.max(0, now - before) : null);
+    updateRings(playing && layers.ringFades ? Math.max(0, now - before) : null);
     if (
       frame !== prevFrame ||
       phase !== prevPhase ||
-      glowValue() ||
+      glowValue()?.arrows ||
       wasFading ||
       ringsFading()
     ) {
@@ -894,6 +944,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  document.removeEventListener('keydown', onLayersKeydown);
   stopGoal();
   stopThrowIn();
   stopGlowLoop();
@@ -1046,7 +1097,7 @@ onUnmounted(() => {
             which the title says on hover.
           -->
           <div
-            v-if="phaseLabels"
+            v-if="phaseLabels && layers.phaseLabels"
             data-testid="pipeline-phase"
             role="group"
             :aria-label="phaseDescription"
@@ -1211,6 +1262,89 @@ onUnmounted(() => {
                     d="M8.25 4.5l7.5 7.5-7.5 7.5"
                   />
                 </svg>
+              </button>
+            </div>
+          </div>
+
+          <!--
+            The layers menu: what the replay draws over the data, each shown
+            or hidden at once. Top right, clear of the transport and the
+            frame and zoom badges.
+          -->
+          <div class="pointer-events-auto absolute right-2 top-2">
+            <button
+              type="button"
+              data-testid="pipeline-layers-toggle"
+              class="flex h-7 items-center gap-1.5 rounded-full bg-black/60 px-2.5 text-[10px] font-semibold uppercase tracking-widest text-white/80 shadow-lg ring-1 ring-white/10 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-white/60 motion-reduce:transition-none"
+              :aria-expanded="layersOpen"
+              aria-haspopup="menu"
+              title="Show or hide what is drawn over the data"
+              @click="layersOpen = !layersOpen"
+            >
+              <svg
+                class="h-3.5 w-3.5"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                aria-hidden="true"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M12 3 2 8l10 5 10-5-10-5ZM2 13l10 5 10-5M2 18l10 5 10-5"
+                />
+              </svg>
+              Layers
+            </button>
+            <div
+              v-if="layersOpen"
+              data-testid="pipeline-layers-backdrop"
+              class="fixed inset-0 z-40"
+              @click="layersOpen = false"
+            />
+            <div
+              v-if="layersOpen"
+              data-testid="pipeline-layers-menu"
+              role="menu"
+              aria-label="Layers"
+              class="absolute right-0 top-full z-50 mt-2 w-64 overflow-hidden rounded-md border border-white/10 bg-gray-900/95 py-1 text-white shadow-xl"
+            >
+              <button
+                v-for="layer in REPLAY_LAYERS"
+                :key="layer.key"
+                type="button"
+                role="menuitemcheckbox"
+                data-testid="pipeline-layer-option"
+                :data-layer="layer.key"
+                :aria-checked="layers[layer.key]"
+                class="flex w-full items-start gap-2.5 px-3 py-1.5 text-left transition-colors hover:bg-white/[0.06] focus-visible:bg-white/[0.06] focus-visible:outline-none motion-reduce:transition-none"
+                @click="toggleLayer(layer.key)"
+              >
+                <span
+                  class="mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border"
+                  :class="layers[layer.key] ? 'border-white bg-white text-gray-900' : 'border-white/40'"
+                  aria-hidden="true"
+                >
+                  <svg
+                    v-if="layers[layer.key]"
+                    class="h-3 w-3"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="3"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="m5 13 4 4L19 7"
+                    />
+                  </svg>
+                </span>
+                <span class="min-w-0">
+                  <span class="block text-[12px] leading-tight">{{ layer.label }}</span>
+                  <span class="block text-[10px] leading-tight text-white/50">{{ layer.hint }}</span>
+                </span>
               </button>
             </div>
           </div>

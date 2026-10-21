@@ -43,6 +43,14 @@ describe('isGoalFrame', () => {
     expect(isGoalFrame(frame({ actions: ['other', 'GOAL'] }))).toBe(true);
   });
 
+  // The Manchester City vs PSG export names its labels "EventType.THROW_IN"
+  // and so on, where the February one said "Throw in".
+  it('recognises the label with its EventType prefix', () => {
+    expect(isGoalFrame(frame({ actions: ['EventType.GOAL'] }))).toBe(true);
+    expect(isGoalFrame(frame({ actions: ['EventType.GOAL_KICK'] }))).toBe(false);
+    expect(isGoalFrame(frame({ actions: ['EventType.BALL_IN_PLAY'] }))).toBe(false);
+  });
+
   it('is false for a frame without actions', () => {
     expect(isGoalFrame(frame({}))).toBe(false);
   });

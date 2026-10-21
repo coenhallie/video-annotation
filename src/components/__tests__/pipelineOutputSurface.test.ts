@@ -1560,5 +1560,227 @@ describe('PipelineOutputSurface', () => {
       }
     });
   });
+  describe('layers menu', () => {
+    let queued: Array<(ms: number) => void> = [];
+    let clockMs = 1000;
+    const originalRaf = window.requestAnimationFrame;
+    const originalCaf = window.cancelAnimationFrame;
+
+    beforeEach(() => {
+      localStorage.clear();
+      queued = [];
+      clockMs = 1000;
+      renderFrame.mockClear();
+      setView.mockClear();
+      window.requestAnimationFrame = ((cb: (ms: number) => void) => {
+        queued.push(cb);
+        return queued.length;
+      }) as typeof window.requestAnimationFrame;
+      window.cancelAnimationFrame = (() => {
+        queued = [];
+      }) as typeof window.cancelAnimationFrame;
+    });
+
+    afterEach(() => {
+      window.requestAnimationFrame = originalRaf;
+      window.cancelAnimationFrame = originalCaf;
+      localStorage.clear();
+    });
+
+    async function animate(ms: number) {
+      const end = clockMs + ms;
+      while (clockMs < end) {
+        clockMs += 1000 / 60;
+        const cbs = queued;
+        queued = [];
+        cbs.forEach((cb) => cb(clockMs));
+      }
+      await nextTick();
+    }
+
+    type Writable = { value: unknown };
+    const set = (r: unknown, v: unknown) => ((r as Writable).value = v);
+    const person = (track_id: number, x: number, ball = false) => ({
+      track_id,
+      person_type: 'PersonType.PLAYER',
+      projected_coordinates: { x, y: 0 },
+      in_possession: ball,
+    });
+    /** Red's carrier at x = 0 and a teammate at x = 10, with optional labels. */
+    const frameWith = (labels: string[] = [], ball = { x: 0, y: -30 }) => ({
+      pitch_dimensions: { length: 105, width: 68, goal_width: 7.32 },
+      teams: [{ team_id: 0, players: [person(1, 0, true), person(2, 10)] }],
+      balls: [{ projected_coordinates: ball }],
+      state: { actions: labels.map((action_type) => ({ action_type })) },
+      frame_data: [{ frame_count: 1 }],
+    });
+    const BLUE_ATTACKING = {
+      possession: 1,
+      attacks: { 0: 1, 1: -1 },
+      states: { 0: 'defending', 1: 'attacking' },
+    };
+
+    async function ready() {
+      const replay = fakeReplay('loading');
+      const m = mount(replay);
+      await nextTick();
+      set(replay.currentTime, 10);
+      set(replay.frame, frameWith());
+      set(replay.phase, BLUE_ATTACKING);
+      set(replay.state, 'ready');
+      await nextTick();
+      return { replay, m };
+    }
+
+    async function tick(replay: PipelineReplay, frame: unknown, step = 0.04) {
+      set(replay.currentTime, (replay.currentTime.value as number) + step);
+      set(replay.frame, frame);
+      await nextTick();
+    }
+
+    const layersOf = () => renderFrame.mock.calls.at(-1)?.[1];
+    const lastView = () =>
+      setView.mock.calls.at(-1)?.[0] as { zoom: number; panX: number; panY: number } | undefined;
+
+    async function open(root: HTMLElement) {
+      (at(root, 'pipeline-layers-toggle') as HTMLElement).click();
+      await nextTick();
+    }
+    const option = (root: HTMLElement, key: string) =>
+      root.querySelector(`[data-testid="pipeline-layer-option"][data-layer="${key}"]`) as HTMLElement;
+    async function toggle(root: HTMLElement, key: string) {
+      if (!at(root, 'pipeline-layers-menu')) await open(root);
+      option(root, key).click();
+      await nextTick();
+    }
+
+    it('lists every layer, all shown by default', async () => {
+      const { m } = await ready();
+      await open(m.root);
+      const options = [...m.root.querySelectorAll('[data-testid="pipeline-layer-option"]')];
+      expect(options).toHaveLength(8);
+      expect(options.every((o) => o.getAttribute('aria-checked') === 'true')).toBe(true);
+      m.unmount();
+    });
+
+    it('hides the attacking and defending labels', async () => {
+      const { m } = await ready();
+      expect(at(m.root, 'pipeline-phase')).not.toBeNull();
+      await toggle(m.root, 'phaseLabels');
+      expect(at(m.root, 'pipeline-phase')).toBeNull();
+      expect(option(m.root, 'phaseLabels').getAttribute('aria-checked')).toBe('false');
+      m.unmount();
+    });
+
+    it('hides the shading and the arrows separately, and the glow once both are off', async () => {
+      const { m } = await ready();
+      await toggle(m.root, 'attackShading');
+      expect(layersOf()?.glow).toMatchObject({ shading: false, arrows: true });
+      await toggle(m.root, 'attackArrows');
+      expect(layersOf()?.glow).toBeUndefined();
+      m.unmount();
+    });
+
+    it('draws far players solid when their fade is off', async () => {
+      const { m } = await ready();
+      expect(layersOf()?.fadeFar).toBe(true);
+      await toggle(m.root, 'farFade');
+      expect(layersOf()?.fadeFar).toBe(false);
+      m.unmount();
+    });
+
+    it('drops the white rings, and only them', async () => {
+      const { m } = await ready();
+      expect(layersOf()?.rings.nearby.size).toBeGreaterThan(0);
+      await toggle(m.root, 'nearbyRings');
+      expect(layersOf()?.rings.nearby.size).toBe(0);
+      expect(layersOf()?.rings.possession.get(1)).toBe(1);
+      m.unmount();
+    });
+
+    it('snaps the rings during playback when smooth changes are off', async () => {
+      const { replay, m } = await ready();
+      await toggle(m.root, 'ringFades');
+      set(replay.isPlaying, true);
+      await nextTick();
+      await tick(replay, { ...frameWith(), teams: [{ team_id: 0, players: [person(1, 0, true), person(2, 30)] }] });
+      expect(layersOf()?.rings.nearby.get(2)).toBeUndefined();
+      await tick(replay, frameWith());
+      expect(layersOf()?.rings.nearby.get(2)).toBe(1);
+      m.unmount();
+    });
+
+    it('does not play the goal animation when it is off', async () => {
+      const { replay, m } = await ready();
+      await toggle(m.root, 'goal');
+      set(replay.isPlaying, true);
+      await nextTick();
+      await tick(replay, frameWith(['GOAL'], { x: 30, y: 5 }));
+      await animate(1000);
+      expect(layersOf()?.goal).toBeUndefined();
+      m.unmount();
+    });
+
+    it('stops a goal animation that is playing when it is switched off, view and all', async () => {
+      const { replay, m } = await ready();
+      set(replay.isPlaying, true);
+      await nextTick();
+      await tick(replay, frameWith(['GOAL'], { x: 30, y: 5 }));
+      await animate(800);
+      expect(layersOf()?.goal).toBeDefined();
+      await toggle(m.root, 'goal');
+      expect(layersOf()?.goal).toBeUndefined();
+      expect(lastView()).toMatchObject({ zoom: 1, panX: 0, panY: 0 });
+      m.unmount();
+    });
+
+    it('does not zoom in on a throw-in when it is off', async () => {
+      const { replay, m } = await ready();
+      await toggle(m.root, 'throwIn');
+      set(replay.isPlaying, true);
+      await nextTick();
+      await tick(replay, frameWith(['Throw in']));
+      await animate(800);
+      expect(layersOf()?.ballPulse).toBeUndefined();
+      m.unmount();
+    });
+
+    it('stops a throw-in zoom that is playing when it is switched off, view and all', async () => {
+      const { replay, m } = await ready();
+      set(replay.isPlaying, true);
+      await nextTick();
+      await tick(replay, frameWith(['Throw in']));
+      await animate(800);
+      expect(layersOf()?.ballPulse).toBeDefined();
+      await toggle(m.root, 'throwIn');
+      expect(layersOf()?.ballPulse).toBeUndefined();
+      expect(lastView()).toMatchObject({ zoom: 1, panX: 0, panY: 0 });
+      m.unmount();
+    });
+
+    it('remembers the choice for the next time the replay opens', async () => {
+      const first = await ready();
+      await toggle(first.m.root, 'throwIn');
+      first.m.unmount();
+      const second = await ready();
+      await open(second.m.root);
+      expect(option(second.m.root, 'throwIn').getAttribute('aria-checked')).toBe('false');
+      expect(option(second.m.root, 'goal').getAttribute('aria-checked')).toBe('true');
+      second.m.unmount();
+    });
+
+    it('closes on Escape, and on a click outside it', async () => {
+      const { m } = await ready();
+      await open(m.root);
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await nextTick();
+      expect(at(m.root, 'pipeline-layers-menu')).toBeNull();
+      await open(m.root);
+      (at(m.root, 'pipeline-layers-backdrop') as HTMLElement).click();
+      await nextTick();
+      expect(at(m.root, 'pipeline-layers-menu')).toBeNull();
+      m.unmount();
+    });
+  });
 });
 

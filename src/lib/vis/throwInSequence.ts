@@ -1,6 +1,7 @@
 import type { Frame, PitchDimensions } from './types';
 import { build2DTransform, resolvePitchDimensions, worldToPx } from './pitchGeometry';
 import { FRAME_W, FRAME_H } from './constants';
+import { frameHasAction } from './actionLabels';
 
 /**
  * The throw-in sequence: when the pipeline labels a frame a throw-in, the view
@@ -58,18 +59,11 @@ const easeOutCubic = (u: number) => 1 - (1 - u) ** 3;
 const easeInOutCubic = (u: number) => (u < 0.5 ? 4 * u ** 3 : 1 - (-2 * u + 2) ** 3 / 2);
 
 /**
- * Whether the pipeline labelled this frame a throw-in. Case, padding and the
- * separator are ignored ("Throw in", "THROW_IN", "throw-in"), but the label
- * must be the whole of it.
+ * Whether the pipeline labelled this frame a throw-in, however the export
+ * writes it ("Throw in", "EventType.THROW_IN"; see actionName).
  */
 export function isThrowInFrame(frame: Frame): boolean {
-  return (frame.state?.actions ?? []).some(
-    (a) =>
-      String(a.action_type ?? '')
-        .trim()
-        .toLowerCase()
-        .replace(/[\s_-]+/g, ' ') === 'throw in',
-  );
+  return frameHasAction(frame, 'throw in');
 }
 
 /** The frame's ball, if it has a usable one. */

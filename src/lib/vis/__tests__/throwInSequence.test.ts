@@ -49,6 +49,15 @@ describe('isThrowInFrame', () => {
     }
   });
 
+  // The Manchester City vs PSG export names its labels "EventType.THROW_IN";
+  // without the prefix handled, no throw-in on it ever played.
+  it('matches the label with its EventType prefix', () => {
+    expect(isThrowInFrame(frame({ labels: ['EventType.THROW_IN'] }))).toBe(true);
+    for (const label of ['EventType.BALL_IN_PLAY', 'EventType.CORNER', 'EventType.FREE_KICK']) {
+      expect(isThrowInFrame(frame({ labels: [label] }))).toBe(false);
+    }
+  });
+
   it('matches only a throw-in', () => {
     for (const label of ['other', 'Goal kick', 'Corner', 'Throw', 'Throw in attempt']) {
       expect(isThrowInFrame(frame({ labels: [label] }))).toBe(false);

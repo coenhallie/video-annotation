@@ -17,6 +17,10 @@ export interface AttackGlow {
    * caller advances it with time; 0 and 1 draw the same picture.
    */
   flow?: number;
+  /** The shaded area, the bar beyond the goal and the halo round the ball. Default on. */
+  shading?: boolean;
+  /** The chevrons flowing toward the goal. Default on. */
+  arrows?: boolean;
 }
 
 /** Opacity of the shaded area in front of the attack. */
@@ -145,8 +149,10 @@ export function drawAttackGlow(
   const [frontPx] = p(Math.min(half, Math.max(-half, frontX)), 0);
   const [lineX] = p(glow.direction * half, 0);
 
+  const shading = glow.shading !== false;
+
   // One flat shade, from the front of the attack to the goal line.
-  if (lineX !== frontPx) {
+  if (shading && lineX !== frontPx) {
     ctx.globalAlpha = AREA_ALPHA * glow.intensity;
     ctx.fillStyle = glow.color;
     ctx.fillRect(Math.min(frontPx, lineX), top, Math.abs(lineX - frontPx), bottom - top);
@@ -154,17 +160,24 @@ export function drawAttackGlow(
 
   // The direction of the attack, flowing through the middle of the half
   // being attacked.
-  const [halfCentre] = p((glow.direction * half) / 2, 0);
-  ctx.fillStyle = '#ffffff';
-  drawChevrons(
-    ctx,
-    halfCentre,
-    (top + bottom) / 2,
-    glow.direction,
-    t.sc,
-    glow.flow ?? 0,
-    CHEVRON_ALPHA * glow.intensity
-  );
+  if (glow.arrows !== false) {
+    const [halfCentre] = p((glow.direction * half) / 2, 0);
+    ctx.fillStyle = '#ffffff';
+    drawChevrons(
+      ctx,
+      halfCentre,
+      (top + bottom) / 2,
+      glow.direction,
+      t.sc,
+      glow.flow ?? 0,
+      CHEVRON_ALPHA * glow.intensity
+    );
+  }
+
+  if (!shading) {
+    ctx.globalAlpha = before;
+    return;
+  }
 
   // A bar beyond the net of the goal under attack, lit with a soft glow.
   const barNear = glow.direction * (half + NET_DEPTH_METRES + BAR_GAP_METRES);
