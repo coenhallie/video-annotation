@@ -4,7 +4,7 @@ import { createApp, defineComponent, h, nextTick, ref } from 'vue';
 import PipelineOutputSurface from '@/components/PipelineOutputSurface.vue';
 import type { PipelineReplay, ReplayState } from '@/composables/usePipelineReplay';
 import { GOAL_SEQUENCE_MS } from '@/lib/vis/goalSequence';
-import { PERSON_COLORS } from '@/lib/vis/constants';
+import { NEARBY_FADE_S, PERSON_COLORS } from '@/lib/vis/constants';
 import { CHEVRON_FLOW_PERIOD_S } from '@/lib/vis/attackGlow';
 
 /**
@@ -22,7 +22,12 @@ const { renderFrame, setView, useRenderer2D } = vi.hoisted(() => {
   return { renderFrame, setView, useRenderer2D };
 });
 
-vi.mock('@/lib/vis/useRenderer2D', () => ({ useRenderer2D }));
+// Only the renderer is stubbed: the surface also uses the module's pure
+// helpers (nearbyTrackIds), which work without a canvas.
+vi.mock('@/lib/vis/useRenderer2D', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/vis/useRenderer2D')>()),
+  useRenderer2D,
+}));
 
 function fakeReplay(state: ReplayState, message: string | null = null) {
   return {
@@ -1068,6 +1073,128 @@ describe('PipelineOutputSurface', () => {
       await nextTick();
       expect(lastGlow()!.intensity).toBe(1);
       m.unmount();
+    });
+  });
+  describe('ring fade', () => {
+    type Writable = { value: unknown };
+    const set = (r: unknown, v: unknown) => ((r as Writable).value = v);
+    const person = (track_id: number, x: number, ball = false) => ({
+      track_id,
+      person_type: 'PersonType.PLAYER',
+      projected_coordinates: { x, y: 0 },
+      in_possession: ball,
+    });
+    /** Red's carrier (track 1) at x = 0, and track 2 at `x`: ringed within 15 m. */
+    const frameWith = (x: number) => ({
+      pitch_dimensions: { length: 105, width: 68 },
+      teams: [{ team_id: 0, players: [person(1, 0, true), person(2, x)] }],
+      balls: [{ projected_coordinates: { x: 0, y: 0 } }],
+      state: { actions: [] },
+      frame_data: [{ frame_count: 1 }],
+    });
+    const NEAR = 10;
+    const FAR = 30;
+
+    async function ready(x: number) {
+      const replay = fakeReplay('loading');
+      const m = mount(replay);
+      await nextTick();
+      set(replay.currentTime, 10);
+      set(replay.frame, frameWith(x));
+      set(replay.state, 'ready');
+      await nextTick();
+      return { replay, m };
+    }
+
+    /** One step of playback, `step` seconds on, showing a fresh record. */
+    async function step(replay: PipelineReplay, x: number, by = 0.04) {
+      set(replay.currentTime, (replay.currentTime.value as number) + by);
+      set(replay.frame, frameWith(x));
+      await nextTick();
+    }
+
+    const ring = (id: number) =>
+      (renderFrame.mock.calls.at(-1)?.[3] as Map<number, number> | undefined)?.get(id) ?? 0;
+
+    beforeEach(() => renderFrame.mockClear());
+
+    it('shows the rings at once on a frame reached by a seek', async () => {
+      const { replay, m } = await ready(FAR);
+      await step(replay, NEAR, 30);
+      expect(ring(2)).toBe(1);
+      expect(ring(1)).toBe(1);
+      m.unmount();
+    });
+
+    // Possession changes many times a minute, and rings that snapped on and
+    // off with it were jarring.
+    it('fades a ring in during playback', async () => {
+      const { replay, m } = await ready(FAR);
+      set(replay.isPlaying, true);
+      await nextTick();
+      await step(replay, NEAR);
+      expect(ring(2)).toBeGreaterThan(0);
+      expect(ring(2)).toBeLessThan(1);
+      for (let t = 0; t < NEARBY_FADE_S; t += 0.04) await step(replay, NEAR);
+      expect(ring(2)).toBe(1);
+      m.unmount();
+    });
+
+    it('fades a ring out during playback when its player leaves the area', async () => {
+      const { replay, m } = await ready(NEAR);
+      set(replay.isPlaying, true);
+      await nextTick();
+      await step(replay, FAR);
+      expect(ring(2)).toBeGreaterThan(0);
+      expect(ring(2)).toBeLessThan(1);
+      for (let t = 0; t < NEARBY_FADE_S; t += 0.04) await step(replay, FAR);
+      expect(ring(2)).toBe(0);
+      m.unmount();
+    });
+
+    // The clock ticks faster than records arrive: a fade that moved only on
+    // new records would move in steps.
+    it('moves a fade on with the clock between records', async () => {
+      const { replay, m } = await ready(FAR);
+      set(replay.isPlaying, true);
+      await nextTick();
+      await step(replay, NEAR);
+      const before = ring(2);
+      set(replay.currentTime, (replay.currentTime.value as number) + 0.016);
+      await nextTick();
+      expect(ring(2)).toBeGreaterThan(before);
+      m.unmount();
+    });
+
+    it('settles at once when playback pauses partway through a fade', async () => {
+      const { replay, m } = await ready(FAR);
+      set(replay.isPlaying, true);
+      await nextTick();
+      await step(replay, NEAR);
+      set(replay.isPlaying, false);
+      await nextTick();
+      expect(ring(2)).toBe(1);
+      m.unmount();
+    });
+
+    it('does not fade under reduced motion', async () => {
+      const originalMatchMedia = window.matchMedia;
+      window.matchMedia = ((query: string) => ({
+        matches: query.includes('prefers-reduced-motion'),
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      })) as unknown as typeof window.matchMedia;
+      try {
+        const { replay, m } = await ready(FAR);
+        set(replay.isPlaying, true);
+        await nextTick();
+        await step(replay, NEAR);
+        expect(ring(2)).toBe(1);
+        m.unmount();
+      } finally {
+        window.matchMedia = originalMatchMedia;
+      }
     });
   });
 });

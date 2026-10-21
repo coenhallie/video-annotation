@@ -65,6 +65,52 @@ export interface GoalOverlay {
   net: NetBulge
 }
 
+/** The player with the ball in this frame and their team, or null. */
+function ballCarrier(
+  frame: Frame,
+): { teamId: number; x: number; y: number } | null {
+  for (const team of frame.teams ?? []) {
+    const tid = team.team_id ?? -1
+    if (tid === -1) continue
+    const player = (team.players ?? []).find((p) => p.in_possession)
+    if (!player) continue
+    const { x, y } = player.projected_coordinates ?? {}
+    // Possession still counts without a usable position; only "nearby" needs one.
+    return { teamId: tid, x: x ?? NaN, y: y ?? NaN }
+  }
+  return null
+}
+
+function isNearCarrier(
+  player: Player,
+  carrier: { x: number; y: number } | null,
+): boolean {
+  const x = player.projected_coordinates?.x
+  const y = player.projected_coordinates?.y
+  if (!carrier || x == null || y == null) return false
+  return Math.hypot(x - carrier.x, y - carrier.y) <= NEARBY_METRES
+}
+
+/** A player's tracking id, which the export gives as a number or a string. */
+export type TrackId = NonNullable<Player['track_id']>
+
+/**
+ * The track ids of the players near the ball: the carrier and their teammates
+ * within NEARBY_METRES of them. These are the players ringed in white.
+ */
+export function nearbyTrackIds(frame: Frame): Set<TrackId> {
+  const ids = new Set<TrackId>()
+  const carrier = ballCarrier(frame)
+  if (!carrier) return ids
+  for (const team of frame.teams ?? []) {
+    if ((team.team_id ?? -1) !== carrier.teamId) continue
+    for (const player of team.players ?? []) {
+      if (player.track_id != null && isNearCarrier(player, carrier)) ids.add(player.track_id)
+    }
+  }
+  return ids
+}
+
 /**
  * Create a 2D renderer bound to a specific canvas element.
  *
@@ -95,7 +141,12 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
    * Render a single frame.  Draws the cached pitch background,
    * iterates teams/players/balls, and paints the HUD overlay.
    */
-  function renderFrame(frame: Frame, overlay?: GoalOverlay, glow?: AttackGlow): void {
+  function renderFrame(
+    frame: Frame,
+    overlay?: GoalOverlay,
+    glow?: AttackGlow,
+    rings?: ReadonlyMap<TrackId, number>,
+  ): void {
     if (!frame) return
 
     const pd = frame.pitch_dimensions
@@ -174,11 +225,18 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
         faded: isFarFromBall(player, tid, focus),
       }))
     })
+    // The white rings: how strong each is, by track id, when the caller fades
+    // them in and out; otherwise full on the players near the ball now.
+    const ringOf = (p: { player: Player; tid: number }): number => {
+      const id = p.player.track_id
+      if (rings && id != null) return rings.get(id) ?? 0
+      return p.tid === withBall && isNearCarrier(p.player, carrier) ? 1 : 0
+    }
     for (const faded of [true, false]) {
       ctx.globalAlpha = faded ? DIMMED_PLAYER_ALPHA : 1
       for (const p of people) {
         if (p.faded !== faded) continue
-        draw2DPlayer(p.player, p.tid, p.tid === withBall && isNearCarrier(p.player, carrier))
+        draw2DPlayer(p.player, p.tid, ringOf(p))
       }
     }
     ctx.globalAlpha = 1
@@ -213,22 +271,6 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
 
   // ── Internal drawing helpers ──────────────────────────────────────────────
 
-  /** The player with the ball in this frame and their team, or null. */
-  function ballCarrier(
-    frame: Frame,
-  ): { teamId: number; x: number; y: number } | null {
-    for (const team of frame.teams ?? []) {
-      const tid = team.team_id ?? -1
-      if (tid === -1) continue
-      const player = (team.players ?? []).find((p) => p.in_possession)
-      if (!player) continue
-      const { x, y } = player.projected_coordinates ?? {}
-      // Possession still counts without a usable position; only "nearby" needs one.
-      return { teamId: tid, x: x ?? NaN, y: y ?? NaN }
-    }
-    return null
-  }
-
   /** The tracked ball's position, or null when the frame has none usable. */
   function trackedBall(frame: Frame): { x: number; y: number } | null {
     for (const ball of frame.balls ?? []) {
@@ -253,21 +295,11 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
   }
 
   /** Within NEARBY_METRES of the carrier, on the pitch (the carrier included). */
-  function isNearCarrier(
-    player: Player,
-    carrier: { x: number; y: number } | null,
-  ): boolean {
-    const x = player.projected_coordinates?.x
-    const y = player.projected_coordinates?.y
-    if (!carrier || x == null || y == null) return false
-    return Math.hypot(x - carrier.x, y - carrier.y) <= NEARBY_METRES
-  }
-
   /**
    * Draw a single player as a filled circle with shadow, outline, optional
    * possession ring, jersey number, and track ID label.
    */
-  function draw2DPlayer(player: Player, teamId: number, nearBall = false): void {
+  function draw2DPlayer(player: Player, teamId: number, ring = 0): void {
     const coords = player.projected_coordinates
     const x = coords?.x
     const y = coords?.y
@@ -292,8 +324,10 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
       colors = PERSON_COLORS.official
       outline = colors.outline
     }
-    // White marks the players around the ball, and only them.
-    if (nearBall) outline = NEARBY_OUTLINE
+    // White marks the players around the ball, and only them. Full on, it
+    // replaces the outline; fading, it is laid over the outline at its strength.
+    const ringOnly = ring >= 1
+    if (ringOnly) outline = NEARBY_OUTLINE
 
     // Shadow (offset 1px down-right)
     ctx.beginPath()
@@ -309,6 +343,13 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     ctx.strokeStyle = outline
     ctx.lineWidth = outlineWidth
     ctx.stroke()
+    if (ring > 0 && !ringOnly) {
+      const alpha = ctx.globalAlpha
+      ctx.globalAlpha = alpha * ring
+      ctx.strokeStyle = NEARBY_OUTLINE
+      ctx.stroke()
+      ctx.globalAlpha = alpha
+    }
 
     // Possession ring (gold)
     if (player.in_possession) {

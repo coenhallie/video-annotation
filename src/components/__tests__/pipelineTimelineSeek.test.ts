@@ -26,7 +26,12 @@ const { renderFrame, useRenderer2D } = vi.hoisted(() => {
   return { renderFrame, useRenderer2D };
 });
 
-vi.mock('@/lib/vis/useRenderer2D', () => ({ useRenderer2D }));
+// Only the renderer is stubbed: the surface also uses the module's pure
+// helpers (nearbyTrackIds), which work without a canvas.
+vi.mock('@/lib/vis/useRenderer2D', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/vis/useRenderer2D')>()),
+  useRenderer2D,
+}));
 
 const FILE = { count: 500, fromBytes: 400, toBytes: 400 };
 

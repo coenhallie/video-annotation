@@ -55,12 +55,12 @@ export const PERSON_COLORS: Record<
  * Opacity of players far from the ball, so the eye goes to the play around it.
  * Applied frame by frame with no fade, following the data as it is.
  *
- * Chosen low on purpose (tried 0.6 and 0.4 first): the faded players recede
- * strongly. The cost, accepted: this much green showing through turns faded
- * red towards olive and faded blue towards teal, so their team reads less
- * clearly than the solid players'.
+ * Chosen low on purpose (tried 0.6, 0.4 and 0.3 first): the faded players
+ * recede strongly. The cost, accepted: this much green showing through turns
+ * faded red towards olive and faded blue towards teal, so their team reads
+ * less clearly than the solid players'.
  */
-export const DIMMED_PLAYER_ALPHA = 0.3
+export const DIMMED_PLAYER_ALPHA = 0.15
 
 /**
  * Players further than this from the ball are faded (DIMMED_PLAYER_ALPHA).
@@ -83,3 +83,10 @@ export const NEARBY_OUTLINE = '#ffffff'
  * have 1 to 5. At 10 m 39% of frames have none; from 20 m it is half the team.
  */
 export const NEARBY_METRES = 15
+
+/**
+ * Seconds for a white ring to fade in or out during playback. Who is near the
+ * ball changes many times a minute, and rings snapping on and off with it were
+ * jarring. Short, so a ring still follows the play.
+ */
+export const NEARBY_FADE_S = 0.4
