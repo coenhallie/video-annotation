@@ -29,7 +29,7 @@ export const REPLAY_LAYERS: ReadonlyArray<{ key: ReplayLayerKey; label: string; 
     hint: 'Team colour from the front of the attack to the goal',
   },
   { key: 'attackArrows', label: 'Attack arrows', hint: 'Arrows flowing toward the goal' },
-  { key: 'ballTrail', label: 'Ball trail', hint: 'A line from where the ball was played' },
+  { key: 'ballTrail', label: 'Ball trail', hint: 'Lines along the last passes' },
   {
     key: 'phaseLabels',
     label: 'Attacking / defending',

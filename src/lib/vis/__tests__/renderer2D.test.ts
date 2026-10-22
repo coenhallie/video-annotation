@@ -493,14 +493,15 @@ describe('ball trail', () => {
     ],
     balls: [{ projected_coordinates: { x: 10, y: 4 } }],
   } as unknown as Frame;
-  const trail = { from: { x: -5, y: 2 }, strength: 1 };
+  const trail = { passes: [], from: { x: -5, y: 2 } };
 
   function render(layers: Parameters<ReturnType<typeof useRenderer2D>['renderFrame']>[1], f = frame) {
     const { canvas, ops } = fakeCanvas();
     useRenderer2D(canvas).renderFrame(f, layers);
     return ops;
   }
-  const trailStroke = (ops: Op[]) => ops.find((o) => o.op === 'stroke' && o.strokeStyle.startsWith('gradient('));
+  const trailStrokes = (ops: Op[]) => ops.filter((o) => o.op === 'stroke' && o.strokeStyle.startsWith('gradient('));
+  const trailStroke = (ops: Op[]) => trailStrokes(ops)[0];
 
   it('draws a line from where the ball was played to the ball, brightening toward the ball', () => {
     const ops = render({ trail });
@@ -513,9 +514,26 @@ describe('ball trail', () => {
     );
   });
 
-  it('fades the whole line with its strength', () => {
-    const ops = render({ trail: { ...trail, strength: 0.5 } });
-    expect(trailStroke(ops)?.strokeStyle).toContain('1:rgba(255,255,255,0.46)');
+  it('draws the passes before it, oldest first, each brightening toward where it went', () => {
+    const passes = [
+      { from: { x: -30, y: 0 }, to: { x: -20, y: 5 }, strength: 0.5 },
+      { from: { x: -19, y: 5 }, to: { x: -6, y: 2 }, strength: 1 },
+    ];
+    const strokes = trailStrokes(render({ trail: { ...trail, passes } }));
+    const line = (from: { x: number; y: number }, to: { x: number; y: number }) =>
+      `gradient(${at(from.x, from.y).join(',')}->${at(to.x, to.y).join(',')}`;
+    expect(strokes.map((o) => o.strokeStyle.split('|')[0])).toEqual([
+      line(passes[0]!.from, passes[0]!.to),
+      line(passes[1]!.from, passes[1]!.to),
+      line(trail.from, { x: 10, y: 4 }),
+    ]);
+    expect(strokes[0]!.strokeStyle).toContain('1:rgba(255,255,255,0.46)');
+    expect(strokes[1]!.strokeStyle).toContain('1:rgba(255,255,255,0.92)');
+  });
+
+  it('draws the passes before it while the ball is not in flight', () => {
+    const passes = [{ from: { x: -30, y: 0 }, to: { x: -20, y: 5 }, strength: 1 }];
+    expect(trailStrokes(render({ trail: { passes, from: null } }))).toHaveLength(1);
   });
 
   it('draws it over the players and under the ball', () => {
@@ -529,7 +547,7 @@ describe('ball trail', () => {
     expect(line).toBeLessThan(ball);
   });
 
-  it('draws none without a tracked ball, or while the goal sequence plays', () => {
+  it('draws no line to a ball the frame does not have, and none while the goal sequence plays', () => {
     expect(trailStroke(render({ trail }, { ...frame, balls: [] } as Frame))).toBeUndefined();
     const goal = { ball: { x: 53, y: 1 }, trail: [], net: { side: 1 as const, y: 1, metres: 0 } };
     expect(trailStroke(render({ trail, goal }))).toBeUndefined();

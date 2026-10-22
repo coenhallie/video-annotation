@@ -4,6 +4,7 @@ import {
   sameTrail,
   RELEASE_METRES,
   TRAIL_FADE_S,
+  TRAIL_HISTORY_S,
   TRAIL_HOLD_S,
   TRAIL_LOOKBACK_S,
 } from '@/lib/vis/ballTrail';
@@ -67,7 +68,7 @@ describe('ballTrailAt', () => {
     // Frame 15 is the first with the ball over 2.5 m away (3 m).
     const records = pass(16);
     expect(ballTrailAt(records, 14)).toBeNull();
-    expect(last(records)).toEqual({ from: { x: 0, y: 0 }, strength: 1 });
+    expect(last(records)).toEqual({ passes: [], from: { x: 0, y: 0 } });
   });
 
   it('has no trail while a player has the ball', () => {
@@ -110,36 +111,87 @@ describe('ballTrailAt', () => {
     expect(last(records)?.from).toEqual({ x: 0, y: 0 });
   });
 
-  it('ends the trail when someone has the ball again', () => {
-    const records = pass(30);
-    const caught = records.map((r, i) =>
-      i < 25
-        ? r
-        : {
-            ...r,
-            frame: frame([{ team: 1, id: 9, x: 8, ball: true }], { x: 8, y: 0 }),
-          },
-    );
-    expect(ballTrailAt(caught, 24)).not.toBeNull();
-    expect(ballTrailAt(caught, 25)).toBeNull();
+  /** Player 7 passes to 8 at x = 8; at frame 40 player 8 passes on along y. */
+  function chain(steps: number) {
+    return play(steps, (i) => {
+      const people: Person[] = [
+        { team: 0, id: 7, x: 0, ball: i < 10 },
+        { team: 0, id: 8, x: 8, ball: i >= 25 && i < 40 },
+      ];
+      const ball =
+        i < 10 ? { x: 0.5, y: 0 } : i < 25 ? { x: Math.min(8, (i - 9) * 0.5), y: 0 } : i < 40 ? { x: 8, y: 0.5 } : { x: 8, y: (i - 39) * 0.5 };
+      return frame(people, ball);
+    });
+  }
+
+  it('keeps a pass, from where it was played to where it was received, once it lands', () => {
+    const records = chain(30);
+    expect(ballTrailAt(records, 24)).toEqual({ passes: [], from: { x: 0, y: 0 } });
+    expect(ballTrailAt(records, 25)).toEqual({
+      passes: [{ from: { x: 0, y: 0 }, to: { x: 8, y: 0.5 }, strength: 1 }],
+      from: null,
+    });
   });
 
-  it('fades out over the end of the hold, then ends', () => {
-    // Released at frame 15; the trail lasts TRAIL_HOLD_S from there.
-    const steps = 15 + Math.round(TRAIL_HOLD_S / DT) + 2;
-    const records = pass(steps);
-    const at = (s: number) => ballTrailAt(records, 15 + Math.round(s / DT));
-    expect(at(TRAIL_HOLD_S - TRAIL_FADE_S - DT)?.strength).toBe(1);
-    const fading = at(TRAIL_HOLD_S - TRAIL_FADE_S / 2)?.strength ?? 0;
+  it('chains the passes of a move: the one before stays while the next travels', () => {
+    const records = chain(50);
+    expect(last(records)).toEqual({
+      passes: [{ from: { x: 0, y: 0 }, to: { x: 8, y: 0.5 }, strength: 1 }],
+      from: { x: 8, y: 0 },
+    });
+  });
+
+  it('fades a pass out over the end of its time on screen, then drops it', () => {
+    // The pass lands at frame 25, and nothing else happens after.
+    const steps = 25 + Math.round(TRAIL_HISTORY_S / DT) + 2;
+    const records = play(steps, (i) =>
+      i < 40 ? chain(40)[i]!.frame : frame([{ team: 0, id: 8, x: 8, ball: true }], { x: 8, y: 0.5 }),
+    );
+    const at = (s: number) => ballTrailAt(records, 25 + Math.round(s / DT));
+    expect(at(TRAIL_HISTORY_S - TRAIL_FADE_S - DT)?.passes[0]?.strength).toBe(1);
+    const fading = at(TRAIL_HISTORY_S - TRAIL_FADE_S / 2)?.passes[0]?.strength ?? 0;
     expect(fading).toBeGreaterThan(0.3);
     expect(fading).toBeLessThan(0.7);
-    expect(at(TRAIL_HOLD_S + DT)).toBeNull();
+    expect(at(TRAIL_HISTORY_S + DT)).toBeNull();
+  });
+
+  it('ends a pass nobody receives where the ball was last seen, once the hold is up', () => {
+    // Released at frame 15; the ball runs on until frame 30, then stops.
+    const records = play(15 + Math.round(TRAIL_HOLD_S / DT) + 5, (i) =>
+      frame([{ team: 0, id: 7, x: 0, ball: i < 10 }], { x: i < 10 ? 0.5 : (Math.min(i, 30) - 9) * 0.5, y: 0 }),
+    );
+    expect(last(records)).toEqual({
+      passes: [{ from: { x: 0, y: 0 }, to: { x: 10.5, y: 0 }, strength: 1 }],
+      from: null,
+    });
+  });
+
+  it('leaves no line for a ball a player plays and gets back themselves', () => {
+    const records = play(40, (i) =>
+      frame([{ team: 0, id: 7, x: 0, ball: i < 10 || i >= 20 }], { x: i < 10 || i >= 20 ? 0.5 : 3, y: 0 }),
+    );
+    expect(ballTrailAt(records, 15)?.from).toEqual({ x: 0, y: 0 });
+    expect(last(records)).toBeNull();
   });
 
   it('has no trail on a frame without a tracked ball', () => {
     const records = pass(16);
     records.push({ t: records.at(-1)!.t + DT, frame: frame([{ team: 0, id: 7, x: 0 }], null) });
     expect(last(records)).toBeNull();
+    // A pass that has landed still shows: it does not end at the ball.
+    const landed = chain(30);
+    landed.push({ t: landed.at(-1)!.t + DT, frame: frame([{ team: 0, id: 8, x: 8 }], null) });
+    expect(last(landed)?.passes).toHaveLength(1);
+  });
+
+  it('does not take a flag on a player far from the ball to mean they have it', () => {
+    // Mid-pass, an opponent 20 m away is flagged for a frame.
+    const records = pass(20).map((r, i) =>
+      i === 17
+        ? { ...r, frame: frame([{ team: 0, id: 7, x: 0 }, { team: 1, id: 9, x: 24, ball: true }], { x: 4, y: 0 }) }
+        : r,
+    );
+    expect(last(records)).toEqual({ passes: [], from: { x: 0, y: 0 } });
   });
 
   it('never takes an official for the player who had the ball', () => {
@@ -165,10 +217,13 @@ describe('ballTrailAt', () => {
 
 describe('sameTrail', () => {
   it('tells trails that draw the same from those that do not', () => {
-    const a = { from: { x: 1, y: 2 }, strength: 1 };
-    expect(sameTrail(a, { from: { x: 1, y: 2 }, strength: 1 })).toBe(true);
-    expect(sameTrail(a, { from: { x: 1, y: 3 }, strength: 1 })).toBe(false);
-    expect(sameTrail(a, { from: { x: 1, y: 2 }, strength: 0.5 })).toBe(false);
+    const pass = { from: { x: 0, y: 0 }, to: { x: 8, y: 0 }, strength: 1 };
+    const a = { passes: [pass], from: { x: 1, y: 2 } };
+    expect(sameTrail(a, { passes: [{ ...pass }], from: { x: 1, y: 2 } })).toBe(true);
+    expect(sameTrail(a, { passes: [pass], from: { x: 1, y: 3 } })).toBe(false);
+    expect(sameTrail(a, { passes: [pass], from: null })).toBe(false);
+    expect(sameTrail(a, { passes: [{ ...pass, strength: 0.5 }], from: { x: 1, y: 2 } })).toBe(false);
+    expect(sameTrail(a, { passes: [], from: { x: 1, y: 2 } })).toBe(false);
     expect(sameTrail(a, null)).toBe(false);
     expect(sameTrail(null, null)).toBe(true);
   });

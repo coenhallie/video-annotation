@@ -1,54 +1,89 @@
 import type { Frame, Player } from './types';
-import { PHASE_LOOKBACK_S, type PhaseRecord } from './teamPhase';
+import type { PhaseRecord } from './teamPhase';
 
 /**
  * The ball's trail: a line from where a player played the ball to where the
- * ball is now, drawn while it travels to whoever gets it next. Like the team
- * phase it is worked out here from the pipeline's own frames, not reported by
- * the pipeline.
+ * ball is now, while it travels, and behind it the passes that came before,
+ * each a line from where it was played to where it was received. A move of
+ * several passes shows as a chain of them. Like the team phase it is worked
+ * out here from the pipeline's own frames, not reported by the pipeline.
  *
  * The ball has left a player once it is more than RELEASE_METRES from them,
  * not when their possession flag goes: the flag drops out for a frame or two
  * at a time while a player still has the ball at their feet. Until then the
- * point the line starts from follows the player, by track id. A player the
+ * point the line starts from follows the player, by track id. By the same
+ * measure a flag on a player further than that from the ball is not taken to
+ * mean they have it: on the Manchester City vs PSG export 1 flag in 30 is, up
+ * to 24 m away, and each drew a line from that player to the ball. A player the
  * pipeline is not tracking (no track id, or -1) cannot be told apart from
  * anyone else it is not tracking, so the line starts from where they last had
  * the flag.
  *
- * The trail lasts until someone has the ball again, or for TRAIL_HOLD_S after
- * the ball left, fading over the last TRAIL_FADE_S of that. A frame without a
- * tracked ball has no trail: there is nothing for it to end at.
+ * A pass ends where the ball is when someone has it again, or where it was
+ * last seen TRAIL_HOLD_S after it was played if nobody has had it by then (a
+ * shot, a clearance, the ball going out). A ball a player plays and gets back
+ * themselves was a touch, not a pass, and leaves no line. A pass stays on
+ * screen for TRAIL_HISTORY_S after it ended, fading over the last
+ * TRAIL_FADE_S of that.
  *
- * Only frames within TRAIL_LOOKBACK_S of the frame asked about are read, the
- * same history the team phase reads, so the answer is the same whether the
- * replay played into the frame or seeked to it.
+ * Only frames within TRAIL_LOOKBACK_S of the frame asked about are read, so
+ * the answer is the same whether the replay played into the frame or seeked
+ * to it.
  */
 
 /** Further than this from the player, the ball has left them. */
 export const RELEASE_METRES = 2.5;
-/** How long the trail lasts after the ball left, if nobody gets it first. */
+/** How long a pass can travel before it ends where the ball then is. */
 export const TRAIL_HOLD_S = 3;
-/** How long the trail takes to fade out at the end of TRAIL_HOLD_S. */
-export const TRAIL_FADE_S = 0.3;
-/** How far back the trail looks for the player who last had the ball. */
-export const TRAIL_LOOKBACK_S = PHASE_LOOKBACK_S;
+/** How long a pass stays on screen after it ended. */
+export const TRAIL_HISTORY_S = 6;
+/** How long a pass takes to fade out at the end of TRAIL_HISTORY_S. */
+export const TRAIL_FADE_S = 1.5;
+/**
+ * How far back the trail reads: past the start of the oldest pass still on
+ * screen (ended TRAIL_HISTORY_S ago, after travelling up to TRAIL_HOLD_S),
+ * with room before that for the frame its player last had the flag in.
+ */
+export const TRAIL_LOOKBACK_S = TRAIL_HISTORY_S + TRAIL_HOLD_S + 4;
 
-interface Point {
+export interface Point {
   x: number;
   y: number;
 }
 
-export interface BallTrail {
-  /** Where the ball was played from, in pitch metres. */
+/** A pass that has ended, from where it was played to where it ended. */
+export interface TrailPass {
   from: Point;
+  to: Point;
   /** How strongly it is drawn, from 0 to 1: below 1 only as it fades out. */
   strength: number;
 }
 
+export interface BallTrail {
+  /** The passes still on screen, oldest first. */
+  passes: TrailPass[];
+  /**
+   * Where the ball in flight now was played from, or null when it is not in
+   * flight. Its line ends at the frame's own ball.
+   */
+  from: Point | null;
+}
+
+const samePoint = (a: Point, b: Point) => a.x === b.x && a.y === b.y;
+
 /** Whether two trails draw the same, so a caller can keep the one it has. */
 export function sameTrail(a: BallTrail | null, b: BallTrail | null): boolean {
   if (a === null || b === null) return a === b;
-  return a.from.x === b.from.x && a.from.y === b.from.y && a.strength === b.strength;
+  if (a.from === null || b.from === null ? a.from !== b.from : !samePoint(a.from, b.from)) {
+    return false;
+  }
+  return (
+    a.passes.length === b.passes.length &&
+    a.passes.every((p, i) => {
+      const q = b.passes[i]!;
+      return samePoint(p.from, q.from) && samePoint(p.to, q.to) && p.strength === q.strength;
+    })
+  );
 }
 
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
@@ -67,23 +102,48 @@ function ballOf(frame: Frame): Point | null {
   return null;
 }
 
-/** The player flagged with the ball, and their team; officials never are. */
-function carrierOf(frame: Frame): { player: Player; teamId: number } | null {
+/**
+ * The player flagged with the ball, and their team, unless the ball is
+ * tracked further than RELEASE_METRES from them. Officials never have it.
+ */
+function carrierOf(frame: Frame, ball: Point | null): { player: Player; teamId: number } | null {
   for (const team of frame.teams ?? []) {
     const teamId = team.team_id ?? -1;
     if (teamId === -1) continue;
-    const player = (team.players ?? []).find((p) => p.in_possession);
-    if (player) return { player, teamId };
+    for (const player of team.players ?? []) {
+      if (!player.in_possession) continue;
+      const at = position(player);
+      if (ball && at && Math.hypot(ball.x - at.x, ball.y - at.y) > RELEASE_METRES) continue;
+      return { player, teamId };
+    }
   }
   return null;
 }
 
-/** A track id that names one player, rather than "not tracked". */
-function followable(id: Player['track_id']): id is NonNullable<Player['track_id']> {
-  return id != null && Number(id) >= 0;
+type TrackId = NonNullable<Player['track_id']>;
+
+/** The player who last had the ball, until it leaves them. */
+interface Holder {
+  id: TrackId | null;
+  teamId: number;
+  at: Point | null;
 }
 
-function findPlayer(frame: Frame, teamId: number, id: NonNullable<Player['track_id']>) {
+/** The ball since it left a player, until someone has it or it stops. */
+interface Flight {
+  from: Point;
+  by: TrackId | null;
+  at: number;
+  /** Where it was last seen. */
+  ball: Point | null;
+}
+
+/** A track id that names one player, rather than "not tracked". */
+function followable(id: Player['track_id']): TrackId | null {
+  return id != null && Number(id) >= 0 ? id : null;
+}
+
+function findPlayer(frame: Frame, teamId: number, id: TrackId): Player | null {
   const team = (frame.teams ?? []).find((t) => (t.team_id ?? -1) === teamId);
   return (team?.players ?? []).find((p) => p.track_id === id) ?? null;
 }
@@ -91,39 +151,71 @@ function findPlayer(frame: Frame, teamId: number, id: NonNullable<Player['track_
 /** The trail at `records[index]`, from the records before it; null for none. */
 export function ballTrailAt(records: PhaseRecord[], index: number): BallTrail | null {
   const now = records[index];
-  if (!now || carrierOf(now.frame) || !ballOf(now.frame)) return null;
+  if (!now) return null;
 
   let start = index;
   while (start > 0 && (records[start - 1]?.t ?? -Infinity) >= now.t - TRAIL_LOOKBACK_S) start--;
 
-  // The last frame anyone had the ball in.
-  let held = index - 1;
-  while (held >= start && !(records[held] && carrierOf(records[held]!.frame))) held--;
-  const heldRecord = records[held];
-  if (held < start || !heldRecord) return null;
-  const carrier = carrierOf(heldRecord.frame)!;
+  // Who last had the ball, and the ball in flight once it has left them.
+  let holder: Holder | null = null;
+  let flight: Flight | null = null;
+  const passes: { from: Point; to: Point; endedAt: number }[] = [];
+  const land = (landed: Flight, to: Point | null, endedAt: number) => {
+    if (to) passes.push({ from: landed.from, to, endedAt });
+  };
 
-  // Follow them until the ball is far enough from them to have left.
-  let from = position(carrier.player);
-  const id = followable(carrier.player.track_id) ? carrier.player.track_id : null;
-  let releasedAt: number | null = null;
-  for (let i = held + 1; i <= index; i++) {
+  for (let i = start; i <= index; i++) {
     const record = records[i];
     if (!record) continue;
-    if (id !== null) {
-      const holder = findPlayer(record.frame, carrier.teamId, id);
-      const at = holder && position(holder);
-      if (at) from = at;
+    const { t, frame } = record;
+    const ball = ballOf(frame);
+    const carrier = carrierOf(frame, ball);
+
+    if (carrier) {
+      const id = followable(carrier.player.track_id);
+      if (flight) {
+        // Played and got back by the same player: a touch, not a pass.
+        if (id === null || id !== flight.by) {
+          land(flight, ball ?? position(carrier.player) ?? flight.ball, t);
+        }
+        flight = null;
+      }
+      holder = { id, teamId: carrier.teamId, at: position(carrier.player) };
+      continue;
     }
-    const ball = ballOf(record.frame);
-    if (ball && from && Math.hypot(ball.x - from.x, ball.y - from.y) > RELEASE_METRES) {
-      releasedAt = record.t;
-      break;
+
+    if (flight) {
+      if (ball) flight.ball = ball;
+      // Nobody has had it in time: it ends where it was last seen.
+      if (t - flight.at > TRAIL_HOLD_S) {
+        land(flight, flight.ball, t);
+        flight = null;
+        holder = null;
+      }
+      continue;
+    }
+
+    if (holder) {
+      if (holder.id !== null) {
+        const player = findPlayer(frame, holder.teamId, holder.id);
+        const at = player && position(player);
+        if (at) holder.at = at;
+      }
+      const from: Point | null = holder.at;
+      if (ball && from && Math.hypot(ball.x - from.x, ball.y - from.y) > RELEASE_METRES) {
+        flight = { from, by: holder.id, at: t, ball };
+        holder = null;
+      }
     }
   }
-  if (releasedAt === null || !from) return null;
 
-  const left = TRAIL_HOLD_S - (now.t - releasedAt);
-  const strength = Math.min(1, left / TRAIL_FADE_S);
-  return strength > 0 ? { from, strength } : null;
+  const shown = passes
+    .map(({ from, to, endedAt }) => ({
+      from,
+      to,
+      strength: Math.min(1, (TRAIL_HISTORY_S - (now.t - endedAt)) / TRAIL_FADE_S),
+    }))
+    .filter((p) => p.strength > 0);
+  const from = flight && ballOf(now.frame) ? flight.from : null;
+  return shown.length > 0 || from ? { passes: shown, from } : null;
 }

@@ -24,8 +24,9 @@
 //    takes an optional goal-sequence overlay whose ball replaces the tracked
 //    one (goalNets.ts, goalSequence.ts), and an optional attack glow drawn
 //    under the players (attackGlow.ts).
-//  - renderFrame takes an optional ball trail, a line from where the ball was
-//    played to the tracked ball, drawn over the players (ballTrail.ts).
+//  - renderFrame takes an optional ball trail, drawn over the players: a line
+//    from where the ball was played to the tracked ball, and the passes before
+//    it (ballTrail.ts).
 
 // ---------------------------------------------------------------------------
 // 2D canvas rendering composable.
@@ -51,7 +52,7 @@ import {
 import { build2DTransform, worldToPx, buildPitchCache, PITCH_GRASS } from './pitchGeometry'
 import { drawGoalNets, type NetBulge } from './goalNets'
 import { attackFront, drawAttackGlow, type AttackGlow } from './attackGlow'
-import type { BallTrail } from './ballTrail'
+import type { BallTrail, Point } from './ballTrail'
 import {
   computeViewMatrix,
   IDENTITY_VIEW,
@@ -162,7 +163,7 @@ export interface FrameLayers {
   ballPulse?: BallPulse | undefined
   /** Whether players far from the ball are drawn faint. Default on. */
   fadeFar?: boolean | undefined
-  /** The ball's trail, from where it was played to the tracked ball. */
+  /** The ball's trail: the passes before, and the ball in flight now. */
   trail?: BallTrail | undefined
 }
 
@@ -170,8 +171,9 @@ export interface FrameLayers {
 const PULSE_GROWTH_PX = 16
 const PULSE_LINE_PX = 2.5
 /**
- * Width of the ball trail in frame px, and its opacity at the end it was
- * played from and at the ball: it fades in toward the ball, like a streak.
+ * Width of the ball trail in frame px, and the opacity of each of its lines at
+ * the end the ball was played from and at the end it went to: each brightens
+ * toward where the ball went, so a chain of passes reads in order.
  */
 const TRAIL_LINE_PX = 2.5
 const TRAIL_START_ALPHA = 0.05
@@ -310,11 +312,12 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     }
     ctx.globalAlpha = 1
 
-    // The trail ends at the tracked ball, so the goal sequence, which draws its
-    // own ball and trail in place of that one, has none.
+    // The goal sequence draws its own ball and trail in place of the tracked
+    // ones, so the trail is left out while it plays.
     if (trail && !overlay) {
+      for (const pass of trail.passes) drawTrailLine(pass.from, pass.to, pass.strength)
       const ball = trackedBall(frame)
-      if (ball) drawTrail(trail, ball)
+      if (trail.from && ball) drawTrailLine(trail.from, ball, 1)
     }
 
     // During the goal sequence its ball replaces the tracked one, which near a
@@ -491,12 +494,12 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     ctx.globalAlpha = before
   }
 
-  /** The ball trail: a line from where the ball was played to the ball. */
-  function drawTrail(trail: BallTrail, ball: { x: number; y: number }): void {
-    if (!transform2d || !Number.isFinite(trail.from.x) || !Number.isFinite(trail.from.y)) return
-    const [x0, y0] = worldToPx(trail.from.x, trail.from.y, transform2d)
-    const [x1, y1] = worldToPx(ball.x, ball.y, transform2d)
-    const strength = Math.min(1, Math.max(0, trail.strength))
+  /** One line of the ball trail, from where the ball was played to where it went. */
+  function drawTrailLine(from: Point, to: Point, trailStrength: number): void {
+    if (!transform2d || ![from.x, from.y, to.x, to.y].every(Number.isFinite)) return
+    const [x0, y0] = worldToPx(from.x, from.y, transform2d)
+    const [x1, y1] = worldToPx(to.x, to.y, transform2d)
+    const strength = Math.min(1, Math.max(0, trailStrength))
     const gradient = ctx.createLinearGradient(x0, y0, x1, y1)
     gradient.addColorStop(0, `rgba(255,255,255,${TRAIL_START_ALPHA * strength})`)
     gradient.addColorStop(1, `rgba(255,255,255,${TRAIL_END_ALPHA * strength})`)
