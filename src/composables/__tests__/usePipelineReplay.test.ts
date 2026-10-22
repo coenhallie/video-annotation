@@ -1015,7 +1015,7 @@ describe('usePipelineReplay ball trail', () => {
     expect(r.ballTrail.value).toBeNull();
     await r.seek(151);
     await r.whenIdle();
-    expect(r.ballTrail.value).toEqual({ passes: [], from: { x: 0, y: 5 } });
+    expect(r.ballTrail.value).toEqual({ lines: [], from: { x: 0, y: 5 } });
     await r.seek(160);
     await r.whenIdle();
     expect(r.ballTrail.value).toBeNull();

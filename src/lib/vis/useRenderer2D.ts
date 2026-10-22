@@ -25,8 +25,8 @@
 //    one (goalNets.ts, goalSequence.ts), and an optional attack glow drawn
 //    under the players (attackGlow.ts).
 //  - renderFrame takes an optional ball trail, drawn over the players: a line
-//    from where the ball was played to the tracked ball, and the passes before
-//    it (ballTrail.ts).
+//    from where the ball was played to the tracked ball, and the path it took
+//    before that, with a dot wherever it turned (ballTrail.ts).
 
 // ---------------------------------------------------------------------------
 // 2D canvas rendering composable.
@@ -172,12 +172,15 @@ const PULSE_GROWTH_PX = 16
 const PULSE_LINE_PX = 2.5
 /**
  * Width of the ball trail in frame px, and the opacity of each of its lines at
- * the end the ball was played from and at the end it went to: each brightens
- * toward where the ball went, so a chain of passes reads in order.
+ * the end the ball came from and at the end it went to: each brightens toward
+ * where the ball went, so the path reads in order. Each starts bright enough
+ * to show it joins the one before. The dots where the path turns are drawn
+ * at the full opacity of the line that ends there.
  */
 const TRAIL_LINE_PX = 2.5
-const TRAIL_START_ALPHA = 0.05
+const TRAIL_START_ALPHA = 0.3
 const TRAIL_END_ALPHA = 0.92
+const TRAIL_DOT_PX = 2.5
 
 /**
  * Create a 2D renderer bound to a specific canvas element.
@@ -315,9 +318,12 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     // The goal sequence draws its own ball and trail in place of the tracked
     // ones, so the trail is left out while it plays.
     if (trail && !overlay) {
-      for (const pass of trail.passes) drawTrailLine(pass.from, pass.to, pass.strength)
       const ball = trackedBall(frame)
-      if (trail.from && ball) drawTrailLine(trail.from, ball, 1)
+      const inFlight = trail.from && ball ? { from: trail.from, to: ball, strength: 1 } : null
+      const lines = inFlight ? [...trail.lines, inFlight] : trail.lines
+      for (const line of lines) drawTrailLine(line.from, line.to, line.strength)
+      // A dot wherever one line hands over to the next, over both of them.
+      for (const line of lines.slice(0, -1)) drawTrailDot(line.to, line.strength)
     }
 
     // During the goal sequence its ball replaces the tracked one, which near a
@@ -511,6 +517,19 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     ctx.lineCap = 'round'
     ctx.stroke()
     ctx.lineCap = 'butt'
+  }
+
+  /** The dot where the ball trail turns. */
+  function drawTrailDot(at: Point, trailStrength: number): void {
+    if (!transform2d || !Number.isFinite(at.x) || !Number.isFinite(at.y)) return
+    const [px, py] = worldToPx(at.x, at.y, transform2d)
+    const before = ctx.globalAlpha
+    ctx.globalAlpha = TRAIL_END_ALPHA * Math.min(1, Math.max(0, trailStrength))
+    ctx.beginPath()
+    ctx.arc(px, py, TRAIL_DOT_PX, 0, Math.PI * 2)
+    ctx.fillStyle = '#ffffff'
+    ctx.fill()
+    ctx.globalAlpha = before
   }
 
   /** One ring of the throw-in pulse: growing out from its spot and fading. */

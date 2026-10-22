@@ -1692,7 +1692,7 @@ describe('PipelineOutputSurface', () => {
 
     it('draws the ball trail the replay reports, and none when it is off', async () => {
       const { replay, m } = await ready();
-      const trail = { passes: [], from: { x: -5, y: -30 } };
+      const trail = { lines: [], from: { x: -5, y: -30 } };
       set(replay.ballTrail, trail);
       await nextTick();
       expect(layersOf()?.trail).toEqual(trail);
@@ -1704,7 +1704,7 @@ describe('PipelineOutputSurface', () => {
     it('repaints when the trail changes without a new frame', async () => {
       const { replay, m } = await ready();
       const calls = renderFrame.mock.calls.length;
-      set(replay.ballTrail, { passes: [], from: { x: 1, y: 2 } });
+      set(replay.ballTrail, { lines: [], from: { x: 1, y: 2 } });
       await nextTick();
       expect(renderFrame.mock.calls.length).toBe(calls + 1);
       m.unmount();

@@ -3,9 +3,12 @@ import type { PhaseRecord } from './teamPhase';
 
 /**
  * The ball's trail: a line from where a player played the ball to where the
- * ball is now, while it travels, and behind it the passes that came before,
- * each a line from where it was played to where it was received. A move of
- * several passes shows as a chain of them. Like the team phase it is worked
+ * ball is now, while it travels, and behind it the path the ball took before
+ * that, as one line joined end to end. Each pass runs from where it was
+ * played to where it was received; between one pass and the next, a straight
+ * line runs from where it was received to where the player played it on, the
+ * ground they carried it over. A move of several passes shows as one path,
+ * turning wherever the ball changed hands. Like the team phase it is worked
  * out here from the pipeline's own frames, not reported by the pipeline.
  *
  * The ball has left a player once it is more than RELEASE_METRES from them,
@@ -22,9 +25,9 @@ import type { PhaseRecord } from './teamPhase';
  * A pass ends where the ball is when someone has it again, or where it was
  * last seen TRAIL_HOLD_S after it was played if nobody has had it by then (a
  * shot, a clearance, the ball going out). A ball a player plays and gets back
- * themselves was a touch, not a pass, and leaves no line. A pass stays on
- * screen for TRAIL_HISTORY_S after it ended, fading over the last
- * TRAIL_FADE_S of that.
+ * themselves was a touch, not a pass. Each line stays on screen for
+ * TRAIL_HISTORY_S after the ball reached its end, fading over the last
+ * TRAIL_FADE_S of that, so the path fades away from its oldest end.
  *
  * Only frames within TRAIL_LOOKBACK_S of the frame asked about are read, so
  * the answer is the same whether the replay played into the frame or seeked
@@ -35,10 +38,16 @@ import type { PhaseRecord } from './teamPhase';
 export const RELEASE_METRES = 2.5;
 /** How long a pass can travel before it ends where the ball then is. */
 export const TRAIL_HOLD_S = 3;
-/** How long a pass stays on screen after it ended. */
+/** How long a line stays on screen after the ball reached its end. */
 export const TRAIL_HISTORY_S = 6;
-/** How long a pass takes to fade out at the end of TRAIL_HISTORY_S. */
+/** How long a line takes to fade out at the end of TRAIL_HISTORY_S. */
 export const TRAIL_FADE_S = 1.5;
+/**
+ * A pass played on from closer than this to where the one before it was
+ * received starts where that one ended, rather than with a line too short to
+ * see between them.
+ */
+export const JOIN_METRES = 1;
 /**
  * How far back the trail reads: past the start of the oldest pass still on
  * screen (ended TRAIL_HISTORY_S ago, after travelling up to TRAIL_HOLD_S),
@@ -51,8 +60,8 @@ export interface Point {
   y: number;
 }
 
-/** A pass that has ended, from where it was played to where it ended. */
-export interface TrailPass {
+/** One stretch of the ball's path: a pass, or the ground carried between two. */
+export interface TrailLine {
   from: Point;
   to: Point;
   /** How strongly it is drawn, from 0 to 1: below 1 only as it fades out. */
@@ -60,11 +69,15 @@ export interface TrailPass {
 }
 
 export interface BallTrail {
-  /** The passes still on screen, oldest first. */
-  passes: TrailPass[];
+  /**
+   * The path the ball has taken, oldest first, each line starting where the
+   * one before it ended.
+   */
+  lines: TrailLine[];
   /**
    * Where the ball in flight now was played from, or null when it is not in
-   * flight. Its line ends at the frame's own ball.
+   * flight. Its line ends at the frame's own ball; the path, when there is
+   * one, ends where it starts.
    */
   from: Point | null;
 }
@@ -78,9 +91,9 @@ export function sameTrail(a: BallTrail | null, b: BallTrail | null): boolean {
     return false;
   }
   return (
-    a.passes.length === b.passes.length &&
-    a.passes.every((p, i) => {
-      const q = b.passes[i]!;
+    a.lines.length === b.lines.length &&
+    a.lines.every((p, i) => {
+      const q = b.lines[i]!;
       return samePoint(p.from, q.from) && samePoint(p.to, q.to) && p.strength === q.strength;
     })
   );
@@ -159,9 +172,9 @@ export function ballTrailAt(records: PhaseRecord[], index: number): BallTrail | 
   // Who last had the ball, and the ball in flight once it has left them.
   let holder: Holder | null = null;
   let flight: Flight | null = null;
-  const passes: { from: Point; to: Point; endedAt: number }[] = [];
+  const lines: { from: Point; to: Point; endedAt: number }[] = [];
   const land = (landed: Flight, to: Point | null, endedAt: number) => {
-    if (to) passes.push({ from: landed.from, to, endedAt });
+    if (to) lines.push({ from: landed.from, to, endedAt });
   };
 
   for (let i = start; i <= index; i++) {
@@ -203,13 +216,20 @@ export function ballTrailAt(records: PhaseRecord[], index: number): BallTrail | 
       }
       const from: Point | null = holder.at;
       if (ball && from && Math.hypot(ball.x - from.x, ball.y - from.y) > RELEASE_METRES) {
-        flight = { from, by: holder.id, at: t, ball };
+        // Joined to the path so far: across the ground the ball was carried
+        // over since it last ended, or straight on from there when that is
+        // too short to see.
+        const end = lines.at(-1)?.to;
+        let playedFrom: Point = from;
+        if (end && Math.hypot(from.x - end.x, from.y - end.y) < JOIN_METRES) playedFrom = end;
+        else if (end) lines.push({ from: end, to: from, endedAt: t });
+        flight = { from: playedFrom, by: holder.id, at: t, ball };
         holder = null;
       }
     }
   }
 
-  const shown = passes
+  const shown = lines
     .map(({ from, to, endedAt }) => ({
       from,
       to,
@@ -217,5 +237,5 @@ export function ballTrailAt(records: PhaseRecord[], index: number): BallTrail | 
     }))
     .filter((p) => p.strength > 0);
   const from = flight && ballOf(now.frame) ? flight.from : null;
-  return shown.length > 0 || from ? { passes: shown, from } : null;
+  return shown.length > 0 || from ? { lines: shown, from } : null;
 }
