@@ -24,6 +24,10 @@
 //    takes an optional goal-sequence overlay whose ball replaces the tracked
 //    one (goalNets.ts, goalSequence.ts), and an optional attack glow drawn
 //    under the players (attackGlow.ts).
+//  - renderFrame takes an optional ball trail, drawn over the players: the
+//    path the tracked ball took, with a dot wherever it turned (ballTrail.ts).
+//  - players are not labelled with their tracking id: it is the tracker's
+//    bookkeeping, not anything about the player.
 
 // ---------------------------------------------------------------------------
 // 2D canvas rendering composable.
@@ -49,6 +53,7 @@ import {
 import { build2DTransform, worldToPx, buildPitchCache, PITCH_GRASS } from './pitchGeometry'
 import { drawGoalNets, type NetBulge } from './goalNets'
 import { attackFront, drawAttackGlow, type AttackGlow } from './attackGlow'
+import { trailOpacity, type BallTrail, type TrailPoint } from './ballTrail'
 import {
   computeViewMatrix,
   IDENTITY_VIEW,
@@ -159,11 +164,21 @@ export interface FrameLayers {
   ballPulse?: BallPulse | undefined
   /** Whether players far from the ball are drawn faint. Default on. */
   fadeFar?: boolean | undefined
+  /** The ball's trail: the path it took, and where that turned. */
+  trail?: BallTrail | undefined
 }
 
 /** How far a pulse ring grows past the ball, and how thick it is, in frame px. */
 const PULSE_GROWTH_PX = 16
 const PULSE_LINE_PX = 2.5
+/**
+ * Width of the ball trail and radius of the dots where it turns, in frame px.
+ * Its opacity changes along it (trailOpacity), in steps of 1/TRAIL_ALPHA_STEPS:
+ * each step is one stroke, rather than one per frame of the path.
+ */
+const TRAIL_LINE_PX = 2.5
+const TRAIL_DOT_PX = 2.5
+const TRAIL_ALPHA_STEPS = 40
 
 /**
  * Create a 2D renderer bound to a specific canvas element.
@@ -197,7 +212,7 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
    * iterates teams/players/balls, and paints the HUD overlay.
    */
   function renderFrame(frame: Frame, layers: FrameLayers = {}): void {
-    const { goal: overlay, glow, rings, ballPulse } = layers
+    const { goal: overlay, glow, rings, ballPulse, trail } = layers
     const fadeFar = layers.fadeFar !== false
     if (!frame) return
 
@@ -298,6 +313,13 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     }
     ctx.globalAlpha = 1
 
+    // The goal sequence draws its own ball and trail in place of the tracked
+    // ones, so the trail is left out while it plays.
+    if (trail && !overlay) {
+      for (const run of trail.runs) drawTrailRun(run)
+      for (const turn of trail.turns) drawTrailDot(turn)
+    }
+
     // During the goal sequence its ball replaces the tracked one, which near a
     // goal tends to jump about or go straight through the net.
     if (overlay) {
@@ -356,7 +378,7 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
   /** Within NEARBY_METRES of the carrier, on the pitch (the carrier included). */
   /**
    * Draw a single player as a filled circle with shadow, outline, optional
-   * possession ring, jersey number, and track ID label.
+   * possession ring, and jersey number.
    */
   function draw2DPlayer(player: Player, teamId: number, ring = 0, possession = 0): void {
     const coords = player.projected_coordinates
@@ -431,16 +453,6 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
       ctx.textBaseline = 'middle'
       ctx.fillText(String(Math.round(Number(num))), px, py)
     }
-
-    // Track ID (above the player)
-    const trackId = player.track_id
-    if (trackId != null && Number(trackId) >= 0) {
-      ctx.fillStyle = '#aaaaaa'
-      ctx.font = '9px sans-serif'
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'bottom'
-      ctx.fillText(String(trackId), px, py - PLAYER_RADIUS - 2)
-    }
   }
 
   /**
@@ -469,6 +481,48 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     ctx.strokeStyle = '#000'
     ctx.lineWidth = 1
     ctx.stroke()
+    ctx.globalAlpha = before
+  }
+
+  /**
+   * One unbroken stretch of the ball trail, oldest first. Each stretch of it
+   * between two points takes the opacity of the newer one. Neighbouring
+   * stretches of the same opacity are one stroke, joined round; where the
+   * opacity steps, butt ends meet, so no part of the line is drawn twice.
+   */
+  function drawTrailRun(run: TrailPoint[]): void {
+    if (!transform2d) return
+    const px = run.map((p) => worldToPx(p.x, p.y, transform2d!))
+    const step = (i: number) => Math.round(trailOpacity(run[i]!.age) * TRAIL_ALPHA_STEPS)
+    ctx.lineWidth = TRAIL_LINE_PX
+    ctx.lineJoin = 'round'
+    let i = 1
+    while (i < run.length) {
+      const alpha = step(i)
+      let j = i
+      while (j + 1 < run.length && step(j + 1) === alpha) j++
+      if (alpha > 0) {
+        ctx.beginPath()
+        ctx.moveTo(...px[i - 1]!)
+        for (let k = i; k <= j; k++) ctx.lineTo(...px[k]!)
+        ctx.strokeStyle = `rgba(255,255,255,${alpha / TRAIL_ALPHA_STEPS})`
+        ctx.stroke()
+      }
+      i = j + 1
+    }
+    ctx.lineJoin = 'miter'
+  }
+
+  /** The dot where the ball trail turns, as strong as the path there. */
+  function drawTrailDot(at: TrailPoint): void {
+    if (!transform2d || !Number.isFinite(at.x) || !Number.isFinite(at.y)) return
+    const [px, py] = worldToPx(at.x, at.y, transform2d)
+    const before = ctx.globalAlpha
+    ctx.globalAlpha = trailOpacity(at.age)
+    ctx.beginPath()
+    ctx.arc(px, py, TRAIL_DOT_PX, 0, Math.PI * 2)
+    ctx.fillStyle = '#ffffff'
+    ctx.fill()
     ctx.globalAlpha = before
   }
 

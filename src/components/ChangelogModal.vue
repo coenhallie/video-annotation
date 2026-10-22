@@ -117,6 +117,14 @@ useEscapeToClose(() => props.isVisible, closeModal);
 // Add new entries to the TOP of this array
 const changelogEntries = ref([
   {
+    version: 'Beta v3.26',
+    date: 'October 22, 2026',
+    changes: [
+      'The 2D replay draws the ball\'s trail: the path it took over the last 6 seconds, fading with age, with a dot wherever it changed direction. It follows the tracked ball itself, so passes, dribbles and loose balls all show, and a line never moves once drawn. Where the ball was lost or its tracking jumped, the trail breaks rather than drawing a line across. Shown or hidden from the Layers menu as Ball trail',
+      'Players on the 2D replay are no longer labelled with the tracker\'s four-digit id; shirt numbers stay',
+    ],
+  },
+  {
     version: 'Beta v3.25',
     date: 'October 21, 2026',
     changes: [

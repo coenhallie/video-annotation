@@ -16,6 +16,7 @@ import {
 } from '@/lib/vis/constants';
 import { build2DTransform, worldToPx, PITCH_GRASS } from '@/lib/vis/pitchGeometry';
 import { NET_DEPTH_METRES } from '@/lib/vis/goalSequence';
+import { trailOpacity } from '@/lib/vis/ballTrail';
 import { fakeCanvas, stubOffscreenCanvas, type Op } from './recordingCtx';
 
 const PITCH = { length: 105, width: 68 };
@@ -243,6 +244,14 @@ describe('focus around the ball', () => {
   });
 });
 
+describe('player labels', () => {
+  it('draws the shirt number, and not the tracking id', () => {
+    const { canvas, ops } = fakeCanvas();
+    useRenderer2D(canvas).renderFrame(frameWith({}));
+    expect(ops.filter((o) => o.op === 'fillText').map((o) => o.args[0])).toEqual(['9']);
+  });
+});
+
 describe('nearby highlight', () => {
   type Who = { team: number; x: number; y?: number; type?: string; ball?: boolean };
 
@@ -329,7 +338,10 @@ describe('nearby highlight', () => {
     const at = ops.findIndex(
       (o) => o.op === 'arc' && o.args[0] === px && o.args[1] === py && o.args[2] === PLAYER_RADIUS
     );
-    const end = ops.findIndex((o, i) => i > at && o.op === 'fillText');
+    // Up to the next marker drawn (its shadow comes first), whoever's it is.
+    const end = ops.findIndex(
+      (o, i) => i > at && o.op === 'arc' && o.args[2] === PLAYER_RADIUS && o.args[0] !== px
+    );
     return ops
       .slice(at, end === -1 ? undefined : end)
       .filter((o) => o.op === 'stroke' && o.strokeStyle !== '#ffd700')
@@ -478,6 +490,105 @@ describe('goals and the goal sequence', () => {
     const still = render({ ball: { x: 54, y: 0 }, trail: [], net: { side: 1, y: 0, metres: 0 } });
     const struck = render({ ball: { x: 54, y: 0 }, trail: [], net: { side: 1, y: 0, metres: 0.5 } });
     expect(Number(curve(struck))).toBeGreaterThan(Number(curve(still)));
+  });
+});
+
+describe('ball trail', () => {
+  const at = (x: number, y: number) => worldToPx(x, y, build2DTransform(PITCH));
+  const frame = {
+    pitch_dimensions: PITCH,
+    teams: [
+      {
+        team_id: 0,
+        players: [{ track_id: 7, person_type: 'PersonType.PLAYER', projected_coordinates: { x: 12, y: 4 } }],
+      },
+    ],
+    balls: [{ projected_coordinates: { x: 10, y: 4 } }],
+  } as unknown as Frame;
+  // Along x to a turn at (0, 2), then on to the ball.
+  const run = [
+    { x: -10, y: 2, age: 5.5 },
+    { x: -5, y: 2, age: 3 },
+    { x: 0, y: 2, age: 2 },
+    { x: 5, y: 3, age: 1 },
+    { x: 10, y: 4, age: 0 },
+  ];
+  const trail = { runs: [run], turns: [run[2]!] };
+
+  function render(layers: Parameters<ReturnType<typeof useRenderer2D>['renderFrame']>[1], f = frame) {
+    const { canvas, ops } = fakeCanvas();
+    useRenderer2D(canvas).renderFrame(f, layers);
+    return ops;
+  }
+  const white = (o: Op) => o.strokeStyle.startsWith('rgba(255,255,255,');
+  const trailStrokes = (ops: Op[]) => ops.filter((o) => o.op === 'stroke' && white(o));
+  // The points each trail stroke was drawn through: its style is set after them.
+  const lineTos = (ops: Op[]) =>
+    trailStrokes(ops).flatMap((stroke) => {
+      const end = ops.indexOf(stroke);
+      const start = ops.slice(0, end).findLastIndex((o) => o.op === 'stroke' || o.op === 'fill') + 1;
+      return ops.slice(start, end).filter((o) => o.op === 'lineTo');
+    });
+  const dotsAt = (ops: Op[], x: number, y: number) => {
+    const [px, py] = at(x, y);
+    return ops.filter((o) => o.op === 'arc' && o.args[0] === px && o.args[1] === py && o.args[2] === 2.5);
+  };
+
+  it('draws the path through every point, each stretch as strong as its newer end', () => {
+    const ops = render({ trail });
+    expect(lineTos(ops).map((o) => o.args)).toEqual(run.slice(1).map((p) => at(p.x, p.y)));
+    const alphas = trailStrokes(ops).map((o) => Number(/,([\d.]+)\)$/.exec(o.strokeStyle)![1]));
+    expect(alphas).toEqual(
+      run.slice(1).map((p) => Math.round(trailOpacity(p.age) * 40) / 40),
+    );
+  });
+
+  it('draws stretches of the same strength as one stroke, joined round', () => {
+    const even = [0, 1, 2, 3].map((i) => ({ x: i, y: 0, age: 0 }));
+    const ops = render({ trail: { runs: [even], turns: [] } });
+    expect(trailStrokes(ops)).toHaveLength(1);
+    expect(lineTos(ops)).toHaveLength(3);
+  });
+
+  it('leaves out what has faded away entirely', () => {
+    const old = [
+      { x: -10, y: 2, age: 7 },
+      { x: -5, y: 2, age: 6.5 },
+      { x: 0, y: 2, age: 1 },
+    ];
+    expect(trailStrokes(render({ trail: { runs: [old], turns: [] } }))).toHaveLength(1);
+  });
+
+  it('marks each turn with a dot over the path, as strong as the path there', () => {
+    const ops = render({ trail });
+    const [dot] = dotsAt(ops, 0, 2);
+    expect(dot).toBeDefined();
+    expect(ops.indexOf(dot!)).toBeGreaterThan(ops.lastIndexOf(trailStrokes(ops).at(-1)!));
+    const fill = ops.slice(ops.indexOf(dot!)).find((o) => o.op === 'fill')!;
+    expect(fill.globalAlpha).toBeCloseTo(trailOpacity(2));
+    expect(dotsAt(ops, -10, 2)).toHaveLength(0);
+  });
+
+  it('draws each run apart, with nothing across the gap between them', () => {
+    const ops = render({ trail: { runs: [run.slice(0, 2), run.slice(3)], turns: [] } });
+    expect(lineTos(ops).map((o) => o.args)).toEqual([at(-5, 2), at(10, 4)]);
+  });
+
+  it('draws it over the players and under the ball', () => {
+    const ops = render({ trail });
+    const line = ops.indexOf(trailStrokes(ops)[0]!);
+    const [px, py] = at(12, 4);
+    const [bx, by] = at(10, 4);
+    const player = ops.findIndex((o) => o.op === 'arc' && o.args[0] === px && o.args[1] === py);
+    const ball = ops.findIndex((o) => o.op === 'arc' && o.args[0] === bx && o.args[1] === by && o.args[2] !== 2.5);
+    expect(player).toBeLessThan(line);
+    expect(line).toBeLessThan(ball);
+  });
+
+  it('draws none while the goal sequence plays, or when not given one', () => {
+    const goal = { ball: { x: 53, y: 1 }, trail: [], net: { side: 1 as const, y: 1, metres: 0 } };
+    expect(trailStrokes(render({ trail, goal }))).toHaveLength(0);
+    expect(trailStrokes(render({}))).toHaveLength(0);
   });
 });
 
