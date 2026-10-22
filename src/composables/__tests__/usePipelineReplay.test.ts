@@ -977,9 +977,9 @@ describe('usePipelineReplay team phase', () => {
 
 describe('usePipelineReplay ball trail', () => {
   /**
-   * Player 1 has the ball until `passAt` seconds, then plays it along x at
-   * 10 m/s, and nobody has it after. Padded wide like the phase file, so a
-   * seek's probes do not carry the moment the ball was played.
+   * The ball stands at (0, 5) until `passAt` seconds, runs along x at 10 m/s
+   * for a second, then turns and runs along y. Padded wide like the phase
+   * file, so a seek's probes do not carry the seconds before their target.
    */
   function passFile(count: number, passAt: number, width = 4000) {
     const lines: string[] = [];
@@ -994,7 +994,16 @@ describe('usePipelineReplay ball trail', () => {
             ],
           },
         ],
-        balls: [{ projected_coordinates: { x: t < passAt ? 0 : (t - passAt) * 10, y: 5 } }],
+        balls: [
+          {
+            projected_coordinates:
+              t < passAt
+                ? { x: 0, y: 5 }
+                : t < passAt + 1
+                  ? { x: (t - passAt) * 10, y: 5 }
+                  : { x: 10, y: 5 + (t - passAt - 1) * 10 },
+          },
+        ],
         state: { actions: [] },
         frame_data: [{ frame_count: 457 + i, frame_uuid: [{ timestamp: Number((1000 + t).toFixed(4)), uuid: 'x' }] }],
         pad: '',
@@ -1010,15 +1019,18 @@ describe('usePipelineReplay ball trail', () => {
   it('reports the trail of the frame on screen, from the frames before a seek target', async () => {
     const r = usePipelineReplay({ openFetcher: async () => fetcherFor(text) });
     await r.load();
-    await r.seek(149);
+    await r.seek(152);
     await r.whenIdle();
-    expect(r.ballTrail.value).toBeNull();
-    await r.seek(151);
-    await r.whenIdle();
-    expect(r.ballTrail.value).toEqual({ lines: [], from: { x: 0, y: 5 } });
-    await r.seek(160);
-    await r.whenIdle();
-    expect(r.ballTrail.value).toBeNull();
+    const trail = r.ballTrail.value!;
+    const path = trail.runs.flat();
+    // It ends at the ball, and reaches the whole history back, which a seek
+    // on its own does not load.
+    expect(path.at(-1)).toMatchObject({ x: 10, y: 15, age: 0 });
+    expect(path[0]!.age).toBeGreaterThan(5.9);
+    expect(path[0]).toMatchObject({ x: 0, y: 5 });
+    expect(trail.turns).toHaveLength(1);
+    expect(trail.turns[0]!.x).toBeCloseTo(10);
+    expect(trail.turns[0]!.y).toBeCloseTo(5);
   });
 
   it('gives a frame the same trail whether it was reached by playing or by seeking', async () => {

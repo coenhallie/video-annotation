@@ -16,6 +16,7 @@ import {
 } from '@/lib/vis/constants';
 import { build2DTransform, worldToPx, PITCH_GRASS } from '@/lib/vis/pitchGeometry';
 import { NET_DEPTH_METRES } from '@/lib/vis/goalSequence';
+import { trailOpacity } from '@/lib/vis/ballTrail';
 import { fakeCanvas, stubOffscreenCanvas, type Op } from './recordingCtx';
 
 const PITCH = { length: 105, width: 68 };
@@ -493,88 +494,90 @@ describe('ball trail', () => {
     ],
     balls: [{ projected_coordinates: { x: 10, y: 4 } }],
   } as unknown as Frame;
-  const trail = { lines: [], from: { x: -5, y: 2 } };
+  // Along x to a turn at (0, 2), then on to the ball.
+  const run = [
+    { x: -10, y: 2, age: 5.5 },
+    { x: -5, y: 2, age: 3 },
+    { x: 0, y: 2, age: 2 },
+    { x: 5, y: 3, age: 1 },
+    { x: 10, y: 4, age: 0 },
+  ];
+  const trail = { runs: [run], turns: [run[2]!] };
 
   function render(layers: Parameters<ReturnType<typeof useRenderer2D>['renderFrame']>[1], f = frame) {
     const { canvas, ops } = fakeCanvas();
     useRenderer2D(canvas).renderFrame(f, layers);
     return ops;
   }
-  const trailStrokes = (ops: Op[]) => ops.filter((o) => o.op === 'stroke' && o.strokeStyle.startsWith('gradient('));
-  const trailStroke = (ops: Op[]) => trailStrokes(ops)[0];
-
-  it('draws a line from where the ball was played to the ball, brightening toward the ball', () => {
-    const ops = render({ trail });
-    const [x0, y0] = at(-5, 2);
-    const [x1, y1] = at(10, 4);
-    expect(ops).toContainEqual(expect.objectContaining({ op: 'moveTo', args: [x0, y0] }));
-    expect(ops).toContainEqual(expect.objectContaining({ op: 'lineTo', args: [x1, y1] }));
-    expect(trailStroke(ops)?.strokeStyle).toBe(
-      `gradient(${x0},${y0}->${x1},${y1}|0:rgba(255,255,255,0.3),1:rgba(255,255,255,0.92))`,
-    );
-  });
-
-  const path = [
-    { from: { x: -30, y: 0 }, to: { x: -20, y: 5 }, strength: 0.5 },
-    { from: { x: -20, y: 5 }, to: { x: -5, y: 2 }, strength: 1 },
-  ];
+  const white = (o: Op) => o.strokeStyle.startsWith('rgba(255,255,255,');
+  const trailStrokes = (ops: Op[]) => ops.filter((o) => o.op === 'stroke' && white(o));
+  // The points each trail stroke was drawn through: its style is set after them.
+  const lineTos = (ops: Op[]) =>
+    trailStrokes(ops).flatMap((stroke) => {
+      const end = ops.indexOf(stroke);
+      const start = ops.slice(0, end).findLastIndex((o) => o.op === 'stroke' || o.op === 'fill') + 1;
+      return ops.slice(start, end).filter((o) => o.op === 'lineTo');
+    });
   const dotsAt = (ops: Op[], x: number, y: number) => {
     const [px, py] = at(x, y);
     return ops.filter((o) => o.op === 'arc' && o.args[0] === px && o.args[1] === py && o.args[2] === 2.5);
   };
 
-  it('draws the path before it, oldest first, each line brightening toward where it went', () => {
-    const strokes = trailStrokes(render({ trail: { ...trail, lines: path } }));
-    const line = (from: { x: number; y: number }, to: { x: number; y: number }) =>
-      `gradient(${at(from.x, from.y).join(',')}->${at(to.x, to.y).join(',')}`;
-    expect(strokes.map((o) => o.strokeStyle.split('|')[0])).toEqual([
-      line(path[0]!.from, path[0]!.to),
-      line(path[1]!.from, path[1]!.to),
-      line(trail.from, { x: 10, y: 4 }),
-    ]);
-    expect(strokes[0]!.strokeStyle).toContain('1:rgba(255,255,255,0.46)');
-    expect(strokes[1]!.strokeStyle).toContain('1:rgba(255,255,255,0.92)');
+  it('draws the path through every point, each stretch as strong as its newer end', () => {
+    const ops = render({ trail });
+    expect(lineTos(ops).map((o) => o.args)).toEqual(run.slice(1).map((p) => at(p.x, p.y)));
+    const alphas = trailStrokes(ops).map((o) => Number(/,([\d.]+)\)$/.exec(o.strokeStyle)![1]));
+    expect(alphas).toEqual(
+      run.slice(1).map((p) => Math.round(trailOpacity(p.age) * 40) / 40),
+    );
   });
 
-  it('marks each turn in the path with a dot, over the lines, at the strength of the line ending there', () => {
-    const ops = render({ trail: { ...trail, lines: path } });
-    const turns = [dotsAt(ops, -20, 5), dotsAt(ops, -5, 2)];
-    expect(turns.map((d) => d.length)).toEqual([1, 1]);
-    const lastLine = ops.lastIndexOf(trailStrokes(ops).at(-1)!);
-    for (const [dot] of turns) expect(ops.indexOf(dot!)).toBeGreaterThan(lastLine);
-    const fill = (dot: Op) => ops.slice(ops.indexOf(dot)).find((o) => o.op === 'fill')!;
-    expect(fill(turns[0]![0]!).globalAlpha).toBeCloseTo(0.46);
-    expect(fill(turns[1]![0]!).globalAlpha).toBeCloseTo(0.92);
-    // Not where the path starts.
-    expect(dotsAt(ops, -30, 0)).toHaveLength(0);
+  it('draws stretches of the same strength as one stroke, joined round', () => {
+    const even = [0, 1, 2, 3].map((i) => ({ x: i, y: 0, age: 0 }));
+    const ops = render({ trail: { runs: [even], turns: [] } });
+    expect(trailStrokes(ops)).toHaveLength(1);
+    expect(lineTos(ops)).toHaveLength(3);
   });
 
-  it('draws the path before it while the ball is not in flight, with no dot where it ends', () => {
-    const ops = render({ trail: { lines: path, from: null } });
-    expect(trailStrokes(ops)).toHaveLength(2);
-    expect(dotsAt(ops, -20, 5)).toHaveLength(1);
-    expect(dotsAt(ops, -5, 2)).toHaveLength(0);
+  it('leaves out what has faded away entirely', () => {
+    const old = [
+      { x: -10, y: 2, age: 7 },
+      { x: -5, y: 2, age: 6.5 },
+      { x: 0, y: 2, age: 1 },
+    ];
+    expect(trailStrokes(render({ trail: { runs: [old], turns: [] } }))).toHaveLength(1);
+  });
+
+  it('marks each turn with a dot over the path, as strong as the path there', () => {
+    const ops = render({ trail });
+    const [dot] = dotsAt(ops, 0, 2);
+    expect(dot).toBeDefined();
+    expect(ops.indexOf(dot!)).toBeGreaterThan(ops.lastIndexOf(trailStrokes(ops).at(-1)!));
+    const fill = ops.slice(ops.indexOf(dot!)).find((o) => o.op === 'fill')!;
+    expect(fill.globalAlpha).toBeCloseTo(trailOpacity(2));
+    expect(dotsAt(ops, -10, 2)).toHaveLength(0);
+  });
+
+  it('draws each run apart, with nothing across the gap between them', () => {
+    const ops = render({ trail: { runs: [run.slice(0, 2), run.slice(3)], turns: [] } });
+    expect(lineTos(ops).map((o) => o.args)).toEqual([at(-5, 2), at(10, 4)]);
   });
 
   it('draws it over the players and under the ball', () => {
     const ops = render({ trail });
-    const line = ops.indexOf(trailStroke(ops)!);
+    const line = ops.indexOf(trailStrokes(ops)[0]!);
     const [px, py] = at(12, 4);
     const [bx, by] = at(10, 4);
     const player = ops.findIndex((o) => o.op === 'arc' && o.args[0] === px && o.args[1] === py);
-    const ball = ops.findIndex((o) => o.op === 'arc' && o.args[0] === bx && o.args[1] === by);
+    const ball = ops.findIndex((o) => o.op === 'arc' && o.args[0] === bx && o.args[1] === by && o.args[2] !== 2.5);
     expect(player).toBeLessThan(line);
     expect(line).toBeLessThan(ball);
   });
 
-  it('draws no line to a ball the frame does not have, and none while the goal sequence plays', () => {
-    expect(trailStroke(render({ trail }, { ...frame, balls: [] } as Frame))).toBeUndefined();
+  it('draws none while the goal sequence plays, or when not given one', () => {
     const goal = { ball: { x: 53, y: 1 }, trail: [], net: { side: 1 as const, y: 1, metres: 0 } };
-    expect(trailStroke(render({ trail, goal }))).toBeUndefined();
-  });
-
-  it('draws none when not given one', () => {
-    expect(trailStroke(render({}))).toBeUndefined();
+    expect(trailStrokes(render({ trail, goal }))).toHaveLength(0);
+    expect(trailStrokes(render({}))).toHaveLength(0);
   });
 });
 

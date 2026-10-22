@@ -1,113 +1,134 @@
-import type { Frame, Player } from './types';
+import type { Frame } from './types';
 import type { PhaseRecord } from './teamPhase';
 
 /**
- * The ball's trail: a line from where a player played the ball to where the
- * ball is now, while it travels, and behind it the path the ball took before
- * that, as one line joined end to end. Each pass runs from where it was
- * played to where it was received; between one pass and the next, a straight
- * line runs from where it was received to where the player played it on, the
- * ground they carried it over. A move of several passes shows as one path,
- * turning wherever the ball changed hands. Like the team phase it is worked
- * out here from the pipeline's own frames, not reported by the pipeline.
+ * The ball's trail: the path the tracked ball took over the last
+ * TRAIL_HISTORY_S, ending at the ball, with a mark wherever it turned. Like
+ * the team phase it is worked out here from the pipeline's own frames, not
+ * reported by the pipeline.
  *
- * The ball has left a player once it is more than RELEASE_METRES from them,
- * not when their possession flag goes: the flag drops out for a frame or two
- * at a time while a player still has the ball at their feet. Until then the
- * point the line starts from follows the player, by track id. By the same
- * measure a flag on a player further than that from the ball is not taken to
- * mean they have it: on the Manchester City vs PSG export 1 flag in 30 is, up
- * to 24 m away, and each drew a line from that player to the ball. A player the
- * pipeline is not tracking (no track id, or -1) cannot be told apart from
- * anyone else it is not tracking, so the line starts from where they last had
- * the flag.
+ * It is drawn from the ball's own positions, frame by frame, and nothing else.
+ * An earlier trail drew each pass as a straight line from the player who
+ * played it to the ball, and ended it when the next player was flagged with
+ * the ball. The export flags possession on about one frame in ten, so most
+ * passes never ended: when the ball turned, the line swung round its start to
+ * follow it (15 of the 27 passes in two minutes of Manchester City vs PSG, by
+ * up to 121 degrees). A point on this trail is where the ball was, so once
+ * drawn it never moves; it only fades as it gets older.
  *
- * A pass ends where the ball is when someone has it again, or where it was
- * last seen TRAIL_HOLD_S after it was played if nobody has had it by then (a
- * shot, a clearance, the ball going out). A ball a player plays and gets back
- * themselves was a touch, not a pass. Each line stays on screen for
- * TRAIL_HISTORY_S after the ball reached its end, fading over the last
- * TRAIL_FADE_S of that, so the path fades away from its oldest end.
+ * Where the ball turned is worked out from where it went either side of each
+ * point: the direction it came from over the last TURN_ARM_METRES, and the
+ * direction it left in over the next. Measured over a distance rather than a
+ * number of frames, a ball standing still, which jitters by a few centimetres
+ * a frame, has no direction to turn from. A turn of TURN_MIN_DEGREES or more
+ * is marked once, at the point where the path bends most tightly: where the
+ * points TURN_ARM_METRES before and after it, measured along the path the
+ * ball travelled, are closest together. (Measured straight-line, every point
+ * within TURN_ARM_METRES of where a ball was sent back the way it came turns
+ * the same 180 degrees, so that alone cannot pick the point.) The mark only
+ * appears once the ball has gone TURN_ARM_METRES past it, and since nothing
+ * after that can change it, it then stays where it is.
+ *
+ * The path is broken where the ball was not tracked for longer than
+ * MAX_GAP_S, rather than drawn straight across a stretch the export knows
+ * nothing about: a cutaway can lose the ball for seconds. It is also broken
+ * where the tracked ball jumps faster than MAX_BALL_SPEED, which no ball can:
+ * the tracker has lost it and picked up something else. A jump for one frame
+ * that comes straight back is left out, and the path carries on. The
+ * Manchester City vs PSG export never jumps (31.5 m/s at most over two
+ * minutes); the February export does, 159 times in four minutes, some by
+ * hundreds of metres, each a line drawn across the pitch to nowhere.
  *
  * Only frames within TRAIL_LOOKBACK_S of the frame asked about are read, so
  * the answer is the same whether the replay played into the frame or seeked
  * to it.
  */
 
-/** Further than this from the player, the ball has left them. */
-export const RELEASE_METRES = 2.5;
-/** How long a pass can travel before it ends where the ball then is. */
-export const TRAIL_HOLD_S = 3;
-/** How long a line stays on screen after the ball reached its end. */
+/** How long the ball's path stays on screen. */
 export const TRAIL_HISTORY_S = 6;
-/** How long a line takes to fade out at the end of TRAIL_HISTORY_S. */
+/** How long the oldest of it takes to fade out, at the end of TRAIL_HISTORY_S. */
 export const TRAIL_FADE_S = 1.5;
+/** Opacity of the path at the ball, and of the oldest of it before it fades out. */
+export const TRAIL_HEAD_ALPHA = 0.92;
+export const TRAIL_TAIL_ALPHA = 0.3;
+/** Untracked for longer than this, the path is broken rather than joined. */
+export const MAX_GAP_S = 0.12;
 /**
- * A pass played on from closer than this to where the one before it was
- * received starts where that one ended, rather than with a line too short to
- * see between them.
+ * Faster than this, in m/s, the tracked ball has jumped rather than moved: a
+ * hard shot is about 35 m/s. Measured over at least MIN_STEP_S, as the
+ * February export stamps some frames with the time of the one before.
  */
-export const JOIN_METRES = 1;
+export const MAX_BALL_SPEED = 45;
+const MIN_STEP_S = 0.04;
+/** How far either side of a point the ball's direction is measured over. */
+export const TURN_ARM_METRES = 2;
+/** The least change of direction marked as a turn. */
+export const TURN_MIN_DEGREES = 35;
 /**
- * How far back the trail reads: past the start of the oldest pass still on
- * screen (ended TRAIL_HISTORY_S ago, after travelling up to TRAIL_HOLD_S),
- * with room before that for the frame its player last had the flag in.
+ * How far back the trail reads: the TRAIL_HISTORY_S it shows, and before that
+ * room for the direction the ball came from at the oldest of it.
  */
-export const TRAIL_LOOKBACK_S = TRAIL_HISTORY_S + TRAIL_HOLD_S + 4;
+export const TRAIL_LOOKBACK_S = TRAIL_HISTORY_S + 4;
 
-export interface Point {
+/** A point on the ball's path, and how long before the frame the ball was there. */
+export interface TrailPoint {
   x: number;
   y: number;
-}
-
-/** One stretch of the ball's path: a pass, or the ground carried between two. */
-export interface TrailLine {
-  from: Point;
-  to: Point;
-  /** How strongly it is drawn, from 0 to 1: below 1 only as it fades out. */
-  strength: number;
+  /** Seconds. */
+  age: number;
 }
 
 export interface BallTrail {
   /**
-   * The path the ball has taken, oldest first, each line starting where the
-   * one before it ended.
+   * The ball's path, oldest first, in stretches broken where it was not
+   * tracked. The newest ends at the ball, or where it was last tracked.
    */
-  lines: TrailLine[];
-  /**
-   * Where the ball in flight now was played from, or null when it is not in
-   * flight. Its line ends at the frame's own ball; the path, when there is
-   * one, ends where it starts.
-   */
-  from: Point | null;
+  runs: TrailPoint[][];
+  /** Where the path turned, oldest first. */
+  turns: TrailPoint[];
 }
 
-const samePoint = (a: Point, b: Point) => a.x === b.x && a.y === b.y;
+/**
+ * How strongly the path is drawn where the ball was `age` seconds ago: most
+ * strongly at the ball, less so further back, fading out over the last
+ * TRAIL_FADE_S of TRAIL_HISTORY_S. Zero beyond that.
+ */
+export function trailOpacity(age: number): number {
+  const steady = TRAIL_HISTORY_S - TRAIL_FADE_S;
+  if (age <= steady) {
+    const k = Math.max(0, age) / steady;
+    return TRAIL_HEAD_ALPHA + (TRAIL_TAIL_ALPHA - TRAIL_HEAD_ALPHA) * k;
+  }
+  return Math.max(0, (TRAIL_TAIL_ALPHA * (TRAIL_HISTORY_S - age)) / TRAIL_FADE_S);
+}
+
+const samePoints = (a: TrailPoint[], b: TrailPoint[]) =>
+  a.length === b.length &&
+  a.every((p, i) => {
+    const q = b[i]!;
+    return p.x === q.x && p.y === q.y && p.age === q.age;
+  });
 
 /** Whether two trails draw the same, so a caller can keep the one it has. */
 export function sameTrail(a: BallTrail | null, b: BallTrail | null): boolean {
   if (a === null || b === null) return a === b;
-  if (a.from === null || b.from === null ? a.from !== b.from : !samePoint(a.from, b.from)) {
-    return false;
-  }
   return (
-    a.lines.length === b.lines.length &&
-    a.lines.every((p, i) => {
-      const q = b.lines[i]!;
-      return samePoint(p.from, q.from) && samePoint(p.to, q.to) && p.strength === q.strength;
-    })
+    samePoints(a.turns, b.turns) &&
+    a.runs.length === b.runs.length &&
+    a.runs.every((run, i) => samePoints(run, b.runs[i]!))
   );
+}
+
+interface Sample {
+  t: number;
+  x: number;
+  y: number;
 }
 
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
-function position(player: Player): Point | null {
-  const { x, y } = player.projected_coordinates ?? {};
-  return finite(x) && finite(y) ? { x, y } : null;
-}
-
 /** The tracked ball's position, or null when the frame has none usable. */
-function ballOf(frame: Frame): Point | null {
+function ballOf(frame: Frame): { x: number; y: number } | null {
   for (const ball of frame.balls ?? []) {
     const { x, y } = ball.projected_coordinates ?? {};
     if (finite(x) && finite(y)) return { x, y };
@@ -115,50 +136,49 @@ function ballOf(frame: Frame): Point | null {
   return null;
 }
 
+const dist = (a: Sample, b: Sample) => Math.hypot(b.x - a.x, b.y - a.y);
+
+/** The change of direction at `p`, coming from `from` and going on to `to`, in degrees. */
+function turnAngle(from: Sample, p: Sample, to: Sample): number {
+  const turn = Math.abs(Math.atan2(to.y - p.y, to.x - p.x) - Math.atan2(p.y - from.y, p.x - from.x));
+  return ((turn > Math.PI ? 2 * Math.PI - turn : turn) * 180) / Math.PI;
+}
+
 /**
- * The player flagged with the ball, and their team, unless the ball is
- * tracked further than RELEASE_METRES from them. Officials never have it.
+ * How sharply the ball turned at each point of a run, in degrees, or null
+ * while that is not known yet: the ball has not gone TURN_ARM_METRES past it,
+ * and the run may still go on. A point the ball came to from less than
+ * TURN_ARM_METRES away, or left by less than that before the run ended, did
+ * not turn. Each point also gets the span its turn was measured over, and
+ * how far apart the points TURN_ARM_METRES before and after it along the path
+ * are, which is least where the path turns most tightly.
  */
-function carrierOf(frame: Frame, ball: Point | null): { player: Player; teamId: number } | null {
-  for (const team of frame.teams ?? []) {
-    const teamId = team.team_id ?? -1;
-    if (teamId === -1) continue;
-    for (const player of team.players ?? []) {
-      if (!player.in_possession) continue;
-      const at = position(player);
-      if (ball && at && Math.hypot(ball.x - at.x, ball.y - at.y) > RELEASE_METRES) continue;
-      return { player, teamId };
-    }
-  }
-  return null;
-}
-
-type TrackId = NonNullable<Player['track_id']>;
-
-/** The player who last had the ball, until it leaves them. */
-interface Holder {
-  id: TrackId | null;
-  teamId: number;
-  at: Point | null;
-}
-
-/** The ball since it left a player, until someone has it or it stops. */
-interface Flight {
-  from: Point;
-  by: TrackId | null;
-  at: number;
-  /** Where it was last seen. */
-  ball: Point | null;
-}
-
-/** A track id that names one player, rather than "not tracked". */
-function followable(id: Player['track_id']): TrackId | null {
-  return id != null && Number(id) >= 0 ? id : null;
-}
-
-function findPlayer(frame: Frame, teamId: number, id: TrackId): Player | null {
-  const team = (frame.teams ?? []).find((t) => (t.team_id ?? -1) === teamId);
-  return (team?.players ?? []).find((p) => p.track_id === id) ?? null;
+function turnsOf(run: Sample[], open: boolean) {
+  // How far along the path the ball had travelled at each point.
+  const along = [0];
+  for (let i = 1; i < run.length; i++) along.push(along[i - 1]! + dist(run[i - 1]!, run[i]!));
+  return run.map((p, i) => {
+    let a = i - 1;
+    while (a >= 0 && dist(run[a]!, p) < TURN_ARM_METRES) a--;
+    let b = i + 1;
+    while (b < run.length && dist(run[b]!, p) < TURN_ARM_METRES) b++;
+    if (b >= run.length) return { angle: open ? null : 0, chord: Infinity, a, b };
+    if (a < 0) return { angle: 0, chord: Infinity, a, b };
+    // Never further than the straight-line arms, so known whenever they are.
+    // Placed exactly TURN_ARM_METRES along, between the points either side,
+    // so how far apart the frames fall does not decide which point is tighter.
+    const at = (d: number): Sample => {
+      let k = 0;
+      while (along[k + 1]! < d) k++;
+      const from = run[k]!;
+      const to = run[k + 1]!;
+      const f = (d - along[k]!) / (along[k + 1]! - along[k]! || 1);
+      return { t: from.t, x: from.x + (to.x - from.x) * f, y: from.y + (to.y - from.y) * f };
+    };
+    const before = at(along[i]! - TURN_ARM_METRES);
+    const after = at(along[i]! + TURN_ARM_METRES);
+    return { angle: turnAngle(run[a]!, p, run[b]!), chord: dist(before, after), a, b };
+  });
 }
 
 /** The trail at `records[index]`, from the records before it; null for none. */
@@ -166,76 +186,54 @@ export function ballTrailAt(records: PhaseRecord[], index: number): BallTrail | 
   const now = records[index];
   if (!now) return null;
 
+  // The tracked ball, in runs broken where it went untracked too long or
+  // jumped, leaving out any jump for a single frame.
   let start = index;
   while (start > 0 && (records[start - 1]?.t ?? -Infinity) >= now.t - TRAIL_LOOKBACK_S) start--;
-
-  // Who last had the ball, and the ball in flight once it has left them.
-  let holder: Holder | null = null;
-  let flight: Flight | null = null;
-  const lines: { from: Point; to: Point; endedAt: number }[] = [];
-  const land = (landed: Flight, to: Point | null, endedAt: number) => {
-    if (to) lines.push({ from: landed.from, to, endedAt });
-  };
-
+  const samples: Sample[] = [];
   for (let i = start; i <= index; i++) {
     const record = records[i];
-    if (!record) continue;
-    const { t, frame } = record;
-    const ball = ballOf(frame);
-    const carrier = carrierOf(frame, ball);
-
-    if (carrier) {
-      const id = followable(carrier.player.track_id);
-      if (flight) {
-        // Played and got back by the same player: a touch, not a pass.
-        if (id === null || id !== flight.by) {
-          land(flight, ball ?? position(carrier.player) ?? flight.ball, t);
-        }
-        flight = null;
-      }
-      holder = { id, teamId: carrier.teamId, at: position(carrier.player) };
-      continue;
-    }
-
-    if (flight) {
-      if (ball) flight.ball = ball;
-      // Nobody has had it in time: it ends where it was last seen.
-      if (t - flight.at > TRAIL_HOLD_S) {
-        land(flight, flight.ball, t);
-        flight = null;
-        holder = null;
-      }
-      continue;
-    }
-
-    if (holder) {
-      if (holder.id !== null) {
-        const player = findPlayer(frame, holder.teamId, holder.id);
-        const at = player && position(player);
-        if (at) holder.at = at;
-      }
-      const from: Point | null = holder.at;
-      if (ball && from && Math.hypot(ball.x - from.x, ball.y - from.y) > RELEASE_METRES) {
-        // Joined to the path so far: across the ground the ball was carried
-        // over since it last ended, or straight on from there when that is
-        // too short to see.
-        const end = lines.at(-1)?.to;
-        let playedFrom: Point = from;
-        if (end && Math.hypot(from.x - end.x, from.y - end.y) < JOIN_METRES) playedFrom = end;
-        else if (end) lines.push({ from: end, to: from, endedAt: t });
-        flight = { from: playedFrom, by: holder.id, at: t, ball };
-        holder = null;
-      }
-    }
+    const ball = record && ballOf(record.frame);
+    if (record && ball) samples.push({ t: record.t, ...ball });
   }
+  const follows = (a: Sample, b: Sample) =>
+    b.t - a.t <= MAX_GAP_S && dist(a, b) <= MAX_BALL_SPEED * Math.max(b.t - a.t, MIN_STEP_S);
+  const sampleRuns: Sample[][] = [];
+  samples.forEach((sample, i) => {
+    const run = sampleRuns.at(-1);
+    const last = run?.at(-1);
+    if (run && last && follows(last, sample)) return run.push(sample);
+    const next = samples[i + 1];
+    if (run && last && next && follows(last, next) && !follows(sample, next)) return;
+    sampleRuns.push([sample]);
+  });
 
-  const shown = lines
-    .map(({ from, to, endedAt }) => ({
-      from,
-      to,
-      strength: Math.min(1, (TRAIL_HISTORY_S - (now.t - endedAt)) / TRAIL_FADE_S),
-    }))
-    .filter((p) => p.strength > 0);
-  const from = flight && ballOf(now.frame) ? flight.from : null;
-  return shown.length > 0 || from ? { lines: shown, from } : null;
+  const shown = (s: Sample) => now.t - s.t <= TRAIL_HISTORY_S;
+  const point = (s: Sample): TrailPoint => ({ x: s.x, y: s.y, age: now.t - s.t });
+  const runs: TrailPoint[][] = [];
+  const turns: TrailPoint[] = [];
+  // The newest run can still go on, and so can the one before it while the
+  // newest is a single point: that may yet turn out to be a one-frame jump.
+  const lastRun = sampleRuns.length - 1;
+  const open = (r: number) =>
+    r === lastRun || (r === lastRun - 1 && sampleRuns[lastRun]!.length === 1);
+  sampleRuns.forEach((run, r) => {
+    const turn = turnsOf(run, open(r));
+    run.forEach((s, i) => {
+      const own = turn[i]!;
+      if (!shown(s) || own.angle === null || own.angle < TURN_MIN_DEGREES) return;
+      // The tightest point of the turn, the first of any as tight. Decided
+      // only once every point it is measured against is known.
+      for (let j = own.a + 1; j < own.b; j++) {
+        if (j === i) continue;
+        const other = turn[j]!;
+        if (other.angle === null) return;
+        if (other.chord < own.chord || (other.chord === own.chord && j < i)) return;
+      }
+      turns.push(point(s));
+    });
+    const visible = run.filter(shown).map(point);
+    if (visible.length > 1) runs.push(visible);
+  });
+  return runs.length > 0 ? { runs, turns } : null;
 }

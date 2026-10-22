@@ -24,9 +24,8 @@
 //    takes an optional goal-sequence overlay whose ball replaces the tracked
 //    one (goalNets.ts, goalSequence.ts), and an optional attack glow drawn
 //    under the players (attackGlow.ts).
-//  - renderFrame takes an optional ball trail, drawn over the players: a line
-//    from where the ball was played to the tracked ball, and the path it took
-//    before that, with a dot wherever it turned (ballTrail.ts).
+//  - renderFrame takes an optional ball trail, drawn over the players: the
+//    path the tracked ball took, with a dot wherever it turned (ballTrail.ts).
 
 // ---------------------------------------------------------------------------
 // 2D canvas rendering composable.
@@ -52,7 +51,7 @@ import {
 import { build2DTransform, worldToPx, buildPitchCache, PITCH_GRASS } from './pitchGeometry'
 import { drawGoalNets, type NetBulge } from './goalNets'
 import { attackFront, drawAttackGlow, type AttackGlow } from './attackGlow'
-import type { BallTrail, Point } from './ballTrail'
+import { trailOpacity, type BallTrail, type TrailPoint } from './ballTrail'
 import {
   computeViewMatrix,
   IDENTITY_VIEW,
@@ -163,7 +162,7 @@ export interface FrameLayers {
   ballPulse?: BallPulse | undefined
   /** Whether players far from the ball are drawn faint. Default on. */
   fadeFar?: boolean | undefined
-  /** The ball's trail: the passes before, and the ball in flight now. */
+  /** The ball's trail: the path it took, and where that turned. */
   trail?: BallTrail | undefined
 }
 
@@ -171,16 +170,13 @@ export interface FrameLayers {
 const PULSE_GROWTH_PX = 16
 const PULSE_LINE_PX = 2.5
 /**
- * Width of the ball trail in frame px, and the opacity of each of its lines at
- * the end the ball came from and at the end it went to: each brightens toward
- * where the ball went, so the path reads in order. Each starts bright enough
- * to show it joins the one before. The dots where the path turns are drawn
- * at the full opacity of the line that ends there.
+ * Width of the ball trail and radius of the dots where it turns, in frame px.
+ * Its opacity changes along it (trailOpacity), in steps of 1/TRAIL_ALPHA_STEPS:
+ * each step is one stroke, rather than one per frame of the path.
  */
 const TRAIL_LINE_PX = 2.5
-const TRAIL_START_ALPHA = 0.3
-const TRAIL_END_ALPHA = 0.92
 const TRAIL_DOT_PX = 2.5
+const TRAIL_ALPHA_STEPS = 40
 
 /**
  * Create a 2D renderer bound to a specific canvas element.
@@ -318,12 +314,8 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     // The goal sequence draws its own ball and trail in place of the tracked
     // ones, so the trail is left out while it plays.
     if (trail && !overlay) {
-      const ball = trackedBall(frame)
-      const inFlight = trail.from && ball ? { from: trail.from, to: ball, strength: 1 } : null
-      const lines = inFlight ? [...trail.lines, inFlight] : trail.lines
-      for (const line of lines) drawTrailLine(line.from, line.to, line.strength)
-      // A dot wherever one line hands over to the next, over both of them.
-      for (const line of lines.slice(0, -1)) drawTrailDot(line.to, line.strength)
+      for (const run of trail.runs) drawTrailRun(run)
+      for (const turn of trail.turns) drawTrailDot(turn)
     }
 
     // During the goal sequence its ball replaces the tracked one, which near a
@@ -500,31 +492,41 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     ctx.globalAlpha = before
   }
 
-  /** One line of the ball trail, from where the ball was played to where it went. */
-  function drawTrailLine(from: Point, to: Point, trailStrength: number): void {
-    if (!transform2d || ![from.x, from.y, to.x, to.y].every(Number.isFinite)) return
-    const [x0, y0] = worldToPx(from.x, from.y, transform2d)
-    const [x1, y1] = worldToPx(to.x, to.y, transform2d)
-    const strength = Math.min(1, Math.max(0, trailStrength))
-    const gradient = ctx.createLinearGradient(x0, y0, x1, y1)
-    gradient.addColorStop(0, `rgba(255,255,255,${TRAIL_START_ALPHA * strength})`)
-    gradient.addColorStop(1, `rgba(255,255,255,${TRAIL_END_ALPHA * strength})`)
-    ctx.beginPath()
-    ctx.moveTo(x0, y0)
-    ctx.lineTo(x1, y1)
-    ctx.strokeStyle = gradient
+  /**
+   * One unbroken stretch of the ball trail, oldest first. Each stretch of it
+   * between two points takes the opacity of the newer one. Neighbouring
+   * stretches of the same opacity are one stroke, joined round; where the
+   * opacity steps, butt ends meet, so no part of the line is drawn twice.
+   */
+  function drawTrailRun(run: TrailPoint[]): void {
+    if (!transform2d) return
+    const px = run.map((p) => worldToPx(p.x, p.y, transform2d!))
+    const step = (i: number) => Math.round(trailOpacity(run[i]!.age) * TRAIL_ALPHA_STEPS)
     ctx.lineWidth = TRAIL_LINE_PX
-    ctx.lineCap = 'round'
-    ctx.stroke()
-    ctx.lineCap = 'butt'
+    ctx.lineJoin = 'round'
+    let i = 1
+    while (i < run.length) {
+      const alpha = step(i)
+      let j = i
+      while (j + 1 < run.length && step(j + 1) === alpha) j++
+      if (alpha > 0) {
+        ctx.beginPath()
+        ctx.moveTo(...px[i - 1]!)
+        for (let k = i; k <= j; k++) ctx.lineTo(...px[k]!)
+        ctx.strokeStyle = `rgba(255,255,255,${alpha / TRAIL_ALPHA_STEPS})`
+        ctx.stroke()
+      }
+      i = j + 1
+    }
+    ctx.lineJoin = 'miter'
   }
 
-  /** The dot where the ball trail turns. */
-  function drawTrailDot(at: Point, trailStrength: number): void {
+  /** The dot where the ball trail turns, as strong as the path there. */
+  function drawTrailDot(at: TrailPoint): void {
     if (!transform2d || !Number.isFinite(at.x) || !Number.isFinite(at.y)) return
     const [px, py] = worldToPx(at.x, at.y, transform2d)
     const before = ctx.globalAlpha
-    ctx.globalAlpha = TRAIL_END_ALPHA * Math.min(1, Math.max(0, trailStrength))
+    ctx.globalAlpha = trailOpacity(at.age)
     ctx.beginPath()
     ctx.arc(px, py, TRAIL_DOT_PX, 0, Math.PI * 2)
     ctx.fillStyle = '#ffffff'
