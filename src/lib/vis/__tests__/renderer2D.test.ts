@@ -244,6 +244,14 @@ describe('focus around the ball', () => {
   });
 });
 
+describe('player labels', () => {
+  it('draws the shirt number, and not the tracking id', () => {
+    const { canvas, ops } = fakeCanvas();
+    useRenderer2D(canvas).renderFrame(frameWith({}));
+    expect(ops.filter((o) => o.op === 'fillText').map((o) => o.args[0])).toEqual(['9']);
+  });
+});
+
 describe('nearby highlight', () => {
   type Who = { team: number; x: number; y?: number; type?: string; ball?: boolean };
 
@@ -330,7 +338,10 @@ describe('nearby highlight', () => {
     const at = ops.findIndex(
       (o) => o.op === 'arc' && o.args[0] === px && o.args[1] === py && o.args[2] === PLAYER_RADIUS
     );
-    const end = ops.findIndex((o, i) => i > at && o.op === 'fillText');
+    // Up to the next marker drawn (its shadow comes first), whoever's it is.
+    const end = ops.findIndex(
+      (o, i) => i > at && o.op === 'arc' && o.args[2] === PLAYER_RADIUS && o.args[0] !== px
+    );
     return ops
       .slice(at, end === -1 ? undefined : end)
       .filter((o) => o.op === 'stroke' && o.strokeStyle !== '#ffd700')

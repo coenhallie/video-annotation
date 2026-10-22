@@ -26,6 +26,8 @@
 //    under the players (attackGlow.ts).
 //  - renderFrame takes an optional ball trail, drawn over the players: the
 //    path the tracked ball took, with a dot wherever it turned (ballTrail.ts).
+//  - players are not labelled with their tracking id: it is the tracker's
+//    bookkeeping, not anything about the player.
 
 // ---------------------------------------------------------------------------
 // 2D canvas rendering composable.
@@ -376,7 +378,7 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
   /** Within NEARBY_METRES of the carrier, on the pitch (the carrier included). */
   /**
    * Draw a single player as a filled circle with shadow, outline, optional
-   * possession ring, jersey number, and track ID label.
+   * possession ring, and jersey number.
    */
   function draw2DPlayer(player: Player, teamId: number, ring = 0, possession = 0): void {
     const coords = player.projected_coordinates
@@ -450,16 +452,6 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
       ctx.fillText(String(Math.round(Number(num))), px, py)
-    }
-
-    // Track ID (above the player)
-    const trackId = player.track_id
-    if (trackId != null && Number(trackId) >= 0) {
-      ctx.fillStyle = '#aaaaaa'
-      ctx.font = '9px sans-serif'
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'bottom'
-      ctx.fillText(String(trackId), px, py - PLAYER_RADIUS - 2)
     }
   }
 
