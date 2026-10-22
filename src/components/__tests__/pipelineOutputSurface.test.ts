@@ -46,6 +46,7 @@ function fakeReplay(state: ReplayState, message: string | null = null) {
     frame: ref(null),
     buffering: ref(false),
     phase: ref(null),
+    ballTrail: ref(null),
     state: ref(state),
     error: ref(message),
     load: vi.fn(async () => {}),
@@ -1658,7 +1659,7 @@ describe('PipelineOutputSurface', () => {
       const { m } = await ready();
       await open(m.root);
       const options = [...m.root.querySelectorAll('[data-testid="pipeline-layer-option"]')];
-      expect(options).toHaveLength(8);
+      expect(options).toHaveLength(9);
       expect(options.every((o) => o.getAttribute('aria-checked') === 'true')).toBe(true);
       m.unmount();
     });
@@ -1686,6 +1687,26 @@ describe('PipelineOutputSurface', () => {
       expect(layersOf()?.fadeFar).toBe(true);
       await toggle(m.root, 'farFade');
       expect(layersOf()?.fadeFar).toBe(false);
+      m.unmount();
+    });
+
+    it('draws the ball trail the replay reports, and none when it is off', async () => {
+      const { replay, m } = await ready();
+      const trail = { from: { x: -5, y: -30 }, strength: 1 };
+      set(replay.ballTrail, trail);
+      await nextTick();
+      expect(layersOf()?.trail).toEqual(trail);
+      await toggle(m.root, 'ballTrail');
+      expect(layersOf()?.trail).toBeUndefined();
+      m.unmount();
+    });
+
+    it('repaints when the trail changes without a new frame', async () => {
+      const { replay, m } = await ready();
+      const calls = renderFrame.mock.calls.length;
+      set(replay.ballTrail, { from: { x: 1, y: 2 }, strength: 1 });
+      await nextTick();
+      expect(renderFrame.mock.calls.length).toBe(calls + 1);
       m.unmount();
     });
 

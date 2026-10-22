@@ -975,3 +975,74 @@ describe('usePipelineReplay team phase', () => {
   });
 });
 
+describe('usePipelineReplay ball trail', () => {
+  /**
+   * Player 1 has the ball until `passAt` seconds, then plays it along x at
+   * 10 m/s, and nobody has it after. Padded wide like the phase file, so a
+   * seek's probes do not carry the moment the ball was played.
+   */
+  function passFile(count: number, passAt: number, width = 4000) {
+    const lines: string[] = [];
+    for (let i = 0; i < count; i++) {
+      const t = i * 0.04;
+      const body: Record<string, unknown> = {
+        teams: [
+          {
+            team_id: 0,
+            players: [
+              { track_id: 1, person_type: 'PersonType.PLAYER', projected_coordinates: { x: 0, y: 5 }, in_possession: t < passAt },
+            ],
+          },
+        ],
+        balls: [{ projected_coordinates: { x: t < passAt ? 0 : (t - passAt) * 10, y: 5 } }],
+        state: { actions: [] },
+        frame_data: [{ frame_count: 457 + i, frame_uuid: [{ timestamp: Number((1000 + t).toFixed(4)), uuid: 'x' }] }],
+        pad: '',
+      };
+      body.pad = 'p'.repeat(Math.max(0, width - JSON.stringify(body).length));
+      lines.push(JSON.stringify(body));
+    }
+    return lines.join('\n');
+  }
+
+  const text = passFile(7500, 150);
+
+  it('reports the trail of the frame on screen, from the frames before a seek target', async () => {
+    const r = usePipelineReplay({ openFetcher: async () => fetcherFor(text) });
+    await r.load();
+    await r.seek(149);
+    await r.whenIdle();
+    expect(r.ballTrail.value).toBeNull();
+    await r.seek(151);
+    await r.whenIdle();
+    expect(r.ballTrail.value).toEqual({ from: { x: 0, y: 5 }, strength: 1 });
+    await r.seek(160);
+    await r.whenIdle();
+    expect(r.ballTrail.value).toBeNull();
+  });
+
+  it('gives a frame the same trail whether it was reached by playing or by seeking', async () => {
+    const clock = manualClock();
+    const played = usePipelineReplay({ openFetcher: async () => fetcherFor(text), raf: clock.raf, caf: clock.caf });
+    await played.load();
+    await played.seek(149);
+    await played.whenIdle();
+    played.play();
+    clock.tick(0);
+    for (let ms = 40; ms <= 2000; ms += 40) {
+      clock.tick(ms);
+      await played.whenIdle();
+    }
+    played.pause();
+    expect(played.ballTrail.value).not.toBeNull();
+
+    const sought = usePipelineReplay({ openFetcher: async () => fetcherFor(text) });
+    await sought.load();
+    await sought.seek(played.currentTime.value);
+    await sought.whenIdle();
+
+    expect(sought.currentFrame.value).toBe(played.currentFrame.value);
+    expect(sought.ballTrail.value).toEqual(played.ballTrail.value);
+  });
+});
+

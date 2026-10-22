@@ -162,6 +162,7 @@ function paint(): void {
       },
       ballPulse: throwInPulseLayer(),
       fadeFar: layers.farFade,
+      trail: layers.ballTrail ? (props.replay.ballTrail.value ?? undefined) : undefined,
     });
   }
 }
@@ -872,17 +873,18 @@ function ensureRenderer() {
 // arrived.
 //
 // One watcher for everything a tick of the replay can change, so a tick paints
-// once however many of them changed. The record and its phase arrive together
-// on most ticks; the clock alone moves on the rest, as it ticks at display rate
-// and records arrive at the data's rate, and then only a glow needs a repaint,
-// for its chevrons to flow smoothly rather than in steps.
+// once however many of them changed. The record, its phase and its trail
+// arrive together on most ticks; the clock alone moves on the rest, as it
+// ticks at display rate and records arrive at the data's rate, and then only a
+// glow needs a repaint, for its chevrons to flow smoothly rather than in steps.
 watch(
   [
     () => props.replay.frame.value,
     () => props.replay.phase.value,
     () => props.replay.currentTime.value,
+    () => props.replay.ballTrail.value,
   ],
-  ([frame, phase, now], [prevFrame, prevPhase, before]) => {
+  ([frame, phase, now, trail], [prevFrame, prevPhase, before, prevTrail]) => {
     const playing =
       props.replay.isPlaying.value && lastStepWasPlayback && !prefersReducedMotion();
     if (phase !== prevPhase) updateGlow(playing);
@@ -918,6 +920,7 @@ watch(
     if (
       frame !== prevFrame ||
       phase !== prevPhase ||
+      trail !== prevTrail ||
       glowValue()?.arrows ||
       wasFading ||
       ringsFading()

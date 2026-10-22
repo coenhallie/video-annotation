@@ -24,6 +24,8 @@
 //    takes an optional goal-sequence overlay whose ball replaces the tracked
 //    one (goalNets.ts, goalSequence.ts), and an optional attack glow drawn
 //    under the players (attackGlow.ts).
+//  - renderFrame takes an optional ball trail, a line from where the ball was
+//    played to the tracked ball, drawn over the players (ballTrail.ts).
 
 // ---------------------------------------------------------------------------
 // 2D canvas rendering composable.
@@ -49,6 +51,7 @@ import {
 import { build2DTransform, worldToPx, buildPitchCache, PITCH_GRASS } from './pitchGeometry'
 import { drawGoalNets, type NetBulge } from './goalNets'
 import { attackFront, drawAttackGlow, type AttackGlow } from './attackGlow'
+import type { BallTrail } from './ballTrail'
 import {
   computeViewMatrix,
   IDENTITY_VIEW,
@@ -159,11 +162,20 @@ export interface FrameLayers {
   ballPulse?: BallPulse | undefined
   /** Whether players far from the ball are drawn faint. Default on. */
   fadeFar?: boolean | undefined
+  /** The ball's trail, from where it was played to the tracked ball. */
+  trail?: BallTrail | undefined
 }
 
 /** How far a pulse ring grows past the ball, and how thick it is, in frame px. */
 const PULSE_GROWTH_PX = 16
 const PULSE_LINE_PX = 2.5
+/**
+ * Width of the ball trail in frame px, and its opacity at the end it was
+ * played from and at the ball: it fades in toward the ball, like a streak.
+ */
+const TRAIL_LINE_PX = 2.5
+const TRAIL_START_ALPHA = 0.05
+const TRAIL_END_ALPHA = 0.92
 
 /**
  * Create a 2D renderer bound to a specific canvas element.
@@ -197,7 +209,7 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
    * iterates teams/players/balls, and paints the HUD overlay.
    */
   function renderFrame(frame: Frame, layers: FrameLayers = {}): void {
-    const { goal: overlay, glow, rings, ballPulse } = layers
+    const { goal: overlay, glow, rings, ballPulse, trail } = layers
     const fadeFar = layers.fadeFar !== false
     if (!frame) return
 
@@ -297,6 +309,13 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
       }
     }
     ctx.globalAlpha = 1
+
+    // The trail ends at the tracked ball, so the goal sequence, which draws its
+    // own ball and trail in place of that one, has none.
+    if (trail && !overlay) {
+      const ball = trackedBall(frame)
+      if (ball) drawTrail(trail, ball)
+    }
 
     // During the goal sequence its ball replaces the tracked one, which near a
     // goal tends to jump about or go straight through the net.
@@ -470,6 +489,25 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     ctx.lineWidth = 1
     ctx.stroke()
     ctx.globalAlpha = before
+  }
+
+  /** The ball trail: a line from where the ball was played to the ball. */
+  function drawTrail(trail: BallTrail, ball: { x: number; y: number }): void {
+    if (!transform2d || !Number.isFinite(trail.from.x) || !Number.isFinite(trail.from.y)) return
+    const [x0, y0] = worldToPx(trail.from.x, trail.from.y, transform2d)
+    const [x1, y1] = worldToPx(ball.x, ball.y, transform2d)
+    const strength = Math.min(1, Math.max(0, trail.strength))
+    const gradient = ctx.createLinearGradient(x0, y0, x1, y1)
+    gradient.addColorStop(0, `rgba(255,255,255,${TRAIL_START_ALPHA * strength})`)
+    gradient.addColorStop(1, `rgba(255,255,255,${TRAIL_END_ALPHA * strength})`)
+    ctx.beginPath()
+    ctx.moveTo(x0, y0)
+    ctx.lineTo(x1, y1)
+    ctx.strokeStyle = gradient
+    ctx.lineWidth = TRAIL_LINE_PX
+    ctx.lineCap = 'round'
+    ctx.stroke()
+    ctx.lineCap = 'butt'
   }
 
   /** One ring of the throw-in pulse: growing out from its spot and fading. */

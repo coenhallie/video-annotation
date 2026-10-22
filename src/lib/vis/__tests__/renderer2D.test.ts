@@ -481,6 +481,65 @@ describe('goals and the goal sequence', () => {
   });
 });
 
+describe('ball trail', () => {
+  const at = (x: number, y: number) => worldToPx(x, y, build2DTransform(PITCH));
+  const frame = {
+    pitch_dimensions: PITCH,
+    teams: [
+      {
+        team_id: 0,
+        players: [{ track_id: 7, person_type: 'PersonType.PLAYER', projected_coordinates: { x: 12, y: 4 } }],
+      },
+    ],
+    balls: [{ projected_coordinates: { x: 10, y: 4 } }],
+  } as unknown as Frame;
+  const trail = { from: { x: -5, y: 2 }, strength: 1 };
+
+  function render(layers: Parameters<ReturnType<typeof useRenderer2D>['renderFrame']>[1], f = frame) {
+    const { canvas, ops } = fakeCanvas();
+    useRenderer2D(canvas).renderFrame(f, layers);
+    return ops;
+  }
+  const trailStroke = (ops: Op[]) => ops.find((o) => o.op === 'stroke' && o.strokeStyle.startsWith('gradient('));
+
+  it('draws a line from where the ball was played to the ball, brightening toward the ball', () => {
+    const ops = render({ trail });
+    const [x0, y0] = at(-5, 2);
+    const [x1, y1] = at(10, 4);
+    expect(ops).toContainEqual(expect.objectContaining({ op: 'moveTo', args: [x0, y0] }));
+    expect(ops).toContainEqual(expect.objectContaining({ op: 'lineTo', args: [x1, y1] }));
+    expect(trailStroke(ops)?.strokeStyle).toBe(
+      `gradient(${x0},${y0}->${x1},${y1}|0:rgba(255,255,255,0.05),1:rgba(255,255,255,0.92))`,
+    );
+  });
+
+  it('fades the whole line with its strength', () => {
+    const ops = render({ trail: { ...trail, strength: 0.5 } });
+    expect(trailStroke(ops)?.strokeStyle).toContain('1:rgba(255,255,255,0.46)');
+  });
+
+  it('draws it over the players and under the ball', () => {
+    const ops = render({ trail });
+    const line = ops.indexOf(trailStroke(ops)!);
+    const [px, py] = at(12, 4);
+    const [bx, by] = at(10, 4);
+    const player = ops.findIndex((o) => o.op === 'arc' && o.args[0] === px && o.args[1] === py);
+    const ball = ops.findIndex((o) => o.op === 'arc' && o.args[0] === bx && o.args[1] === by);
+    expect(player).toBeLessThan(line);
+    expect(line).toBeLessThan(ball);
+  });
+
+  it('draws none without a tracked ball, or while the goal sequence plays', () => {
+    expect(trailStroke(render({ trail }, { ...frame, balls: [] } as Frame))).toBeUndefined();
+    const goal = { ball: { x: 53, y: 1 }, trail: [], net: { side: 1 as const, y: 1, metres: 0 } };
+    expect(trailStroke(render({ trail, goal }))).toBeUndefined();
+  });
+
+  it('draws none when not given one', () => {
+    expect(trailStroke(render({}))).toBeUndefined();
+  });
+});
+
 describe('attack glow', () => {
   const T = build2DTransform(PITCH);
   const px = (x: number, y = 0) => worldToPx(x, y, T);

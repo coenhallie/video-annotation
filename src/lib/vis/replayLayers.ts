@@ -11,6 +11,7 @@ export type ReplayLayerKey =
   | 'throwIn'
   | 'attackShading'
   | 'attackArrows'
+  | 'ballTrail'
   | 'phaseLabels'
   | 'nearbyRings'
   | 'farFade'
@@ -28,6 +29,7 @@ export const REPLAY_LAYERS: ReadonlyArray<{ key: ReplayLayerKey; label: string; 
     hint: 'Team colour from the front of the attack to the goal',
   },
   { key: 'attackArrows', label: 'Attack arrows', hint: 'Arrows flowing toward the goal' },
+  { key: 'ballTrail', label: 'Ball trail', hint: 'A line from where the ball was played' },
   {
     key: 'phaseLabels',
     label: 'Attacking / defending',
@@ -55,6 +57,7 @@ export const DEFAULT_REPLAY_LAYERS: ReplayLayers = {
   throwIn: true,
   attackShading: true,
   attackArrows: true,
+  ballTrail: true,
   phaseLabels: true,
   nearbyRings: true,
   farFade: true,
