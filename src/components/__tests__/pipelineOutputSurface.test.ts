@@ -10,7 +10,8 @@ import {
   THROW_IN_REPEAT_S,
   THROW_IN_ZOOM,
 } from '@/lib/vis/throwInSequence';
-import { PERSON_COLORS, RING_FADE_S } from '@/lib/vis/constants';
+import { PERSON_COLORS, POSSESSION_FADE_IN_S, RING_FADE_S } from '@/lib/vis/constants';
+import { UPRIGHT } from '@/lib/vis/football';
 import { CHEVRON_FLOW_PERIOD_S } from '@/lib/vis/attackGlow';
 
 /**
@@ -1229,6 +1230,22 @@ describe('PipelineOutputSurface', () => {
       m.unmount();
     });
 
+    // The data flags the carrier in bursts of a few frames: faded in over
+    // RING_FADE_S, most of them never got past a fifth of full strength.
+    it('brings the possession ring in quickly, and fades it out slowly', async () => {
+      const { replay, m } = await ready(NEAR);
+      set(replay.isPlaying, true);
+      await nextTick();
+      for (let t = 0; t <= RING_FADE_S; t += 0.04) await step(replay, NEAR, 0.04, false);
+      expect(held(1)).toBe(0);
+      for (let t = 0; t < POSSESSION_FADE_IN_S - 1e-9; t += 0.04) await step(replay, NEAR);
+      expect(held(1)).toBeCloseTo(1, 9);
+      // It still fades out over RING_FADE_S.
+      await step(replay, NEAR, 0.04, false);
+      expect(held(1)).toBeCloseTo(1 - 0.04 / RING_FADE_S);
+      m.unmount();
+    });
+
     it('does not fade under reduced motion', async () => {
       const originalMatchMedia = window.matchMedia;
       window.matchMedia = ((query: string) => ({
@@ -1243,6 +1260,91 @@ describe('PipelineOutputSurface', () => {
         await nextTick();
         await step(replay, NEAR);
         expect(ring(2)).toBe(1);
+        m.unmount();
+      } finally {
+        window.matchMedia = originalMatchMedia;
+      }
+    });
+  });
+  describe('ball roll', () => {
+    type Writable = { value: unknown };
+    const set = (r: unknown, v: unknown) => ((r as Writable).value = v);
+    const frameWith = (ballX: number) => ({
+      pitch_dimensions: { length: 105, width: 68 },
+      teams: [],
+      balls: [{ projected_coordinates: { x: ballX, y: 0 } }],
+      state: { actions: [] },
+      frame_data: [{ frame_count: 1 }],
+    });
+    const spin = () => renderFrame.mock.calls.at(-1)?.[1]?.ballSpin;
+
+    async function ready() {
+      const replay = fakeReplay('loading');
+      const m = mount(replay);
+      await nextTick();
+      set(replay.currentTime, 10);
+      set(replay.frame, frameWith(0));
+      set(replay.state, 'ready');
+      await nextTick();
+      return { replay, m };
+    }
+    async function step(replay: PipelineReplay, ballX: number, by = 0.04) {
+      set(replay.currentTime, (replay.currentTime.value as number) + by);
+      set(replay.frame, frameWith(ballX));
+      await nextTick();
+    }
+    async function playing() {
+      const r = await ready();
+      set(r.replay.isPlaying, true);
+      await nextTick();
+      return r;
+    }
+
+    beforeEach(() => renderFrame.mockClear());
+
+    it('rolls the ball as it moves during playback, and only then', async () => {
+      const { replay, m } = await playing();
+      expect(spin()).toEqual(UPRIGHT);
+      await step(replay, 0.5);
+      const turned = spin();
+      expect(turned).not.toEqual(UPRIGHT);
+      // Still: the clock moves, the ball does not.
+      set(replay.currentTime, (replay.currentTime.value as number) + 0.02);
+      await nextTick();
+      expect(spin()).toEqual(turned);
+      m.unmount();
+    });
+
+    it('keeps the ball as it was across a seek, or a step while paused', async () => {
+      const { replay, m } = await ready();
+      await step(replay, 0.5);
+      expect(spin()).toEqual(UPRIGHT);
+      set(replay.isPlaying, true);
+      await nextTick();
+      await step(replay, 5, 30);
+      expect(spin()).toEqual(UPRIGHT);
+      m.unmount();
+    });
+
+    it('does not roll the ball across a jump in its tracking', async () => {
+      const { replay, m } = await playing();
+      await step(replay, 20);
+      expect(spin()).toEqual(UPRIGHT);
+      m.unmount();
+    });
+
+    it('does not roll the ball under reduced motion', async () => {
+      const originalMatchMedia = window.matchMedia;
+      window.matchMedia = ((query: string) => ({
+        matches: query.includes('prefers-reduced-motion'),
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      })) as unknown as typeof window.matchMedia;
+      try {
+        const { replay, m } = await playing();
+        await step(replay, 0.5);
+        expect(spin()).toEqual(UPRIGHT);
         m.unmount();
       } finally {
         window.matchMedia = originalMatchMedia;

@@ -38,7 +38,16 @@ import {
   type GoalPlan,
   type GoalState,
 } from '@/lib/vis/goalSequence';
-import { FRAME_W, FRAME_H, PERSON_COLORS, RING_FADE_S } from '@/lib/vis/constants';
+import {
+  BALL_RADIUS,
+  FRAME_W,
+  FRAME_H,
+  PERSON_COLORS,
+  POSSESSION_FADE_IN_S,
+  RING_FADE_S,
+} from '@/lib/vis/constants';
+import { rolled, UPRIGHT, type Spin } from '@/lib/vis/football';
+import { build2DTransform, worldToPx } from '@/lib/vis/pitchGeometry';
 import type { TeamId, TeamState } from '@/lib/vis/teamPhase';
 import {
   cameraFromView,
@@ -49,6 +58,7 @@ import {
 } from '@/lib/vis/viewTransform';
 import type { PipelineReplay } from '@/composables/usePipelineReplay';
 import { replayDrawingFrame } from '@/utils/timelineBinding';
+import type { Frame } from '@/lib/vis/types';
 
 const props = defineProps<{
   replay: PipelineReplay;
@@ -153,8 +163,10 @@ function pushView(): void {
 function paint(): void {
   const frame = props.replay.frame.value;
   if (frame) {
+    const goal = goalOverlay();
+    rollBall(frame, goal);
     renderer?.renderFrame(frame, {
-      goal: goalOverlay(),
+      goal,
       glow: glowValue(),
       rings: {
         nearby: layers.nearbyRings ? new Map(nearbyRings) : new Map(),
@@ -163,6 +175,7 @@ function paint(): void {
       ballPulse: throwInPulseLayer(),
       fadeFar: layers.farFade,
       trail: layers.ballTrail ? (props.replay.ballTrail.value ?? undefined) : undefined,
+      ballSpin,
     });
   }
 }
@@ -820,17 +833,26 @@ function ringsFading(): boolean {
   return false;
 }
 
-/** Fade `rings` toward `target` by `dt` seconds, or set them to it at once. */
-function fadeRings(rings: Map<TrackId, number>, target: Set<TrackId>, dt: number | null): void {
+/**
+ * Fade `rings` toward `target` by `dt` seconds, or set them to it at once.
+ * They fade in over `fadeIn` seconds and out over RING_FADE_S.
+ */
+function fadeRings(
+  rings: Map<TrackId, number>,
+  target: Set<TrackId>,
+  dt: number | null,
+  fadeIn = RING_FADE_S,
+): void {
   if (dt === null) {
     rings.clear();
     for (const id of target) rings.set(id, 1);
     return;
   }
-  const step = dt / RING_FADE_S;
   for (const id of target) if (!rings.has(id)) rings.set(id, 0);
   for (const [id, strength] of rings) {
-    const next = target.has(id) ? Math.min(1, strength + step) : Math.max(0, strength - step);
+    const next = target.has(id)
+      ? Math.min(1, strength + dt / fadeIn)
+      : Math.max(0, strength - dt / RING_FADE_S);
     if (next > 0) rings.set(id, next);
     else rings.delete(id);
   }
@@ -840,12 +862,62 @@ function fadeRings(rings: Map<TrackId, number>, target: Set<TrackId>, dt: number
 function updateRings(dt: number | null): void {
   const frame = props.replay.frame.value;
   fadeRings(nearbyRings, frame ? nearbyTrackIds(frame) : new Set(), dt);
-  fadeRings(possessionRings, frame ? possessionTrackIds(frame) : new Set(), dt);
+  fadeRings(possessionRings, frame ? possessionTrackIds(frame) : new Set(), dt, POSSESSION_FADE_IN_S);
 }
 
 /** Finish any fade at once: the frame on screen shows its own rings. */
 function settleRings(): void {
   updateRings(null);
+}
+
+// ── Ball roll ───────────────────────────────────────────────────────────────
+//
+// The ball is drawn as a football, and during playback it rolls the way it
+// moves on screen (football.ts). How it is turned carries on from frame to
+// frame, so it is kept here. A seek, a step while paused, or a jump in the
+// ball's tracking moves it without rolling it, and reduced motion never rolls
+// it.
+
+/**
+ * Further than this in one step, in metres, the tracked ball has jumped
+ * rather than moved: 45 m/s, as in ballTrail.ts, over a frame and a half.
+ */
+const MAX_ROLL_STEP_METRES = 2.7;
+
+let ballSpin: Spin = UPRIGHT;
+/** Where the ball was last drawn, in metres. */
+let rolledFrom: { x: number; y: number } | null = null;
+
+/** The ball the frame is drawn with: the goal sequence's, or the tracked one. */
+function shownBall(frame: Frame, goal: GoalOverlay | undefined): { x: number; y: number } | null {
+  if (goal) return goal.ball;
+  for (const ball of frame.balls ?? []) {
+    const { x, y } = ball.projected_coordinates ?? {};
+    if (typeof x === 'number' && Number.isFinite(x) && typeof y === 'number' && Number.isFinite(y)) {
+      return { x, y };
+    }
+  }
+  return null;
+}
+
+/** Roll the ball on from where it was last drawn, if it is moving in play. */
+function rollBall(frame: Frame, goal: GoalOverlay | undefined): void {
+  const at = shownBall(frame, goal);
+  const moving =
+    (goal !== undefined || (props.replay.isPlaying.value && lastStepWasPlayback)) &&
+    !prefersReducedMotion();
+  if (at && rolledFrom && moving) {
+    const dx = at.x - rolledFrom.x;
+    const dy = at.y - rolledFrom.y;
+    if (Math.hypot(dx, dy) <= MAX_ROLL_STEP_METRES) {
+      // Rolled on screen, where it is drawn BALL_RADIUS across.
+      const t = build2DTransform(frame.pitch_dimensions);
+      const [x0, y0] = worldToPx(rolledFrom.x, rolledFrom.y, t);
+      const [x1, y1] = worldToPx(at.x, at.y, t);
+      ballSpin = rolled(ballSpin, x1 - x0, y1 - y0, BALL_RADIUS);
+    }
+  }
+  rolledFrom = at;
 }
 
 function ensureRenderer() {

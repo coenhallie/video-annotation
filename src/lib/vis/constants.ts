@@ -93,6 +93,28 @@ export const NEARBY_METRES = 15
 export const RING_FADE_S = 0.6
 
 /**
+ * Seconds for the gold possession ring, and with it the carrier's number and
+ * growth, to fade in during playback. It still fades out over RING_FADE_S.
+ * The Manchester City vs PSG export flags the carrier in short bursts, most
+ * of them 1 to 4 frames: fading in over RING_FADE_S, the median one reached
+ * a fifth of full strength before fading again. Over 0.12 s the median one
+ * reaches full strength, and 37 of 41 reach half.
+ */
+export const POSSESSION_FADE_IN_S = 0.12
+
+/**
+ * How much bigger the player with the ball is drawn, as a fraction of
+ * PLAYER_RADIUS, at full possession strength.
+ */
+export const CARRIER_GROWTH = 0.25
+
+/**
+ * Radius (px) of the ball on the ground. Large enough for its pattern to
+ * show, and smaller than a player.
+ */
+export const BALL_RADIUS = 7
+
+/**
  * The ring that pulses on the throw-in spot (throwInSequence.ts).
  * Cyan, as every other colour on the pitch already means something: white is
  * the players near the ball, gold the ball carrier, yellow and magenta the
