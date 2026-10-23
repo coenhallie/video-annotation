@@ -112,7 +112,7 @@ export const CARRIER_GROWTH = 0.25
  * Radius (px) of the ball on the ground. Large enough for its pattern to
  * show, and smaller than a player.
  */
-export const BALL_RADIUS = 7
+export const BALL_RADIUS = 9
 
 /**
  * The ring that pulses on the throw-in spot (throwInSequence.ts).

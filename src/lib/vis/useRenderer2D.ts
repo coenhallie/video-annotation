@@ -30,7 +30,7 @@
 //    bookkeeping, not anything about the player. Their shirt number is drawn
 //    only on the player with the ball, with the possession ring, and that
 //    player is drawn bigger (CARRIER_GROWTH).
-//  - the ball is drawn as a football, BALL_RADIUS across rather than 4 px, and
+//  - the ball is drawn as a football, of radius BALL_RADIUS rather than 4 px, and
 //    renderFrame takes how it is turned, for a caller that rolls it
 //    (football.ts).
 
@@ -533,7 +533,7 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
 
     const [px, py] = worldToPx(x, y, transform2d)
     // Grows with z, up to 6 m, and stays smaller than a player.
-    const r = BALL_RADIUS + Math.min(6, Math.max(0, z)) * 0.5
+    const r = BALL_RADIUS + Math.min(6, Math.max(0, z)) * 0.4
 
     const before = ctx.globalAlpha
     ctx.globalAlpha = alpha
