@@ -1155,3 +1155,57 @@ describe('the ball', () => {
     expect(ops.find((o, i) => i > ops.indexOf(disc(ops)!) && o.op === 'fill')?.fillStyle).toBe('#c8ffff');
   });
 });
+
+describe('the player who has just received the ball', () => {
+  const T = build2DTransform(PITCH);
+  // Track 1 has the ball, which is on their circle.
+  const frame = {
+    pitch_dimensions: PITCH,
+    teams: [
+      {
+        team_id: 0,
+        players: [
+          {
+            track_id: 1,
+            person_type: 'PersonType.PLAYER',
+            projected_coordinates: { x: 0, y: 0 },
+            player_number: 10,
+            in_possession: true,
+          },
+        ],
+      },
+    ],
+    balls: [{ projected_coordinates: { x: 0.3, y: 0 } }],
+  } as unknown as Frame;
+  const [cx, cy] = worldToPx(0, 0, T);
+
+  function render(received?: Map<number, number>) {
+    const { canvas, ops } = fakeCanvas();
+    useRenderer2D(canvas).renderFrame(frame, received ? { received } : {});
+    // Everything drawn after the ball: its patches are clipped to it.
+    const ball = ops.findIndex((o) => o.op === 'clip');
+    return ops.slice(ops.slice(ball).findIndex((o) => o.op === 'restore') + ball);
+  }
+  const circleOver = (after: Op[]) => {
+    const at = after.findIndex((o) => isPlayerCircle(o, cx, cy));
+    return at < 0 ? undefined : after.slice(at).find((o) => o.op === 'fill');
+  };
+
+  it('covers the ball with their circle and number, so the number shows', () => {
+    const after = render(new Map([[1, 1]]));
+    expect(circleOver(after)?.fillStyle).toBe(PERSON_COLORS.home.fill);
+    expect(circleOver(after)?.globalAlpha).toBe(1);
+    expect(after.filter((o) => o.op === 'fillText').map((o) => o.args[0])).toEqual(['10']);
+  });
+
+  it('fades the cover out at the strength it is given, to show the ball again', () => {
+    const after = render(new Map([[1, 0.4]]));
+    expect(circleOver(after)?.globalAlpha).toBeCloseTo(0.4);
+    expect(after.find((o) => o.op === 'fillText')?.globalAlpha).toBeCloseTo(0.4);
+  });
+
+  it('draws nothing over the ball otherwise', () => {
+    expect(circleOver(render())).toBeUndefined();
+    expect(circleOver(render(new Map()))).toBeUndefined();
+  });
+});

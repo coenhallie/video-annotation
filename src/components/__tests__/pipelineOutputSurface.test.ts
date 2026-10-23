@@ -10,7 +10,13 @@ import {
   THROW_IN_REPEAT_S,
   THROW_IN_ZOOM,
 } from '@/lib/vis/throwInSequence';
-import { PERSON_COLORS, POSSESSION_FADE_IN_S, RING_FADE_S } from '@/lib/vis/constants';
+import {
+  PERSON_COLORS,
+  POSSESSION_FADE_IN_S,
+  RECEIVE_FADE_S,
+  RECEIVE_SHOW_S,
+  RING_FADE_S,
+} from '@/lib/vis/constants';
 import { UPRIGHT } from '@/lib/vis/football';
 import { CHEVRON_FLOW_PERIOD_S } from '@/lib/vis/attackGlow';
 
@@ -1257,6 +1263,66 @@ describe('PipelineOutputSurface', () => {
       m.unmount();
     });
 
+    /** How strongly track `id` is drawn over the ball, having just received it. */
+    const cover = (id: number) =>
+      (renderFrame.mock.calls.at(-1)?.[1]?.received as Map<number, number> | undefined)?.get(id) ?? 0;
+    /** Play on `s` seconds, a frame at a time. */
+    async function playFor(replay: PipelineReplay, s: number, carrier = true) {
+      for (let t = 0; t < s - 1e-9; t += 0.04) await step(replay, NEAR, 0.04, carrier);
+    }
+    /** Playing, with nobody having had the ball for long enough to forget it. */
+    async function playingWithoutBall() {
+      const { replay, m } = await ready(NEAR);
+      set(replay.isPlaying, true);
+      await nextTick();
+      await playFor(replay, RING_FADE_S + 0.08, false);
+      return { replay, m };
+    }
+
+    // The ball sits on the circle of the player with it, over their number.
+    it('draws a player who receives the ball over it for a moment, then fades them to show it', async () => {
+      const { replay, m } = await playingWithoutBall();
+      expect(cover(1)).toBe(0);
+      await step(replay, NEAR);
+      expect(cover(1)).toBe(1);
+      await playFor(replay, RECEIVE_SHOW_S - 0.04);
+      expect(cover(1)).toBe(1);
+      await playFor(replay, RECEIVE_FADE_S / 2);
+      expect(cover(1)).toBeGreaterThan(0);
+      expect(cover(1)).toBeLessThan(1);
+      await playFor(replay, RECEIVE_FADE_S / 2 + 0.04);
+      expect(cover(1)).toBe(0);
+      m.unmount();
+    });
+
+    // The data loses the carrier for a frame or two at a time.
+    it('does not start again when the data loses the player with the ball for a frame or two', async () => {
+      const { replay, m } = await playingWithoutBall();
+      await step(replay, NEAR);
+      await playFor(replay, RECEIVE_SHOW_S + RECEIVE_FADE_S);
+      expect(cover(1)).toBe(0);
+      await playFor(replay, 0.08, false);
+      await step(replay, NEAR);
+      expect(cover(1)).toBe(0);
+      m.unmount();
+    });
+
+    it('draws nobody over the ball on a frame reached by a seek, or while paused', async () => {
+      const { replay, m } = await ready(FAR);
+      await step(replay, NEAR, 30, false);
+      await step(replay, NEAR, 30, true);
+      expect(cover(1)).toBe(0);
+      set(replay.isPlaying, true);
+      await nextTick();
+      await playFor(replay, RING_FADE_S + 0.08, false);
+      await step(replay, NEAR);
+      expect(cover(1)).toBe(1);
+      set(replay.isPlaying, false);
+      await nextTick();
+      expect(cover(1)).toBe(0);
+      m.unmount();
+    });
+
     it('does not fade under reduced motion', async () => {
       const originalMatchMedia = window.matchMedia;
       window.matchMedia = ((query: string) => ({
@@ -1271,6 +1337,8 @@ describe('PipelineOutputSurface', () => {
         await nextTick();
         await step(replay, NEAR);
         expect(ring(2)).toBe(1);
+        // Nor draw the player with the ball over it, which would only flash.
+        expect(cover(1)).toBe(0);
         m.unmount();
       } finally {
         window.matchMedia = originalMatchMedia;

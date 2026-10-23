@@ -176,6 +176,12 @@ export interface FrameLayers {
   trail?: BallTrail | undefined
   /** How the ball is turned, for a caller that rolls it. Default upright. */
   ballSpin?: Spin | undefined
+  /**
+   * The players who have just received the ball, by track id, and how
+   * strongly their circle and number are drawn over it, from 0 to 1. A player
+   * missing from it is drawn under the ball as usual.
+   */
+  received?: ReadonlyMap<TrackId, number> | undefined
 }
 
 /** Size of a shirt number, in proportion to its circle: 10 px in 12 px. */
@@ -371,6 +377,19 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
       for (const ball of frame.balls ?? []) {
         draw2DBall(ball, spin)
       }
+      // A player who has just received the ball is drawn over it for a
+      // moment, so their number shows, then fades to show the ball again.
+      for (const p of people) {
+        const id = p.player.track_id
+        const cover = id != null ? (layers.received?.get(id) ?? 0) : 0
+        if (cover <= 0) continue
+        const at = playerPx(p.player)
+        if (!at) continue
+        ctx.globalAlpha = alphaOf(p) * cover
+        drawPlayerBody(at, carrierRadius(possessionOf(p)), p.player, p.tid, nearbyOf(p))
+        draw2DNumber(p.player, p.tid, possessionOf(p))
+      }
+      ctx.globalAlpha = 1
     }
 
     if (ballPulse) drawBallPulse(ballPulse)
@@ -459,12 +478,6 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     if (!at) return
     const [px, py] = at
     const radius = carrierRadius(possession)
-    const { colors, outlineWidth, ...style } = personStyle(player, teamId)
-    let outline = style.outline
-    // White marks the players around the ball, and only them. Full on, it
-    // replaces the outline; fading, it is laid over the outline at its strength.
-    const ringOnly = ring >= 1
-    if (ringOnly) outline = NEARBY_OUTLINE
 
     // Shadow (offset 1px down-right)
     ctx.beginPath()
@@ -472,7 +485,38 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     ctx.fillStyle = 'rgba(0,0,0,0.3)'
     ctx.fill()
 
-    // Player circle
+    drawPlayerBody(at, radius, player, teamId, ring)
+
+    // Possession ring (gold), at its strength
+    if (possession > 0) {
+      const alpha = ctx.globalAlpha
+      ctx.globalAlpha = alpha * possession
+      ctx.beginPath()
+      ctx.arc(px, py, radius + 4, 0, Math.PI * 2)
+      ctx.strokeStyle = '#ffd700'
+      ctx.lineWidth = 2
+      ctx.stroke()
+      ctx.globalAlpha = alpha
+    }
+  }
+
+  /**
+   * A player's circle at `at`, of `radius`: filled, and outlined, with the
+   * white ring at strength `ring` on the players around the ball.
+   */
+  function drawPlayerBody(
+    at: [number, number],
+    radius: number,
+    player: Player,
+    teamId: number,
+    ring: number,
+  ): void {
+    const [px, py] = at
+    const { colors, outlineWidth, ...style } = personStyle(player, teamId)
+    // White marks the players around the ball, and only them. Full on, it
+    // replaces the outline; fading, it is laid over the outline at its strength.
+    const ringOnly = ring >= 1
+    const outline = ringOnly ? NEARBY_OUTLINE : style.outline
     ctx.beginPath()
     ctx.arc(px, py, radius, 0, Math.PI * 2)
     ctx.fillStyle = colors.fill
@@ -484,18 +528,6 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
       const alpha = ctx.globalAlpha
       ctx.globalAlpha = alpha * ring
       ctx.strokeStyle = NEARBY_OUTLINE
-      ctx.stroke()
-      ctx.globalAlpha = alpha
-    }
-
-    // Possession ring (gold), at its strength
-    if (possession > 0) {
-      const alpha = ctx.globalAlpha
-      ctx.globalAlpha = alpha * possession
-      ctx.beginPath()
-      ctx.arc(px, py, radius + 4, 0, Math.PI * 2)
-      ctx.strokeStyle = '#ffd700'
-      ctx.lineWidth = 2
       ctx.stroke()
       ctx.globalAlpha = alpha
     }

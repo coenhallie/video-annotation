@@ -103,6 +103,16 @@ export const RING_FADE_S = 0.6
 export const POSSESSION_FADE_IN_S = 0.12
 
 /**
+ * Seconds a player who has just received the ball is drawn over it, so their
+ * number shows, and then seconds to fade them out to show the ball again.
+ * It starts when a player gets the ball whose possession ring had faded out
+ * altogether, so the data losing them for a frame or two does not start it
+ * again.
+ */
+export const RECEIVE_SHOW_S = 0.5
+export const RECEIVE_FADE_S = 0.4
+
+/**
  * How much bigger the player with the ball is drawn, as a fraction of
  * PLAYER_RADIUS, at full possession strength.
  */

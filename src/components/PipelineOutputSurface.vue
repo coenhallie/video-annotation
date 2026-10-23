@@ -44,6 +44,8 @@ import {
   FRAME_H,
   PERSON_COLORS,
   POSSESSION_FADE_IN_S,
+  RECEIVE_FADE_S,
+  RECEIVE_SHOW_S,
   RING_FADE_S,
 } from '@/lib/vis/constants';
 import { rolled, UPRIGHT, type Spin } from '@/lib/vis/football';
@@ -176,6 +178,7 @@ function paint(): void {
       fadeFar: layers.farFade,
       trail: layers.ballTrail ? (props.replay.ballTrail.value ?? undefined) : undefined,
       ballSpin,
+      received: receivedCovers(),
     });
   }
 }
@@ -825,8 +828,12 @@ function settleGlow(): void {
 const nearbyRings = new Map<TrackId, number>();
 const possessionRings = new Map<TrackId, number>();
 
-/** Rings partway through a fade, which need a repaint as the clock moves. */
+/**
+ * Rings partway through a fade, or a player drawn over the ball having just
+ * received it, which need a repaint as the clock moves.
+ */
 function ringsFading(): boolean {
+  if (received.size > 0) return true;
   for (const rings of [nearbyRings, possessionRings]) {
     for (const strength of rings.values()) if (strength < 1) return true;
   }
@@ -861,8 +868,46 @@ function fadeRings(
 /** Fade both kinds of ring toward the frame's own by `dt` seconds, or set them. */
 function updateRings(dt: number | null): void {
   const frame = props.replay.frame.value;
+  const withBall = frame ? possessionTrackIds(frame) : new Set<TrackId>();
+  updateReceived(withBall, dt);
   fadeRings(nearbyRings, frame ? nearbyTrackIds(frame) : new Set(), dt);
-  fadeRings(possessionRings, frame ? possessionTrackIds(frame) : new Set(), dt, POSSESSION_FADE_IN_S);
+  fadeRings(possessionRings, withBall, dt, POSSESSION_FADE_IN_S);
+}
+
+// ── Receiving the ball ──────────────────────────────────────────────────────
+//
+// The ball sits on the circle of the player with it, over their number. So
+// during playback a player who receives it is drawn over it for
+// RECEIVE_SHOW_S, their number showing, and then fades over RECEIVE_FADE_S
+// to show the ball again. A player receives the ball when they get it with
+// their possession ring faded out altogether: the data loses the carrier for
+// a frame or two at a time, which does not count. Anywhere else, and under
+// reduced motion, nobody is drawn over the ball.
+
+/** Seconds since each player received the ball, while they are drawn over it. */
+const received = new Map<TrackId, number>();
+
+/** Start and move on each player drawn over the ball, by `dt` seconds, or clear them. */
+function updateReceived(withBall: Set<TrackId>, dt: number | null): void {
+  if (dt === null) {
+    received.clear();
+    return;
+  }
+  for (const [id, since] of received) {
+    if (since + dt >= RECEIVE_SHOW_S + RECEIVE_FADE_S) received.delete(id);
+    else received.set(id, since + dt);
+  }
+  for (const id of withBall) if (!possessionRings.has(id)) received.set(id, 0);
+}
+
+/** How strongly each player who has just received the ball is drawn over it. */
+function receivedCovers(): Map<TrackId, number> {
+  const covers = new Map<TrackId, number>();
+  for (const [id, since] of received) {
+    const fading = (since - RECEIVE_SHOW_S) / RECEIVE_FADE_S;
+    covers.set(id, fading <= 0 ? 1 : 1 - fading * fading * (3 - 2 * fading));
+  }
+  return covers;
 }
 
 /** Finish any fade at once: the frame on screen shows its own rings. */
