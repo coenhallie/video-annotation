@@ -865,11 +865,15 @@ function fadeRings(
   }
 }
 
-/** Fade both kinds of ring toward the frame's own by `dt` seconds, or set them. */
-function updateRings(dt: number | null): void {
+/**
+ * Fade both kinds of ring toward the frame's own by `dt` seconds, or set them,
+ * and move on who is drawn over the ball by `receiveDt`: that plays whether
+ * the rings fade or not.
+ */
+function updateRings(dt: number | null, receiveDt: number | null = dt): void {
   const frame = props.replay.frame.value;
   const withBall = frame ? possessionTrackIds(frame) : new Set<TrackId>();
-  updateReceived(withBall, dt);
+  updateReceived(withBall, receiveDt);
   fadeRings(nearbyRings, frame ? nearbyTrackIds(frame) : new Set(), dt);
   fadeRings(possessionRings, withBall, dt, POSSESSION_FADE_IN_S);
 }
@@ -879,25 +883,38 @@ function updateRings(dt: number | null): void {
 // The ball sits on the circle of the player with it, over their number. So
 // during playback a player who receives it is drawn over it for
 // RECEIVE_SHOW_S, their number showing, and then fades over RECEIVE_FADE_S
-// to show the ball again. A player receives the ball when they get it with
-// their possession ring faded out altogether: the data loses the carrier for
-// a frame or two at a time, which does not count. Anywhere else, and under
+// to show the ball again. A player receives the ball when they get it having
+// not had it for RING_FADE_S: the data loses the carrier for a frame or two at
+// a time, which does not count. This is kept apart from the possession ring,
+// which does not fade with ring fades switched off. Anywhere else, and under
 // reduced motion, nobody is drawn over the ball.
 
 /** Seconds since each player received the ball, while they are drawn over it. */
 const received = new Map<TrackId, number>();
+/** Seconds since each player last had the ball, for RING_FADE_S after. */
+const hadBall = new Map<TrackId, number>();
 
 /** Start and move on each player drawn over the ball, by `dt` seconds, or clear them. */
 function updateReceived(withBall: Set<TrackId>, dt: number | null): void {
   if (dt === null) {
+    // Whoever has the ball here has had it: playing on, they did not just get it.
     received.clear();
+    hadBall.clear();
+    for (const id of withBall) hadBall.set(id, 0);
     return;
   }
   for (const [id, since] of received) {
     if (since + dt >= RECEIVE_SHOW_S + RECEIVE_FADE_S) received.delete(id);
     else received.set(id, since + dt);
   }
-  for (const id of withBall) if (!possessionRings.has(id)) received.set(id, 0);
+  for (const [id, since] of hadBall) {
+    if (since + dt > RING_FADE_S) hadBall.delete(id);
+    else hadBall.set(id, since + dt);
+  }
+  for (const id of withBall) {
+    if (!hadBall.has(id)) received.set(id, 0);
+    hadBall.set(id, 0);
+  }
 }
 
 /** How strongly each player who has just received the ball is drawn over it. */
@@ -1037,7 +1054,8 @@ watch(
     }
     // A fade that has just finished still needs the paint that shows its end.
     const wasFading = ringsFading();
-    updateRings(playing && layers.ringFades ? Math.max(0, now - before) : null);
+    const step = playing ? Math.max(0, now - before) : null;
+    updateRings(layers.ringFades ? step : null, step);
     if (
       frame !== prevFrame ||
       phase !== prevPhase ||

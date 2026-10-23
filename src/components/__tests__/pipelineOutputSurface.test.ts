@@ -1307,6 +1307,34 @@ describe('PipelineOutputSurface', () => {
       m.unmount();
     });
 
+    // The cover is not a ring fade: switching those off must not lose it.
+    describe('with ring fades switched off', () => {
+      beforeEach(() =>
+        localStorage.setItem('perspecto.replayLayers', JSON.stringify({ ringFades: false })),
+      );
+      afterEach(() => localStorage.clear());
+
+      it('still draws a player who receives the ball over it, and fades them', async () => {
+        const { replay, m } = await playingWithoutBall();
+        await step(replay, NEAR);
+        expect(cover(1)).toBe(1);
+        await playFor(replay, RECEIVE_SHOW_S + RECEIVE_FADE_S / 2);
+        expect(cover(1)).toBeGreaterThan(0);
+        expect(cover(1)).toBeLessThan(1);
+        m.unmount();
+      });
+
+      it('still does not start again when the data loses the player for a frame or two', async () => {
+        const { replay, m } = await playingWithoutBall();
+        await step(replay, NEAR);
+        await playFor(replay, RECEIVE_SHOW_S + RECEIVE_FADE_S);
+        await playFor(replay, 0.08, false);
+        await step(replay, NEAR);
+        expect(cover(1)).toBe(0);
+        m.unmount();
+      });
+    });
+
     it('draws nobody over the ball on a frame reached by a seek, or while paused', async () => {
       const { replay, m } = await ready(FAR);
       await step(replay, NEAR, 30, false);
