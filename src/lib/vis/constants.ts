@@ -16,7 +16,7 @@ export const PITCH_MARGIN = 40
 /** Colour used for pitch markings. */
 export const LINE_COLOR = '#ffffff'
 /** Radius (px) of a player circle on the 2D canvas. */
-export const PLAYER_RADIUS = 12
+export const PLAYER_RADIUS = 14
 
 /** Fill, outline and number colours for one kind of person on the 2D pitch. */
 export interface PersonColors {
@@ -91,6 +91,38 @@ export const NEARBY_METRES = 15
  * off with it were jarring. Tried 0.4 s first, which still felt abrupt.
  */
 export const RING_FADE_S = 0.6
+
+/**
+ * Seconds for the gold possession ring, and with it the carrier's number and
+ * growth, to fade in during playback. It still fades out over RING_FADE_S.
+ * The Manchester City vs PSG export flags the carrier in short bursts, most
+ * of them 1 to 4 frames: fading in over RING_FADE_S, the median one reached
+ * a fifth of full strength before fading again. Over 0.12 s the median one
+ * reaches full strength, and 37 of 41 reach half.
+ */
+export const POSSESSION_FADE_IN_S = 0.12
+
+/**
+ * Seconds a player who has just received the ball is drawn over it, so their
+ * number shows, and then seconds to fade them out to show the ball again.
+ * It starts when a player gets the ball whose possession ring had faded out
+ * altogether, so the data losing them for a frame or two does not start it
+ * again.
+ */
+export const RECEIVE_SHOW_S = 0.5
+export const RECEIVE_FADE_S = 0.4
+
+/**
+ * How much bigger the player with the ball is drawn, as a fraction of
+ * PLAYER_RADIUS, at full possession strength.
+ */
+export const CARRIER_GROWTH = 0.25
+
+/**
+ * Radius (px) of the ball on the ground. Large enough for its pattern to
+ * show, and smaller than a player.
+ */
+export const BALL_RADIUS = 10.5
 
 /**
  * The ring that pulses on the throw-in spot (throwInSequence.ts).

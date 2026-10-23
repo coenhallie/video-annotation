@@ -77,6 +77,26 @@ export function recordingCtx() {
         },
       };
     },
+    createRadialGradient(...args: number[]) {
+      const stops: Array<[number, string]> = [];
+      return {
+        addColorStop(offset: number, color: string) {
+          stops.push([offset, color]);
+        },
+        toString() {
+          return `radial(${args.join(',')}|${stops.map(([o, c]) => `${o}:${c}`).join(',')})`;
+        },
+      };
+    },
+    save() {
+      ctx.snap('save');
+    },
+    restore() {
+      ctx.snap('restore');
+    },
+    clip() {
+      ctx.snap('clip');
+    },
     strokeRect(...args: unknown[]) {
       ctx.snap('strokeRect', args);
     },

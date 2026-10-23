@@ -4,6 +4,7 @@ import {
   sameTrail,
   trailOpacity,
   MAX_GAP_S,
+  TRAIL_FADE_S,
   TRAIL_HEAD_ALPHA,
   TRAIL_HISTORY_S,
   TRAIL_LOOKBACK_S,
@@ -37,6 +38,10 @@ const corner = (turnAt: number) => (i: number) =>
   i <= turnAt ? { x: i * 0.5, y: 0 } : { x: turnAt * 0.5, y: (i - turnAt) * 0.5 };
 
 describe('ballTrailAt', () => {
+  it('keeps three seconds of the ball\'s path', () => {
+    expect(TRAIL_HISTORY_S).toBe(3);
+  });
+
   it('is the path the ball took, oldest first, ending at the ball', () => {
     const trail = last(play(20, (i) => ({ x: i * 0.5, y: 0 })));
     expect(trail?.runs).toHaveLength(1);
@@ -48,7 +53,8 @@ describe('ballTrailAt', () => {
   });
 
   it('keeps every point where it is, frame to frame, only older', () => {
-    const records = play(80, corner(30));
+    // Short enough that none of it is old enough to drop off the end.
+    const records = play(Math.floor(TRAIL_HISTORY_S / DT) - 1, corner(30));
     for (let i = 1; i < records.length; i++) {
       const before = path(ballTrailAt(records, i - 1));
       const after = path(ballTrailAt(records, i));
@@ -156,10 +162,11 @@ describe('ballTrailAt', () => {
 
 describe('trailOpacity', () => {
   it('is strongest at the ball and fades to nothing at the end of the history', () => {
+    const fading = TRAIL_HISTORY_S - TRAIL_FADE_S;
     expect(trailOpacity(0)).toBeCloseTo(TRAIL_HEAD_ALPHA);
-    expect(trailOpacity(2)).toBeLessThan(trailOpacity(1));
-    expect(trailOpacity(4.5)).toBeCloseTo(TRAIL_TAIL_ALPHA);
-    expect(trailOpacity(5.25)).toBeCloseTo(TRAIL_TAIL_ALPHA / 2);
+    expect(trailOpacity(fading / 2)).toBeLessThan(trailOpacity(fading / 4));
+    expect(trailOpacity(fading)).toBeCloseTo(TRAIL_TAIL_ALPHA);
+    expect(trailOpacity(fading + TRAIL_FADE_S / 2)).toBeCloseTo(TRAIL_TAIL_ALPHA / 2);
     expect(trailOpacity(TRAIL_HISTORY_S)).toBe(0);
     expect(trailOpacity(TRAIL_HISTORY_S + 1)).toBe(0);
   });

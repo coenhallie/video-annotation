@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { watch } from 'vue';
 import { usePipelineReplay } from '@/composables/usePipelineReplay';
+import { TRAIL_HISTORY_S } from '@/lib/vis/ballTrail';
 import type { RangeFetcher } from '@/lib/pipelineData/jsonlIndex';
 import {
   bandedFile,
@@ -1026,7 +1027,7 @@ describe('usePipelineReplay ball trail', () => {
     // It ends at the ball, and reaches the whole history back, which a seek
     // on its own does not load.
     expect(path.at(-1)).toMatchObject({ x: 10, y: 15, age: 0 });
-    expect(path[0]!.age).toBeGreaterThan(5.9);
+    expect(path[0]!.age).toBeGreaterThan(TRAIL_HISTORY_S - 0.1);
     expect(path[0]).toMatchObject({ x: 0, y: 5 });
     expect(trail.turns).toHaveLength(1);
     expect(trail.turns[0]!.x).toBeCloseTo(10);

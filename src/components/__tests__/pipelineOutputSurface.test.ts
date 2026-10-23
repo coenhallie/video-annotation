@@ -10,7 +10,14 @@ import {
   THROW_IN_REPEAT_S,
   THROW_IN_ZOOM,
 } from '@/lib/vis/throwInSequence';
-import { PERSON_COLORS, RING_FADE_S } from '@/lib/vis/constants';
+import {
+  PERSON_COLORS,
+  POSSESSION_FADE_IN_S,
+  RECEIVE_FADE_S,
+  RECEIVE_SHOW_S,
+  RING_FADE_S,
+} from '@/lib/vis/constants';
+import { UPRIGHT } from '@/lib/vis/football';
 import { CHEVRON_FLOW_PERIOD_S } from '@/lib/vis/attackGlow';
 
 /**
@@ -721,6 +728,17 @@ describe('PipelineOutputSurface', () => {
 
     const lastOverlay = () => renderFrame.mock.calls.at(-1)?.[1]?.goal;
 
+    it('rolls its ball into the net', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, goalFrame(['GOAL']));
+      await animate(16);
+      const before = renderFrame.mock.calls.at(-1)?.[1]?.ballSpin;
+      await animate(400);
+      expect(lastOverlay()).toBeDefined();
+      expect(renderFrame.mock.calls.at(-1)?.[1]?.ballSpin).not.toEqual(before);
+      m.unmount();
+    });
+
     it('plays when playback runs into a GOAL label', async () => {
       const { replay, m } = await playing();
       await tick(replay, goalFrame(['GOAL']));
@@ -1229,6 +1247,110 @@ describe('PipelineOutputSurface', () => {
       m.unmount();
     });
 
+    // The data flags the carrier in bursts of a few frames: faded in over
+    // RING_FADE_S, most of them never got past a fifth of full strength.
+    it('brings the possession ring in quickly, and fades it out slowly', async () => {
+      const { replay, m } = await ready(NEAR);
+      set(replay.isPlaying, true);
+      await nextTick();
+      for (let t = 0; t <= RING_FADE_S; t += 0.04) await step(replay, NEAR, 0.04, false);
+      expect(held(1)).toBe(0);
+      for (let t = 0; t < POSSESSION_FADE_IN_S - 1e-9; t += 0.04) await step(replay, NEAR);
+      expect(held(1)).toBeCloseTo(1, 9);
+      // It still fades out over RING_FADE_S.
+      await step(replay, NEAR, 0.04, false);
+      expect(held(1)).toBeCloseTo(1 - 0.04 / RING_FADE_S);
+      m.unmount();
+    });
+
+    /** How strongly track `id` is drawn over the ball, having just received it. */
+    const cover = (id: number) =>
+      (renderFrame.mock.calls.at(-1)?.[1]?.received as Map<number, number> | undefined)?.get(id) ?? 0;
+    /** Play on `s` seconds, a frame at a time. */
+    async function playFor(replay: PipelineReplay, s: number, carrier = true) {
+      for (let t = 0; t < s - 1e-9; t += 0.04) await step(replay, NEAR, 0.04, carrier);
+    }
+    /** Playing, with nobody having had the ball for long enough to forget it. */
+    async function playingWithoutBall() {
+      const { replay, m } = await ready(NEAR);
+      set(replay.isPlaying, true);
+      await nextTick();
+      await playFor(replay, RING_FADE_S + 0.08, false);
+      return { replay, m };
+    }
+
+    // The ball sits on the circle of the player with it, over their number.
+    it('draws a player who receives the ball over it for a moment, then fades them to show it', async () => {
+      const { replay, m } = await playingWithoutBall();
+      expect(cover(1)).toBe(0);
+      await step(replay, NEAR);
+      expect(cover(1)).toBe(1);
+      await playFor(replay, RECEIVE_SHOW_S - 0.04);
+      expect(cover(1)).toBe(1);
+      await playFor(replay, RECEIVE_FADE_S / 2);
+      expect(cover(1)).toBeGreaterThan(0);
+      expect(cover(1)).toBeLessThan(1);
+      await playFor(replay, RECEIVE_FADE_S / 2 + 0.04);
+      expect(cover(1)).toBe(0);
+      m.unmount();
+    });
+
+    // The data loses the carrier for a frame or two at a time.
+    it('does not start again when the data loses the player with the ball for a frame or two', async () => {
+      const { replay, m } = await playingWithoutBall();
+      await step(replay, NEAR);
+      await playFor(replay, RECEIVE_SHOW_S + RECEIVE_FADE_S);
+      expect(cover(1)).toBe(0);
+      await playFor(replay, 0.08, false);
+      await step(replay, NEAR);
+      expect(cover(1)).toBe(0);
+      m.unmount();
+    });
+
+    // The cover is not a ring fade: switching those off must not lose it.
+    describe('with ring fades switched off', () => {
+      beforeEach(() =>
+        localStorage.setItem('perspecto.replayLayers', JSON.stringify({ ringFades: false })),
+      );
+      afterEach(() => localStorage.clear());
+
+      it('still draws a player who receives the ball over it, and fades them', async () => {
+        const { replay, m } = await playingWithoutBall();
+        await step(replay, NEAR);
+        expect(cover(1)).toBe(1);
+        await playFor(replay, RECEIVE_SHOW_S + RECEIVE_FADE_S / 2);
+        expect(cover(1)).toBeGreaterThan(0);
+        expect(cover(1)).toBeLessThan(1);
+        m.unmount();
+      });
+
+      it('still does not start again when the data loses the player for a frame or two', async () => {
+        const { replay, m } = await playingWithoutBall();
+        await step(replay, NEAR);
+        await playFor(replay, RECEIVE_SHOW_S + RECEIVE_FADE_S);
+        await playFor(replay, 0.08, false);
+        await step(replay, NEAR);
+        expect(cover(1)).toBe(0);
+        m.unmount();
+      });
+    });
+
+    it('draws nobody over the ball on a frame reached by a seek, or while paused', async () => {
+      const { replay, m } = await ready(FAR);
+      await step(replay, NEAR, 30, false);
+      await step(replay, NEAR, 30, true);
+      expect(cover(1)).toBe(0);
+      set(replay.isPlaying, true);
+      await nextTick();
+      await playFor(replay, RING_FADE_S + 0.08, false);
+      await step(replay, NEAR);
+      expect(cover(1)).toBe(1);
+      set(replay.isPlaying, false);
+      await nextTick();
+      expect(cover(1)).toBe(0);
+      m.unmount();
+    });
+
     it('does not fade under reduced motion', async () => {
       const originalMatchMedia = window.matchMedia;
       window.matchMedia = ((query: string) => ({
@@ -1243,6 +1365,93 @@ describe('PipelineOutputSurface', () => {
         await nextTick();
         await step(replay, NEAR);
         expect(ring(2)).toBe(1);
+        // Nor draw the player with the ball over it, which would only flash.
+        expect(cover(1)).toBe(0);
+        m.unmount();
+      } finally {
+        window.matchMedia = originalMatchMedia;
+      }
+    });
+  });
+  describe('ball roll', () => {
+    type Writable = { value: unknown };
+    const set = (r: unknown, v: unknown) => ((r as Writable).value = v);
+    const frameWith = (ballX: number) => ({
+      pitch_dimensions: { length: 105, width: 68 },
+      teams: [],
+      balls: [{ projected_coordinates: { x: ballX, y: 0 } }],
+      state: { actions: [] },
+      frame_data: [{ frame_count: 1 }],
+    });
+    const spin = () => renderFrame.mock.calls.at(-1)?.[1]?.ballSpin;
+
+    async function ready() {
+      const replay = fakeReplay('loading');
+      const m = mount(replay);
+      await nextTick();
+      set(replay.currentTime, 10);
+      set(replay.frame, frameWith(0));
+      set(replay.state, 'ready');
+      await nextTick();
+      return { replay, m };
+    }
+    async function step(replay: PipelineReplay, ballX: number, by = 0.04) {
+      set(replay.currentTime, (replay.currentTime.value as number) + by);
+      set(replay.frame, frameWith(ballX));
+      await nextTick();
+    }
+    async function playing() {
+      const r = await ready();
+      set(r.replay.isPlaying, true);
+      await nextTick();
+      return r;
+    }
+
+    beforeEach(() => renderFrame.mockClear());
+
+    it('rolls the ball as it moves during playback, and only then', async () => {
+      const { replay, m } = await playing();
+      expect(spin()).toEqual(UPRIGHT);
+      await step(replay, 0.5);
+      const turned = spin();
+      expect(turned).not.toEqual(UPRIGHT);
+      // Still: the clock moves, the ball does not.
+      set(replay.currentTime, (replay.currentTime.value as number) + 0.02);
+      await nextTick();
+      expect(spin()).toEqual(turned);
+      m.unmount();
+    });
+
+    it('keeps the ball as it was across a seek, or a step while paused', async () => {
+      const { replay, m } = await ready();
+      await step(replay, 0.5);
+      expect(spin()).toEqual(UPRIGHT);
+      set(replay.isPlaying, true);
+      await nextTick();
+      await step(replay, 5, 30);
+      expect(spin()).toEqual(UPRIGHT);
+      m.unmount();
+    });
+
+    it('does not roll the ball across a jump in its tracking', async () => {
+      const { replay, m } = await playing();
+      await step(replay, 20);
+      expect(spin()).toEqual(UPRIGHT);
+      m.unmount();
+    });
+
+    it('does not roll the ball under reduced motion', async () => {
+      const originalMatchMedia = window.matchMedia;
+      window.matchMedia = ((query: string) => ({
+        matches: query.includes('prefers-reduced-motion'),
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      })) as unknown as typeof window.matchMedia;
+      try {
+        const { replay, m } = await playing();
+        await step(replay, 0.5);
+        expect(spin()).toEqual(UPRIGHT);
         m.unmount();
       } finally {
         window.matchMedia = originalMatchMedia;

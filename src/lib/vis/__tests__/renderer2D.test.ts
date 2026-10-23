@@ -13,13 +13,24 @@ import {
   DIMMED_PLAYER_ALPHA,
   NEARBY_OUTLINE,
   PLAYER_RADIUS,
+  BALL_RADIUS,
+  CARRIER_GROWTH,
 } from '@/lib/vis/constants';
 import { build2DTransform, worldToPx, PITCH_GRASS } from '@/lib/vis/pitchGeometry';
 import { NET_DEPTH_METRES } from '@/lib/vis/goalSequence';
 import { trailOpacity } from '@/lib/vis/ballTrail';
+import { UPRIGHT, footballPatches, rolled } from '@/lib/vis/football';
 import { fakeCanvas, stubOffscreenCanvas, type Op } from './recordingCtx';
 
 const PITCH = { length: 105, width: 68 };
+
+/** A player's circle at (px, py): at its own size, or grown with the ball. */
+const isPlayerCircle = (o: Op, px: number, py: number) =>
+  o.op === 'arc' &&
+  o.args[0] === px &&
+  o.args[1] === py &&
+  Number(o.args[2]) >= PLAYER_RADIUS &&
+  Number(o.args[2]) <= PLAYER_RADIUS * (1 + CARRIER_GROWTH);
 
 function frameWith(teamOver: Record<string, unknown>): Frame {
   return {
@@ -93,7 +104,7 @@ describe('draw2DPlayer colours', () => {
     // full player radius (the drop shadow is offset by a pixel).
     const [px, py] = worldToPx(0, 0, build2DTransform(PITCH));
     const circleAt = ops.findIndex(
-      (o) => o.op === 'arc' && o.args[0] === px && o.args[1] === py && o.args[2] === PLAYER_RADIUS
+      (o) => isPlayerCircle(o, px, py)
     );
     const after = ops.slice(circleAt);
     return {
@@ -179,7 +190,7 @@ describe('focus around the ball', () => {
   function fillAt(ops: Op[], x: number, y = 0): Op | undefined {
     const [px, py] = worldToPx(x, y, build2DTransform(PITCH));
     const at = ops.findIndex(
-      (o) => o.op === 'arc' && o.args[0] === px && o.args[1] === py && o.args[2] === PLAYER_RADIUS
+      (o) => isPlayerCircle(o, px, py)
     );
     return at < 0 ? undefined : ops.slice(at).find((o) => o.op === 'fill');
   }
@@ -245,10 +256,40 @@ describe('focus around the ball', () => {
 });
 
 describe('player labels', () => {
-  it('draws the shirt number, and not the tracking id', () => {
+  const withBall = (inPossession: boolean) =>
+    frameWith({
+      players: [
+        {
+          track_id: 7,
+          person_type: 'PersonType.PLAYER',
+          projected_coordinates: { x: 0, y: 0 },
+          player_number: 9,
+          in_possession: inPossession,
+        },
+      ],
+    });
+  const labels = (frame: Frame, rings?: { possession: Map<number, number> }) => {
     const { canvas, ops } = fakeCanvas();
-    useRenderer2D(canvas).renderFrame(frameWith({}));
-    expect(ops.filter((o) => o.op === 'fillText').map((o) => o.args[0])).toEqual(['9']);
+    useRenderer2D(canvas).renderFrame(
+      frame,
+      rings ? { rings: { nearby: new Map(), possession: rings.possession } } : {},
+    );
+    return ops.filter((o) => o.op === 'fillText');
+  };
+
+  it('draws the shirt number of the player with the ball, and not the tracking id', () => {
+    expect(labels(withBall(true)).map((o) => o.args[0])).toEqual(['9']);
+  });
+
+  it('draws no number on a player without the ball', () => {
+    expect(labels(withBall(false))).toEqual([]);
+    expect(labels(frameWith({}))).toEqual([]);
+  });
+
+  it('fades the number in and out with the possession ring', () => {
+    const half = labels(withBall(false), { possession: new Map([[7, 0.5]]) });
+    expect(half.map((o) => [o.args[0], o.globalAlpha])).toEqual([['9', 0.5]]);
+    expect(labels(withBall(true), { possession: new Map() })).toEqual([]);
   });
 });
 
@@ -280,7 +321,7 @@ describe('nearby highlight', () => {
     useRenderer2D(canvas).renderFrame(f);
     const [px, py] = worldToPx(x, y, build2DTransform(PITCH));
     const at = ops.findIndex(
-      (o) => o.op === 'arc' && o.args[0] === px && o.args[1] === py && o.args[2] === PLAYER_RADIUS
+      (o) => isPlayerCircle(o, px, py)
     );
     return ops.slice(at).find((o) => o.op === 'stroke')?.strokeStyle;
   }
@@ -336,11 +377,11 @@ describe('nearby highlight', () => {
     useRenderer2D(canvas).renderFrame(f, { rings: { nearby, possession: new Map() } });
     const [px, py] = worldToPx(x, y, build2DTransform(PITCH));
     const at = ops.findIndex(
-      (o) => o.op === 'arc' && o.args[0] === px && o.args[1] === py && o.args[2] === PLAYER_RADIUS
+      (o) => isPlayerCircle(o, px, py)
     );
     // Up to the next marker drawn (its shadow comes first), whoever's it is.
     const end = ops.findIndex(
-      (o, i) => i > at && o.op === 'arc' && o.args[2] === PLAYER_RADIUS && o.args[0] !== px
+      (o, i) => i > at && o.op === 'arc' && o.args[0] !== px && isPlayerCircle(o, Number(o.args[0]), Number(o.args[1]))
     );
     return ops
       .slice(at, end === -1 ? undefined : end)
@@ -399,8 +440,14 @@ describe('nearby highlight', () => {
       possession ? { rings: { nearby: new Map(), possession } } : {}
     );
     const [px, py] = worldToPx(x, 0, build2DTransform(PITCH));
+    // The ring is 4 px out from the circle, at whatever size it is drawn.
     const at = ops.findIndex(
-      (o) => o.op === 'arc' && o.args[0] === px && o.args[1] === py && o.args[2] === PLAYER_RADIUS + 4
+      (o) =>
+        o.op === 'arc' &&
+        o.args[0] === px &&
+        o.args[1] === py &&
+        Number(o.args[2]) >= PLAYER_RADIUS + 4 &&
+        Number(o.args[2]) <= PLAYER_RADIUS * (1 + CARRIER_GROWTH) + 4
     );
     if (at === -1) return null;
     const stroke = ops.slice(at).find((o) => o.op === 'stroke');
@@ -460,12 +507,12 @@ describe('goals and the goal sequence', () => {
 
   it('draws the sequence ball in place of the tracked one', () => {
     const ops = render({ ball: { x: 53, y: 1 }, trail: [], net: { side: 1, y: 1, metres: 0 } });
-    expect(arcAt(ops, 53, 1)).toHaveLength(1);
+    expect(arcAt(ops, 53, 1)).not.toHaveLength(0);
     expect(arcAt(ops, 10, 4)).toHaveLength(0);
   });
 
   it('draws the tracked ball when there is no sequence', () => {
-    expect(arcAt(render(), 10, 4)).toHaveLength(1);
+    expect(arcAt(render(), 10, 4)).not.toHaveLength(0);
   });
 
   it('draws a fading trail behind a fast ball', () => {
@@ -507,10 +554,10 @@ describe('ball trail', () => {
   } as unknown as Frame;
   // Along x to a turn at (0, 2), then on to the ball.
   const run = [
-    { x: -10, y: 2, age: 5.5 },
-    { x: -5, y: 2, age: 3 },
-    { x: 0, y: 2, age: 2 },
-    { x: 5, y: 3, age: 1 },
+    { x: -10, y: 2, age: 2.75 },
+    { x: -5, y: 2, age: 1.5 },
+    { x: 0, y: 2, age: 1 },
+    { x: 5, y: 3, age: 0.5 },
     { x: 10, y: 4, age: 0 },
   ];
   const trail = { runs: [run], turns: [run[2]!] };
@@ -552,9 +599,9 @@ describe('ball trail', () => {
 
   it('leaves out what has faded away entirely', () => {
     const old = [
-      { x: -10, y: 2, age: 7 },
-      { x: -5, y: 2, age: 6.5 },
-      { x: 0, y: 2, age: 1 },
+      { x: -10, y: 2, age: 3.5 },
+      { x: -5, y: 2, age: 3.25 },
+      { x: 0, y: 2, age: 0.5 },
     ];
     expect(trailStrokes(render({ trail: { runs: [old], turns: [] } }))).toHaveLength(1);
   });
@@ -565,7 +612,7 @@ describe('ball trail', () => {
     expect(dot).toBeDefined();
     expect(ops.indexOf(dot!)).toBeGreaterThan(ops.lastIndexOf(trailStrokes(ops).at(-1)!));
     const fill = ops.slice(ops.indexOf(dot!)).find((o) => o.op === 'fill')!;
-    expect(fill.globalAlpha).toBeCloseTo(trailOpacity(2));
+    expect(fill.globalAlpha).toBeCloseTo(trailOpacity(1));
     expect(dotsAt(ops, -10, 2)).toHaveLength(0);
   });
 
@@ -583,6 +630,32 @@ describe('ball trail', () => {
     const ball = ops.findIndex((o) => o.op === 'arc' && o.args[0] === bx && o.args[1] === by && o.args[2] !== 2.5);
     expect(player).toBeLessThan(line);
     expect(line).toBeLessThan(ball);
+  });
+
+  it('draws the number of the player with the ball over it, so the path ending there does not hide it', () => {
+    const carrying = {
+      ...frame,
+      teams: [
+        {
+          team_id: 0,
+          players: [
+            {
+              track_id: 7,
+              person_type: 'PersonType.PLAYER',
+              projected_coordinates: { x: 10, y: 4 },
+              player_number: 25,
+              in_possession: true,
+            },
+          ],
+        },
+      ],
+    } as unknown as Frame;
+    const ops = render({ trail }, carrying);
+    const number = ops.findIndex((o) => o.op === 'fillText' && o.args[0] === '25');
+    const [bx, by] = at(10, 4);
+    const ball = ops.findIndex((o) => o.op === 'arc' && o.args[0] === bx && o.args[1] === by && Number(o.args[2]) < PLAYER_RADIUS);
+    expect(number).toBeGreaterThan(ops.lastIndexOf(trailStrokes(ops).at(-1)!));
+    expect(number).toBeLessThan(ball);
   });
 
   it('draws none while the goal sequence plays, or when not given one', () => {
@@ -677,7 +750,7 @@ describe('attack glow', () => {
   it('puts a halo in the team colour around the ball', () => {
     const ops = render({ color: BLUE, team: 1, direction: 1, intensity: 1 });
     const [bx, by] = px(10);
-    const halo = ops.findIndex((o) => o.op === 'arc' && o.args[0] === bx && o.args[1] === by && Number(o.args[2]) > 10);
+    const halo = ops.findIndex((o) => o.op === 'arc' && o.args[0] === bx && o.args[1] === by && Number(o.args[2]) > PLAYER_RADIUS);
     expect(halo).toBeGreaterThanOrEqual(0);
     expect(ops.slice(halo).find((o) => o.op === 'fill')?.fillStyle).toBe(BLUE);
   });
@@ -745,9 +818,10 @@ describe('attack glow', () => {
     const ops = render({ color: BLUE, team: 1, direction: 1, intensity: 1, flow: 0.5, shading: false });
     expect(areaFills(ops)).toHaveLength(0);
     expect(ops.some((o) => o.op === 'fillRect' && o.fillStyle === BLUE)).toBe(false);
-    // No halo: the team's players are blue too, so look for the halo's arc.
+    // No halo: the team's players are blue too, so look for the halo's arc,
+    // bigger round the ball than the ball or any player.
     const [bx, by] = px(10);
-    expect(ops.some((o) => o.op === 'arc' && o.args[0] === bx && o.args[1] === by && Number(o.args[2]) > 10)).toBe(false);
+    expect(ops.some((o) => o.op === 'arc' && o.args[0] === bx && o.args[1] === by && Number(o.args[2]) > PLAYER_RADIUS)).toBe(false);
     expect(ops.filter((o) => o.op === 'fill' && o.fillStyle === '#ffffff').length).toBeGreaterThanOrEqual(3);
   });
 
@@ -971,5 +1045,167 @@ describe('throw-in pulse', () => {
     // Fully faded at the end of one pulse, so the next starting small is not seen to jump.
     expect(end === undefined || end.alpha < 0.01).toBe(true);
     expect(start.alpha).toBeGreaterThan(0.5);
+  });
+});
+
+describe('the player with the ball', () => {
+  const T = build2DTransform(PITCH);
+  const player = (track_id: number, x: number, ball = false) => ({
+    track_id,
+    person_type: 'PersonType.PLAYER',
+    projected_coordinates: { x, y: 0 },
+    player_number: track_id,
+    in_possession: ball,
+  });
+  // Track 1 has the ball at x = 0; track 2 stands beside them at x = 1.
+  const frame = {
+    pitch_dimensions: PITCH,
+    teams: [{ team_id: 0, players: [player(1, 0, true), player(2, 1)] }],
+    balls: [],
+  } as unknown as Frame;
+
+  function render(possession?: Map<number, number>) {
+    const { canvas, ops } = fakeCanvas();
+    useRenderer2D(canvas).renderFrame(
+      frame,
+      possession ? { rings: { nearby: new Map(), possession } } : {},
+    );
+    return ops;
+  }
+  /** The radius of the circle of the person at x, and where it was drawn. */
+  const circleAt = (ops: Op[], x: number) => {
+    const [px, py] = worldToPx(x, 0, T);
+    const at = ops.findIndex((o) => isPlayerCircle(o, px, py));
+    return { at, radius: Number(ops[at]?.args[2]) };
+  };
+  const goldRing = (ops: Op[]) => {
+    const stroke = ops.findIndex((o) => o.op === 'stroke' && o.strokeStyle === '#ffd700');
+    return Number(ops.slice(0, stroke).findLast((o) => o.op === 'arc')?.args[2]);
+  };
+
+  it('is drawn a quarter bigger, with the gold ring around the bigger circle', () => {
+    const ops = render();
+    const grown = PLAYER_RADIUS * (1 + CARRIER_GROWTH);
+    expect(circleAt(ops, 0).radius).toBeCloseTo(grown);
+    expect(circleAt(ops, 1).radius).toBe(PLAYER_RADIUS);
+    expect(goldRing(ops)).toBeCloseTo(grown + 4);
+  });
+
+  it('grows with the possession ring as it fades in, easing in and out of it', () => {
+    const sizes = [0, 0.1, 0.5, 0.9, 1].map((k) => circleAt(render(new Map([[1, k]])), 0).radius);
+    expect(sizes[0]).toBe(PLAYER_RADIUS);
+    expect(sizes[2]).toBeCloseTo(PLAYER_RADIUS * (1 + CARRIER_GROWTH / 2));
+    expect(sizes[4]).toBeCloseTo(PLAYER_RADIUS * (1 + CARRIER_GROWTH));
+    // Slow at either end, so it does not start or stop with a jolt.
+    expect(sizes[1]! - sizes[0]!).toBeLessThan((sizes[2]! - sizes[0]!) / 5);
+    expect(sizes[4]! - sizes[3]!).toBeLessThan((sizes[4]! - sizes[2]!) / 5);
+  });
+
+  it('is drawn over the players around them, so its bigger circle is not covered', () => {
+    const ops = render();
+    expect(circleAt(ops, 0).at).toBeGreaterThan(circleAt(ops, 1).at);
+  });
+});
+
+describe('the ball', () => {
+  const T = build2DTransform(PITCH);
+  const ballAt = (z = 0) =>
+    ({
+      pitch_dimensions: PITCH,
+      teams: [],
+      balls: [{ projected_coordinates: { x: 10, y: 4, z } }],
+    }) as unknown as Frame;
+  const [bx, by] = worldToPx(10, 4, T);
+
+  function render(frame: Frame, layers: Parameters<ReturnType<typeof useRenderer2D>['renderFrame']>[1] = {}) {
+    const { canvas, ops } = fakeCanvas();
+    useRenderer2D(canvas).renderFrame(frame, layers);
+    return ops;
+  }
+  const disc = (ops: Op[]) =>
+    ops.find((o) => o.op === 'arc' && o.args[0] === bx && o.args[1] === by && o.op === 'arc');
+  /** The black patches drawn on the ball: each a filled outline. */
+  const patches = (ops: Op[]) => {
+    const from = ops.findIndex((o) => o.op === 'clip');
+    return ops.slice(from).filter((o) => o.op === 'fill' && o.fillStyle === '#1a1a1a');
+  };
+
+  it('is a white football with black patches, kept inside its outline', () => {
+    const ops = render(ballAt());
+    expect(disc(ops)?.args[2]).toBe(BALL_RADIUS);
+    expect(ops.find((o, i) => i > ops.indexOf(disc(ops)!) && o.op === 'fill')?.fillStyle).toBe('#ffffff');
+    expect(ops.some((o) => o.op === 'clip')).toBe(true);
+    expect(patches(ops)).toHaveLength(footballPatches(UPRIGHT).length);
+  });
+
+  it('draws its patches where the spin it is given has turned them', () => {
+    const spin = rolled(rolled(UPRIGHT, 3, 1, BALL_RADIUS), 3, 1, BALL_RADIUS);
+    const lines = (ops: Op[]) => ops.filter((o) => o.op === 'lineTo' || o.op === 'moveTo').map((o) => o.args);
+    const [first] = footballPatches(spin);
+    const turned = render(ballAt(), { ballSpin: spin });
+    expect(lines(turned)).toContainEqual([bx + first![0]![0] * BALL_RADIUS, by + first![0]![1] * BALL_RADIUS]);
+    expect(lines(turned)).not.toEqual(lines(render(ballAt())));
+  });
+
+  it('is still drawn bigger and tinted the higher it is in the air', () => {
+    const ops = render(ballAt(4));
+    const r = Number(disc(ops)?.args[2]);
+    expect(r).toBeGreaterThan(BALL_RADIUS);
+    expect(r).toBeLessThan(PLAYER_RADIUS);
+    expect(ops.find((o, i) => i > ops.indexOf(disc(ops)!) && o.op === 'fill')?.fillStyle).toBe('#c8ffff');
+  });
+});
+
+describe('the player who has just received the ball', () => {
+  const T = build2DTransform(PITCH);
+  // Track 1 has the ball, which is on their circle.
+  const frame = {
+    pitch_dimensions: PITCH,
+    teams: [
+      {
+        team_id: 0,
+        players: [
+          {
+            track_id: 1,
+            person_type: 'PersonType.PLAYER',
+            projected_coordinates: { x: 0, y: 0 },
+            player_number: 10,
+            in_possession: true,
+          },
+        ],
+      },
+    ],
+    balls: [{ projected_coordinates: { x: 0.3, y: 0 } }],
+  } as unknown as Frame;
+  const [cx, cy] = worldToPx(0, 0, T);
+
+  function render(received?: Map<number, number>) {
+    const { canvas, ops } = fakeCanvas();
+    useRenderer2D(canvas).renderFrame(frame, received ? { received } : {});
+    // Everything drawn after the ball: its patches are clipped to it.
+    const ball = ops.findIndex((o) => o.op === 'clip');
+    return ops.slice(ops.slice(ball).findIndex((o) => o.op === 'restore') + ball);
+  }
+  const circleOver = (after: Op[]) => {
+    const at = after.findIndex((o) => isPlayerCircle(o, cx, cy));
+    return at < 0 ? undefined : after.slice(at).find((o) => o.op === 'fill');
+  };
+
+  it('covers the ball with their circle and number, so the number shows', () => {
+    const after = render(new Map([[1, 1]]));
+    expect(circleOver(after)?.fillStyle).toBe(PERSON_COLORS.home.fill);
+    expect(circleOver(after)?.globalAlpha).toBe(1);
+    expect(after.filter((o) => o.op === 'fillText').map((o) => o.args[0])).toEqual(['10']);
+  });
+
+  it('fades the cover out at the strength it is given, to show the ball again', () => {
+    const after = render(new Map([[1, 0.4]]));
+    expect(circleOver(after)?.globalAlpha).toBeCloseTo(0.4);
+    expect(after.find((o) => o.op === 'fillText')?.globalAlpha).toBeCloseTo(0.4);
+  });
+
+  it('draws nothing over the ball otherwise', () => {
+    expect(circleOver(render())).toBeUndefined();
+    expect(circleOver(render(new Map()))).toBeUndefined();
   });
 });

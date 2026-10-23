@@ -117,6 +117,17 @@ useEscapeToClose(() => props.isVisible, closeModal);
 // Add new entries to the TOP of this array
 const changelogEntries = ref([
   {
+    version: 'Beta v3.27',
+    date: 'October 23, 2026',
+    changes: [
+      'The ball on the 2D replay is drawn as a football, and rolls the way it moves during playback. It still grows and turns cyan the higher it is in the air',
+      'Players and the ball are drawn bigger. The player with the ball is drawn a little bigger again, with their shirt number shown only on them',
+      'When a player receives the ball, their circle and shirt number are drawn over it for a moment, then fade to show the ball again. Where the data has no shirt number for them, only the circle shows',
+      'The gold ring on the player with the ball now fades in quickly, so it shows even when the data marks who has the ball for only a few frames',
+      'The ball trail now shows the last 3 seconds of the ball\'s path, rather than 6',
+    ],
+  },
+  {
     version: 'Beta v3.26',
     date: 'October 22, 2026',
     changes: [

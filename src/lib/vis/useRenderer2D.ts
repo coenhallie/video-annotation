@@ -27,7 +27,12 @@
 //  - renderFrame takes an optional ball trail, drawn over the players: the
 //    path the tracked ball took, with a dot wherever it turned (ballTrail.ts).
 //  - players are not labelled with their tracking id: it is the tracker's
-//    bookkeeping, not anything about the player.
+//    bookkeeping, not anything about the player. Their shirt number is drawn
+//    only on the player with the ball, with the possession ring, and that
+//    player is drawn bigger (CARRIER_GROWTH).
+//  - the ball is drawn as a football, of radius BALL_RADIUS rather than 4 px, and
+//    renderFrame takes how it is turned, for a caller that rolls it
+//    (football.ts).
 
 // ---------------------------------------------------------------------------
 // 2D canvas rendering composable.
@@ -43,6 +48,8 @@ import {
   FRAME_W,
   FRAME_H,
   PLAYER_RADIUS,
+  CARRIER_GROWTH,
+  BALL_RADIUS,
   PERSON_COLORS,
   DIMMED_PLAYER_ALPHA,
   FOCUS_METRES,
@@ -54,6 +61,7 @@ import { build2DTransform, worldToPx, buildPitchCache, PITCH_GRASS } from './pit
 import { drawGoalNets, type NetBulge } from './goalNets'
 import { attackFront, drawAttackGlow, type AttackGlow } from './attackGlow'
 import { trailOpacity, type BallTrail, type TrailPoint } from './ballTrail'
+import { footballPatches, UPRIGHT, type Spin } from './football'
 import {
   computeViewMatrix,
   IDENTITY_VIEW,
@@ -166,6 +174,30 @@ export interface FrameLayers {
   fadeFar?: boolean | undefined
   /** The ball's trail: the path it took, and where that turned. */
   trail?: BallTrail | undefined
+  /** How the ball is turned, for a caller that rolls it. Default upright. */
+  ballSpin?: Spin | undefined
+  /**
+   * The players who have just received the ball, by track id, and how
+   * strongly their circle and number are drawn over it, from 0 to 1. A player
+   * missing from it is drawn under the ball as usual.
+   */
+  received?: ReadonlyMap<TrackId, number> | undefined
+}
+
+/** Size of a shirt number, in proportion to its circle: 10 px in 12 px. */
+const NUMBER_PX_PER_RADIUS = 10 / 12
+
+/** Colour of the ball's black patches. */
+const BALL_PATCH = '#1a1a1a'
+
+/**
+ * How far the player with the ball has grown, from 0 to 1, at possession
+ * strength `k`: eased in and out, so the circle neither starts nor stops
+ * growing with a jolt.
+ */
+const growthAt = (k: number) => {
+  const t = Math.min(1, Math.max(0, k))
+  return t * t * (3 - 2 * t)
 }
 
 /** How far a pulse ring grows past the ball, and how thick it is, in frame px. */
@@ -213,6 +245,7 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
    */
   function renderFrame(frame: Frame, layers: FrameLayers = {}): void {
     const { goal: overlay, glow, rings, ballPulse, trail } = layers
+    const spin = layers.ballSpin ?? UPRIGHT
     const fadeFar = layers.fadeFar !== false
     if (!frame) return
 
@@ -304,10 +337,13 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
       if (rings && id != null) return rings.possession.get(id) ?? 0
       return p.player.in_possession ? 1 : 0
     }
+    const alphaOf = (p: { faded: boolean }) => (p.faded && fadeFar ? DIMMED_PLAYER_ALPHA : 1)
+    // The player with the ball is drawn bigger, so on top of those around them.
+    const order = [...people].sort((a, b) => Number(possessionOf(a) > 0) - Number(possessionOf(b) > 0))
     for (const faded of [true, false]) {
-      ctx.globalAlpha = faded && fadeFar ? DIMMED_PLAYER_ALPHA : 1
-      for (const p of people) {
+      for (const p of order) {
         if (p.faded !== faded) continue
+        ctx.globalAlpha = alphaOf(p)
         draw2DPlayer(p.player, p.tid, nearbyOf(p), possessionOf(p))
       }
     }
@@ -320,17 +356,40 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
       for (const turn of trail.turns) drawTrailDot(turn)
     }
 
+    // The shirt number of the player with the ball, over the trail, which
+    // always ends at them and would otherwise run across it.
+    for (const p of people) {
+      const possession = possessionOf(p)
+      if (possession <= 0) continue
+      ctx.globalAlpha = alphaOf(p) * possession
+      draw2DNumber(p.player, p.tid, possession)
+    }
+    ctx.globalAlpha = 1
+
     // During the goal sequence its ball replaces the tracked one, which near a
     // goal tends to jump about or go straight through the net.
     if (overlay) {
       overlay.trail.forEach((p, i) => {
-        draw2DBall({ projected_coordinates: p }, 0.45 / (i + 1))
+        draw2DBall({ projected_coordinates: p }, spin, 0.45 / (i + 1))
       })
-      draw2DBall({ projected_coordinates: overlay.ball })
+      draw2DBall({ projected_coordinates: overlay.ball }, spin)
     } else {
       for (const ball of frame.balls ?? []) {
-        draw2DBall(ball)
+        draw2DBall(ball, spin)
       }
+      // A player who has just received the ball is drawn over it for a
+      // moment, so their number shows, then fades to show the ball again.
+      for (const p of people) {
+        const id = p.player.track_id
+        const cover = id != null ? (layers.received?.get(id) ?? 0) : 0
+        if (cover <= 0) continue
+        const at = playerPx(p.player)
+        if (!at) continue
+        ctx.globalAlpha = alphaOf(p) * cover
+        drawPlayerBody(at, carrierRadius(possessionOf(p)), p.player, p.tid, nearbyOf(p))
+        draw2DNumber(p.player, p.tid, possessionOf(p))
+      }
+      ctx.globalAlpha = 1
     }
 
     if (ballPulse) drawBallPulse(ballPulse)
@@ -376,21 +435,22 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
   }
 
   /** Within NEARBY_METRES of the carrier, on the pitch (the carrier included). */
-  /**
-   * Draw a single player as a filled circle with shadow, outline, optional
-   * possession ring, and jersey number.
-   */
-  function draw2DPlayer(player: Player, teamId: number, ring = 0, possession = 0): void {
+  /** A person's position on the canvas, or null when it has none usable. */
+  function playerPx(player: Player): [number, number] | null {
     const coords = player.projected_coordinates
     const x = coords?.x
     const y = coords?.y
-    if (x == null || y == null || isNaN(x) || isNaN(y)) return
-    if (!transform2d) return
+    if (x == null || y == null || isNaN(x) || isNaN(y)) return null
+    if (!transform2d) return null
+    return worldToPx(x, y, transform2d)
+  }
 
-    const [px, py] = worldToPx(x, y, transform2d)
+  /**
+   * A person's colours and outline. Fixed by role; see PERSON_COLORS. Team 0
+   * is home, team 1 away.
+   */
+  function personStyle(player: Player, teamId: number) {
     const pt = String(player.person_type ?? '').toUpperCase()
-
-    // Fixed colours by role; see PERSON_COLORS. Team 0 is home, team 1 away.
     const team =
       teamId === 0 ? PERSON_COLORS.home : teamId === 1 ? PERSON_COLORS.away : null
     let colors = team ?? PERSON_COLORS.unknown
@@ -405,20 +465,60 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
       colors = PERSON_COLORS.official
       outline = colors.outline
     }
-    // White marks the players around the ball, and only them. Full on, it
-    // replaces the outline; fading, it is laid over the outline at its strength.
-    const ringOnly = ring >= 1
-    if (ringOnly) outline = NEARBY_OUTLINE
+    return { colors, outline, outlineWidth }
+  }
+
+  /**
+   * Draw a single player as a filled circle with shadow, outline, and, on the
+   * player with the ball, the possession ring, grown by CARRIER_GROWTH at its
+   * strength. Their number is drawn later, by draw2DNumber.
+   */
+  function draw2DPlayer(player: Player, teamId: number, ring = 0, possession = 0): void {
+    const at = playerPx(player)
+    if (!at) return
+    const [px, py] = at
+    const radius = carrierRadius(possession)
 
     // Shadow (offset 1px down-right)
     ctx.beginPath()
-    ctx.arc(px + 1, py + 1, PLAYER_RADIUS, 0, Math.PI * 2)
+    ctx.arc(px + 1, py + 1, radius, 0, Math.PI * 2)
     ctx.fillStyle = 'rgba(0,0,0,0.3)'
     ctx.fill()
 
-    // Player circle
+    drawPlayerBody(at, radius, player, teamId, ring)
+
+    // Possession ring (gold), at its strength
+    if (possession > 0) {
+      const alpha = ctx.globalAlpha
+      ctx.globalAlpha = alpha * possession
+      ctx.beginPath()
+      ctx.arc(px, py, radius + 4, 0, Math.PI * 2)
+      ctx.strokeStyle = '#ffd700'
+      ctx.lineWidth = 2
+      ctx.stroke()
+      ctx.globalAlpha = alpha
+    }
+  }
+
+  /**
+   * A player's circle at `at`, of `radius`: filled, and outlined, with the
+   * white ring at strength `ring` on the players around the ball.
+   */
+  function drawPlayerBody(
+    at: [number, number],
+    radius: number,
+    player: Player,
+    teamId: number,
+    ring: number,
+  ): void {
+    const [px, py] = at
+    const { colors, outlineWidth, ...style } = personStyle(player, teamId)
+    // White marks the players around the ball, and only them. Full on, it
+    // replaces the outline; fading, it is laid over the outline at its strength.
+    const ringOnly = ring >= 1
+    const outline = ringOnly ? NEARBY_OUTLINE : style.outline
     ctx.beginPath()
-    ctx.arc(px, py, PLAYER_RADIUS, 0, Math.PI * 2)
+    ctx.arc(px, py, radius, 0, Math.PI * 2)
     ctx.fillStyle = colors.fill
     ctx.fill()
     ctx.strokeStyle = outline
@@ -431,35 +531,34 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
       ctx.stroke()
       ctx.globalAlpha = alpha
     }
+  }
 
-    // Possession ring (gold), at its strength
-    if (possession > 0) {
-      const alpha = ctx.globalAlpha
-      ctx.globalAlpha = alpha * possession
-      ctx.beginPath()
-      ctx.arc(px, py, PLAYER_RADIUS + 4, 0, Math.PI * 2)
-      ctx.strokeStyle = '#ffd700'
-      ctx.lineWidth = 2
-      ctx.stroke()
-      ctx.globalAlpha = alpha
-    }
-
-    // Jersey number (centred inside the circle)
-    const num = player.player_number
-    if (num != null && Number(num) > 0) {
-      ctx.fillStyle = colors.text
-      ctx.font = 'bold 10px sans-serif'
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.fillText(String(Math.round(Number(num))), px, py)
-    }
+  /** A player's radius, grown by CARRIER_GROWTH at possession strength `k`. */
+  function carrierRadius(k: number): number {
+    return PLAYER_RADIUS * (1 + CARRIER_GROWTH * growthAt(k))
   }
 
   /**
-   * Draw a single ball.  Radius and colour vary with the z (height)
-   * coordinate: taller balls are slightly larger and tinted cyan.
+   * Draw a player's jersey number, centred inside their circle and growing
+   * with it.
    */
-  function draw2DBall(ball: Ball, alpha = 1): void {
+  function draw2DNumber(player: Player, teamId: number, possession = 0): void {
+    const at = playerPx(player)
+    const num = player.player_number
+    if (!at || num == null || !(Number(num) > 0)) return
+    ctx.fillStyle = personStyle(player, teamId).colors.text
+    ctx.font = `bold ${carrierRadius(possession) * NUMBER_PX_PER_RADIUS}px sans-serif`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(String(Math.round(Number(num))), at[0], at[1])
+  }
+
+  /**
+   * Draw a single ball, as a football turned by `spin` (football.ts). The
+   * higher it is (z), the bigger it is drawn, and above half a metre its white
+   * panels are tinted cyan.
+   */
+  function draw2DBall(ball: Ball, spin: Spin, alpha = 1): void {
     const coords = ball.projected_coordinates
     const x = coords?.x
     const y = coords?.y
@@ -468,16 +567,38 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     if (!transform2d) return
 
     const [px, py] = worldToPx(x, y, transform2d)
-
-    // Radius grows with z (clamped 0-6), base radius 4px, min 3px
-    const r = Math.max(3, Math.round(4 + Math.min(6, Math.max(0, z)) * 0.6))
+    // Grows with z, up to 6 m, and stays smaller than a player.
+    const r = BALL_RADIUS + Math.min(6, Math.max(0, z)) * 0.4
 
     const before = ctx.globalAlpha
     ctx.globalAlpha = alpha
+    ctx.save()
     ctx.beginPath()
     ctx.arc(px, py, r, 0, Math.PI * 2)
     ctx.fillStyle = z <= 0.5 ? '#ffffff' : '#c8ffff'
     ctx.fill()
+    ctx.clip()
+    ctx.fillStyle = BALL_PATCH
+    for (const patch of footballPatches(spin)) {
+      ctx.beginPath()
+      patch.forEach(([u, v], i) => {
+        if (i === 0) ctx.moveTo(px + u * r, py + v * r)
+        else ctx.lineTo(px + u * r, py + v * r)
+      })
+      ctx.closePath()
+      ctx.fill()
+    }
+    // Lit from the top left, so it reads as round.
+    const shade = ctx.createRadialGradient(px - r * 0.35, py - r * 0.35, r * 0.1, px, py, r)
+    shade.addColorStop(0, 'rgba(255,255,255,0.35)')
+    shade.addColorStop(1, 'rgba(0,0,0,0.3)')
+    ctx.beginPath()
+    ctx.arc(px, py, r, 0, Math.PI * 2)
+    ctx.fillStyle = shade
+    ctx.fill()
+    ctx.restore()
+    ctx.beginPath()
+    ctx.arc(px, py, r, 0, Math.PI * 2)
     ctx.strokeStyle = '#000'
     ctx.lineWidth = 1
     ctx.stroke()
