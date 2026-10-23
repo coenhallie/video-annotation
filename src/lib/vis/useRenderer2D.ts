@@ -27,7 +27,8 @@
 //  - renderFrame takes an optional ball trail, drawn over the players: the
 //    path the tracked ball took, with a dot wherever it turned (ballTrail.ts).
 //  - players are not labelled with their tracking id: it is the tracker's
-//    bookkeeping, not anything about the player.
+//    bookkeeping, not anything about the player. Their shirt number is drawn
+//    only on the player with the ball, with the possession ring.
 
 // ---------------------------------------------------------------------------
 // 2D canvas rendering composable.
@@ -304,10 +305,11 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
       if (rings && id != null) return rings.possession.get(id) ?? 0
       return p.player.in_possession ? 1 : 0
     }
+    const alphaOf = (p: { faded: boolean }) => (p.faded && fadeFar ? DIMMED_PLAYER_ALPHA : 1)
     for (const faded of [true, false]) {
-      ctx.globalAlpha = faded && fadeFar ? DIMMED_PLAYER_ALPHA : 1
       for (const p of people) {
         if (p.faded !== faded) continue
+        ctx.globalAlpha = alphaOf(p)
         draw2DPlayer(p.player, p.tid, nearbyOf(p), possessionOf(p))
       }
     }
@@ -319,6 +321,16 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
       for (const run of trail.runs) drawTrailRun(run)
       for (const turn of trail.turns) drawTrailDot(turn)
     }
+
+    // The shirt number of the player with the ball, over the trail, which
+    // always ends at them and would otherwise run across it.
+    for (const p of people) {
+      const possession = possessionOf(p)
+      if (possession <= 0) continue
+      ctx.globalAlpha = alphaOf(p) * possession
+      draw2DNumber(p.player, p.tid)
+    }
+    ctx.globalAlpha = 1
 
     // During the goal sequence its ball replaces the tracked one, which near a
     // goal tends to jump about or go straight through the net.
@@ -376,21 +388,22 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
   }
 
   /** Within NEARBY_METRES of the carrier, on the pitch (the carrier included). */
-  /**
-   * Draw a single player as a filled circle with shadow, outline, optional
-   * possession ring, and jersey number.
-   */
-  function draw2DPlayer(player: Player, teamId: number, ring = 0, possession = 0): void {
+  /** A person's position on the canvas, or null when it has none usable. */
+  function playerPx(player: Player): [number, number] | null {
     const coords = player.projected_coordinates
     const x = coords?.x
     const y = coords?.y
-    if (x == null || y == null || isNaN(x) || isNaN(y)) return
-    if (!transform2d) return
+    if (x == null || y == null || isNaN(x) || isNaN(y)) return null
+    if (!transform2d) return null
+    return worldToPx(x, y, transform2d)
+  }
 
-    const [px, py] = worldToPx(x, y, transform2d)
+  /**
+   * A person's colours and outline. Fixed by role; see PERSON_COLORS. Team 0
+   * is home, team 1 away.
+   */
+  function personStyle(player: Player, teamId: number) {
     const pt = String(player.person_type ?? '').toUpperCase()
-
-    // Fixed colours by role; see PERSON_COLORS. Team 0 is home, team 1 away.
     const team =
       teamId === 0 ? PERSON_COLORS.home : teamId === 1 ? PERSON_COLORS.away : null
     let colors = team ?? PERSON_COLORS.unknown
@@ -405,6 +418,20 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
       colors = PERSON_COLORS.official
       outline = colors.outline
     }
+    return { colors, outline, outlineWidth }
+  }
+
+  /**
+   * Draw a single player as a filled circle with shadow, outline, and, on the
+   * player with the ball, the possession ring. Their number is drawn later, by
+   * draw2DNumber.
+   */
+  function draw2DPlayer(player: Player, teamId: number, ring = 0, possession = 0): void {
+    const at = playerPx(player)
+    if (!at) return
+    const [px, py] = at
+    const { colors, outlineWidth, ...style } = personStyle(player, teamId)
+    let outline = style.outline
     // White marks the players around the ball, and only them. Full on, it
     // replaces the outline; fading, it is laid over the outline at its strength.
     const ringOnly = ring >= 1
@@ -443,16 +470,18 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
       ctx.stroke()
       ctx.globalAlpha = alpha
     }
+  }
 
-    // Jersey number (centred inside the circle)
+  /** Draw a player's jersey number, centred inside their circle. */
+  function draw2DNumber(player: Player, teamId: number): void {
+    const at = playerPx(player)
     const num = player.player_number
-    if (num != null && Number(num) > 0) {
-      ctx.fillStyle = colors.text
-      ctx.font = 'bold 10px sans-serif'
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.fillText(String(Math.round(Number(num))), px, py)
-    }
+    if (!at || num == null || !(Number(num) > 0)) return
+    ctx.fillStyle = personStyle(player, teamId).colors.text
+    ctx.font = 'bold 10px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(String(Math.round(Number(num))), at[0], at[1])
   }
 
   /**

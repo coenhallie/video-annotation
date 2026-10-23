@@ -245,10 +245,40 @@ describe('focus around the ball', () => {
 });
 
 describe('player labels', () => {
-  it('draws the shirt number, and not the tracking id', () => {
+  const withBall = (inPossession: boolean) =>
+    frameWith({
+      players: [
+        {
+          track_id: 7,
+          person_type: 'PersonType.PLAYER',
+          projected_coordinates: { x: 0, y: 0 },
+          player_number: 9,
+          in_possession: inPossession,
+        },
+      ],
+    });
+  const labels = (frame: Frame, rings?: { possession: Map<number, number> }) => {
     const { canvas, ops } = fakeCanvas();
-    useRenderer2D(canvas).renderFrame(frameWith({}));
-    expect(ops.filter((o) => o.op === 'fillText').map((o) => o.args[0])).toEqual(['9']);
+    useRenderer2D(canvas).renderFrame(
+      frame,
+      rings ? { rings: { nearby: new Map(), possession: rings.possession } } : {},
+    );
+    return ops.filter((o) => o.op === 'fillText');
+  };
+
+  it('draws the shirt number of the player with the ball, and not the tracking id', () => {
+    expect(labels(withBall(true)).map((o) => o.args[0])).toEqual(['9']);
+  });
+
+  it('draws no number on a player without the ball', () => {
+    expect(labels(withBall(false))).toEqual([]);
+    expect(labels(frameWith({}))).toEqual([]);
+  });
+
+  it('fades the number in and out with the possession ring', () => {
+    const half = labels(withBall(false), { possession: new Map([[7, 0.5]]) });
+    expect(half.map((o) => [o.args[0], o.globalAlpha])).toEqual([['9', 0.5]]);
+    expect(labels(withBall(true), { possession: new Map() })).toEqual([]);
   });
 });
 
@@ -507,10 +537,10 @@ describe('ball trail', () => {
   } as unknown as Frame;
   // Along x to a turn at (0, 2), then on to the ball.
   const run = [
-    { x: -10, y: 2, age: 5.5 },
-    { x: -5, y: 2, age: 3 },
-    { x: 0, y: 2, age: 2 },
-    { x: 5, y: 3, age: 1 },
+    { x: -10, y: 2, age: 2.75 },
+    { x: -5, y: 2, age: 1.5 },
+    { x: 0, y: 2, age: 1 },
+    { x: 5, y: 3, age: 0.5 },
     { x: 10, y: 4, age: 0 },
   ];
   const trail = { runs: [run], turns: [run[2]!] };
@@ -552,9 +582,9 @@ describe('ball trail', () => {
 
   it('leaves out what has faded away entirely', () => {
     const old = [
-      { x: -10, y: 2, age: 7 },
-      { x: -5, y: 2, age: 6.5 },
-      { x: 0, y: 2, age: 1 },
+      { x: -10, y: 2, age: 3.5 },
+      { x: -5, y: 2, age: 3.25 },
+      { x: 0, y: 2, age: 0.5 },
     ];
     expect(trailStrokes(render({ trail: { runs: [old], turns: [] } }))).toHaveLength(1);
   });
@@ -565,7 +595,7 @@ describe('ball trail', () => {
     expect(dot).toBeDefined();
     expect(ops.indexOf(dot!)).toBeGreaterThan(ops.lastIndexOf(trailStrokes(ops).at(-1)!));
     const fill = ops.slice(ops.indexOf(dot!)).find((o) => o.op === 'fill')!;
-    expect(fill.globalAlpha).toBeCloseTo(trailOpacity(2));
+    expect(fill.globalAlpha).toBeCloseTo(trailOpacity(1));
     expect(dotsAt(ops, -10, 2)).toHaveLength(0);
   });
 
@@ -583,6 +613,32 @@ describe('ball trail', () => {
     const ball = ops.findIndex((o) => o.op === 'arc' && o.args[0] === bx && o.args[1] === by && o.args[2] !== 2.5);
     expect(player).toBeLessThan(line);
     expect(line).toBeLessThan(ball);
+  });
+
+  it('draws the number of the player with the ball over it, so the path ending there does not hide it', () => {
+    const carrying = {
+      ...frame,
+      teams: [
+        {
+          team_id: 0,
+          players: [
+            {
+              track_id: 7,
+              person_type: 'PersonType.PLAYER',
+              projected_coordinates: { x: 10, y: 4 },
+              player_number: 25,
+              in_possession: true,
+            },
+          ],
+        },
+      ],
+    } as unknown as Frame;
+    const ops = render({ trail }, carrying);
+    const number = ops.findIndex((o) => o.op === 'fillText' && o.args[0] === '25');
+    const [bx, by] = at(10, 4);
+    const ball = ops.findIndex((o) => o.op === 'arc' && o.args[0] === bx && o.args[1] === by && Number(o.args[2]) < PLAYER_RADIUS);
+    expect(number).toBeGreaterThan(ops.lastIndexOf(trailStrokes(ops).at(-1)!));
+    expect(number).toBeLessThan(ball);
   });
 
   it('draws none while the goal sequence plays, or when not given one', () => {

@@ -45,9 +45,9 @@ import type { PhaseRecord } from './teamPhase';
  */
 
 /** How long the ball's path stays on screen. */
-export const TRAIL_HISTORY_S = 6;
+export const TRAIL_HISTORY_S = 3;
 /** How long the oldest of it takes to fade out, at the end of TRAIL_HISTORY_S. */
-export const TRAIL_FADE_S = 1.5;
+export const TRAIL_FADE_S = 0.75;
 /** Opacity of the path at the ball, and of the oldest of it before it fades out. */
 export const TRAIL_HEAD_ALPHA = 0.92;
 export const TRAIL_TAIL_ALPHA = 0.3;
