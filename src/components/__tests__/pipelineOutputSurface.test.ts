@@ -722,6 +722,17 @@ describe('PipelineOutputSurface', () => {
 
     const lastOverlay = () => renderFrame.mock.calls.at(-1)?.[1]?.goal;
 
+    it('rolls its ball into the net', async () => {
+      const { replay, m } = await playing();
+      await tick(replay, goalFrame(['GOAL']));
+      await animate(16);
+      const before = renderFrame.mock.calls.at(-1)?.[1]?.ballSpin;
+      await animate(400);
+      expect(lastOverlay()).toBeDefined();
+      expect(renderFrame.mock.calls.at(-1)?.[1]?.ballSpin).not.toEqual(before);
+      m.unmount();
+    });
+
     it('plays when playback runs into a GOAL label', async () => {
       const { replay, m } = await playing();
       await tick(replay, goalFrame(['GOAL']));

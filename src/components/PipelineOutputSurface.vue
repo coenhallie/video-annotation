@@ -885,8 +885,9 @@ function settleRings(): void {
 const MAX_ROLL_STEP_METRES = 2.7;
 
 let ballSpin: Spin = UPRIGHT;
-/** Where the ball was last drawn, in metres. */
+/** Where the ball was last drawn, in metres, and whether it was the goal's. */
 let rolledFrom: { x: number; y: number } | null = null;
+let rolledGoal = false;
 
 /** The ball the frame is drawn with: the goal sequence's, or the tracked one. */
 function shownBall(frame: Frame, goal: GoalOverlay | undefined): { x: number; y: number } | null {
@@ -906,7 +907,10 @@ function rollBall(frame: Frame, goal: GoalOverlay | undefined): void {
   const moving =
     (goal !== undefined || (props.replay.isPlaying.value && lastStepWasPlayback)) &&
     !prefersReducedMotion();
-  if (at && rolledFrom && moving) {
+  // Between the tracked ball and the goal's, the ball did not travel.
+  const sameBall = (goal !== undefined) === rolledGoal;
+  rolledGoal = goal !== undefined;
+  if (at && rolledFrom && moving && sameBall) {
     const dx = at.x - rolledFrom.x;
     const dy = at.y - rolledFrom.y;
     if (Math.hypot(dx, dy) <= MAX_ROLL_STEP_METRES) {
