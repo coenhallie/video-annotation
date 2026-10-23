@@ -178,6 +178,9 @@ export interface FrameLayers {
   ballSpin?: Spin | undefined
 }
 
+/** Size of a shirt number, in proportion to its circle: 10 px in 12 px. */
+const NUMBER_PX_PER_RADIUS = 10 / 12
+
 /** Colour of the ball's black patches. */
 const BALL_PATCH = '#1a1a1a'
 
@@ -512,7 +515,7 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     const num = player.player_number
     if (!at || num == null || !(Number(num) > 0)) return
     ctx.fillStyle = personStyle(player, teamId).colors.text
-    ctx.font = `bold ${(10 * carrierRadius(possession)) / PLAYER_RADIUS}px sans-serif`
+    ctx.font = `bold ${carrierRadius(possession) * NUMBER_PX_PER_RADIUS}px sans-serif`
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.fillText(String(Math.round(Number(num))), at[0], at[1])

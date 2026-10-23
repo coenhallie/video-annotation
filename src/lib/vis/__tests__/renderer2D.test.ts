@@ -750,7 +750,7 @@ describe('attack glow', () => {
   it('puts a halo in the team colour around the ball', () => {
     const ops = render({ color: BLUE, team: 1, direction: 1, intensity: 1 });
     const [bx, by] = px(10);
-    const halo = ops.findIndex((o) => o.op === 'arc' && o.args[0] === bx && o.args[1] === by && Number(o.args[2]) > 10);
+    const halo = ops.findIndex((o) => o.op === 'arc' && o.args[0] === bx && o.args[1] === by && Number(o.args[2]) > PLAYER_RADIUS);
     expect(halo).toBeGreaterThanOrEqual(0);
     expect(ops.slice(halo).find((o) => o.op === 'fill')?.fillStyle).toBe(BLUE);
   });
@@ -818,9 +818,10 @@ describe('attack glow', () => {
     const ops = render({ color: BLUE, team: 1, direction: 1, intensity: 1, flow: 0.5, shading: false });
     expect(areaFills(ops)).toHaveLength(0);
     expect(ops.some((o) => o.op === 'fillRect' && o.fillStyle === BLUE)).toBe(false);
-    // No halo: the team's players are blue too, so look for the halo's arc.
+    // No halo: the team's players are blue too, so look for the halo's arc,
+    // bigger round the ball than the ball or any player.
     const [bx, by] = px(10);
-    expect(ops.some((o) => o.op === 'arc' && o.args[0] === bx && o.args[1] === by && Number(o.args[2]) > 10)).toBe(false);
+    expect(ops.some((o) => o.op === 'arc' && o.args[0] === bx && o.args[1] === by && Number(o.args[2]) > PLAYER_RADIUS)).toBe(false);
     expect(ops.filter((o) => o.op === 'fill' && o.fillStyle === '#ffffff').length).toBeGreaterThanOrEqual(3);
   });
 

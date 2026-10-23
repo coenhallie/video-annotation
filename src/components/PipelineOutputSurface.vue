@@ -914,7 +914,7 @@ function rollBall(frame: Frame, goal: GoalOverlay | undefined): void {
     const dx = at.x - rolledFrom.x;
     const dy = at.y - rolledFrom.y;
     if (Math.hypot(dx, dy) <= MAX_ROLL_STEP_METRES) {
-      // Rolled on screen, where it is drawn BALL_RADIUS across.
+      // Rolled on screen, where it is drawn at BALL_RADIUS.
       const t = build2DTransform(frame.pitch_dimensions);
       const [x0, y0] = worldToPx(rolledFrom.x, rolledFrom.y, t);
       const [x1, y1] = worldToPx(at.x, at.y, t);

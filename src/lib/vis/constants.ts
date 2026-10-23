@@ -16,7 +16,7 @@ export const PITCH_MARGIN = 40
 /** Colour used for pitch markings. */
 export const LINE_COLOR = '#ffffff'
 /** Radius (px) of a player circle on the 2D canvas. */
-export const PLAYER_RADIUS = 12
+export const PLAYER_RADIUS = 14
 
 /** Fill, outline and number colours for one kind of person on the 2D pitch. */
 export interface PersonColors {
@@ -112,7 +112,7 @@ export const CARRIER_GROWTH = 0.25
  * Radius (px) of the ball on the ground. Large enough for its pattern to
  * show, and smaller than a player.
  */
-export const BALL_RADIUS = 9
+export const BALL_RADIUS = 10.5
 
 /**
  * The ring that pulses on the throw-in spot (throwInSequence.ts).
