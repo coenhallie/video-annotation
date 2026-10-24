@@ -1,5 +1,11 @@
 import type { PitchDimensions, Transform2D } from './types';
-import { resolvePitchDimensions, worldToPx } from './pitchGeometry';
+import {
+  DESIGN_LINE_PX,
+  PITCH_LINE_ALPHA,
+  designUnit,
+  resolvePitchDimensions,
+  worldToPx,
+} from './pitchGeometry';
 import { NET_DEPTH_METRES } from './goalSequence';
 
 /** Struck net: which goal, where along it, and how far it bows out, in metres. */
@@ -9,21 +15,25 @@ export interface NetBulge {
   metres: number;
 }
 
-/** Spacing of the net's mesh, in metres. */
-const MESH_METRES = 0.6;
-const POST_RADIUS = 2.5;
+/** The goal's line, and its corner radius on the outside of it, in design pixels. */
+const GOAL_LINE_PX = 2;
+const GOAL_CORNER_RADIUS_PX = 2;
+/** The goal's fill in the design: white at this opacity, under the line opacity. */
+const GOAL_FILL_ALPHA = 0.2;
 
 /**
- * Draw both goals: posts on the goal line and a net box behind it.
+ * Draw both goals as the Figma pitch draws them: a box behind the goal line
+ * with a thin white outline and a translucent white fill, rounded at the back.
+ * The goal width comes from the frame, the depth from the design
+ * (NET_DEPTH_METRES).
  *
- * Drawn faint and translucent on purpose. The goal width comes from the frame,
- * but the net's depth is not in the export at all, and reviewers compare the
- * solid pitch lines against the video (PITCH LINES MISMATCH), so nothing here
- * may look like one of them.
+ * The design's goal overlaps the outer box's line, which hides that part of it.
+ * As the goals are drawn over the line rather than inside the same group, they
+ * are clipped to beyond the line, so the overlap cannot brighten it.
  *
  * Drawn in frame units through whatever transform the context already has, and
- * on every frame rather than into the pitch cache, so a bulging net costs a
- * few lines rather than a rebuilt pitch.
+ * on every frame rather than into the pitch cache, so a struck net bowing out
+ * costs a few lines rather than a rebuilt pitch.
  */
 export function drawGoalNets(
   ctx: CanvasRenderingContext2D,
@@ -34,86 +44,58 @@ export function drawGoalNets(
   const dims = resolvePitchDimensions(pd);
   const half = dims.length.value / 2;
   const g = dims.goal_width.value / 2;
+  const u = designUnit(t);
   const p = (x: number, y: number) => worldToPx(x, y, t);
-  const before = ctx.globalAlpha;
 
   for (const side of [-1, 1] as const) {
     const b = bulge && bulge.side === side ? bulge.metres : 0;
     const by = bulge && bulge.side === side ? bulge.y : 0;
-    const line = side * half;
     const backX = side * (half + NET_DEPTH_METRES);
-    // A quadratic bows halfway to its control point, so the control sits out
-    // by twice the bulge to put the net's peak out by the bulge itself.
-    const backCurve = (depthFraction: number) => {
-      const x = side * (half + NET_DEPTH_METRES * depthFraction);
-      const [x0, y0] = p(x, -g);
-      const [cx, cy] = p(x + side * 2 * b * depthFraction, by);
-      const [x1, y1] = p(x, g);
-      return { x0, y0, cx, cy, x1, y1 };
-    };
-    // How far the back of the net has moved at a point along it, following the
-    // same bow as the curve.
-    const bowAt = (y: number) => {
-      const span = g + Math.abs(by);
-      return b * Math.max(0, 1 - ((y - by) / span) ** 2);
+    const [lx0, ly0] = p(side * half, -g);
+    const [lx1, ly1] = p(side * half, g);
+    const [bx0, by0] = p(backX, -g);
+    const [bx1, by1] = p(backX, g);
+
+    // The goal's outline from post to post, round the back. At rest the back
+    // is straight and its corners rounded as in the design; struck, it bows
+    // out through a quadratic, whose peak is halfway to its control point.
+    const outline = () => {
+      ctx.moveTo(lx0, ly0);
+      if (b === 0) {
+        const r = (GOAL_CORNER_RADIUS_PX - GOAL_LINE_PX / 2) * u;
+        ctx.arcTo(bx0, by0, bx1, by1, r);
+        ctx.arcTo(bx1, by1, lx1, ly1, r);
+      } else {
+        const [cx, cy] = p(backX + side * 2 * b, by);
+        ctx.lineTo(bx0, by0);
+        ctx.quadraticCurveTo(cx, cy, bx1, by1);
+      }
+      ctx.lineTo(lx1, ly1);
     };
 
-    const back = backCurve(1);
-    const [lx0, ly0] = p(line, -g);
-    const [lx1, ly1] = p(line, g);
-
-    // Net body, lit up while it is moving so the impact reads at a glance.
-    ctx.globalAlpha = 0.08 + Math.min(0.22, Math.abs(b) * 0.25);
-    ctx.fillStyle = '#ffffff';
+    ctx.save();
+    // Only beyond the outside of the goal line.
+    const edgeX = lx0 + side * (DESIGN_LINE_PX / 2) * u;
     ctx.beginPath();
-    ctx.moveTo(lx0, ly0);
-    ctx.lineTo(back.x0, back.y0);
-    ctx.quadraticCurveTo(back.cx, back.cy, back.x1, back.y1);
-    ctx.lineTo(lx1, ly1);
+    ctx.rect(edgeX, -1e5, side * 1e6, 2e5);
+    ctx.clip();
+
+    ctx.lineJoin = 'round';
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = GOAL_LINE_PX * u;
+
+    // Fill, lit up while the net moves so the impact reads at a glance.
+    ctx.globalAlpha = GOAL_FILL_ALPHA * PITCH_LINE_ALPHA + Math.min(0.15, Math.abs(b) * 0.25);
+    ctx.beginPath();
+    outline();
     ctx.closePath();
     ctx.fill();
 
-    // Side and back netting.
-    ctx.globalAlpha = 0.5;
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 1.5;
+    ctx.globalAlpha = PITCH_LINE_ALPHA;
     ctx.beginPath();
-    ctx.moveTo(lx0, ly0);
-    ctx.lineTo(back.x0, back.y0);
-    ctx.quadraticCurveTo(back.cx, back.cy, back.x1, back.y1);
-    ctx.lineTo(lx1, ly1);
+    outline();
     ctx.stroke();
-
-    // Mesh: rows parallel to the goal line, bowing with the back of the net
-    // in proportion to their depth, and columns running back into it.
-    ctx.globalAlpha = 0.2;
-    ctx.lineWidth = 0.75;
-    for (const f of [0.25, 0.5, 0.75]) {
-      const row = backCurve(f);
-      ctx.beginPath();
-      ctx.moveTo(row.x0, row.y0);
-      ctx.quadraticCurveTo(row.cx, row.cy, row.x1, row.y1);
-      ctx.stroke();
-    }
-    for (let y = -g + MESH_METRES; y < g - MESH_METRES / 2; y += MESH_METRES) {
-      const [fx, fy] = p(line, y);
-      const [tx, ty] = p(backX + side * bowAt(y), y);
-      ctx.beginPath();
-      ctx.moveTo(fx, fy);
-      ctx.lineTo(tx, ty);
-      ctx.stroke();
-    }
-
-    // Posts.
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = '#ffffff';
-    for (const y of [-g, g]) {
-      const [px, py] = p(line, y);
-      ctx.beginPath();
-      ctx.arc(px, py, POST_RADIUS, 0, Math.PI * 2);
-      ctx.fill();
-    }
+    ctx.restore();
   }
-
-  ctx.globalAlpha = before;
 }

@@ -2,20 +2,26 @@
 // minimal so the two copies stay diffable. Deliberate difference from the
 // vendored copy:
 //  - the vendored buildPitchCache silently substitutes FIFA standard values for
-//    any dimension the frame omits, and draws the result identically to a
-//    measured one. The pipeline's export states neither center_circle_radius
-//    nor penalty_mark_distance in any frame, so the centre circle and both
-//    penalty spots were always drawn from constants while looking like
-//    projections. Since PITCH LINES MISMATCH asks the reviewer to compare
-//    exactly those markings against the video, substituted dimensions are now
-//    resolved through resolvePitchDimensions() and drawn dashed and dimmed, so
-//    an assumption cannot read as pipeline output.
+//    any dimension the frame omits. The pipeline's export states neither
+//    center_circle_radius nor penalty_mark_distance in any frame, so the centre
+//    circle and both penalty spots are always drawn from constants.
+//    resolvePitchDimensions() still records which dimensions were assumed. They
+//    were drawn dashed and dimmed for a while; that cue was dropped on
+//    2026-10-24 so the pitch matches the Figma design exactly, every marking
+//    solid.
 //  - buildPitchCache takes an optional surface: the bitmap size and the matrix
 //    to draw through. The vendored cache is always 1280x720, which the browser
 //    then stretched to the display (soft on any 2x screen) and magnified up to
 //    6x under zoom. Drawn at the display's own resolution through the current
 //    view instead, the lines stay sharp. The surface can also leave the grass
 //    out, so the renderer can draw between the grass and the markings.
+//  - the pitch is drawn to the Figma pitch (Game Animation Visualizer, node
+//    5:22): a lit gradient for the grass, a darker playing area, 4px lines with
+//    a rounded outer box, 8px spots, and goals as translucent boxes behind the
+//    goal line (goalNets.ts). The design's sizes are scaled to the pitch as
+//    drawn (designUnit). Its layout is within a few percent of scale but not
+//    exactly to it, so every marking is still placed from the frame's
+//    dimensions, which are what the players are positioned against.
 
 // ---------------------------------------------------------------------------
 // Pitch geometry utilities for the 2D canvas renderer.
@@ -114,20 +120,125 @@ export function worldToPx(x: number, y: number, t: Transform2D): [number, number
   return [t.ox + (x + t.pl / 2) * t.sc, t.oy + (y + t.pw / 2) * t.sc]
 }
 
+// ── Figma pitch style ──────────────────────────────────────────────────────
+
+/** Grass colour at the left and right edges of the frame. */
+export const PITCH_GRASS_EDGE = '#166950'
+/** Grass colour down the middle of the frame. */
+export const PITCH_GRASS_MIDDLE = '#198061'
+
+/**
+ * Opacity the markings are drawn at, over the grass. Applied to the cache as a
+ * whole when it is drawn, as the design applies it to the group of lines, so
+ * crossing lines do not double up where they overlap.
+ */
+export const PITCH_LINE_ALPHA = 0.75
+
+/** Darkening over the playing area, inside the outer box. */
+const PLAYING_AREA_SHADE = 'rgba(0, 0, 0, 0.15)'
+
+/**
+ * Light at the centre of the grass: grey stops brightening the grass through
+ * colour dodge, at half strength, fading to none at the frame's edges.
+ */
+const GRASS_LIGHT_ALPHA = 0.5
+const GRASS_LIGHT_STOPS: Array<[number, string]> = [
+  [0.19712, '#666666'],
+  [0.39784, '#4d4d4d'],
+  [0.59856, '#333333'],
+  [0.79928, '#1a1a1a'],
+  [0.89964, '#0d0d0d'],
+  [0.94982, '#060606'],
+  [1, '#000000'],
+]
+
+/**
+ * The pitch's length in the design, between the centres of the two goal
+ * lines, in design pixels. The outer box spans 1360, with its 4px border
+ * inside that.
+ */
+export const DESIGN_PITCH_LENGTH_PX = 1356
+/** Sizes on the design, in design pixels. */
+export const DESIGN_LINE_PX = 4
+const DESIGN_SPOT_RADIUS_PX = 4
+/** The outer box's corner radius, on the outside of its line. */
+const DESIGN_CORNER_RADIUS_PX = 8
+
+/**
+ * Frame units per design pixel: the design's pitch length against the length
+ * of the pitch as drawn, so its line weights keep their proportion to it.
+ */
+export function designUnit(t: Transform2D): number {
+  return (t.pl * t.sc) / DESIGN_PITCH_LENGTH_PX
+}
+
+/**
+ * Fill the frame with grass: a gradient from the edges to the middle, lit
+ * towards the centre, and the playing area shaded a little darker.
+ *
+ * Drawn in frame units through whatever transform the context already has.
+ * Leaves the context's composite mode and alpha as it found them.
+ */
+export function fillGrass(
+  c: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
+  pd: Partial<PitchDimensions> | undefined,
+  t: Transform2D,
+): void {
+  const grass = c.createLinearGradient(0, 0, FRAME_W, 0)
+  grass.addColorStop(0, PITCH_GRASS_EDGE)
+  grass.addColorStop(0.5, PITCH_GRASS_MIDDLE)
+  grass.addColorStop(1, PITCH_GRASS_EDGE)
+  c.fillStyle = grass
+  c.fillRect(0, 0, FRAME_W, FRAME_H)
+
+  // An ellipse filling the frame: a unit circle scaled to its half extents.
+  c.save()
+  c.globalCompositeOperation = 'color-dodge'
+  c.globalAlpha = GRASS_LIGHT_ALPHA
+  c.translate(FRAME_W / 2, FRAME_H / 2)
+  c.scale(FRAME_W / 2, FRAME_H / 2)
+  const light = c.createRadialGradient(0, 0, 0, 0, 0, 1)
+  for (const [offset, color] of GRASS_LIGHT_STOPS) light.addColorStop(offset, color)
+  c.fillStyle = light
+  c.fillRect(-1, -1, 2, 2)
+  c.restore()
+
+  // The shade sits under the lines in the design, so it takes their opacity,
+  // and reaches the outside of the outer box's line, as the box's own
+  // background does.
+  const R = resolvePitchDimensions(pd)
+  const u = designUnit(t)
+  const half = (DESIGN_LINE_PX / 2) * u
+  const [tlX, tlY] = worldToPx(-R.length.value / 2, -R.width.value / 2, t)
+  const [brX, brY] = worldToPx(R.length.value / 2, R.width.value / 2, t)
+  c.save()
+  c.globalAlpha = PITCH_LINE_ALPHA
+  c.fillStyle = PLAYING_AREA_SHADE
+  c.beginPath()
+  c.roundRect(
+    tlX - half,
+    tlY - half,
+    brX - tlX + 2 * half,
+    brY - tlY + 2 * half,
+    DESIGN_CORNER_RADIUS_PX * u,
+  )
+  c.fill()
+  c.restore()
+}
+
 /**
  * Pre-render all static pitch markings to an OffscreenCanvas so they can be
  * blitted in a single `drawImage` call each frame.
  *
  * Draws:
- *  - Green background (#1e7a1e)
- *  - White 2px lines: outer box, halfway line, centre circle + centre spot
+ *  - Grass (fillGrass), unless the surface leaves it out
+ *  - White lines: outer box, halfway line, centre circle + centre spot
  *  - Penalty areas (both ends)
  *  - Goal areas (both ends)
  *  - Penalty marks
- *  - Goal-line emphasis
+ *
+ * The lines are drawn at full strength; draw the cache at PITCH_LINE_ALPHA.
  */
-/** The colour of the grass under the pitch markings. */
-export const PITCH_GRASS = '#1e7a1e'
 
 /** The bitmap a pitch cache is drawn into, and the matrix to draw through. */
 export interface PitchSurface {
@@ -159,12 +270,8 @@ export function buildPitchCache(
   c.setTransform(...surface.matrix)
 
   // Background
-  if (surface.grass !== false) {
-    c.fillStyle = PITCH_GRASS
-    c.fillRect(0, 0, FRAME_W, FRAME_H)
-  }
+  if (surface.grass !== false) fillGrass(c, pd, t)
 
-  // Resolved dimensions, each carrying whether the frame stated it
   const R = resolvePitchDimensions(pd)
   const D = {
     length: R.length.value,
@@ -173,88 +280,35 @@ export function buildPitchCache(
     paw: R.penalty_area_width.value,
     gal: R.goal_area_length.value,
     gaw: R.goal_area_width.value,
-    gw: R.goal_width.value,
     ccr: R.center_circle_radius.value,
     pmd: R.penalty_mark_distance.value,
   }
 
-  // Placement of every marking depends on the pitch extent, so a marking is
-  // only as measured as its own dimensions AND those two.
-  const placement = [R.length, R.width]
-
-  /**
-   * Draw one marking. When any dimension it rests on was not stated by the
-   * frame, it is dashed and dimmed so it reads as an assumption rather than as
-   * something the pipeline projected.
-   */
-  function marking(dims: ResolvedDimension[], draw: () => void): void {
-    const assumed = [...placement, ...dims].some((d) => d.assumed)
-    if (assumed) {
-      c.setLineDash([6, 5])
-      c.globalAlpha = 0.5
-    }
-    draw()
-    if (assumed) {
-      c.setLineDash([])
-      c.globalAlpha = 1
-    }
-  }
+  // Line weight and spot size, scaled from the design to the pitch as drawn
+  const u = designUnit(t)
+  const lineWidth = DESIGN_LINE_PX * u
+  const spotRadius = DESIGN_SPOT_RADIUS_PX * u
 
   // Shorthand for worldToPx using the provided transform
   const p = (x: number, y: number): [number, number] => worldToPx(x, y, t)
 
   c.strokeStyle = LINE_COLOR
-  c.lineWidth = 2
+  c.fillStyle = LINE_COLOR
+  c.lineWidth = lineWidth
+  // The design's boxes are square inside and rounded by half the line's width
+  // outside, which is what a round join gives.
+  c.lineJoin = 'round'
 
   // ── Outer box ──────────────────────────────────────────────────────────────
-  marking([], () => {
-    const [tlX, tlY] = p(-D.length / 2, -D.width / 2)
-    const [brX, brY] = p(D.length / 2, D.width / 2)
-    c.strokeRect(tlX, tlY, brX - tlX, brY - tlY)
-  })
+  // Its corner radius is on the outside of the line; the path runs down the
+  // line's middle.
+  const [tlX, tlY] = p(-D.length / 2, -D.width / 2)
+  const [brX, brY] = p(D.length / 2, D.width / 2)
+  c.beginPath()
+  c.roundRect(tlX, tlY, brX - tlX, brY - tlY, (DESIGN_CORNER_RADIUS_PX - DESIGN_LINE_PX / 2) * u)
+  c.stroke()
 
-  // ── Halfway line ───────────────────────────────────────────────────────────
-  marking([], () => {
-    const [m1x, m1y] = p(0, -D.width / 2)
-    const [m2x, m2y] = p(0, D.width / 2)
-    c.beginPath()
-    c.moveTo(m1x, m1y)
-    c.lineTo(m2x, m2y)
-    c.stroke()
-  })
-
-  // ── Centre circle + centre spot ────────────────────────────────────────────
-  const [cX, cY] = p(0, 0)
-  marking([R.center_circle_radius], () => {
-    c.beginPath()
-    c.arc(cX, cY, D.ccr * t.sc, 0, Math.PI * 2)
-    c.stroke()
-  })
-
-  // The spot is the pitch centre itself, so it rests on the extent alone.
-  c.fillStyle = LINE_COLOR
-  marking([], () => {
-    c.beginPath()
-    c.arc(cX, cY, 2, 0, Math.PI * 2)
-    c.fill()
-  })
-
-  // ── Helper: draw a stroked rectangle from two world corners ────────────────
-  function rect(x1: number, y1: number, x2: number, y2: number) {
-    const [ax, ay] = p(x1, y1)
-    const [bx, by] = p(x2, y2)
-    c.strokeRect(ax, ay, bx - ax, by - ay)
-  }
-
-  // ── Helper: draw a filled dot at a world position ──────────────────────────
-  function dot(x: number, y: number) {
-    const [px_, py_] = p(x, y)
-    c.beginPath()
-    c.arc(px_, py_, 2, 0, Math.PI * 2)
-    c.fill()
-  }
-
-  // ── Helper: draw a line between two world positions ────────────────────────
+  // ── Helpers ────────────────────────────────────────────────────────────────
   function line(x1: number, y1: number, x2: number, y2: number) {
     const [ax, ay] = p(x1, y1)
     const [bx, by] = p(x2, y2)
@@ -264,30 +318,40 @@ export function buildPitchCache(
     c.stroke()
   }
 
+  function rect(x1: number, y1: number, x2: number, y2: number) {
+    const [ax, ay] = p(x1, y1)
+    const [bx, by] = p(x2, y2)
+    c.strokeRect(ax, ay, bx - ax, by - ay)
+  }
+
+  function dot(x: number, y: number) {
+    const [px_, py_] = p(x, y)
+    c.beginPath()
+    c.arc(px_, py_, spotRadius, 0, Math.PI * 2)
+    c.fill()
+  }
+
+  // ── Halfway line ───────────────────────────────────────────────────────────
+  line(0, -D.width / 2, 0, D.width / 2)
+
+  // ── Centre circle + centre spot ────────────────────────────────────────────
+  const [cX, cY] = p(0, 0)
+  c.beginPath()
+  c.arc(cX, cY, D.ccr * t.sc, 0, Math.PI * 2)
+  c.stroke()
+  dot(0, 0)
+
   // ── Penalty areas ──────────────────────────────────────────────────────────
-  marking([R.penalty_area_length, R.penalty_area_width], () => {
-    rect(-D.length / 2, -D.paw / 2, -D.length / 2 + D.pal, D.paw / 2)
-    rect(D.length / 2 - D.pal, -D.paw / 2, D.length / 2, D.paw / 2)
-  })
+  rect(-D.length / 2, -D.paw / 2, -D.length / 2 + D.pal, D.paw / 2)
+  rect(D.length / 2 - D.pal, -D.paw / 2, D.length / 2, D.paw / 2)
 
   // ── Goal areas ─────────────────────────────────────────────────────────────
-  marking([R.goal_area_length, R.goal_area_width], () => {
-    rect(-D.length / 2, -D.gaw / 2, -D.length / 2 + D.gal, D.gaw / 2)
-    rect(D.length / 2 - D.gal, -D.gaw / 2, D.length / 2, D.gaw / 2)
-  })
+  rect(-D.length / 2, -D.gaw / 2, -D.length / 2 + D.gal, D.gaw / 2)
+  rect(D.length / 2 - D.gal, -D.gaw / 2, D.length / 2, D.gaw / 2)
 
   // ── Penalty marks ──────────────────────────────────────────────────────────
-  c.fillStyle = LINE_COLOR
-  marking([R.penalty_mark_distance], () => {
-    dot(-D.length / 2 + D.pmd, 0)
-    dot(D.length / 2 - D.pmd, 0)
-  })
-
-  // ── Goal-line emphasis ─────────────────────────────────────────────────────
-  marking([R.goal_width], () => {
-    line(-D.length / 2, -D.gw / 2, -D.length / 2, D.gw / 2)
-    line(D.length / 2, -D.gw / 2, D.length / 2, D.gw / 2)
-  })
+  dot(-D.length / 2 + D.pmd, 0)
+  dot(D.length / 2 - D.pmd, 0)
 
   return oc
 }

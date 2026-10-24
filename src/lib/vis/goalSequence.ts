@@ -1,5 +1,10 @@
 import type { Frame, PitchDimensions } from './types';
-import { build2DTransform, resolvePitchDimensions, worldToPx } from './pitchGeometry';
+import {
+  build2DTransform,
+  resolvePitchDimensions,
+  worldToPx,
+  DESIGN_PITCH_LENGTH_PX,
+} from './pitchGeometry';
 import { FRAME_W, FRAME_H } from './constants';
 import { frameHasAction } from './actionLabels';
 
@@ -13,8 +18,12 @@ import { frameHasAction } from './actionLabels';
  * centred on the pitch, the same space as the frame's own coordinates.
  */
 
-/** Depth of the net behind the goal line. The export does not state one. */
-export const NET_DEPTH_METRES = 2;
+/**
+ * Depth of the net behind the goal line. The export does not state one, so it
+ * is the Figma pitch's: the middle of the goal's back line sits 37 design
+ * pixels behind the middle of the goal line, on a standard 105 m pitch.
+ */
+export const NET_DEPTH_METRES = (37 / DESIGN_PITCH_LENGTH_PX) * 105;
 
 /** Length of the whole sequence, from the shot until the ball has settled. */
 export const GOAL_SEQUENCE_MS = 3200;
