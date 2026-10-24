@@ -16,7 +16,13 @@ import {
   BALL_RADIUS,
   CARRIER_GROWTH,
 } from '@/lib/vis/constants';
-import { build2DTransform, worldToPx, PITCH_GRASS } from '@/lib/vis/pitchGeometry';
+import {
+  build2DTransform,
+  worldToPx,
+  PITCH_GRASS_EDGE,
+  PITCH_GRASS_MIDDLE,
+  PITCH_LINE_ALPHA,
+} from '@/lib/vis/pitchGeometry';
 import { NET_DEPTH_METRES } from '@/lib/vis/goalSequence';
 import { trailOpacity } from '@/lib/vis/ballTrail';
 import { UPRIGHT, footballPatches, rolled } from '@/lib/vis/football';
@@ -501,8 +507,11 @@ describe('goals and the goal sequence', () => {
   };
 
   it('draws both goals on every frame', () => {
-    const posts = render().filter((o) => o.op === 'arc' && o.args[2] === 2.5);
-    expect(posts).toHaveLength(4);
+    const ops = render();
+    for (const side of [-1, 1]) {
+      const [backX] = at(side * (52.5 + NET_DEPTH_METRES), 0);
+      expect(ops.some((o) => o.op === 'arcTo' && o.args[0] === backX)).toBe(true);
+    }
   });
 
   it('draws the sequence ball in place of the tracked one', () => {
@@ -532,11 +541,13 @@ describe('goals and the goal sequence', () => {
   });
 
   it('bows the struck net', () => {
+    const [backX] = at(52.5 + NET_DEPTH_METRES, 0);
     const curve = (ops: Op[]) =>
-      ops.filter((o) => o.op === 'quadraticCurveTo' && Number(o.args[2]) > 640)[0]!.args[0];
+      ops.find((o) => o.op === 'quadraticCurveTo' && Number(o.args[2]) > 640);
     const still = render({ ball: { x: 54, y: 0 }, trail: [], net: { side: 1, y: 0, metres: 0 } });
     const struck = render({ ball: { x: 54, y: 0 }, trail: [], net: { side: 1, y: 0, metres: 0.5 } });
-    expect(Number(curve(struck))).toBeGreaterThan(Number(curve(still)));
+    expect(curve(still)).toBeUndefined();
+    expect(Number(curve(struck)!.args[0])).toBeGreaterThan(backX);
   });
 });
 
@@ -720,7 +731,11 @@ describe('attack glow', () => {
   it('is one solid colour rather than fading out', () => {
     const ops = render({ color: BLUE, team: 1, direction: 1, intensity: 1 });
     expect(areaFills(ops)).toHaveLength(1);
-    expect(ops.some((o) => o.op === 'fillRect' && o.fillStyle.startsWith('gradient('))).toBe(false);
+    // The grass is a gradient of its own; any other one would be the glow.
+    const gradients = ops.filter(
+      (o) => o.op === 'fillRect' && o.fillStyle.startsWith('gradient(') && !o.fillStyle.includes(PITCH_GRASS_EDGE)
+    );
+    expect(gradients).toHaveLength(0);
   });
 
   it('follows the attackers, not the ball', () => {
@@ -779,11 +794,22 @@ describe('attack glow', () => {
   it('lies under the pitch lines, over the grass', () => {
     const ops = render({ color: BLUE, team: 1, direction: 1, intensity: 1 });
     const areaAt = ops.indexOf(areaFills(ops)[0]!);
-    const grassAt = ops.findIndex((o) => o.op === 'fillRect' && o.fillStyle === PITCH_GRASS);
+    const grassAt = ops.findIndex(
+      (o) => o.op === 'fillRect' && o.fillStyle.startsWith('gradient(') && o.fillStyle.includes(PITCH_GRASS_MIDDLE)
+    );
     const linesAt = ops.findIndex((o) => o.op === 'drawImage');
     expect(grassAt).toBeGreaterThanOrEqual(0);
     expect(grassAt).toBeLessThan(areaAt);
     expect(linesAt).toBeGreaterThan(areaAt);
+  });
+
+  // As the design applies its opacity to the group of lines, the cache is
+  // drawn at it as a whole, rather than each line at it.
+  it('draws the pitch lines at the line opacity, and leaves it after', () => {
+    const ops = render({ color: BLUE, team: 1, direction: 1, intensity: 1 });
+    const linesAt = ops.findIndex((o) => o.op === 'drawImage');
+    expect(ops[linesAt]!.globalAlpha).toBe(PITCH_LINE_ALPHA);
+    expect(ops[linesAt + 1]!.globalAlpha).toBe(1);
   });
 
   /** The white chevron shapes drawn as part of the glow, as point lists. */
@@ -1182,8 +1208,9 @@ describe('the player who has just received the ball', () => {
   function render(received?: Map<number, number>) {
     const { canvas, ops } = fakeCanvas();
     useRenderer2D(canvas).renderFrame(frame, received ? { received } : {});
-    // Everything drawn after the ball: its patches are clipped to it.
-    const ball = ops.findIndex((o) => o.op === 'clip');
+    // Everything drawn after the ball: its patches are clipped to it, and it
+    // is the last thing that clips (the goals clip before it).
+    const ball = ops.map((o) => o.op).lastIndexOf('clip');
     return ops.slice(ops.slice(ball).findIndex((o) => o.op === 'restore') + ball);
   }
   const circleOver = (after: Op[]) => {

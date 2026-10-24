@@ -50,6 +50,13 @@ export function recordingCtx() {
     quadraticCurveTo(...args: unknown[]) {
       ctx.snap('quadraticCurveTo', args);
     },
+    arcTo(...args: unknown[]) {
+      ctx.snap('arcTo', args);
+    },
+    rect(...args: unknown[]) {
+      ctx.snap('rect', args);
+    },
+    lineJoin: 'miter',
     arc(...args: unknown[]) {
       ctx.snap('arc', args);
     },
@@ -88,11 +95,22 @@ export function recordingCtx() {
         },
       };
     },
+    // save and restore keep the style state, as a real context does, so code
+    // that changes alpha or dash inside a save leaves nothing behind.
+    stack: [] as Array<Pick<Op, 'fillStyle' | 'strokeStyle' | 'lineDash' | 'globalAlpha'>>,
     save() {
       ctx.snap('save');
+      ctx.stack.push({
+        fillStyle: ctx.fillStyle,
+        strokeStyle: ctx.strokeStyle,
+        lineDash: [...ctx.lineDash],
+        globalAlpha: ctx.globalAlpha,
+      });
     },
     restore() {
       ctx.snap('restore');
+      const top = ctx.stack.pop();
+      if (top) Object.assign(ctx, top);
     },
     clip() {
       ctx.snap('clip');
@@ -100,6 +118,12 @@ export function recordingCtx() {
     strokeRect(...args: unknown[]) {
       ctx.snap('strokeRect', args);
     },
+    roundRect(...args: unknown[]) {
+      ctx.snap('roundRect', args);
+    },
+    globalCompositeOperation: 'source-over',
+    translate() {},
+    scale() {},
     fillText(...args: unknown[]) {
       ctx.snap('fillText', args);
     },

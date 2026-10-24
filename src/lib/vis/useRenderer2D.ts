@@ -57,7 +57,13 @@ import {
   NEARBY_METRES,
   THROW_IN_PULSE_COLOR,
 } from './constants'
-import { build2DTransform, worldToPx, buildPitchCache, PITCH_GRASS } from './pitchGeometry'
+import {
+  build2DTransform,
+  worldToPx,
+  buildPitchCache,
+  fillGrass,
+  PITCH_LINE_ALPHA,
+} from './pitchGeometry'
 import { drawGoalNets, type NetBulge } from './goalNets'
 import { attackFront, drawAttackGlow, type AttackGlow } from './attackGlow'
 import { trailOpacity, type BallTrail, type TrailPoint } from './ballTrail'
@@ -288,8 +294,7 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     // Grass, then the attack glow on it, then the markings over both, so the
     // lines read white through the glow.
     ctx.setTransform(...matrix)
-    ctx.fillStyle = PITCH_GRASS
-    ctx.fillRect(0, 0, FRAME_W, FRAME_H)
+    fillGrass(ctx, pd, transform2d)
 
     // The shaded area reaches back to the attacking team's most advanced
     // player, or to the ball with none tracked. The halo follows the goal
@@ -303,11 +308,13 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
 
     // The markings are already drawn through the view, pixel for pixel.
     ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.globalAlpha = PITCH_LINE_ALPHA
     ctx.drawImage(pitchCache, 0, 0)
+    ctx.globalAlpha = 1
 
     ctx.setTransform(...matrix)
 
-    // Goals, faint, on every frame; a struck net bows out while it is hit.
+    // Goals, on every frame; a struck net bows out while it is hit.
     drawGoalNets(ctx as CanvasRenderingContext2D, pd, transform2d, overlay?.net)
 
     // ── Teams + players ────────────────────────────────────────────────────
