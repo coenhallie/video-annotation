@@ -117,6 +117,15 @@ useEscapeToClose(() => props.isVisible, closeModal);
 // Add new entries to the TOP of this array
 const changelogEntries = ref([
   {
+    version: 'Beta v3.28',
+    date: 'October 24, 2026',
+    changes: [
+      'The 2D replay has a new pitch: the grass is lit from the centre, the playing area is a shade darker, and the lines are thicker with a rounded outer box',
+      'Every pitch marking is now drawn solid, including the centre circle and penalty spots, which the pipeline data does not measure and are drawn at their standard sizes',
+      'The goals are drawn as boxes behind the goal line, in place of the netting and posts. A net still bulges and lights up when a goal goes in',
+    ],
+  },
+  {
     version: 'Beta v3.27',
     date: 'October 23, 2026',
     changes: [
