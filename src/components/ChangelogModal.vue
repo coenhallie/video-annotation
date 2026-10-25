@@ -117,6 +117,13 @@ useEscapeToClose(() => props.isVisible, closeModal);
 // Add new entries to the TOP of this array
 const changelogEntries = ref([
   {
+    version: 'Beta v3.33',
+    date: 'October 25, 2026',
+    changes: [
+      'The red and blue Attacking / Defending team labels are back above the 2D replay, with their own entry in the layers menu, alongside the attack animation',
+    ],
+  },
+  {
     version: 'Beta v3.32',
     date: 'October 25, 2026',
     changes: [
