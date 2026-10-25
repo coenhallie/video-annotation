@@ -117,6 +117,14 @@ useEscapeToClose(() => props.isVisible, closeModal);
 // Add new entries to the TOP of this array
 const changelogEntries = ref([
   {
+    version: 'Beta v3.29',
+    date: 'October 25, 2026',
+    changes: [
+      'The 2D replay draws the red and blue players in brighter colours',
+      'Officials, the referee and the linesmen, are drawn in black instead of magenta',
+    ],
+  },
+  {
     version: 'Beta v3.28',
     date: 'October 24, 2026',
     changes: [
