@@ -38,8 +38,8 @@ const corner = (turnAt: number) => (i: number) =>
   i <= turnAt ? { x: i * 0.5, y: 0 } : { x: turnAt * 0.5, y: (i - turnAt) * 0.5 };
 
 describe('ballTrailAt', () => {
-  it('keeps three seconds of the ball\'s path', () => {
-    expect(TRAIL_HISTORY_S).toBe(3);
+  it('keeps 2.1 seconds of the ball\'s path', () => {
+    expect(TRAIL_HISTORY_S).toBe(2.1);
   });
 
   it('is the path the ball took, oldest first, ending at the ball', () => {
@@ -111,8 +111,10 @@ describe('ballTrailAt', () => {
   });
 
   it('marks the turn of a ball received, held, and played on in a new direction', () => {
-    const records = play(90, (i) =>
-      i <= 20 ? { x: i * 0.5, y: 0 } : i <= 60 ? { x: 10, y: 0 } : { x: 10, y: (i - 60) * 0.5 },
+    // Received at frame 20 and held until 40, so the turn is still on screen
+    // at the last frame.
+    const records = play(70, (i) =>
+      i <= 20 ? { x: i * 0.5, y: 0 } : i <= 40 ? { x: 10, y: 0 } : { x: 10, y: (i - 40) * 0.5 },
     );
     expect(last(records)?.turns).toEqual([expect.objectContaining({ x: 10, y: 0 })]);
   });
