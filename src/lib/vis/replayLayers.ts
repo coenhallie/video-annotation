@@ -10,6 +10,7 @@ export type ReplayLayerKey =
   | 'goal'
   | 'attack'
   | 'ballTrail'
+  | 'phaseLabels'
   | 'nearbyRings'
   | 'farFade'
   | 'ringFades';
@@ -25,6 +26,11 @@ export const REPLAY_LAYERS: ReadonlyArray<{ key: ReplayLayerKey; label: string; 
     hint: 'Worked out from possession: shade and team name',
   },
   { key: 'ballTrail', label: 'Ball trail', hint: "The ball's path, with a dot at each turn" },
+  {
+    key: 'phaseLabels',
+    label: 'Attacking / defending',
+    hint: 'Team labels above the pitch',
+  },
   {
     key: 'nearbyRings',
     label: 'Players near the ball',
@@ -46,6 +52,7 @@ export const DEFAULT_REPLAY_LAYERS: ReplayLayers = {
   goal: true,
   attack: true,
   ballTrail: true,
+  phaseLabels: true,
   nearbyRings: true,
   farFade: true,
   ringFades: true,
