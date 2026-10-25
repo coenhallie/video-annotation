@@ -203,17 +203,30 @@ export function fillGrass(
   c.fillRect(-1, -1, 2, 2)
   c.restore()
 
-  // The shade sits under the lines in the design, so it takes their opacity,
-  // and reaches the outside of the outer box's line, as the box's own
-  // background does.
+  // The shade sits under the lines in the design, so it takes their opacity.
+  c.save()
+  c.globalAlpha = PITCH_LINE_ALPHA
+  c.fillStyle = PLAYING_AREA_SHADE
+  tracePlayingArea(c, pd, t)
+  c.fill()
+  c.restore()
+}
+
+/**
+ * Begin a path round the playing area: the outer box out to the outside of its
+ * line, rounded as the design's box is, which is where the box's own
+ * background reaches. Anything shading the pitch fills or clips to it.
+ */
+export function tracePlayingArea(
+  c: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
+  pd: Partial<PitchDimensions> | undefined,
+  t: Transform2D,
+): void {
   const R = resolvePitchDimensions(pd)
   const u = designUnit(t)
   const half = (DESIGN_LINE_PX / 2) * u
   const [tlX, tlY] = worldToPx(-R.length.value / 2, -R.width.value / 2, t)
   const [brX, brY] = worldToPx(R.length.value / 2, R.width.value / 2, t)
-  c.save()
-  c.globalAlpha = PITCH_LINE_ALPHA
-  c.fillStyle = PLAYING_AREA_SHADE
   c.beginPath()
   c.roundRect(
     tlX - half,
@@ -222,8 +235,6 @@ export function fillGrass(
     brY - tlY + 2 * half,
     DESIGN_CORNER_RADIUS_PX * u,
   )
-  c.fill()
-  c.restore()
 }
 
 /**

@@ -12,16 +12,20 @@ import {
   isThrowInFrame,
   isValidFrame,
   throwInBall,
-  throwInCamera,
-  throwInWeight,
   throwInHolds,
   throwInPulse,
   throwInSpot,
-  type ThrowInEase,
   THROW_IN_REPEAT_S,
   THROW_IN_STALE_S,
 } from '@/lib/vis/throwInSequence';
-import { CHEVRON_FLOW_PERIOD_S, type AttackGlow } from '@/lib/vis/attackGlow';
+import {
+  ATTACK_IN_MS,
+  ATTACK_OUT_MS,
+  ATTACK_PULSE_MS,
+  ATTACK_SHOW_MS,
+  type AttackIndicator,
+} from '@/lib/vis/attackIndicator';
+import type { BallTrail } from '@/lib/vis/ballTrail';
 import {
   REPLAY_LAYERS,
   readReplayLayers,
@@ -50,7 +54,7 @@ import {
 } from '@/lib/vis/constants';
 import { rolled, UPRIGHT, type Spin } from '@/lib/vis/football';
 import { build2DTransform, worldToPx } from '@/lib/vis/pitchGeometry';
-import type { TeamId, TeamState } from '@/lib/vis/teamPhase';
+import type { TeamId } from '@/lib/vis/teamPhase';
 import {
   cameraFromView,
   fitFrameBox,
@@ -93,6 +97,7 @@ function toggleLayer(key: ReplayLayerKey): void {
   writeReplayLayers(layerStorage(), { ...layers });
   // A sequence switched off mid-way ends now, putting the user's view back.
   if (key === 'goal' && !layers.goal) stopGoal();
+  if (key === 'attack' && !layers.attack) stopAttack();
   if (key === 'throwIn' && !layers.throwIn) stopThrowIn();
   if (key === 'ringFades' && !layers.ringFades) settleRings();
   paint();
@@ -167,17 +172,23 @@ function paint(): void {
   if (frame) {
     const goal = goalOverlay();
     rollBall(frame, goal);
+    const attackShown = attackValue();
+    // The attack holds the ball, and the trail that leads to it, where they
+    // were when it was shown, until it starts to go.
+    const held = attackShown?.ball && !attackShown.leaving ? attackMoment : null;
     renderer?.renderFrame(frame, {
       goal,
-      glow: glowValue(),
+      attack: attackShown,
       rings: {
         nearby: layers.nearbyRings ? new Map(nearbyRings) : new Map(),
         possession: new Map(possessionRings),
       },
       ballPulse: throwInPulseLayer(),
       fadeFar: layers.farFade,
-      trail: layers.ballTrail ? (props.replay.ballTrail.value ?? undefined) : undefined,
-      ballSpin,
+      trail: layers.ballTrail
+        ? ((held ? held.trail : props.replay.ballTrail.value) ?? undefined)
+        : undefined,
+      ballSpin: attackMoment ? attackMoment.spin : ballSpin,
       received: receivedCovers(),
     });
   }
@@ -206,27 +217,14 @@ const boxStyle = computed(() => {
   };
 });
 
-/**
- * A row kept clear above the pitch for the team phase labels, so they never
- * sit over it: anything on the near touchline would be hidden under them.
- */
-const LABEL_ROW_PX = 40;
-
 function measure(): void {
   const el = viewportRef.value;
   if (!el) return;
   const rect = el.getBoundingClientRect();
-  const fitted = fitFrameBox(
-    {
-      left: rect.left,
-      top: rect.top + LABEL_ROW_PX,
-      width: rect.width,
-      height: Math.max(0, rect.height - LABEL_ROW_PX),
-    },
+  const next = fitFrameBox(
+    { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
     window.devicePixelRatio || 1
   );
-  // fitFrameBox places the box within the area it was given, below the row.
-  const next = { ...fitted, top: fitted.top + LABEL_ROW_PX };
   // A hidden surface measures as nothing. Keep the last box rather than
   // collapse the bitmap to zero, which has nothing to draw into.
   if (next.pixelWidth < 1 || next.pixelHeight < 1) return;
@@ -505,7 +503,6 @@ function startGoal(frame: NonNullable<PipelineReplay['frame']['value']>): void {
 /** The user has zoomed or panned: the view is theirs, and stays where they put it. */
 function releaseSequenceCamera(): void {
   if (goal) goal.camera = null;
-  if (throwIn) throwIn.camera = null;
 }
 
 function stopGoal(): void {
@@ -528,6 +525,7 @@ watch(
     if (!lastStepWasPlayback) {
       stopGoal();
       stopThrowIn();
+      stopAttack();
       // After a seek, back or forward, a label is not the last throw-in
       // labelled again, however close in time.
       throwInEndedAt = null;
@@ -542,7 +540,7 @@ watch(
     if (playing) return;
     stopGoal();
     stopThrowIn();
-    settleGlow();
+    stopAttack();
     settleRings();
     paint();
   }
@@ -550,28 +548,22 @@ watch(
 
 // ── Throw-in sequence ───────────────────────────────────────────────────────
 //
-// When playback runs into a frame the pipeline labels a throw-in, the view
-// zooms in on the spot it is taken from, on the touchline level with the ball,
-// and a ring pulses there, until play is back on:
-// the label is over and valid frames have been flowing again for a few
-// seconds, not a cutaway (see throwInSequence.ts). Then it eases back out to the view the user had.
+// When playback runs into a frame the pipeline labels a throw-in, a ring
+// pulses on the spot it is taken from, on the touchline level with the ball,
+// until play is back on: the label is over and valid frames have been flowing
+// again for a few seconds, not a cutaway (see throwInSequence.ts). It no
+// longer zooms the view in on the spot.
 //
-// Unlike the goal sequence it draws nothing in place of the data, but it does
-// move the view, so the same things stop it: pausing, seeking, stepping and
-// pressing on the drawing layer put the user's view straight back, and
-// zooming or panning hands the view to the user. Reduced motion keeps the
-// view where it is and holds the ring still.
+// Like the goal sequence, pausing, seeking, stepping and pressing on the
+// drawing layer end it. Reduced motion holds the ring still.
 
 let throwIn: {
-  /** Where the throw-in is taken from, on the touchline, and the view zooms in. */
+  /** Where the throw-in is taken from, on the touchline. */
   spot: { x: number; y: number };
   startedMs: number | null;
   elapsedMs: number;
-  /** Which way the view is easing: in, or back out once it lets go. */
-  ease: ThrowInEase;
   /** Replay time the label, a gap or an empty frame last held it. */
   busyAt: number;
-  camera: { from: Camera; to: Camera } | null;
 } | null = null;
 let throwInRaf: number | null = null;
 // The label stays on for many frames: only its first one starts a sequence.
@@ -599,29 +591,18 @@ function throwInStep(ms: number): void {
   throwIn.elapsedMs = ms - throwIn.startedMs;
   const frame = props.replay.frame.value;
   const now = props.replay.currentTime.value;
-  let weight = throwInWeight(throwIn.ease, throwIn.elapsedMs);
   if (frame) {
     const state = {
       labelled: isThrowInFrame(frame),
       valid: isValidFrame(frame),
       stale: now - frameArrivedAt > THROW_IN_STALE_S,
     };
-    const busy = state.labelled || !state.valid || state.stale;
-    if (busy) throwIn.busyAt = now;
-    const holds = throwInHolds({ ...state, quietS: now - throwIn.busyAt });
-    // Labelled again, or cut away from, while easing out: turn back in from
-    // where the zoom has got to. Let go after holding: start back out.
-    const towards = throwIn.ease.towards === 0 ? (busy ? 1 : 0) : holds ? 1 : 0;
-    if (towards !== throwIn.ease.towards) {
-      throwIn.ease = { towards, fromWeight: weight, startMs: throwIn.elapsedMs };
-      weight = throwInWeight(throwIn.ease, throwIn.elapsedMs);
+    if (state.labelled || !state.valid || state.stale) throwIn.busyAt = now;
+    if (!throwInHolds({ ...state, quietS: now - throwIn.busyAt })) {
+      stopThrowIn();
+      return;
     }
   }
-  if (throwIn.ease.towards === 0 && weight === 0) {
-    stopThrowIn();
-    return;
-  }
-  if (throwIn.camera) showCamera(blendCamera(throwIn.camera.from, throwIn.camera.to, weight));
   paint();
   throwInRaf = window.requestAnimationFrame(throwInStep);
 }
@@ -629,35 +610,22 @@ function throwInStep(ms: number): void {
 function startThrowIn(frame: NonNullable<PipelineReplay['frame']['value']>): void {
   const ball = throwInBall(frame, lastBallSeen);
   if (!ball) return;
-  const spot = throwInSpot(ball, frame.pitch_dimensions);
-  const from = cameraFromView({
-    zoom: zoom.value,
-    panX: panX.value,
-    panY: panY.value,
-    renderedWidth: renderedWidth(),
-  });
   throwIn = {
-    spot,
+    spot: throwInSpot(ball, frame.pitch_dimensions),
     startedMs: null,
     elapsedMs: 0,
-    ease: { towards: 1, fromWeight: 0, startMs: 0 },
     busyAt: props.replay.currentTime.value,
-    camera: prefersReducedMotion()
-      ? null
-      : { from, to: throwInCamera(spot, frame.pitch_dimensions) },
   };
   throwInRaf = window.requestAnimationFrame(throwInStep);
 }
 
-/** End the sequence, putting back the view it started from unless the user took it over. */
+/** End the sequence. */
 function stopThrowIn(): void {
   if (!throwIn && throwInRaf === null) return;
   if (throwInRaf !== null) window.cancelAnimationFrame(throwInRaf);
   throwInRaf = null;
-  const camera = throwIn?.camera;
   throwIn = null;
   throwInEndedAt = props.replay.currentTime.value;
-  if (camera) showCamera(camera.from);
   paint();
 }
 
@@ -665,153 +633,158 @@ function stopThrowIn(): void {
 function stopSequences(): void {
   stopGoal();
   stopThrowIn();
+  stopAttack();
 }
 
-// ── Team phase labels ───────────────────────────────────────────────────────
+// ── Attack ──────────────────────────────────────────────────────────────────
 //
-// Which team is attacking and which defending, from the replay's phase (see
-// teamPhase.ts). Named after the match title's teams when it names them, the
+// When playback runs into an attack (see teamPhase.ts) with the ball in the
+// other team's half, the attack is shown for ATTACK_SHOW_MS: the pitch shaded
+// from the attacking team's own goal line to a toothed edge pointing at the
+// goal it attacks, the same width for every attack, as on the design, with
+// its name over "Attack" just behind that edge (attackIndicator.ts). Everyone
+// on the pitch fades out, and the ball is held where it was when the attack
+// was shown, its border pulsing. Play carries on underneath; when the time is
+// up it all fades out over ATTACK_OUT_MS onto play as it now is.
+//
+// An attack is shown once, the first time it is seen in the other team's half.
+// Like the goal sequence it only ever plays during playback, and anything that
+// means someone wants the real frame - pausing, seeking, stepping, pressing on
+// the drawing layer - stops it at once. An attack a seek or a step lands in
+// the middle of is not shown when play then carries on.
+//
+// The team is named after the match title's teams when it names them, the
 // first-named as team 0: the export names neither team, and DALF names the
-// home team first, which is also the team drawn red. An assumption, as
-// nothing says which team the pipeline numbered 0. Without a match in the
-// title the teams are called Red and Blue, the colours they are drawn in.
+// home team first, which is also the team drawn red. An assumption, as nothing
+// says which team the pipeline numbered 0. Without a match in the title the
+// teams are called Red and Blue, the colours they are drawn in.
 
 const PHASE_TEAMS: Record<TeamId, { name: string; color: string }> = {
   0: { name: 'Red', color: PERSON_COLORS.home.fill },
   1: { name: 'Blue', color: PERSON_COLORS.away.fill },
 };
 
-const STATE_TEXT: Record<TeamState, string> = {
-  attacking: 'Attacking',
-  defending: 'Defending',
-};
+const teamName = (team: TeamId) => props.teamNames?.[team] ?? PHASE_TEAMS[team].name;
 
-const phaseLabels = computed(() => {
-  const phase = props.replay.phase.value;
-  if (!phase) return null;
-  return ([0, 1] as const).map((team) => {
-    const state = phase.states[team];
-    return {
-      team,
-      ...PHASE_TEAMS[team],
-      name: props.teamNames?.[team] ?? PHASE_TEAMS[team].name,
-      state,
-      text: state ? STATE_TEXT[state] : null,
-      // Only an attacking team is filled: a team that merely has the ball,
-      // or nobody clearly having it, leaves both labels plain.
-      filled: state === 'attacking',
-    };
-  });
+/** The attacking team, for screen readers: the canvas label says it to everyone else. */
+const attackDescription = computed(() => {
+  const states = props.replay.phase.value?.states;
+  const team = states?.[0] === 'attacking' ? 0 : states?.[1] === 'attacking' ? 1 : null;
+  return team === null ? '' : `${teamName(team)} attacking`;
 });
 
-const phaseDescription = computed(() =>
-  (phaseLabels.value ?? [])
-    .map((l) => (l.text ? `${l.name} ${l.text.toLowerCase()}` : l.name))
-    .join(', ')
-);
+let attackMoment: {
+  team: TeamId;
+  color: string;
+  direction: 1 | -1;
+  /** The ball, its trail and how it was turned when the attack was shown. */
+  ball: { x: number; y: number };
+  trail: BallTrail | null;
+  spin: Spin;
+  startedMs: number | null;
+  elapsedMs: number;
+} | null = null;
+let attackRaf: number | null = null;
+/**
+ * The attack last seen, as team and direction, so each is shown once; null
+ * while nobody is attacking.
+ */
+let attackSeen: string | null = null;
 
-// ── Attack glow ─────────────────────────────────────────────────────────────
-//
-// While a team is attacking (see teamPhase.ts), a glow across the pitch toward
-// the goal it attacks, a lit bar beyond that goal and a halo round the ball
-// (attackGlow.ts). During playback it fades in and out over GLOW_FADE_S, so a
-// short attack is a gentle pulse rather than a flash. Anywhere else - a seek,
-// a step, a pause - it shows the frame's own state at once: a frame being
-// looked at should not be partway through a fade. Reduced motion never fades.
-//
-// The chevrons in it flow toward the goal with the replay's clock, so they are
-// still while paused and the same at a given moment however the replay got
-// there. Reduced motion holds them still.
-
-const GLOW_FADE_S = 1;
-
-let glow: (AttackGlow & { target: 0 | 1 }) | null = null;
-let glowRaf: number | null = null;
-let lastGlowMs: number | null = null;
-
-/** The glow the current phase calls for, before any fading. */
-function glowTarget(): Omit<AttackGlow, 'intensity'> | null {
+/** The attack the current phase says is under way, if any. */
+function attackTarget(): { team: TeamId; direction: 1 | -1; color: string } | null {
   const phase = props.replay.phase.value;
   if (!phase) return null;
   const team =
     phase.states[0] === 'attacking' ? 0 : phase.states[1] === 'attacking' ? 1 : null;
   if (team === null) return null;
   const direction = phase.attacks[team];
-  // Without a direction there is no goal to glow towards.
+  // Without a direction there is no telling which half is the other team's.
   if (direction === null) return null;
-  return { color: PHASE_TEAMS[team].color, team, direction };
+  return { team, direction, color: PHASE_TEAMS[team].color };
 }
 
-function glowValue(): AttackGlow | undefined {
-  if (!glow || glow.intensity <= 0) return undefined;
-  if (!layers.attackShading && !layers.attackArrows) return undefined;
-  const cycles = props.replay.currentTime.value / CHEVRON_FLOW_PERIOD_S;
+function attackValue(): AttackIndicator | undefined {
+  const m = attackMoment;
+  if (!m) return undefined;
+  const e = m.elapsedMs;
+  const still = prefersReducedMotion();
+  const coming = Math.min(1, e / ATTACK_IN_MS);
+  const leaving = !still && e >= ATTACK_SHOW_MS;
+  const going = leaving ? Math.max(0, 1 - (e - ATTACK_SHOW_MS) / ATTACK_OUT_MS) : 1;
+  const intensity = still ? 1 : leaving ? going : coming;
+  const playersFade = still ? 1 : leaving ? going : Math.max(0, coming * 2 - 1);
   return {
-    color: glow.color,
-    team: glow.team,
-    direction: glow.direction,
-    intensity: glow.intensity,
-    flow: prefersReducedMotion() ? 0 : cycles - Math.floor(cycles),
-    shading: layers.attackShading,
-    arrows: layers.attackArrows,
+    team: m.team,
+    color: m.color,
+    name: teamName(m.team),
+    direction: m.direction,
+    intensity,
+    leaving,
+    playersFade,
+    ball: m.ball,
+    ...(still ? {} : { pulse: (e / ATTACK_PULSE_MS) % 1 }),
   };
 }
 
-function stopGlowLoop(): void {
-  if (glowRaf !== null) window.cancelAnimationFrame(glowRaf);
-  glowRaf = null;
-  lastGlowMs = null;
-}
-
-function glowStep(ms: number): void {
-  glowRaf = null;
-  if (!glow) return;
-  // Capped, so a tab that was in the background does not jump to the end.
-  const dt = lastGlowMs === null ? 0 : Math.min(0.1, (ms - lastGlowMs) / 1000);
-  lastGlowMs = ms;
-  const step = dt / GLOW_FADE_S;
-  glow.intensity =
-    glow.target > glow.intensity
-      ? Math.min(glow.target, glow.intensity + step)
-      : Math.max(glow.target, glow.intensity - step);
-  if (glow.intensity === glow.target) {
-    lastGlowMs = null;
-    if (glow.target === 0) glow = null;
-    paint();
+function attackStep(ms: number): void {
+  attackRaf = null;
+  if (!attackMoment) return;
+  if (attackMoment.startedMs === null) attackMoment.startedMs = ms;
+  attackMoment.elapsedMs = ms - attackMoment.startedMs;
+  const end = prefersReducedMotion() ? ATTACK_SHOW_MS : ATTACK_SHOW_MS + ATTACK_OUT_MS;
+  if (attackMoment.elapsedMs >= end) {
+    stopAttack();
     return;
   }
   paint();
-  glowRaf = window.requestAnimationFrame(glowStep);
+  attackRaf = window.requestAnimationFrame(attackStep);
 }
 
-/** Bring the glow in line with the phase, fading if `fade`, else at once. */
-function updateGlow(fade: boolean): void {
-  const target = glowTarget();
-  if (!fade) {
-    stopGlowLoop();
-    glow = target ? { ...target, intensity: 1, target: 1 } : null;
+function startAttack(
+  target: { team: TeamId; direction: 1 | -1; color: string },
+  ball: { x: number; y: number }
+): void {
+  attackMoment = {
+    ...target,
+    ball,
+    trail: props.replay.ballTrail.value,
+    spin: ballSpin,
+    startedMs: null,
+    elapsedMs: 0,
+  };
+  attackRaf = window.requestAnimationFrame(attackStep);
+}
+
+/** End the attack at once, back to the frame as it is. */
+function stopAttack(): void {
+  if (!attackMoment && attackRaf === null) return;
+  if (attackRaf !== null) window.cancelAnimationFrame(attackRaf);
+  attackRaf = null;
+  attackMoment = null;
+  paint();
+}
+
+/**
+ * Show the attack on `frame` if it has just reached the other team's half
+ * during playback. Called for every frame drawn, after the goal and throw-in
+ * sequences have had their say.
+ */
+function maybeStartAttack(frame: Frame): void {
+  const target = attackTarget();
+  const key = target ? `${target.team}:${target.direction}` : null;
+  // Landed on by a seek or a step: whatever attack is under way has been
+  // seen, and is not shown when play carries on.
+  if (!lastStepWasPlayback || key === null) {
+    attackSeen = key;
     return;
   }
-  if (target) {
-    // The same attack carries on from wherever its fade has got to; a new one
-    // starts from nothing.
-    const same = glow?.team === target.team && glow.direction === target.direction;
-    glow = { ...target, intensity: same && glow ? glow.intensity : 0, target: 1 };
-  } else if (glow) {
-    // Fading out keeps the colour and direction of the attack that ended.
-    glow.target = 0;
-  }
-  if (glow && glow.intensity !== glow.target && glowRaf === null) {
-    glowRaf = window.requestAnimationFrame(glowStep);
-  }
-}
-
-/** Finish any fade at once: the frame on screen shows its own state. */
-function settleGlow(): void {
-  stopGlowLoop();
-  if (!glow) return;
-  glow.intensity = glow.target;
-  if (glow.target === 0) glow = null;
+  if (!target || key === attackSeen) return;
+  const ball = shownBall(frame, undefined);
+  // Not yet in the other team's half: not shown until it is.
+  if (!ball || target.direction * ball.x <= 0) return;
+  attackSeen = key;
+  if (layers.attack && !goal && !throwIn && !attackMoment) startAttack(target, ball);
 }
 
 // ── Rings ───────────────────────────────────────────────────────────────────
@@ -821,7 +794,7 @@ function settleGlow(): void {
 // so who is near it, changes many times a minute, and the data loses the
 // carrier for a frame or two at a time: rings snapping on and off with it were
 // jarring. So during playback each fades in and out over RING_FADE_S of replay
-// time. Anywhere else they show the frame's own rings at once, like the glow,
+// time. Anywhere else they show the frame's own rings at once, like the attack,
 // and reduced motion never fades.
 
 /** How strong each ring is, by track id. Absent means no ring. */
@@ -1013,8 +986,8 @@ function ensureRenderer() {
 // One watcher for everything a tick of the replay can change, so a tick paints
 // once however many of them changed. The record, its phase and its trail
 // arrive together on most ticks; the clock alone moves on the rest, as it
-// ticks at display rate and records arrive at the data's rate, and then only a
-// glow needs a repaint, for its chevrons to flow smoothly rather than in steps.
+// ticks at display rate and records arrive at the data's rate, and then only
+// fading rings need a repaint.
 watch(
   [
     () => props.replay.frame.value,
@@ -1025,15 +998,15 @@ watch(
   ([frame, phase, now, trail], [prevFrame, prevPhase, before, prevTrail]) => {
     const playing =
       props.replay.isPlaying.value && lastStepWasPlayback && !prefersReducedMotion();
-    if (phase !== prevPhase) updateGlow(playing);
     if (!frame) return;
     if (frame !== prevFrame) {
       ensureRenderer();
       frameArrivedAt = now;
       const labelled = isGoalFrame(frame);
       if (labelled && layers.goal && !goalLabelSeen && !goal && lastStepWasPlayback) {
-        // The goal frames the shot from the user's own view, not a throw-in's.
+        // The goal takes over from a throw-in or an attack still showing.
         stopThrowIn();
+        stopAttack();
         startGoal(frame);
       }
       goalLabelSeen = labelled;
@@ -1047,9 +1020,12 @@ watch(
         lastStepWasPlayback &&
         (throwInEndedAt === null || now - throwInEndedAt >= THROW_IN_REPEAT_S)
       ) {
+        // The ball is out: the attack is over.
+        stopAttack();
         startThrowIn(frame);
       }
       throwInLabelSeen = thrown;
+      maybeStartAttack(frame);
       lastBallSeen = throwInBall(frame, lastBallSeen);
     }
     // A fade that has just finished still needs the paint that shows its end.
@@ -1060,7 +1036,6 @@ watch(
       frame !== prevFrame ||
       phase !== prevPhase ||
       trail !== prevTrail ||
-      glowValue()?.arrows ||
       wasFading ||
       ringsFading()
     ) {
@@ -1082,14 +1057,32 @@ watch(
 
 onMounted(() => {
   watchPixelRatio();
+  loadLabelFont();
   void props.replay.load();
 });
+
+/**
+ * The attack's label is drawn on the canvas in the app's web font, which a
+ * canvas does not wait for: until it arrives, text is drawn in a fallback, and
+ * nothing redraws a paused replay once it has. So load both weights the label
+ * uses, and repaint when they are in.
+ */
+function loadLabelFont(): void {
+  const fonts = typeof document !== 'undefined' ? document.fonts : undefined;
+  if (!fonts?.load) return;
+  Promise.all([fonts.load('600 16px Montserrat'), fonts.load('700 16px Montserrat')]).then(
+    () => paint(),
+    () => {
+      // Unavailable: the fallback stands.
+    }
+  );
+}
 
 onUnmounted(() => {
   document.removeEventListener('keydown', onLayersKeydown);
   stopGoal();
   stopThrowIn();
-  stopGlowLoop();
+  stopAttack();
   dprQuery?.removeEventListener('change', onPixelRatioChange);
   dprQuery = null;
   props.replay.dispose();
@@ -1234,58 +1227,18 @@ onUnmounted(() => {
           data-testid="pipeline-hud"
         >
           <!--
-            In the row kept clear above the pitch (LABEL_ROW_PX), centred on
-            it. Worked out by the app rather than reported by the pipeline,
-            which the title says on hover.
+            The attack is drawn on the canvas, label and all; this says it to
+            screen readers. Worked out by the app rather than reported by the
+            pipeline.
           -->
-          <div
-            v-if="phaseLabels && layers.phaseLabels"
+          <p
+            v-if="layers.attack"
             data-testid="pipeline-phase"
-            role="group"
-            :aria-label="phaseDescription"
-            title="Worked out from the tracking data: a team is attacking once it has kept the ball for 3 seconds, and the other team is then defending."
-            class="pointer-events-auto absolute inset-x-0 bottom-full mx-auto mb-1.5 grid w-max max-w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2"
+            role="status"
+            class="sr-only"
           >
-            <!--
-              Two equal columns either side of "vs", as wide as the longer
-              label needs, so "vs" stays centred; a name too long for the row
-              is cut short, and shown in full on hover.
-            -->
-            <template
-              v-for="(l, i) in phaseLabels"
-              :key="l.team"
-            >
-              <span
-                v-if="i === 1"
-                class="text-[10px] font-semibold uppercase tracking-widest text-white/60"
-                aria-hidden="true"
-              >vs</span>
-              <div
-                :data-testid="`pipeline-phase-team-${l.team}`"
-                :data-state="l.state ?? 'none'"
-                :title="l.name"
-                class="flex min-w-[9.5rem] items-center gap-3 whitespace-nowrap rounded-md border-2 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-lg transition-colors duration-200 motion-reduce:transition-none"
-                :class="[l.filled ? '' : 'bg-black/60', l.team === 1 ? 'justify-end' : '']"
-                :style="{ borderColor: l.color, backgroundColor: l.filled ? l.color : undefined }"
-                aria-hidden="true"
-              >
-                <!-- Mirrored for team 1, so both states sit either side of "vs". -->
-                <span
-                  v-if="l.team === 0"
-                  class="min-w-0 truncate font-bold"
-                >{{ l.name }}</span>
-                <span
-                  v-if="l.text"
-                  class="shrink-0 text-[10px] tracking-widest"
-                  :class="l.team === 0 ? 'ml-auto' : 'mr-auto'"
-                >{{ l.text }}</span>
-                <span
-                  v-if="l.team === 1"
-                  class="min-w-0 truncate font-bold"
-                >{{ l.name }}</span>
-              </div>
-            </template>
-          </div>
+            {{ attackDescription }}
+          </p>
 
           <div
             class="absolute bottom-2 left-2 flex items-center gap-1.5 rounded bg-black/60 px-2.5 py-1 font-mono text-[11px] text-white"

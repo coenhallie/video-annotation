@@ -22,8 +22,9 @@
 //    outlined in white.
 //  - goals (posts and a faint net) are drawn on every frame, and renderFrame
 //    takes an optional goal-sequence overlay whose ball replaces the tracked
-//    one (goalNets.ts, goalSequence.ts), and an optional attack glow drawn
-//    under the players (attackGlow.ts).
+//    one (goalNets.ts, goalSequence.ts), and an optional attack indicator:
+//    the pitch shaded behind the attack, with a label, under the players,
+//    everyone faded out, and a pulsing ring round the ball (attackIndicator.ts).
 //  - renderFrame takes an optional ball trail, drawn over the players: the
 //    path the tracked ball took, with a dot wherever it turned (ballTrail.ts).
 //  - players are not labelled with their tracking id: it is the tracker's
@@ -65,7 +66,17 @@ import {
   PITCH_LINE_ALPHA,
 } from './pitchGeometry'
 import { drawGoalNets, type NetBulge } from './goalNets'
-import { attackFront, drawAttackGlow, type AttackGlow } from './attackGlow'
+import {
+  ballRingAlpha,
+  drawAttackIndicator,
+  BALL_OUTER_RING_ALPHA,
+  BALL_OUTER_RING_GAP_PX,
+  BALL_OUTER_RING_PX,
+  BALL_PULSE_GROWTH_PX,
+  BALL_RING_PX,
+  BALL_RING_SWELL_PX,
+  type AttackIndicator,
+} from './attackIndicator'
 import { trailOpacity, type BallTrail, type TrailPoint } from './ballTrail'
 import { footballPatches, UPRIGHT, type Spin } from './football'
 import {
@@ -170,8 +181,8 @@ export interface BallPulse {
 export interface FrameLayers {
   /** The goal sequence's ball and net, drawn in place of the tracked ball. */
   goal?: GoalOverlay | undefined
-  /** The attack glow, under the players. */
-  glow?: AttackGlow | undefined
+  /** The attack: its shade and label under the players, its rings round the ball. */
+  attack?: AttackIndicator | undefined
   /** Ring strengths, for a caller that fades the rings in and out. */
   rings?: RingStrengths | undefined
   /** The throw-in pulse, over the players and ball. */
@@ -250,7 +261,7 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
    * iterates teams/players/balls, and paints the HUD overlay.
    */
   function renderFrame(frame: Frame, layers: FrameLayers = {}): void {
-    const { goal: overlay, glow, rings, ballPulse, trail } = layers
+    const { goal: overlay, attack, rings, ballPulse, trail } = layers
     const spin = layers.ballSpin ?? UPRIGHT
     const fadeFar = layers.fadeFar !== false
     if (!frame) return
@@ -274,8 +285,7 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
 
     const key = `${canvas.width}x${canvas.height}:${matrix.join(',')}`
     if (!pitchCache || key !== pitchKey) {
-      // The markings alone: the grass is drawn per frame, so the attack glow
-      // can go between it and the lines.
+      // The markings alone: the grass is drawn per frame, under them.
       pitchCache = buildPitchCache(pd, transform2d, {
         width: canvas.width,
         height: canvas.height,
@@ -291,20 +301,8 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.clearRect(0, 0, canvas.width, canvas.height)
 
-    // Grass, then the attack glow on it, then the markings over both, so the
-    // lines read white through the glow.
     ctx.setTransform(...matrix)
     fillGrass(ctx, pd, transform2d)
-
-    // The shaded area reaches back to the attacking team's most advanced
-    // player, or to the ball with none tracked. The halo follows the goal
-    // sequence's ball while that plays, like everything else that follows
-    // the ball.
-    const glowBall = overlay?.ball ?? trackedBall(frame)
-    if (glow && glowBall) {
-      const front = attackFront(frame, glow.team, glow.direction) ?? glowBall.x
-      drawAttackGlow(ctx as CanvasRenderingContext2D, pd, transform2d, glow, glowBall, front)
-    }
 
     // The markings are already drawn through the view, pixel for pixel.
     ctx.setTransform(1, 0, 0, 1, 0, 0)
@@ -313,6 +311,10 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     ctx.globalAlpha = 1
 
     ctx.setTransform(...matrix)
+
+    // The attack's shade darkens the markings with the grass, as the design
+    // does, and its label goes under everything that moves.
+    if (attack) drawAttackIndicator(ctx as CanvasRenderingContext2D, pd, transform2d, attack)
 
     // Goals, on every frame; a struck net bows out while it is hit.
     drawGoalNets(ctx as CanvasRenderingContext2D, pd, transform2d, overlay?.net)
@@ -344,10 +346,14 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
       if (rings && id != null) return rings.possession.get(id) ?? 0
       return p.player.in_possession ? 1 : 0
     }
-    const alphaOf = (p: { faded: boolean }) => (p.faded && fadeFar ? DIMMED_PLAYER_ALPHA : 1)
+    // During an attack everyone fades out, players and officials alike,
+    // leaving the ball. Everything drawn for a person goes through here.
+    const shown = 1 - Math.min(1, Math.max(0, attack?.playersFade ?? 0))
+    const alphaOf = (p: { faded: boolean }) =>
+      (p.faded && fadeFar ? DIMMED_PLAYER_ALPHA : 1) * shown
     // The player with the ball is drawn bigger, so on top of those around them.
     const order = [...people].sort((a, b) => Number(possessionOf(a) > 0) - Number(possessionOf(b) > 0))
-    for (const faded of [true, false]) {
+    for (const faded of shown > 0 ? [true, false] : []) {
       for (const p of order) {
         if (p.faded !== faded) continue
         ctx.globalAlpha = alphaOf(p)
@@ -365,7 +371,7 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
 
     // The shirt number of the player with the ball, over the trail, which
     // always ends at them and would otherwise run across it.
-    for (const p of people) {
+    for (const p of shown > 0 ? people : []) {
       const possession = possessionOf(p)
       if (possession <= 0) continue
       ctx.globalAlpha = alphaOf(p) * possession
@@ -379,14 +385,21 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
       overlay.trail.forEach((p, i) => {
         draw2DBall({ projected_coordinates: p }, spin, 0.45 / (i + 1))
       })
-      draw2DBall({ projected_coordinates: overlay.ball }, spin)
+      draw2DBall({ projected_coordinates: overlay.ball }, spin, 1, attack)
     } else {
-      for (const ball of frame.balls ?? []) {
-        draw2DBall(ball, spin)
+      // During an attack the ball is held where it was when the attack was
+      // shown, and the tracked one only fades back in as the attack goes.
+      const held = attack?.ball
+      const heldAlpha = held && attack.leaving ? Math.min(1, Math.max(0, attack.intensity)) : 1
+      if (!held || heldAlpha < 1) {
+        for (const ball of frame.balls ?? []) {
+          draw2DBall(ball, spin, 1 - (held ? heldAlpha : 0), held ? undefined : attack)
+        }
       }
+      if (held) draw2DBall({ projected_coordinates: held }, spin, heldAlpha, attack)
       // A player who has just received the ball is drawn over it for a
       // moment, so their number shows, then fades to show the ball again.
-      for (const p of people) {
+      for (const p of shown > 0 ? people : []) {
         const id = p.player.track_id
         const cover = id != null ? (layers.received?.get(id) ?? 0) : 0
         if (cover <= 0) continue
@@ -563,9 +576,10 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
   /**
    * Draw a single ball, as a football turned by `spin` (football.ts). The
    * higher it is (z), the bigger it is drawn, and above half a metre its white
-   * panels are tinted cyan.
+   * panels are tinted cyan. During an attack it is ringed in the attacking
+   * team's colour.
    */
-  function draw2DBall(ball: Ball, spin: Spin, alpha = 1): void {
+  function draw2DBall(ball: Ball, spin: Spin, alpha = 1, attack?: AttackIndicator): void {
     const coords = ball.projected_coordinates
     const x = coords?.x
     const y = coords?.y
@@ -578,6 +592,7 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     const r = BALL_RADIUS + Math.min(6, Math.max(0, z)) * 0.4
 
     const before = ctx.globalAlpha
+    if (attack) drawBallRings(px, py, r, attack)
     ctx.globalAlpha = alpha
     ctx.save()
     ctx.beginPath()
@@ -610,6 +625,38 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     ctx.lineWidth = 1
     ctx.stroke()
     ctx.globalAlpha = before
+  }
+
+  /**
+   * The attacking team's border round a ball of radius `r` at (px, py): a
+   * solid ring hugging it, swelling and settling with each pulse, and one
+   * pulsing out from it, growing and fading, or both held still without a
+   * pulse.
+   */
+  function drawBallRings(px: number, py: number, r: number, attack: AttackIndicator): void {
+    const strength = ballRingAlpha(attack)
+    if (strength <= 0) return
+    const phase = attack.pulse === undefined ? null : ((attack.pulse % 1) + 1) % 1
+    // 0 at the start and end of a pulse, 1 halfway, eased both ways.
+    const swell = phase === null ? 0 : (1 - Math.cos(phase * Math.PI * 2)) / 2
+    const width = BALL_RING_PX + BALL_RING_SWELL_PX * swell
+    ctx.strokeStyle = attack.color
+    ctx.globalAlpha = strength
+    ctx.lineWidth = width
+    ctx.beginPath()
+    ctx.arc(px, py, r + width / 2, 0, Math.PI * 2)
+    ctx.stroke()
+    const radius =
+      phase === null
+        ? r + BALL_OUTER_RING_GAP_PX
+        : r + BALL_RING_PX + phase * BALL_PULSE_GROWTH_PX
+    const alpha = phase === null ? BALL_OUTER_RING_ALPHA : (1 - phase) ** 2
+    if (alpha <= 0) return
+    ctx.globalAlpha = strength * alpha
+    ctx.lineWidth = BALL_OUTER_RING_PX
+    ctx.beginPath()
+    ctx.arc(px, py, radius, 0, Math.PI * 2)
+    ctx.stroke()
   }
 
   /**

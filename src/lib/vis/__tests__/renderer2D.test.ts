@@ -5,7 +5,14 @@ import {
   useRenderer2D,
   type GoalOverlay,
 } from '@/lib/vis/useRenderer2D';
-import type { AttackGlow } from '@/lib/vis/attackGlow';
+import {
+  ATTACK_NAME_COLOR,
+  BALL_PULSE_GROWTH_PX,
+  BALL_RING_PX,
+  BALL_RING_SWELL_PX,
+  EDGE_AT,
+  type AttackIndicator,
+} from '@/lib/vis/attackIndicator';
 import type { Frame } from '@/lib/vis/types';
 import {
   THROW_IN_PULSE_COLOR,
@@ -18,9 +25,8 @@ import {
 } from '@/lib/vis/constants';
 import {
   build2DTransform,
+  designUnit,
   worldToPx,
-  PITCH_GRASS_EDGE,
-  PITCH_GRASS_MIDDLE,
   PITCH_LINE_ALPHA,
 } from '@/lib/vis/pitchGeometry';
 import { NET_DEPTH_METRES } from '@/lib/vis/goalSequence';
@@ -676,258 +682,295 @@ describe('ball trail', () => {
   });
 });
 
-describe('attack glow', () => {
+describe('attack indicator', () => {
   const T = build2DTransform(PITCH);
+  const u = designUnit(T);
   const px = (x: number, y = 0) => worldToPx(x, y, T);
-  const player = (track_id: number, x: number, type = 'PersonType.PLAYER') => ({
+  const player = (track_id: number, x: number) => ({
     track_id,
-    person_type: type,
+    person_type: 'PersonType.PLAYER',
     projected_coordinates: { x, y: 3 },
   });
-  // Blue (team 1) has players at x = 5 and x = 20; Red's player and the
-  // official stand further up the pitch, and must not count.
   const frame = {
     pitch_dimensions: PITCH,
     teams: [
-      { team_id: -1, players: [player(1, 45, 'PersonType.OFFICIAL')] },
       { team_id: 0, players: [player(2, 40)] },
       { team_id: 1, players: [player(7, 5), player(8, 20)] },
     ],
     balls: [{ projected_coordinates: { x: 10, y: 0 } }],
   } as unknown as Frame;
   const BLUE = PERSON_COLORS.away.fill;
-  const [lineLeft] = px(-PITCH.length / 2);
-  const [lineRight] = px(PITCH.length / 2);
+  /** The toothed edge's teeth reach this far, end to end, in metres. */
+  const DEPTH = 5.4;
+  const blue = (over: Partial<AttackIndicator> = {}): AttackIndicator => ({
+    team: 1,
+    color: BLUE,
+    name: 'PSG',
+    direction: 1,
+    intensity: 1,
+    ...over,
+  });
+  /** Where the middle of the edge ends up, in metres: EDGE_AT up from the team's own goal line. */
+  const EDGE = EDGE_AT * PITCH.length - PITCH.length / 2;
 
-  function render(glow?: AttackGlow | undefined, overlay?: GoalOverlay | undefined, f: Frame = frame) {
+  function render(attack?: AttackIndicator, overlay?: GoalOverlay) {
     const { canvas, ops } = fakeCanvas();
-    useRenderer2D(canvas).renderFrame(f, { goal: overlay, glow });
+    useRenderer2D(canvas).renderFrame(frame, { goal: overlay, attack });
     return ops;
   }
-  /** The shaded attack area: a fill in the team colour inside the goal lines. */
-  const areaFills = (ops: Op[]) =>
-    ops.filter(
-      (o) =>
-        o.op === 'fillRect' &&
-        o.fillStyle === BLUE &&
-        Number(o.args[0]) >= lineLeft - 1e-6 &&
-        Number(o.args[0]) + Number(o.args[2]) <= lineRight + 1e-6
-    );
 
-  it('shades from the most advanced attacker to the goal line being attacked', () => {
-    const area = areaFills(render({ color: BLUE, team: 1, direction: 1, intensity: 1 }))[0]!;
-    // fillRect(x, y, w, h): from Blue's player at x = 20 to the goal line.
-    expect(area.args[0]).toBeCloseTo(px(20)[0], 6);
-    expect(Number(area.args[0]) + Number(area.args[2])).toBeCloseTo(lineRight, 6);
+  /** The shade: the translucent black fill, and the outline it was filled along. */
+  function shade(ops: Op[]) {
+    const at = ops.findIndex((o) => o.op === 'fill' && o.fillStyle === '#000000');
+    if (at < 0) return null;
+    let from = at;
+    while (from > 0 && ops[from]!.op !== 'moveTo') from--;
+    const points = ops
+      .slice(from, at)
+      .filter((o) => o.op === 'moveTo' || o.op === 'lineTo')
+      .map((o) => [Number(o.args[0]), Number(o.args[1])] as [number, number]);
+    return { at, op: ops[at]!, points };
+  }
+  /** The points of the edge, from touchline to touchline. */
+  const edge = (points: Array<[number, number]>) => {
+    const [, top] = px(0, -PITCH.width / 2);
+    const [, bottom] = px(0, PITCH.width / 2);
+    return points.filter(([, y]) => y >= top - 1e-6 && y <= bottom + 1e-6);
+  };
+  const texts = (ops: Op[]) => ops.filter((o) => o.op === 'fillText');
+
+  it('shades the pitch as far as the design does, with three teeth pointing at the goal', () => {
+    // As on the design: the edge's middle 74% of the way up from the team's own goal line.
+    expect(EDGE_AT).toBe(0.74);
+    const s = shade(render(blue()))!;
+    expect(s.op.globalAlpha).toBeCloseTo(0.18, 6);
+    const points = edge(s.points);
+    // Back in at each touchline and between the teeth, out at their points.
+    expect(points).toHaveLength(7);
+    points.forEach(([x], i) => {
+      const [want] = px(EDGE + (i % 2 === 1 ? 1 : -1) * (DEPTH / 2));
+      expect(x).toBeCloseTo(want, 6);
+    });
+    // The rest of it lies behind, toward the team's own goal.
+    const [behind] = px(EDGE - DEPTH);
+    expect(s.points.filter(([x]) => x < behind).length).toBeGreaterThan(0);
+    expect(s.points.every(([x]) => x <= px(EDGE + DEPTH / 2)[0] + 1e-6)).toBe(true);
   });
 
-  it('shades the other way for a team attacking the other goal', () => {
-    // Attacking toward -x, Blue's most advanced player is the one at x = 5.
-    const area = areaFills(render({ color: BLUE, team: 1, direction: -1, intensity: 1 }))[0]!;
-    expect(area.args[0]).toBeCloseTo(lineLeft, 6);
-    expect(Number(area.args[0]) + Number(area.args[2])).toBeCloseTo(px(5)[0], 6);
+  // Not where the ball is: every attack is drawn the same width.
+  it('puts the edge in the same place wherever the ball is', () => {
+    const edgeOf = (ballX: number) => {
+      const { canvas, ops } = fakeCanvas();
+      const f = { ...frame, balls: [{ projected_coordinates: { x: ballX, y: 0 } }] } as unknown as Frame;
+      useRenderer2D(canvas).renderFrame(f, { attack: blue() });
+      return edge(shade(ops)!.points);
+    };
+    expect(edgeOf(-40)).toEqual(edgeOf(30));
   });
 
-  it('is one solid colour rather than fading out', () => {
-    const ops = render({ color: BLUE, team: 1, direction: 1, intensity: 1 });
-    expect(areaFills(ops)).toHaveLength(1);
-    // The grass is a gradient of its own; any other one would be the glow.
-    const gradients = ops.filter(
-      (o) => o.op === 'fillRect' && o.fillStyle.startsWith('gradient(') && !o.fillStyle.includes(PITCH_GRASS_EDGE)
-    );
-    expect(gradients).toHaveLength(0);
+  it('mirrors the shade for an attack the other way', () => {
+    const s = shade(render(blue({ direction: -1 })))!;
+    const points = edge(s.points);
+    points.forEach(([x], i) => {
+      const [want] = px(-EDGE - (i % 2 === 1 ? 1 : -1) * (DEPTH / 2));
+      expect(x).toBeCloseTo(want, 6);
+    });
+    expect(s.points.every(([x]) => x >= px(-EDGE - DEPTH / 2)[0] - 1e-6)).toBe(true);
   });
 
-  it('follows the attackers, not the ball', () => {
-    const at = (ballX: number) =>
-      areaFills(
-        render({ color: BLUE, team: 1, direction: 1, intensity: 1 }, undefined, {
-          ...frame,
-          balls: [{ projected_coordinates: { x: ballX, y: 0 } }],
-        } as Frame)
-      )[0]!.args;
-    expect(at(-30)).toEqual(at(10));
+  it('keeps the shade to the playing area', () => {
+    const ops = render(blue());
+    const s = shade(ops)!;
+    const clipAt = ops.slice(0, s.at).map((o) => o.op).lastIndexOf('clip');
+    expect(clipAt).toBeGreaterThan(-1);
+    expect(ops[clipAt - 1]!.op).toBe('roundRect');
   });
 
-  it('starts from the ball when no attacker is tracked', () => {
-    const noBlue = { ...frame, teams: frame.teams!.filter((t) => t.team_id !== 1) } as Frame;
-    const area = areaFills(render({ color: BLUE, team: 1, direction: 1, intensity: 1 }, undefined, noBlue))[0]!;
-    expect(area.args[0]).toBeCloseTo(px(10)[0], 6);
+  it('sweeps in from the team’s own end, and fades out where it is', () => {
+    const middle = (a: AttackIndicator) => {
+      const points = edge(shade(render(a))!.points);
+      return (points[0]![0] + points[1]![0]) / 2;
+    };
+    const [own] = px(-PITCH.length / 2);
+    const [to] = px(EDGE);
+    const partway = middle(blue({ intensity: 0.5 }));
+    expect(partway).toBeGreaterThan(own);
+    expect(partway).toBeLessThan(to);
+    expect(middle(blue({ intensity: 1 }))).toBeCloseTo(to, 6);
+    // Fading out, it stays where it was, and goes faint.
+    const leaving = blue({ intensity: 0.5, leaving: true });
+    expect(middle(leaving)).toBeCloseTo(to, 6);
+    expect(shade(render(leaving))!.op.globalAlpha).toBeCloseTo(0.09, 6);
   });
 
-  it('lights a bar beyond the goal under attack, outside the net', () => {
-    const ops = render({ color: BLUE, team: 1, direction: 1, intensity: 1 });
-    const [netBackX] = px(PITCH.length / 2 + NET_DEPTH_METRES);
-    const bars = ops.filter((o) => o.op === 'fillRect' && o.fillStyle === BLUE && Number(o.args[0]) > netBackX);
-    expect(bars).toHaveLength(1);
-  });
-
-  it('puts a halo in the team colour around the ball', () => {
-    const ops = render({ color: BLUE, team: 1, direction: 1, intensity: 1 });
-    const [bx, by] = px(10);
-    const halo = ops.findIndex((o) => o.op === 'arc' && o.args[0] === bx && o.args[1] === by && Number(o.args[2]) > PLAYER_RADIUS);
-    expect(halo).toBeGreaterThanOrEqual(0);
-    expect(ops.slice(halo).find((o) => o.op === 'fill')?.fillStyle).toBe(BLUE);
-  });
-
-  it('fades with its intensity', () => {
-    const half = areaFills(render({ color: BLUE, team: 1, direction: 1, intensity: 0.5 }))[0]!;
-    const full = areaFills(render({ color: BLUE, team: 1, direction: 1, intensity: 1 }))[0]!;
-    expect(half.globalAlpha).toBeCloseTo(full.globalAlpha / 2, 6);
-  });
-
-  it('draws nothing at zero intensity, or with no glow at all', () => {
-    expect(areaFills(render({ color: BLUE, team: 1, direction: 1, intensity: 0 }))).toHaveLength(0);
-    expect(areaFills(render())).toHaveLength(0);
-  });
-
-  it('lies under the players', () => {
-    const ops = render({ color: BLUE, team: 1, direction: 1, intensity: 1 });
-    const areaAt = ops.indexOf(areaFills(ops)[0]!);
+  it('darkens the markings, and lies under the goals and the players', () => {
+    const ops = render(blue());
+    const s = shade(ops)!;
+    const linesAt = ops.findIndex((o) => o.op === 'drawImage');
+    const goalsAt = ops.findIndex((o, i) => i > linesAt && o.op === 'arcTo');
     const [pxX, pxY] = px(5, 3);
     const playerAt = ops.findIndex((o) => o.op === 'arc' && o.args[0] === pxX && o.args[1] === pxY);
-    expect(areaAt).toBeLessThan(playerAt);
+    const attackAt = texts(ops).map((t) => ops.indexOf(t));
+    expect(linesAt).toBeLessThan(s.at);
+    expect(Math.max(s.at, ...attackAt)).toBeLessThan(goalsAt);
+    expect(goalsAt).toBeLessThan(playerAt);
   });
 
-  // The lines must read white through the glow, as on the mockup: the glow
-  // goes on the grass, and the markings over it.
-  it('lies under the pitch lines, over the grass', () => {
-    const ops = render({ color: BLUE, team: 1, direction: 1, intensity: 1 });
-    const areaAt = ops.indexOf(areaFills(ops)[0]!);
-    const grassAt = ops.findIndex(
-      (o) => o.op === 'fillRect' && o.fillStyle.startsWith('gradient(') && o.fillStyle.includes(PITCH_GRASS_MIDDLE)
+  it("names the team above 'Attack', right-aligned behind the edge, beside a bar in its colour", () => {
+    const ops = render(blue());
+    const [name, attack] = texts(ops);
+    expect(name!.args[0]).toBe('PSG');
+    expect(name!.fillStyle).toBe(ATTACK_NAME_COLOR);
+    expect(attack!.args[0]).toBe('Attack');
+    expect(attack!.fillStyle).toBe('#ffffff');
+    expect(Number(name!.args[2])).toBeLessThan(Number(attack!.args[2]));
+    for (const t of [name!, attack!]) {
+      expect(t.textAlign).toBe('right');
+      expect(t.font).toContain('Montserrat');
+    }
+    const [trough] = px(EDGE - DEPTH / 2);
+    const bar = ops.find((o) => o.op === 'fillRect' && o.fillStyle === BLUE)!;
+    const barX = Number(bar.args[0]);
+    expect(barX + Number(bar.args[2])).toBeLessThan(trough);
+    // The text ends before the bar, on the side away from the goal.
+    expect(Number(attack!.args[1])).toBeLessThan(barX);
+  });
+
+  it('mirrors the label for an attack the other way', () => {
+    const ops = render(blue({ direction: -1 }));
+    const [trough] = px(-EDGE + DEPTH / 2);
+    const bar = ops.find((o) => o.op === 'fillRect' && o.fillStyle === BLUE)!;
+    expect(Number(bar.args[0])).toBeGreaterThan(trough);
+    for (const t of texts(ops)) {
+      expect(t.textAlign).toBe('left');
+      expect(Number(t.args[1])).toBeGreaterThan(Number(bar.args[0]) + Number(bar.args[2]));
+    }
+  });
+
+  it('colours the bar for the team attacking', () => {
+    const red = PERSON_COLORS.home.fill;
+    const ops = render(blue({ team: 0, color: red, name: 'Manchester City' }));
+    expect(ops.some((o) => o.op === 'fillRect' && o.fillStyle === red)).toBe(true);
+    expect(texts(ops)[0]!.args[0]).toBe('Manchester City');
+  });
+
+  it('draws a long name smaller, to fit', () => {
+    const size = (name: string) =>
+      Number(/([\d.]+)px/.exec(texts(render(blue({ name })))[0]!.font)![1]);
+    expect(size('A'.repeat(60))).toBeLessThan(size('PSG'));
+    expect(size('PSG')).toBeCloseTo(40 * u, 6);
+  });
+
+  it('fades the label in over the second half of the sweep', () => {
+    expect(texts(render(blue({ intensity: 0.4 })))).toHaveLength(0);
+    expect(texts(render(blue({ intensity: 0.75 })))[0]!.globalAlpha).toBeCloseTo(0.5, 6);
+    expect(texts(render(blue({ intensity: 1 })))[0]!.globalAlpha).toBe(1);
+  });
+
+  /** Strokes round the ball at (bx, by) in the team colour, before the ball itself. */
+  function rings(ops: Op[], at: [number, number]) {
+    const [bx, by] = px(...at);
+    const ballAt = ops.findIndex(
+      (o) => o.op === 'arc' && o.args[0] === bx && o.args[1] === by && Number(o.args[2]) === BALL_RADIUS
     );
-    const linesAt = ops.findIndex((o) => o.op === 'drawImage');
-    expect(grassAt).toBeGreaterThanOrEqual(0);
-    expect(grassAt).toBeLessThan(areaAt);
-    expect(linesAt).toBeGreaterThan(areaAt);
+    return ops
+      .slice(0, ballAt)
+      .filter((o, i, all) => o.op === 'stroke' && o.strokeStyle === BLUE && all[i - 1]?.op === 'arc' && all[i - 1]!.args[0] === bx);
+  }
+
+  it('rings the ball in the team colour, one solid and one faint', () => {
+    const found = rings(render(blue()), [10, 0]);
+    expect(found).toHaveLength(2);
+    expect(found[0]!.globalAlpha).toBe(1);
+    expect(found[1]!.globalAlpha).toBeLessThan(1);
+  });
+
+  it('pulses the outer ring out from the ball, fading as it grows', () => {
+    const outer = (pulse: number) => {
+      const ops = render(blue({ pulse }));
+      const ring = rings(ops, [10, 0])[1]!;
+      const arc = ops[ops.indexOf(ring) - 1]!;
+      return { radius: Number(arc.args[2]), alpha: ring.globalAlpha };
+    };
+    const start = outer(0);
+    const later = outer(0.5);
+    expect(start.radius).toBeCloseTo(BALL_RADIUS + BALL_RING_PX, 6);
+    expect(start.alpha).toBe(1);
+    expect(later.radius).toBeCloseTo(BALL_RADIUS + BALL_RING_PX + BALL_PULSE_GROWTH_PX / 2, 6);
+    expect(later.alpha).toBeCloseTo(0.25, 6);
+    // One pulse after another: a whole period on draws the same ring.
+    expect(outer(1.5)).toEqual(later);
+  });
+
+  it('swells the solid border and back with each pulse', () => {
+    const widthAt = (pulse: number) => rings(render(blue({ pulse })), [10, 0])[0]!.lineWidth;
+    expect(widthAt(0)).toBeCloseTo(BALL_RING_PX, 6);
+    expect(widthAt(0.5)).toBeCloseTo(BALL_RING_PX + BALL_RING_SWELL_PX, 6);
+    expect(widthAt(1)).toBeCloseTo(BALL_RING_PX, 6);
+  });
+
+  /** Where balls are drawn: the centre of each football's body, and how strongly. */
+  const balls = (ops: Op[]) =>
+    ops
+      .filter((o) => o.op === 'arc' && Number(o.args[2]) === BALL_RADIUS)
+      .filter((o, i, all) => all.findIndex((p) => p.args[0] === o.args[0] && p.args[1] === o.args[1]) === i)
+      .map((o) => ({ x: Number(o.args[0]), y: Number(o.args[1]), alpha: o.globalAlpha }));
+
+  it('holds the ball where the attack was shown, in place of the tracked one', () => {
+    const drawn = balls(render(blue({ ball: { x: -20, y: 5 } })));
+    const [hx, hy] = px(-20, 5);
+    const [tx, ty] = px(10, 0);
+    expect(drawn.some((b) => b.x === hx && b.y === hy)).toBe(true);
+    expect(drawn.some((b) => b.x === tx && b.y === ty)).toBe(false);
+    // The border goes round the held ball.
+    expect(rings(render(blue({ ball: { x: -20, y: 5 } })), [-20, 5])).toHaveLength(2);
+  });
+
+  it('fades the held ball into the tracked one as the attack goes', () => {
+    const drawn = balls(render(blue({ ball: { x: -20, y: 5 }, leaving: true, intensity: 0.25 })));
+    const [hx] = px(-20, 5);
+    const [tx] = px(10, 0);
+    expect(drawn.find((b) => b.x === hx)!.alpha).toBeCloseTo(0.25, 6);
+    expect(drawn.find((b) => b.x === tx)!.alpha).toBeCloseTo(0.75, 6);
+  });
+
+  /** Everything drawn at a player's position: their shadow, circle and rings. */
+  const playerOps = (ops: Op[]) => {
+    const [x, y] = px(5, 3);
+    return ops.filter((o) => o.op === 'arc' && (o.args[0] === x || o.args[0] === x + 1) && (o.args[1] === y || o.args[1] === y + 1));
+  };
+
+  it('fades everyone out as far as it says, and leaves the ball', () => {
+    const full = playerOps(render(blue({ playersFade: 0 })));
+    const half = playerOps(render(blue({ playersFade: 0.5 })));
+    expect(full.length).toBeGreaterThan(0);
+    expect(half.length).toBe(full.length);
+    half.forEach((o, i) => expect(o.globalAlpha).toBeCloseTo(full[i]!.globalAlpha * 0.5, 6));
+    const gone = render(blue({ playersFade: 1 }));
+    expect(playerOps(gone)).toHaveLength(0);
+    expect(rings(gone, [10, 0])).toHaveLength(2);
+  });
+
+  it('rings the goal sequence’s ball while that plays', () => {
+    const overlay = { ball: { x: 50, y: 1 }, trail: [], net: { side: 1 as const, y: 1, metres: 0 } };
+    expect(rings(render(blue(), overlay), [50, 1])).toHaveLength(2);
+  });
+
+  it('draws nothing at zero intensity, or with no attack at all', () => {
+    for (const ops of [render(blue({ intensity: 0 })), render()]) {
+      expect(shade(ops)).toBeNull();
+      expect(texts(ops)).toHaveLength(0);
+      expect(rings(ops, [10, 0])).toHaveLength(0);
+    }
   });
 
   // As the design applies its opacity to the group of lines, the cache is
   // drawn at it as a whole, rather than each line at it.
   it('draws the pitch lines at the line opacity, and leaves it after', () => {
-    const ops = render({ color: BLUE, team: 1, direction: 1, intensity: 1 });
+    const ops = render(blue());
     const linesAt = ops.findIndex((o) => o.op === 'drawImage');
     expect(ops[linesAt]!.globalAlpha).toBe(PITCH_LINE_ALPHA);
     expect(ops[linesAt + 1]!.globalAlpha).toBe(1);
-  });
-
-  /** The white chevron shapes drawn as part of the glow, as point lists. */
-  function chevrons(ops: Op[]) {
-    const from = ops.indexOf(areaFills(ops)[0]!);
-    const to = ops.findIndex((o) => o.op === 'drawImage');
-    const shapes: Array<{ points: Array<[number, number]>; alpha: number }> = [];
-    let points: Array<[number, number]> = [];
-    for (const o of ops.slice(from, to)) {
-      if (o.op === 'moveTo') points = [[Number(o.args[0]), Number(o.args[1])]];
-      else if (o.op === 'lineTo') points.push([Number(o.args[0]), Number(o.args[1])]);
-      else if (o.op === 'fill' && o.fillStyle === '#ffffff') shapes.push({ points, alpha: o.globalAlpha });
-    }
-    return shapes;
-  }
-
-  function renderWithBall(ballX: number, glow: AttackGlow | undefined) {
-    const { canvas, ops } = fakeCanvas();
-    useRenderer2D(canvas).renderFrame(
-      { ...frame, balls: [{ projected_coordinates: { x: ballX, y: 0 } }] } as Frame,
-      { glow }
-    );
-    return ops;
-  }
-  const centreX = (c: { points: Array<[number, number]> }) => {
-    const xs = c.points.map(([x]) => x);
-    return (Math.min(...xs) + Math.max(...xs)) / 2;
-  };
-
-  // The layers menu can hide the shading and the arrows separately.
-  it('draws only the arrows when the shading is switched off', () => {
-    const ops = render({ color: BLUE, team: 1, direction: 1, intensity: 1, flow: 0.5, shading: false });
-    expect(areaFills(ops)).toHaveLength(0);
-    expect(ops.some((o) => o.op === 'fillRect' && o.fillStyle === BLUE)).toBe(false);
-    // No halo: the team's players are blue too, so look for the halo's arc,
-    // bigger round the ball than the ball or any player.
-    const [bx, by] = px(10);
-    expect(ops.some((o) => o.op === 'arc' && o.args[0] === bx && o.args[1] === by && Number(o.args[2]) > PLAYER_RADIUS)).toBe(false);
-    expect(ops.filter((o) => o.op === 'fill' && o.fillStyle === '#ffffff').length).toBeGreaterThanOrEqual(3);
-  });
-
-  it('draws only the shading when the arrows are switched off', () => {
-    const ops = render({ color: BLUE, team: 1, direction: 1, intensity: 1, flow: 0.5, arrows: false });
-    expect(areaFills(ops)).toHaveLength(1);
-    const from = ops.indexOf(areaFills(ops)[0]!);
-    const to = ops.findIndex((o) => o.op === 'drawImage');
-    expect(ops.slice(from, to).some((o) => o.op === 'fill' && o.fillStyle === '#ffffff')).toBe(false);
-  });
-
-  it('draws chevrons pointing at the goal being attacked', () => {
-    for (const direction of [1, -1] as const) {
-      const shapes = chevrons(render({ color: BLUE, team: 1, direction, intensity: 1, flow: 0.5 }));
-      expect(shapes.length).toBeGreaterThanOrEqual(3);
-      for (const { points } of shapes) {
-        const ys = points.map(([, y]) => y);
-        const mid = (Math.min(...ys) + Math.max(...ys)) / 2;
-        const xs = points.map(([x]) => x);
-        // The point of the chevron sits on its middle row, furthest towards the goal.
-        const tip = direction === 1 ? Math.max(...xs) : Math.min(...xs);
-        expect(points.some(([x, y]) => x === tip && Math.abs(y - mid) < 1e-6)).toBe(true);
-      }
-    }
-  });
-
-  // The stagger: centred on the ball, the arrow moved with every jitter and
-  // pass of the tracked ball.
-  it('keeps the chevrons where they are however the ball moves', () => {
-    const glow = { color: BLUE, team: 1 as const, direction: 1 as const, intensity: 1, flow: 0.3 };
-    const at10 = chevrons(renderWithBall(10, glow));
-    expect(chevrons(renderWithBall(30, glow))).toEqual(at10);
-    expect(chevrons(renderWithBall(-20, glow))).toEqual(at10);
-  });
-
-  it('centres the stream of chevrons on the half being attacked', () => {
-    for (const direction of [1, -1] as const) {
-      const shapes = chevrons(render({ color: BLUE, team: 1, direction, intensity: 1, flow: 0.5 }));
-      const mean = shapes.reduce((sum, c) => sum + centreX(c), 0) / shapes.length;
-      expect(mean).toBeCloseTo(px((direction * PITCH.length) / 4)[0], 6);
-    }
-  });
-
-  it('moves the chevrons toward the goal as the flow advances', () => {
-    for (const direction of [1, -1] as const) {
-      const a = chevrons(render({ color: BLUE, team: 1, direction, intensity: 1, flow: 0.2 }));
-      const b = chevrons(render({ color: BLUE, team: 1, direction, intensity: 1, flow: 0.3 }));
-      expect(b).toHaveLength(a.length);
-      a.forEach((c, i) => {
-        const moved = centreX(b[i]!) - centreX(c);
-        expect(Math.sign(moved)).toBe(direction);
-        expect(Math.abs(moved)).toBeGreaterThan(0);
-      });
-    }
-  });
-
-  // One flow cycle must end exactly where the next begins, or the stream
-  // would visibly jump once a cycle.
-  it('loops without a jump', () => {
-    const start = chevrons(render({ color: BLUE, team: 1, direction: 1, intensity: 1, flow: 0 }));
-    const end = chevrons(render({ color: BLUE, team: 1, direction: 1, intensity: 1, flow: 0.9999 }));
-    const visible = (cs: typeof start) => cs.filter((c) => c.alpha > 0.01);
-    expect(visible(end)).toHaveLength(visible(start).length);
-    visible(start).forEach((c) => {
-      expect(
-        visible(end).some((e) => Math.abs(centreX(e) - centreX(c)) < 0.1 && Math.abs(e.alpha - c.alpha) < 0.01)
-      ).toBe(true);
-    });
-  });
-
-  it('fades the chevrons in as they enter and out as they leave', () => {
-    const shapes = chevrons(render({ color: BLUE, team: 1, direction: 1, intensity: 1, flow: 0.5 }));
-    const alphas = shapes.map((c) => c.alpha);
-    expect(Math.min(alphas[0]!, alphas.at(-1)!)).toBeLessThan(Math.max(...alphas));
-  });
-
-  it('fades the chevrons with the glow', () => {
-    const full = chevrons(render({ color: BLUE, team: 1, direction: 1, intensity: 1, flow: 0.5 }))[1]!.alpha;
-    const half = chevrons(render({ color: BLUE, team: 1, direction: 1, intensity: 0.5, flow: 0.5 }))[1]!.alpha;
-    expect(half).toBeCloseTo(full / 2, 6);
   });
 });
 

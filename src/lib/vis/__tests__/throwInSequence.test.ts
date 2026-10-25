@@ -3,19 +3,12 @@ import {
   isThrowInFrame,
   isValidFrame,
   throwInBall,
-  throwInCamera,
-  throwInWeight,
   throwInHolds,
   throwInPulse,
   throwInSpot,
-  THROW_IN_IN_MS,
-  THROW_IN_OUT_MS,
   THROW_IN_SETTLE_S,
-  THROW_IN_ZOOM,
   THROW_IN_PULSE_MS,
 } from '@/lib/vis/throwInSequence';
-import { build2DTransform, worldToPx } from '@/lib/vis/pitchGeometry';
-import { FRAME_W, FRAME_H } from '@/lib/vis/constants';
 import type { Frame } from '@/lib/vis/types';
 
 const PITCH = { length: 105, width: 68 };
@@ -115,23 +108,6 @@ describe('throwInSpot', () => {
   });
 });
 
-describe('throwInCamera', () => {
-  const t = build2DTransform(PITCH);
-
-  it('centres on the ball, zoomed in', () => {
-    const cam = throwInCamera({ x: 0, y: 0 }, PITCH);
-    const [bx, by] = worldToPx(0, 0, t);
-    expect(cam).toEqual({ zoom: THROW_IN_ZOOM, x: bx, y: by });
-  });
-
-  // A throw-in is at the touchline, often with the ball tracked beyond it.
-  it('never shows past the edge of the frame', () => {
-    const cam = throwInCamera({ x: 50, y: -40 }, PITCH);
-    expect(cam.y).toBeCloseTo(FRAME_H / (2 * THROW_IN_ZOOM), 6);
-    expect(cam.x).toBeCloseTo(FRAME_W - FRAME_W / (2 * THROW_IN_ZOOM), 6);
-  });
-});
-
 describe('throwInHolds', () => {
   const base = { labelled: false, valid: true, stale: false, quietS: THROW_IN_SETTLE_S };
 
@@ -150,46 +126,10 @@ describe('throwInHolds', () => {
   });
 
   // The same throw-in is often labelled again, or cut away from, a few
-  // seconds after the label goes off: zooming out and straight back in
-  // would be worse than staying in.
+  // seconds after the label goes off: stopping and straight away starting
+  // again would be worse than carrying on.
   it('holds until play has been back on for the settle time', () => {
     expect(throwInHolds({ ...base, quietS: THROW_IN_SETTLE_S - 0.01 })).toBe(true);
-  });
-
-  it('does not let go before the zoom in has finished', () => {
-    expect(THROW_IN_SETTLE_S * 1000).toBeGreaterThanOrEqual(THROW_IN_IN_MS);
-  });
-});
-
-describe('throwInWeight', () => {
-  it('eases in from where it starts', () => {
-    const ease = { towards: 1 as const, fromWeight: 0, startMs: 1000 };
-    expect(throwInWeight(ease, 1000)).toBe(0);
-    const mid = throwInWeight(ease, 1000 + THROW_IN_IN_MS / 2);
-    expect(mid).toBeGreaterThan(0);
-    expect(mid).toBeLessThan(1);
-    expect(throwInWeight(ease, 1000 + THROW_IN_IN_MS)).toBe(1);
-    expect(throwInWeight(ease, 60_000)).toBe(1);
-  });
-
-  it('eases out to nothing', () => {
-    const ease = { towards: 0 as const, fromWeight: 1, startMs: 5000 };
-    expect(throwInWeight(ease, 5000)).toBe(1);
-    const mid = throwInWeight(ease, 5000 + THROW_IN_OUT_MS / 2);
-    expect(mid).toBeGreaterThan(0);
-    expect(mid).toBeLessThan(1);
-    expect(throwInWeight(ease, 5000 + THROW_IN_OUT_MS)).toBe(0);
-  });
-
-  // Turning round partway: back in from wherever the zoom out had got to,
-  // with no jump.
-  it('starts a turn from the weight it turns at', () => {
-    const out = { towards: 0 as const, fromWeight: 1, startMs: 0 };
-    const at = throwInWeight(out, THROW_IN_OUT_MS / 3);
-    const back = { towards: 1 as const, fromWeight: at, startMs: THROW_IN_OUT_MS / 3 };
-    expect(throwInWeight(back, THROW_IN_OUT_MS / 3)).toBeCloseTo(at, 9);
-    expect(throwInWeight(back, THROW_IN_OUT_MS / 3 + 10)).toBeGreaterThan(at);
-    expect(throwInWeight(back, THROW_IN_OUT_MS / 3 + THROW_IN_IN_MS)).toBe(1);
   });
 });
 
