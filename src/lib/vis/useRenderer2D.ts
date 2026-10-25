@@ -14,7 +14,7 @@
 //    either changes, instead of once at 1280x720 and then magnified.
 //  - players are coloured by role from fixed colours (constants.ts,
 //    PERSON_COLORS): home red, away blue, goalkeepers yellow ringed in their
-//    team's colour, officials magenta. The vendored copy coloured each team
+//    team's colour, officials black. The vendored copy coloured each team
 //    from the kit colours the pipeline detected; that resolver is gone.
 //  - players further than FOCUS_METRES from the ball are faded
 //    (DIMMED_PLAYER_ALPHA) and drawn underneath the rest, and while a team has

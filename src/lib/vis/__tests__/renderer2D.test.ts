@@ -138,7 +138,7 @@ describe('draw2DPlayer colours', () => {
     expect(away.strokes[0]?.strokeStyle).toBe(PERSON_COLORS.away.fill);
   });
 
-  it('draws a referee or other official in high-visibility magenta', () => {
+  it('draws a referee or other official in black', () => {
     expect(draw(person(-1, 'PersonType.OFFICIAL')).fill).toBe(PERSON_COLORS.official.fill);
   });
 

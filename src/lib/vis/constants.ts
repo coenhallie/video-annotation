@@ -33,7 +33,8 @@ export interface PersonColors {
  * the convention at least never swaps mid-match.
  *
  * Goalkeepers and officials get colours that cannot be mistaken for either
- * team or for the green pitch. A goalkeeper's outline is their team's colour,
+ * team or for the green pitch: goalkeepers yellow, officials (the referee and
+ * the linesmen) black. A goalkeeper's outline is their team's colour,
  * which keeps their team visible. Outfield outlines are a dark shade of the
  * team colour: red and the pitch green are close in brightness, so without an
  * edge red players blend into the pitch for anyone who cannot tell red from
@@ -43,10 +44,10 @@ export const PERSON_COLORS: Record<
   'home' | 'away' | 'goalkeeper' | 'official' | 'unknown',
   PersonColors
 > = {
-  home: { fill: '#dc2626', outline: '#7f1d1d', text: '#ffffff' },
-  away: { fill: '#2563eb', outline: '#1e3a8a', text: '#ffffff' },
+  home: { fill: '#e51a1a', outline: '#7f1d1d', text: '#ffffff' },
+  away: { fill: '#184fe7', outline: '#1e3a8a', text: '#ffffff' },
   goalkeeper: { fill: '#facc15', outline: '#000000', text: '#000000' },
-  official: { fill: '#d946ef', outline: '#000000', text: '#000000' },
+  official: { fill: '#000000', outline: '#000000', text: '#ffffff' },
   // A team id the export does not define has no home or away to be coloured as.
   unknown: { fill: '#9ca3af', outline: '#000000', text: '#000000' },
 }
@@ -127,7 +128,7 @@ export const BALL_RADIUS = 10.5
 /**
  * The ring that pulses on the throw-in spot (throwInSequence.ts).
  * Cyan, as every other colour on the pitch already means something: white is
- * the players near the ball, gold the ball carrier, yellow and magenta the
+ * the players near the ball, gold the ball carrier, yellow and black the
  * keepers and officials, red and blue the teams.
  */
 export const THROW_IN_PULSE_COLOR = '#22d3ee'
