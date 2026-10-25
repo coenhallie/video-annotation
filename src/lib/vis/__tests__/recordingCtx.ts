@@ -9,6 +9,9 @@ export interface Op {
   strokeStyle: string;
   lineDash: number[];
   globalAlpha: number;
+  font: string;
+  textAlign: string;
+  lineWidth: number;
   args: unknown[];
 }
 
@@ -36,6 +39,9 @@ export function recordingCtx() {
         strokeStyle: String(ctx.strokeStyle),
         lineDash: [...ctx.lineDash],
         globalAlpha: ctx.globalAlpha,
+        font: ctx.font,
+        textAlign: ctx.textAlign,
+        lineWidth: ctx.lineWidth,
         args,
       });
     },
@@ -126,6 +132,12 @@ export function recordingCtx() {
     scale() {},
     fillText(...args: unknown[]) {
       ctx.snap('fillText', args);
+    },
+    // No font metrics without a canvas: every character is taken as 0.6 of
+    // the font size wide, which is enough to lay text out against.
+    measureText(text: string) {
+      const size = Number(/([\d.]+)px/.exec(ctx.font)?.[1] ?? 10);
+      return { width: text.length * size * 0.6 };
     },
     drawImage() {
       ctx.snap('drawImage');

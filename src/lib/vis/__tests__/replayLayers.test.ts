@@ -47,7 +47,7 @@ describe('replay layers', () => {
   // never hide a layer nobody chose to hide.
   it('keeps the default for anything stored that it does not recognise', () => {
     const storage = memoryStorage({
-      'perspecto.replayLayers': JSON.stringify({ goal: false, attackArrows: 'no', retired: false }),
+      'perspecto.replayLayers': JSON.stringify({ goal: false, attack: 'no', attackArrows: false }),
     });
     expect(readReplayLayers(storage)).toEqual({ ...DEFAULT_REPLAY_LAYERS, goal: false });
     expect(readReplayLayers(memoryStorage({ 'perspecto.replayLayers': '{not json' }))).toEqual(

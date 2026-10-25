@@ -9,10 +9,8 @@
 export type ReplayLayerKey =
   | 'goal'
   | 'throwIn'
-  | 'attackShading'
-  | 'attackArrows'
+  | 'attack'
   | 'ballTrail'
-  | 'phaseLabels'
   | 'nearbyRings'
   | 'farFade'
   | 'ringFades';
@@ -22,19 +20,13 @@ export type ReplayLayers = Record<ReplayLayerKey, boolean>;
 /** In the order the menu lists them. */
 export const REPLAY_LAYERS: ReadonlyArray<{ key: ReplayLayerKey; label: string; hint: string }> = [
   { key: 'goal', label: 'Goal animation', hint: 'A shot into the net on a goal label' },
-  { key: 'throwIn', label: 'Throw-in zoom', hint: 'Zoom to the touchline, with a pulse' },
+  { key: 'throwIn', label: 'Throw-in', hint: 'A pulse on the touchline spot' },
   {
-    key: 'attackShading',
-    label: 'Attack shading',
-    hint: 'Team colour from the front of the attack to the goal',
+    key: 'attack',
+    label: 'Attack',
+    hint: 'Worked out from possession: shade and team name',
   },
-  { key: 'attackArrows', label: 'Attack arrows', hint: 'Arrows flowing toward the goal' },
   { key: 'ballTrail', label: 'Ball trail', hint: "The ball's path, with a dot at each turn" },
-  {
-    key: 'phaseLabels',
-    label: 'Attacking / defending',
-    hint: 'Team labels above the pitch',
-  },
   {
     key: 'nearbyRings',
     label: 'Players near the ball',
@@ -55,10 +47,8 @@ export const REPLAY_LAYERS: ReadonlyArray<{ key: ReplayLayerKey; label: string; 
 export const DEFAULT_REPLAY_LAYERS: ReplayLayers = {
   goal: true,
   throwIn: true,
-  attackShading: true,
-  attackArrows: true,
+  attack: true,
   ballTrail: true,
-  phaseLabels: true,
   nearbyRings: true,
   farFade: true,
   ringFades: true,
