@@ -117,6 +117,15 @@ useEscapeToClose(() => props.isVisible, closeModal);
 // Add new entries to the TOP of this array
 const changelogEntries = ref([
   {
+    version: 'Beta v3.31',
+    date: 'October 25, 2026',
+    changes: [
+      'When an attack reaches the other team\'s half in the 2D replay, it is shown for 2 seconds as on a match summary: the pitch shaded up to a toothed edge pointing at the goal, the team\'s name over "Attack", the players faded out and the ball held in place with a pulsing border, while play carries on underneath',
+      'The Attacking / Defending labels above the pitch, the team-colour attack shading and the attack arrows are gone, and the pitch is a little bigger',
+      'Throw-ins no longer zoom in: a ring pulses on the touchline spot instead',
+    ],
+  },
+  {
     version: 'Beta v3.30',
     date: 'October 25, 2026',
     changes: [
