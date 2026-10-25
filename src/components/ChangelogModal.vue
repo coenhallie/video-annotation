@@ -117,6 +117,13 @@ useEscapeToClose(() => props.isVisible, closeModal);
 // Add new entries to the TOP of this array
 const changelogEntries = ref([
   {
+    version: 'Beta v3.32',
+    date: 'October 25, 2026',
+    changes: [
+      'Throw-ins are no longer marked in the 2D replay: the pulsing ring on the touchline is gone, and the Throw-in layer with it',
+    ],
+  },
+  {
     version: 'Beta v3.31',
     date: 'October 25, 2026',
     changes: [

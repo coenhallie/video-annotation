@@ -56,7 +56,6 @@ import {
   FOCUS_METRES,
   NEARBY_OUTLINE,
   NEARBY_METRES,
-  THROW_IN_PULSE_COLOR,
 } from './constants'
 import {
   build2DTransform,
@@ -166,17 +165,6 @@ export interface RingStrengths {
   possession: ReadonlyMap<TrackId, number>
 }
 
-/**
- * A ring pulsing on the throw-in spot during a throw-in: where, in pitch
- * metres, and how far through one pulse it is, from 0 to 1. See
- * throwInSequence.ts.
- */
-export interface BallPulse {
-  x: number
-  y: number
-  phase: number
-}
-
 /** Everything a frame can be drawn with besides its own data. */
 export interface FrameLayers {
   /** The goal sequence's ball and net, drawn in place of the tracked ball. */
@@ -185,8 +173,6 @@ export interface FrameLayers {
   attack?: AttackIndicator | undefined
   /** Ring strengths, for a caller that fades the rings in and out. */
   rings?: RingStrengths | undefined
-  /** The throw-in pulse, over the players and ball. */
-  ballPulse?: BallPulse | undefined
   /** Whether players far from the ball are drawn faint. Default on. */
   fadeFar?: boolean | undefined
   /** The ball's trail: the path it took, and where that turned. */
@@ -217,9 +203,6 @@ const growthAt = (k: number) => {
   return t * t * (3 - 2 * t)
 }
 
-/** How far a pulse ring grows past the ball, and how thick it is, in frame px. */
-const PULSE_GROWTH_PX = 16
-const PULSE_LINE_PX = 2.5
 /**
  * Width of the ball trail and radius of the dots where it turns, in frame px.
  * Its opacity changes along it (trailOpacity), in steps of 1/TRAIL_ALPHA_STEPS:
@@ -261,7 +244,7 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
    * iterates teams/players/balls, and paints the HUD overlay.
    */
   function renderFrame(frame: Frame, layers: FrameLayers = {}): void {
-    const { goal: overlay, attack, rings, ballPulse, trail } = layers
+    const { goal: overlay, attack, rings, trail } = layers
     const spin = layers.ballSpin ?? UPRIGHT
     const fadeFar = layers.fadeFar !== false
     if (!frame) return
@@ -412,7 +395,6 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
       ctx.globalAlpha = 1
     }
 
-    if (ballPulse) drawBallPulse(ballPulse)
 
     // ── Overlay HUD ────────────────────────────────────────────────────────
     const fc = frame.frame_data?.[0]?.frame_count ?? null
@@ -698,21 +680,6 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
     ctx.arc(px, py, TRAIL_DOT_PX, 0, Math.PI * 2)
     ctx.fillStyle = '#ffffff'
     ctx.fill()
-    ctx.globalAlpha = before
-  }
-
-  /** One ring of the throw-in pulse: growing out from its spot and fading. */
-  function drawBallPulse(pulse: BallPulse): void {
-    if (!transform2d || !Number.isFinite(pulse.x) || !Number.isFinite(pulse.y)) return
-    const [px, py] = worldToPx(pulse.x, pulse.y, transform2d)
-    const phase = Math.min(1, Math.max(0, pulse.phase))
-    const before = ctx.globalAlpha
-    ctx.globalAlpha = (1 - phase) ** 2
-    ctx.beginPath()
-    ctx.arc(px, py, 6 + phase * PULSE_GROWTH_PX, 0, Math.PI * 2)
-    ctx.strokeStyle = THROW_IN_PULSE_COLOR
-    ctx.lineWidth = PULSE_LINE_PX
-    ctx.stroke()
     ctx.globalAlpha = before
   }
 

@@ -5,10 +5,6 @@ import PipelineOutputSurface from '@/components/PipelineOutputSurface.vue';
 import type { PipelineReplay, ReplayState } from '@/composables/usePipelineReplay';
 import { GOAL_SEQUENCE_MS } from '@/lib/vis/goalSequence';
 import {
-  THROW_IN_SETTLE_S,
-  THROW_IN_REPEAT_S,
-} from '@/lib/vis/throwInSequence';
-import {
   PERSON_COLORS,
   POSSESSION_FADE_IN_S,
   RECEIVE_FADE_S,
@@ -1421,286 +1417,43 @@ describe('PipelineOutputSurface', () => {
       }
     });
   });
-  describe('throw-in sequence', () => {
-    let queued: Array<(ms: number) => void> = [];
-    let clockMs = 1000;
-    const originalRaf = window.requestAnimationFrame;
-    const originalCaf = window.cancelAnimationFrame;
-
-    beforeEach(() => {
-      queued = [];
-      clockMs = 1000;
-      renderFrame.mockClear();
-      setView.mockClear();
-      window.requestAnimationFrame = ((cb: (ms: number) => void) => {
-        queued.push(cb);
-        return queued.length;
-      }) as typeof window.requestAnimationFrame;
-      window.cancelAnimationFrame = (() => {
-        queued = [];
-      }) as typeof window.cancelAnimationFrame;
+  // A throw-in used to zoom in on the touchline and pulse a ring there. Both
+  // were taken out at the user's request: it plays like any other frame.
+  it('plays a throw-in like any other frame', async () => {
+    const replay = fakeReplay('loading');
+    const m = mount(replay);
+    await nextTick();
+    const set = (r: unknown, v: unknown) => ((r as { value: unknown }).value = v);
+    const frame = (labels: string[]) => ({
+      pitch_dimensions: { length: 105, width: 68 },
+      teams: [{ team_id: 0, players: [{ track_id: 1, projected_coordinates: { x: 0, y: 0 } }] }],
+      balls: [{ projected_coordinates: { x: 10, y: -30 } }],
+      state: { actions: labels.map((action_type) => ({ action_type })) },
+      frame_data: [{ frame_count: 1 }],
     });
-
-    afterEach(() => {
-      window.requestAnimationFrame = originalRaf;
-      window.cancelAnimationFrame = originalCaf;
-    });
-
-    async function animate(ms: number) {
-      const end = clockMs + ms;
-      while (clockMs < end) {
-        clockMs += 1000 / 60;
-        const cbs = queued;
-        queued = [];
-        cbs.forEach((cb) => cb(clockMs));
-      }
+    set(replay.currentTime, 10);
+    set(replay.frame, frame([]));
+    set(replay.state, 'ready');
+    set(replay.isPlaying, true);
+    await nextTick();
+    // The layers drawn with something in them.
+    const drawn = () =>
+      Object.entries(renderFrame.mock.calls.at(-1)?.[1] ?? {})
+        .filter(([, v]) => v !== undefined)
+        .map(([k]) => k)
+        .sort();
+    const plain = drawn();
+    setView.mockClear();
+    for (let i = 0; i < 20; i++) {
+      set(replay.currentTime, (replay.currentTime.value as number) + 0.04);
+      set(replay.frame, frame(['Throw in']));
       await nextTick();
     }
-
-    type Writable = { value: unknown };
-    const set = (r: unknown, v: unknown) => ((r as Writable).value = v);
-
-    /**
-     * A frame of the match: two tracked players and the ball, unless a test
-     * says otherwise. A cutaway tracks nobody.
-     */
-    function matchFrame({
-      labels = [] as string[],
-      ball = { x: 10, y: -30 } as { x: number; y: number } | null,
-      players = 2,
-    } = {}) {
-      return {
-        pitch_dimensions: { length: 105, width: 68 },
-        teams: [
-          {
-            team_id: 0,
-            players: Array.from({ length: players }, (_, i) => ({
-              track_id: i + 1,
-              person_type: 'PersonType.PLAYER',
-              projected_coordinates: { x: i * 3, y: 0 },
-            })),
-          },
-        ],
-        balls: ball ? [{ projected_coordinates: ball }] : [],
-        state: { actions: labels.map((action_type) => ({ action_type })) },
-        frame_data: [{ frame_count: 1 }],
-      };
-    }
-    const THROW_IN = () => matchFrame({ labels: ['Throw in'] });
-    const PLAY = () => matchFrame();
-
-    async function playing() {
-      const replay = fakeReplay('loading');
-      const m = mount(replay);
-      await nextTick();
-      set(replay.currentTime, 10);
-      set(replay.frame, PLAY());
-      set(replay.state, 'ready');
-      set(replay.isPlaying, true);
-      await nextTick();
-      return { replay, m };
-    }
-
-    /** One playback tick: the clock moves on and, unless null, a new record shows. */
-    async function tick(replay: PipelineReplay, frame: unknown, step = 0.04) {
-      set(replay.currentTime, (replay.currentTime.value as number) + step);
-      if (frame !== null) set(replay.frame, frame);
-      await nextTick();
-    }
-
-    /** `ms` of playback in 40 ms ticks, new records from `next` (null: none come). */
-    async function play(replay: PipelineReplay, ms: number, next: (() => unknown) | null) {
-      for (let t = 0; t < ms; t += 40) {
-        await tick(replay, next ? next() : null);
-        await animate(40);
-      }
-    }
-
-    const lastPulse = () =>
-      renderFrame.mock.calls.at(-1)?.[1]?.ballPulse as
-        | { x: number; y: number; phase: number }
-        | undefined;
-
-    it('pulses on the touchline when playback runs into one, and leaves the view alone', async () => {
-      const { replay, m } = await playing();
-      await tick(replay, THROW_IN());
-      await play(replay, 800, THROW_IN);
-      // On the touchline, level with the ball at (10, -30).
-      expect(lastPulse()).toMatchObject({ x: 10, y: -34 });
-      expect(setView.mock.calls.every(([v]) => v.zoom === 1 && v.panX === 0 && v.panY === 0)).toBe(
-        true
-      );
-      m.unmount();
-    });
-
-    // The spot is fixed, wherever the tracked ball goes while it plays.
-    it('keeps the ring on the throw-in spot as the ball moves', async () => {
-      const { replay, m } = await playing();
-      await tick(replay, THROW_IN());
-      await play(replay, 400, () => matchFrame({ labels: ['Throw in'], ball: { x: 14, y: -20 } }));
-      expect(lastPulse()).toMatchObject({ x: 10, y: -34 });
-      m.unmount();
-    });
-
-    it('pulses: the ring moves on with the clock', async () => {
-      const { replay, m } = await playing();
-      await tick(replay, THROW_IN());
-      await animate(200);
-      const a = lastPulse()!.phase;
-      await animate(300);
-      expect(lastPulse()!.phase).not.toBeCloseTo(a, 3);
-      m.unmount();
-    });
-
-    it('carries on while the label is on', async () => {
-      const { replay, m } = await playing();
-      await tick(replay, THROW_IN());
-      await play(replay, 4000, THROW_IN);
-      expect(lastPulse()).toBeDefined();
-      m.unmount();
-    });
-
-    // The broadcast cut away: no records arrive while the clock runs on.
-    it('carries on through a gap in the data, however long', async () => {
-      const { replay, m } = await playing();
-      await tick(replay, THROW_IN());
-      await play(replay, 8000, null);
-      expect(lastPulse()).toBeDefined();
-      m.unmount();
-    });
-
-    it('carries on through frames that track nobody', async () => {
-      const { replay, m } = await playing();
-      await tick(replay, THROW_IN());
-      await play(replay, 4000, () => matchFrame({ players: 0, ball: null }));
-      expect(lastPulse()).toBeDefined();
-      m.unmount();
-    });
-
-    it('stops once valid frames have flowed again for the settle time, and not before', async () => {
-      const { replay, m } = await playing();
-      await tick(replay, THROW_IN());
-      await play(replay, 2000, THROW_IN);
-      await play(replay, 3000, null);
-      await play(replay, THROW_IN_SETTLE_S * 1000 - 400, PLAY);
-      expect(lastPulse()).toBeDefined();
-      await play(replay, 800, PLAY);
-      expect(lastPulse()).toBeUndefined();
-      m.unmount();
-    });
-
-    // Measured on a full match: the same throw-in is often labelled again a
-    // couple of seconds after its label goes off.
-    it('carries on when the throw-in is labelled again soon after', async () => {
-      const { replay, m } = await playing();
-      await tick(replay, THROW_IN());
-      await play(replay, 2000, PLAY);
-      await play(replay, 1000, THROW_IN);
-      await play(replay, 2000, PLAY);
-      expect(lastPulse()).toBeDefined();
-      m.unmount();
-    });
-
-    it('pulses where the ball was last seen when the label frame has none', async () => {
-      const { replay, m } = await playing();
-      await tick(replay, matchFrame({ ball: { x: -20, y: 31 } }));
-      await tick(replay, matchFrame({ labels: ['Throw in'], ball: null }));
-      await animate(800);
-      expect(lastPulse()).toMatchObject({ x: -20, y: 34 });
-      m.unmount();
-    });
-
-    it('does not start on a seek', async () => {
-      const { replay, m } = await playing();
-      await tick(replay, THROW_IN(), 30);
-      await animate(800);
-      expect(lastPulse()).toBeUndefined();
-      m.unmount();
-    });
-
-    it('does not start while paused', async () => {
-      const { replay, m } = await playing();
-      set(replay.isPlaying, false);
-      await nextTick();
-      await tick(replay, THROW_IN());
-      await animate(800);
-      expect(lastPulse()).toBeUndefined();
-      m.unmount();
-    });
-
-    it('stops the moment playback pauses', async () => {
-      const { replay, m } = await playing();
-      await tick(replay, THROW_IN());
-      await play(replay, 800, THROW_IN);
-      set(replay.isPlaying, false);
-      await nextTick();
-      expect(lastPulse()).toBeUndefined();
-      m.unmount();
-    });
-
-    it('stops the moment someone presses on the drawing layer', async () => {
-      const { replay, m } = await playing();
-      await tick(replay, THROW_IN());
-      await play(replay, 800, THROW_IN);
-      at(m.root, 'pipeline-overlay')!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
-      await nextTick();
-      expect(lastPulse()).toBeUndefined();
-      m.unmount();
-    });
-
-    // The same throw-in is often labelled again a few seconds later.
-    it('does not start again for a label soon after the last one ended', async () => {
-      const { replay, m } = await playing();
-      await tick(replay, THROW_IN());
-      await play(replay, THROW_IN_SETTLE_S * 1000 + 400, PLAY);
-      expect(lastPulse()).toBeUndefined();
-      await play(replay, 1000, THROW_IN);
-      expect(lastPulse()).toBeUndefined();
-
-      // Long enough after, a label is a new throw-in.
-      await play(replay, THROW_IN_REPEAT_S * 1000, PLAY);
-      await play(replay, 800, THROW_IN);
-      expect(lastPulse()).toBeDefined();
-      m.unmount();
-    });
-
-    // The clock can go back: a seek to just before a throw-in already seen
-    // must play it again.
-    it('plays again after a seek back to just before it', async () => {
-      const { replay, m } = await playing();
-      await tick(replay, THROW_IN());
-      await play(replay, THROW_IN_SETTLE_S * 1000 + 400, PLAY);
-      expect(lastPulse()).toBeUndefined();
-      set(replay.currentTime, 9);
-      set(replay.frame, PLAY());
-      await nextTick();
-      await play(replay, 200, PLAY);
-      await play(replay, 800, THROW_IN);
-      expect(lastPulse()).toBeDefined();
-      m.unmount();
-    });
-
-    it('holds the ring still under reduced motion', async () => {
-      const originalMatchMedia = window.matchMedia;
-      window.matchMedia = ((query: string) => ({
-        matches: query.includes('prefers-reduced-motion'),
-        media: query,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-      })) as unknown as typeof window.matchMedia;
-      try {
-        const { replay, m } = await playing();
-        await tick(replay, THROW_IN());
-        await play(replay, 400, THROW_IN);
-        const still = lastPulse()!.phase;
-        await play(replay, 400, THROW_IN);
-        expect(lastPulse()!.phase).toBe(still);
-        m.unmount();
-      } finally {
-        window.matchMedia = originalMatchMedia;
-      }
-    });
+    expect(setView).not.toHaveBeenCalled();
+    expect(drawn()).toEqual(plain);
+    m.unmount();
   });
+
   describe('layers menu', () => {
     let queued: Array<(ms: number) => void> = [];
     let clockMs = 1000;
@@ -1799,7 +1552,7 @@ describe('PipelineOutputSurface', () => {
       const { m } = await ready();
       await open(m.root);
       const options = [...m.root.querySelectorAll('[data-testid="pipeline-layer-option"]')];
-      expect(options).toHaveLength(7);
+      expect(options).toHaveLength(6);
       expect(options.every((o) => o.getAttribute('aria-checked') === 'true')).toBe(true);
       m.unmount();
     });
@@ -1887,36 +1640,13 @@ describe('PipelineOutputSurface', () => {
       m.unmount();
     });
 
-    it('does not mark a throw-in when it is off', async () => {
-      const { replay, m } = await ready();
-      await toggle(m.root, 'throwIn');
-      set(replay.isPlaying, true);
-      await nextTick();
-      await tick(replay, frameWith(['Throw in']));
-      await animate(800);
-      expect(layersOf()?.ballPulse).toBeUndefined();
-      m.unmount();
-    });
-
-    it('stops a throw-in that is playing when it is switched off', async () => {
-      const { replay, m } = await ready();
-      set(replay.isPlaying, true);
-      await nextTick();
-      await tick(replay, frameWith(['Throw in']));
-      await animate(800);
-      expect(layersOf()?.ballPulse).toBeDefined();
-      await toggle(m.root, 'throwIn');
-      expect(layersOf()?.ballPulse).toBeUndefined();
-      m.unmount();
-    });
-
     it('remembers the choice for the next time the replay opens', async () => {
       const first = await ready();
-      await toggle(first.m.root, 'throwIn');
+      await toggle(first.m.root, 'ballTrail');
       first.m.unmount();
       const second = await ready();
       await open(second.m.root);
-      expect(option(second.m.root, 'throwIn').getAttribute('aria-checked')).toBe('false');
+      expect(option(second.m.root, 'ballTrail').getAttribute('aria-checked')).toBe('false');
       expect(option(second.m.root, 'goal').getAttribute('aria-checked')).toBe('true');
       second.m.unmount();
     });

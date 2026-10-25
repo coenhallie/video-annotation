@@ -4,20 +4,9 @@ import {
   nearbyTrackIds,
   possessionTrackIds,
   useRenderer2D,
-  type BallPulse,
   type GoalOverlay,
   type TrackId,
 } from '@/lib/vis/useRenderer2D';
-import {
-  isThrowInFrame,
-  isValidFrame,
-  throwInBall,
-  throwInHolds,
-  throwInPulse,
-  throwInSpot,
-  THROW_IN_REPEAT_S,
-  THROW_IN_STALE_S,
-} from '@/lib/vis/throwInSequence';
 import {
   ATTACK_IN_MS,
   ATTACK_OUT_MS,
@@ -98,7 +87,6 @@ function toggleLayer(key: ReplayLayerKey): void {
   // A sequence switched off mid-way ends now, putting the user's view back.
   if (key === 'goal' && !layers.goal) stopGoal();
   if (key === 'attack' && !layers.attack) stopAttack();
-  if (key === 'throwIn' && !layers.throwIn) stopThrowIn();
   if (key === 'ringFades' && !layers.ringFades) settleRings();
   paint();
 }
@@ -183,7 +171,6 @@ function paint(): void {
         nearby: layers.nearbyRings ? new Map(nearbyRings) : new Map(),
         possession: new Map(possessionRings),
       },
-      ballPulse: throwInPulseLayer(),
       fadeFar: layers.farFade,
       trail: layers.ballTrail
         ? ((held ? held.trail : props.replay.ballTrail.value) ?? undefined)
@@ -524,11 +511,7 @@ watch(
       props.replay.isPlaying.value && now > before && now - before <= MAX_PLAYBACK_STEP_S;
     if (!lastStepWasPlayback) {
       stopGoal();
-      stopThrowIn();
       stopAttack();
-      // After a seek, back or forward, a label is not the last throw-in
-      // labelled again, however close in time.
-      throwInEndedAt = null;
     }
   },
   { flush: 'sync' }
@@ -539,100 +522,15 @@ watch(
   (playing) => {
     if (playing) return;
     stopGoal();
-    stopThrowIn();
     stopAttack();
     settleRings();
     paint();
   }
 );
 
-// ── Throw-in sequence ───────────────────────────────────────────────────────
-//
-// When playback runs into a frame the pipeline labels a throw-in, a ring
-// pulses on the spot it is taken from, on the touchline level with the ball,
-// until play is back on: the label is over and valid frames have been flowing
-// again for a few seconds, not a cutaway (see throwInSequence.ts). It no
-// longer zooms the view in on the spot.
-//
-// Like the goal sequence, pausing, seeking, stepping and pressing on the
-// drawing layer end it. Reduced motion holds the ring still.
-
-let throwIn: {
-  /** Where the throw-in is taken from, on the touchline. */
-  spot: { x: number; y: number };
-  startedMs: number | null;
-  elapsedMs: number;
-  /** Replay time the label, a gap or an empty frame last held it. */
-  busyAt: number;
-} | null = null;
-let throwInRaf: number | null = null;
-// The label stays on for many frames: only its first one starts a sequence.
-let throwInLabelSeen = false;
-/** Replay time the last sequence ended at, for THROW_IN_REPEAT_S. */
-let throwInEndedAt: number | null = null;
-/** Replay time the record on screen arrived: a gap in the data leaves it behind. */
-let frameArrivedAt = 0;
-/** Where the ball was last seen, for a label frame that has none. */
-let lastBallSeen: { x: number; y: number } | null = null;
-
-/** The ring pulsing on the throw-in spot while a sequence plays. */
-function throwInPulseLayer(): BallPulse | undefined {
-  if (!throwIn) return undefined;
-  return {
-    ...throwIn.spot,
-    phase: prefersReducedMotion() ? 0.3 : throwInPulse(throwIn.elapsedMs),
-  };
-}
-
-function throwInStep(ms: number): void {
-  throwInRaf = null;
-  if (!throwIn) return;
-  if (throwIn.startedMs === null) throwIn.startedMs = ms;
-  throwIn.elapsedMs = ms - throwIn.startedMs;
-  const frame = props.replay.frame.value;
-  const now = props.replay.currentTime.value;
-  if (frame) {
-    const state = {
-      labelled: isThrowInFrame(frame),
-      valid: isValidFrame(frame),
-      stale: now - frameArrivedAt > THROW_IN_STALE_S,
-    };
-    if (state.labelled || !state.valid || state.stale) throwIn.busyAt = now;
-    if (!throwInHolds({ ...state, quietS: now - throwIn.busyAt })) {
-      stopThrowIn();
-      return;
-    }
-  }
-  paint();
-  throwInRaf = window.requestAnimationFrame(throwInStep);
-}
-
-function startThrowIn(frame: NonNullable<PipelineReplay['frame']['value']>): void {
-  const ball = throwInBall(frame, lastBallSeen);
-  if (!ball) return;
-  throwIn = {
-    spot: throwInSpot(ball, frame.pitch_dimensions),
-    startedMs: null,
-    elapsedMs: 0,
-    busyAt: props.replay.currentTime.value,
-  };
-  throwInRaf = window.requestAnimationFrame(throwInStep);
-}
-
-/** End the sequence. */
-function stopThrowIn(): void {
-  if (!throwIn && throwInRaf === null) return;
-  if (throwInRaf !== null) window.cancelAnimationFrame(throwInRaf);
-  throwInRaf = null;
-  throwIn = null;
-  throwInEndedAt = props.replay.currentTime.value;
-  paint();
-}
-
 /** Someone wants the real frame and their own view: end both sequences. */
 function stopSequences(): void {
   stopGoal();
-  stopThrowIn();
   stopAttack();
 }
 
@@ -767,8 +665,8 @@ function stopAttack(): void {
 
 /**
  * Show the attack on `frame` if it has just reached the other team's half
- * during playback. Called for every frame drawn, after the goal and throw-in
- * sequences have had their say.
+ * during playback. Called for every frame drawn, after the goal sequence has
+ * had its say.
  */
 function maybeStartAttack(frame: Frame): void {
   const target = attackTarget();
@@ -784,7 +682,7 @@ function maybeStartAttack(frame: Frame): void {
   // Not yet in the other team's half: not shown until it is.
   if (!ball || target.direction * ball.x <= 0) return;
   attackSeen = key;
-  if (layers.attack && !goal && !throwIn && !attackMoment) startAttack(target, ball);
+  if (layers.attack && !goal && !attackMoment) startAttack(target, ball);
 }
 
 // ── Rings ───────────────────────────────────────────────────────────────────
@@ -1001,32 +899,14 @@ watch(
     if (!frame) return;
     if (frame !== prevFrame) {
       ensureRenderer();
-      frameArrivedAt = now;
       const labelled = isGoalFrame(frame);
       if (labelled && layers.goal && !goalLabelSeen && !goal && lastStepWasPlayback) {
-        // The goal takes over from a throw-in or an attack still showing.
-        stopThrowIn();
+        // The goal takes over from an attack still showing.
         stopAttack();
         startGoal(frame);
       }
       goalLabelSeen = labelled;
-      const thrown = isThrowInFrame(frame);
-      if (
-        thrown &&
-        layers.throwIn &&
-        !throwInLabelSeen &&
-        !throwIn &&
-        !goal &&
-        lastStepWasPlayback &&
-        (throwInEndedAt === null || now - throwInEndedAt >= THROW_IN_REPEAT_S)
-      ) {
-        // The ball is out: the attack is over.
-        stopAttack();
-        startThrowIn(frame);
-      }
-      throwInLabelSeen = thrown;
       maybeStartAttack(frame);
-      lastBallSeen = throwInBall(frame, lastBallSeen);
     }
     // A fade that has just finished still needs the paint that shows its end.
     const wasFading = ringsFading();
@@ -1081,7 +961,6 @@ function loadLabelFont(): void {
 onUnmounted(() => {
   document.removeEventListener('keydown', onLayersKeydown);
   stopGoal();
-  stopThrowIn();
   stopAttack();
   dprQuery?.removeEventListener('change', onPixelRatioChange);
   dprQuery = null;

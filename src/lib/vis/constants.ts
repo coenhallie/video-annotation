@@ -125,11 +125,3 @@ export const CARRIER_GROWTH = 0.25
  */
 export const BALL_RADIUS = 10.5
 
-/**
- * The ring that pulses on the throw-in spot (throwInSequence.ts).
- * Cyan, as every other colour on the pitch already means something: white is
- * the players near the ball, gold the ball carrier, yellow and black the
- * keepers and officials, red and blue the teams.
- */
-export const THROW_IN_PULSE_COLOR = '#22d3ee'
-
