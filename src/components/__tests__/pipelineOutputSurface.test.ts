@@ -185,25 +185,24 @@ describe('PipelineOutputSurface', () => {
       await nextTick();
 
       const canvasBox = box(at(m.root, 'pipeline-canvas'));
-      // 1096x640: as wide as the stage, as 640 px of height allows 1138.
-      expect(canvasBox[2]).toBe('1096px');
+      // 1096x640, less the 40 px row kept above the pitch for the team labels.
+      expect(canvasBox[2]).toBe('1066.5px');
       expect(box(at(m.root, 'pipeline-overlay'))).toEqual(canvasBox);
       expect(box(at(m.root, 'pipeline-hud'))).toEqual(canvasBox);
       m.unmount();
     });
 
-    // Nothing sits above the pitch any more: the attack is labelled on it.
-    it('keeps no row above the pitch', async () => {
+    // The labels sit above the pitch, never over it: anything standing on the
+    // near touchline would otherwise be hidden under them.
+    it('keeps a row above the pitch for the team labels', async () => {
       const m = mount(fakeReplay('ready'));
       await nextTick();
       observed.forEach((notify) => notify());
       await nextTick();
 
       const style = (at(m.root, 'pipeline-canvas') as HTMLElement).style;
-      // Letterboxed in the middle of the stage, with even bands above and below.
-      const top = parseFloat(style.top);
-      const below = 640 - (top + parseFloat(style.height));
-      expect(Math.abs(top - below)).toBeLessThanOrEqual(1);
+      expect(parseFloat(style.top)).toBeGreaterThanOrEqual(40);
+      expect(parseFloat(style.top) + parseFloat(style.height)).toBeLessThanOrEqual(640);
       m.unmount();
     });
 
@@ -214,7 +213,7 @@ describe('PipelineOutputSurface', () => {
       await nextTick();
 
       const canvas = at(m.root, 'pipeline-canvas') as HTMLCanvasElement;
-      expect([canvas.width, canvas.height]).toEqual([2192, 1233]);
+      expect([canvas.width, canvas.height]).toEqual([2133, 1200]);
       m.unmount();
     });
 
@@ -239,7 +238,7 @@ describe('PipelineOutputSurface', () => {
         await nextTick();
 
         const canvas = at(m.root, 'pipeline-canvas') as HTMLCanvasElement;
-        expect(canvas.width).toBe(3288);
+        expect(canvas.width).toBe(3200);
         m.unmount();
       } finally {
         window.matchMedia = originalMatchMedia;
@@ -309,7 +308,7 @@ describe('PipelineOutputSurface', () => {
     unmount();
   });
 
-  describe('attack description', () => {
+  describe('team phase labels', () => {
     type Phase = PipelineReplay['phase']['value'];
     async function withPhase(phase: Phase, teamNames?: [string, string] | null) {
       const replay = fakeReplay('ready');
@@ -318,39 +317,123 @@ describe('PipelineOutputSurface', () => {
       await nextTick();
       return m;
     }
-    const said = (root: HTMLElement) => at(root, 'pipeline-phase')?.textContent?.trim();
+    const label = (root: HTMLElement, team: 0 | 1) =>
+      root.querySelector(`[data-testid="pipeline-phase-team-${team}"]`) as HTMLElement | null;
 
-    // The label is drawn on the canvas, which screen readers cannot read.
-    it('says which team is attacking, for screen readers', async () => {
+    it('shows each team with its state', async () => {
       const m = await withPhase({
         possession: 0,
         attacks: { 0: 1, 1: -1 },
         states: { 0: 'attacking', 1: 'defending' },
       });
-      expect(at(m.root, 'pipeline-phase')?.getAttribute('role')).toBe('status');
-      expect(said(m.root)).toBe('Red attacking');
+      expect(label(m.root, 0)?.textContent).toMatch(/Red\s*Attacking/i);
+      expect(label(m.root, 1)?.textContent).toMatch(/Defending\s*Blue/i);
+      expect(label(m.root, 0)?.dataset.state).toBe('attacking');
+      expect(label(m.root, 1)?.dataset.state).toBe('defending');
       m.unmount();
     });
 
-    // Team 0 is taken to be the first team the match title names (see
-    // pipelineTeamNames): the export itself names neither team.
-    it('names the team when the match is known, first-named as Red', async () => {
-      const m = await withPhase(
-        { possession: 1, attacks: { 0: 1, 1: -1 }, states: { 0: 'defending', 1: 'attacking' } },
-        ['Manchester City', 'PSG']
-      );
-      expect(said(m.root)).toBe('PSG attacking');
+    it('fills the label of the team with the ball in its colour', async () => {
+      const m = await withPhase({
+        possession: 1,
+        attacks: { 0: 1, 1: -1 },
+        states: { 0: 'defending', 1: 'attacking' },
+      });
+      expect(label(m.root, 1)?.style.backgroundColor).not.toBe('');
+      expect(label(m.root, 0)?.style.backgroundColor).toBe('');
       m.unmount();
     });
 
-    // A team keeping the ball for less than the attack hold is not attacking.
-    it('says nothing while nobody is attacking', async () => {
+    // A team keeping the ball for less than the attack hold is not attacking,
+    // and a filled label would say it was.
+    it('does not fill the label of a team that has the ball but is not attacking yet', async () => {
       const m = await withPhase({
         possession: 1,
         attacks: { 0: 1, 1: -1 },
         states: { 0: null, 1: null },
       });
-      expect(said(m.root)).toBe('');
+      expect(label(m.root, 1)?.style.backgroundColor).toBe('');
+      expect(label(m.root, 1)?.textContent?.trim()).toMatch(/^Blue$/i);
+      m.unmount();
+    });
+
+    // A third of real frames have nobody clearly in possession: say nothing
+    // rather than guess.
+    it('shows both teams without a state when nobody is in possession', async () => {
+      const m = await withPhase({
+        possession: null,
+        attacks: { 0: 1, 1: -1 },
+        states: { 0: null, 1: null },
+      });
+      expect(label(m.root, 0)?.textContent?.trim()).toMatch(/^Red$/i);
+      expect(label(m.root, 1)?.textContent?.trim()).toMatch(/^Blue$/i);
+      expect(label(m.root, 0)?.dataset.state).toBe('none');
+      m.unmount();
+    });
+
+    it('describes the phase for screen readers', async () => {
+      const m = await withPhase({
+        possession: 0,
+        attacks: { 0: 1, 1: -1 },
+        states: { 0: 'attacking', 1: 'defending' },
+      });
+      expect(at(m.root, 'pipeline-phase')?.getAttribute('aria-label')).toBe(
+        'Red attacking, Blue defending'
+      );
+      m.unmount();
+    });
+
+    // Team 0 is taken to be the first team the match title names (see
+    // pipelineTeamNames): the export itself names neither team.
+    it('names the teams when the match is known, first-named as Red', async () => {
+      const m = await withPhase(
+        { possession: 0, attacks: { 0: 1, 1: -1 }, states: { 0: 'attacking', 1: 'defending' } },
+        ['Manchester City', 'PSG']
+      );
+      expect(label(m.root, 0)?.textContent).toMatch(/Manchester City\s*Attacking/i);
+      expect(label(m.root, 1)?.textContent).toMatch(/Defending\s*PSG/i);
+      expect(at(m.root, 'pipeline-phase')?.getAttribute('aria-label')).toBe(
+        'Manchester City attacking, PSG defending'
+      );
+      m.unmount();
+    });
+
+    it('keeps the colours for the names', async () => {
+      const m = await withPhase(
+        { possession: 1, attacks: { 0: 1, 1: -1 }, states: { 0: 'defending', 1: 'attacking' } },
+        ['Manchester City', 'PSG']
+      );
+      expect(label(m.root, 0)?.style.borderColor).toBe(PERSON_COLORS.home.fill);
+      // jsdom reports a background as rgb(), so compare it the same way.
+      const probe = document.createElement('div');
+      probe.style.backgroundColor = PERSON_COLORS.away.fill;
+      expect(label(m.root, 1)?.style.backgroundColor).toBe(probe.style.backgroundColor);
+      m.unmount();
+    });
+
+    // A long name is cut short on screen, so the whole of it goes on hover.
+    it('shows a team name in full on hover', async () => {
+      const m = await withPhase(
+        { possession: null, attacks: { 0: 1, 1: -1 }, states: { 0: null, 1: null } },
+        ['Borussia Mönchengladbach', 'PSG']
+      );
+      expect(label(m.root, 0)?.getAttribute('title')).toBe('Borussia Mönchengladbach');
+      m.unmount();
+    });
+
+    it('falls back to the colours when the match is not known', async () => {
+      const m = await withPhase(
+        { possession: null, attacks: { 0: 1, 1: -1 }, states: { 0: null, 1: null } },
+        null
+      );
+      expect(label(m.root, 0)?.textContent?.trim()).toMatch(/^Red$/i);
+      expect(label(m.root, 1)?.textContent?.trim()).toMatch(/^Blue$/i);
+      m.unmount();
+    });
+
+    it('shows nothing before the first frame has a phase', async () => {
+      const m = await withPhase(null);
+      expect(at(m.root, 'pipeline-phase')).toBeNull();
       m.unmount();
     });
   });
@@ -1552,18 +1635,26 @@ describe('PipelineOutputSurface', () => {
       const { m } = await ready();
       await open(m.root);
       const options = [...m.root.querySelectorAll('[data-testid="pipeline-layer-option"]')];
-      expect(options).toHaveLength(6);
+      expect(options).toHaveLength(7);
       expect(options.every((o) => o.getAttribute('aria-checked') === 'true')).toBe(true);
       m.unmount();
     });
 
-    // Showing and stopping the attack itself is covered under 'attack'.
-    it('hides what the attack says to screen readers', async () => {
+    it('hides the attacking and defending labels', async () => {
       const { m } = await ready();
       expect(at(m.root, 'pipeline-phase')).not.toBeNull();
-      await toggle(m.root, 'attack');
+      await toggle(m.root, 'phaseLabels');
       expect(at(m.root, 'pipeline-phase')).toBeNull();
+      expect(option(m.root, 'phaseLabels').getAttribute('aria-checked')).toBe('false');
+      m.unmount();
+    });
+
+    // Showing and stopping the attack itself is covered under 'attack'.
+    it('leaves the attacking and defending labels to their own layer', async () => {
+      const { m } = await ready();
+      await toggle(m.root, 'attack');
       expect(option(m.root, 'attack').getAttribute('aria-checked')).toBe('false');
+      expect(at(m.root, 'pipeline-phase')).not.toBeNull();
       m.unmount();
     });
 

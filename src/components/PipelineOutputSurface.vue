@@ -43,7 +43,7 @@ import {
 } from '@/lib/vis/constants';
 import { rolled, UPRIGHT, type Spin } from '@/lib/vis/football';
 import { build2DTransform, worldToPx } from '@/lib/vis/pitchGeometry';
-import type { TeamId } from '@/lib/vis/teamPhase';
+import type { TeamId, TeamState } from '@/lib/vis/teamPhase';
 import {
   cameraFromView,
   fitFrameBox,
@@ -204,14 +204,27 @@ const boxStyle = computed(() => {
   };
 });
 
+/**
+ * A row kept clear above the pitch for the team phase labels, so they never
+ * sit over it: anything on the near touchline would be hidden under them.
+ */
+const LABEL_ROW_PX = 40;
+
 function measure(): void {
   const el = viewportRef.value;
   if (!el) return;
   const rect = el.getBoundingClientRect();
-  const next = fitFrameBox(
-    { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+  const fitted = fitFrameBox(
+    {
+      left: rect.left,
+      top: rect.top + LABEL_ROW_PX,
+      width: rect.width,
+      height: Math.max(0, rect.height - LABEL_ROW_PX),
+    },
     window.devicePixelRatio || 1
   );
+  // fitFrameBox places the box within the area it was given, below the row.
+  const next = { ...fitted, top: fitted.top + LABEL_ROW_PX };
   // A hidden surface measures as nothing. Keep the last box rather than
   // collapse the bitmap to zero, which has nothing to draw into.
   if (next.pixelWidth < 1 || next.pixelHeight < 1) return;
@@ -564,12 +577,39 @@ const PHASE_TEAMS: Record<TeamId, { name: string; color: string }> = {
 
 const teamName = (team: TeamId) => props.teamNames?.[team] ?? PHASE_TEAMS[team].name;
 
-/** The attacking team, for screen readers: the canvas label says it to everyone else. */
-const attackDescription = computed(() => {
-  const states = props.replay.phase.value?.states;
-  const team = states?.[0] === 'attacking' ? 0 : states?.[1] === 'attacking' ? 1 : null;
-  return team === null ? '' : `${teamName(team)} attacking`;
+// ── Team phase labels ───────────────────────────────────────────────────────
+//
+// Which team is attacking and which defending, from the replay's phase (see
+// teamPhase.ts), in a row above the pitch, named as the attack is.
+
+const STATE_TEXT: Record<TeamState, string> = {
+  attacking: 'Attacking',
+  defending: 'Defending',
+};
+
+const phaseLabels = computed(() => {
+  const phase = props.replay.phase.value;
+  if (!phase) return null;
+  return ([0, 1] as const).map((team) => {
+    const state = phase.states[team];
+    return {
+      team,
+      ...PHASE_TEAMS[team],
+      name: teamName(team),
+      state,
+      text: state ? STATE_TEXT[state] : null,
+      // Only an attacking team is filled: a team that merely has the ball,
+      // or nobody clearly having it, leaves both labels plain.
+      filled: state === 'attacking',
+    };
+  });
 });
+
+const phaseDescription = computed(() =>
+  (phaseLabels.value ?? [])
+    .map((l) => (l.text ? `${l.name} ${l.text.toLowerCase()}` : l.name))
+    .join(', ')
+);
 
 let attackMoment: {
   team: TeamId;
@@ -1106,18 +1146,58 @@ onUnmounted(() => {
           data-testid="pipeline-hud"
         >
           <!--
-            The attack is drawn on the canvas, label and all; this says it to
-            screen readers. Worked out by the app rather than reported by the
-            pipeline.
+            In the row kept clear above the pitch (LABEL_ROW_PX), centred on
+            it. Worked out by the app rather than reported by the pipeline,
+            which the title says on hover.
           -->
-          <p
-            v-if="layers.attack"
+          <div
+            v-if="phaseLabels && layers.phaseLabels"
             data-testid="pipeline-phase"
-            role="status"
-            class="sr-only"
+            role="group"
+            :aria-label="phaseDescription"
+            title="Worked out from the tracking data: a team is attacking once it has kept the ball for 3 seconds, and the other team is then defending."
+            class="pointer-events-auto absolute inset-x-0 bottom-full mx-auto mb-1.5 grid w-max max-w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2"
           >
-            {{ attackDescription }}
-          </p>
+            <!--
+              Two equal columns either side of "vs", as wide as the longer
+              label needs, so "vs" stays centred; a name too long for the row
+              is cut short, and shown in full on hover.
+            -->
+            <template
+              v-for="(l, i) in phaseLabels"
+              :key="l.team"
+            >
+              <span
+                v-if="i === 1"
+                class="text-[10px] font-semibold uppercase tracking-widest text-white/60"
+                aria-hidden="true"
+              >vs</span>
+              <div
+                :data-testid="`pipeline-phase-team-${l.team}`"
+                :data-state="l.state ?? 'none'"
+                :title="l.name"
+                class="flex min-w-[9.5rem] items-center gap-3 whitespace-nowrap rounded-md border-2 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-lg transition-colors duration-200 motion-reduce:transition-none"
+                :class="[l.filled ? '' : 'bg-black/60', l.team === 1 ? 'justify-end' : '']"
+                :style="{ borderColor: l.color, backgroundColor: l.filled ? l.color : undefined }"
+                aria-hidden="true"
+              >
+                <!-- Mirrored for team 1, so both states sit either side of "vs". -->
+                <span
+                  v-if="l.team === 0"
+                  class="min-w-0 truncate font-bold"
+                >{{ l.name }}</span>
+                <span
+                  v-if="l.text"
+                  class="shrink-0 text-[10px] tracking-widest"
+                  :class="l.team === 0 ? 'ml-auto' : 'mr-auto'"
+                >{{ l.text }}</span>
+                <span
+                  v-if="l.team === 1"
+                  class="min-w-0 truncate font-bold"
+                >{{ l.name }}</span>
+              </div>
+            </template>
+          </div>
 
           <div
             class="absolute bottom-2 left-2 flex items-center gap-1.5 rounded bg-black/60 px-2.5 py-1 font-mono text-[11px] text-white"
