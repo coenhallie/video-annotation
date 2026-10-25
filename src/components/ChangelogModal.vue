@@ -117,6 +117,13 @@ useEscapeToClose(() => props.isVisible, closeModal);
 // Add new entries to the TOP of this array
 const changelogEntries = ref([
   {
+    version: 'Beta v3.30',
+    date: 'October 25, 2026',
+    changes: [
+      'The ball trail in the 2D replay is 30% shorter, showing the last 2.1 seconds of the ball\'s path',
+    ],
+  },
+  {
     version: 'Beta v3.29',
     date: 'October 25, 2026',
     changes: [
