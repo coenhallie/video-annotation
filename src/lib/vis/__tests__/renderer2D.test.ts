@@ -15,7 +15,6 @@ import {
 } from '@/lib/vis/attackIndicator';
 import type { Frame } from '@/lib/vis/types';
 import {
-  THROW_IN_PULSE_COLOR,
   PERSON_COLORS,
   DIMMED_PLAYER_ALPHA,
   NEARBY_OUTLINE,
@@ -1059,61 +1058,6 @@ describe('resolution', () => {
     Object.assign(canvas, { width: 1280, height: 720 });
     renderer.renderFrame(frameWith({}));
     expect(offscreen.sizes.at(-1)).toEqual([1280, 720]);
-  });
-});
-
-describe('throw-in pulse', () => {
-  const T = build2DTransform(PITCH);
-  const frame = {
-    pitch_dimensions: PITCH,
-    teams: [],
-    balls: [{ projected_coordinates: { x: 10, y: -30 } }],
-  } as unknown as Frame;
-
-  /** The pulse rings drawn: arcs stroked in the pulse colour, after the ball. */
-  function pulses(ballPulse?: { x: number; y: number; phase: number }) {
-    const { canvas, ops } = fakeCanvas();
-    useRenderer2D(canvas).renderFrame(frame, ballPulse ? { ballPulse } : {});
-    const rings: Array<{ x: number; y: number; r: number; alpha: number }> = [];
-    let arc: Op | null = null;
-    for (const o of ops) {
-      if (o.op === 'arc') arc = o;
-      else if (o.op === 'stroke' && o.strokeStyle === THROW_IN_PULSE_COLOR && arc) {
-        rings.push({
-          x: Number(arc.args[0]),
-          y: Number(arc.args[1]),
-          r: Number(arc.args[2]),
-          alpha: o.globalAlpha,
-        });
-      }
-    }
-    return rings;
-  }
-
-  it('draws nothing without a pulse', () => {
-    expect(pulses()).toHaveLength(0);
-  });
-
-  it('rings the point it is given', () => {
-    const [px, py] = worldToPx(10, -30, T);
-    const [ring] = pulses({ x: 10, y: -30, phase: 0.3 });
-    expect(ring).toMatchObject({ x: px, y: py });
-  });
-
-  // A ring that grows out from the ball and fades as it goes: the pulse.
-  it('grows and fades as the pulse runs', () => {
-    const early = pulses({ x: 10, y: -30, phase: 0.1 })[0]!;
-    const late = pulses({ x: 10, y: -30, phase: 0.8 })[0]!;
-    expect(late.r).toBeGreaterThan(early.r);
-    expect(late.alpha).toBeLessThan(early.alpha);
-  });
-
-  it('starts each pulse where the last one ended without a jump', () => {
-    const start = pulses({ x: 10, y: -30, phase: 0 })[0]!;
-    const end = pulses({ x: 10, y: -30, phase: 0.9999 })[0];
-    // Fully faded at the end of one pulse, so the next starting small is not seen to jump.
-    expect(end === undefined || end.alpha < 0.01).toBe(true);
-    expect(start.alpha).toBeGreaterThan(0.5);
   });
 });
 

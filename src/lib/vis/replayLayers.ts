@@ -8,7 +8,6 @@
 
 export type ReplayLayerKey =
   | 'goal'
-  | 'throwIn'
   | 'attack'
   | 'ballTrail'
   | 'nearbyRings'
@@ -20,7 +19,6 @@ export type ReplayLayers = Record<ReplayLayerKey, boolean>;
 /** In the order the menu lists them. */
 export const REPLAY_LAYERS: ReadonlyArray<{ key: ReplayLayerKey; label: string; hint: string }> = [
   { key: 'goal', label: 'Goal animation', hint: 'A shot into the net on a goal label' },
-  { key: 'throwIn', label: 'Throw-in', hint: 'A pulse on the touchline spot' },
   {
     key: 'attack',
     label: 'Attack',
@@ -46,7 +44,6 @@ export const REPLAY_LAYERS: ReadonlyArray<{ key: ReplayLayerKey; label: string; 
 
 export const DEFAULT_REPLAY_LAYERS: ReplayLayers = {
   goal: true,
-  throwIn: true,
   attack: true,
   ballTrail: true,
   nearbyRings: true,

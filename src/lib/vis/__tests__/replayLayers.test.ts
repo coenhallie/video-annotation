@@ -38,7 +38,7 @@ describe('replay layers', () => {
 
   it('reads back what was written', () => {
     const storage = memoryStorage();
-    const layers: ReplayLayers = { ...DEFAULT_REPLAY_LAYERS, throwIn: false, farFade: false };
+    const layers: ReplayLayers = { ...DEFAULT_REPLAY_LAYERS, attack: false, farFade: false };
     writeReplayLayers(storage, layers);
     expect(readReplayLayers(storage)).toEqual(layers);
   });
