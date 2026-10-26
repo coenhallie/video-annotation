@@ -58,13 +58,26 @@ function fakeReplay(state: ReplayState, message: string | null = null) {
   } as unknown as PipelineReplay;
 }
 
+/** What the surface exposes to the editor: playing its moments by hand. */
+interface SurfaceExpose {
+  triggerMoment: (moment: 'goal' | 'attack' | 'freeKick' | 'throwIn', team?: 0 | 1) => void;
+  momentAvailability: {
+    goal: boolean;
+    attack: Record<0 | 1, boolean>;
+    freeKick: boolean;
+    throwIn: boolean;
+  };
+}
+
 function mount(replay: PipelineReplay, props: { teamNames?: [string, string] | null | undefined } = {}) {
   const root = document.createElement('div');
   document.body.appendChild(root);
+  const surface = ref<SurfaceExpose | null>(null);
   const app = createApp(
     defineComponent({
       setup: () => () =>
         h(PipelineOutputSurface, {
+          ref: surface,
           replay,
           ...(props.teamNames !== undefined ? { teamNames: props.teamNames } : {}),
         }),
@@ -73,6 +86,7 @@ function mount(replay: PipelineReplay, props: { teamNames?: [string, string] | n
   app.mount(root);
   return {
     root,
+    surface: () => surface.value as SurfaceExpose,
     unmount: () => {
       app.unmount();
       root.remove();
@@ -1887,41 +1901,447 @@ describe('PipelineOutputSurface', () => {
       }
     });
   });
-  // A throw-in used to zoom in on the touchline and pulse a ring there. Both
-  // were taken out at the user's request: it plays like any other frame.
-  it('plays a throw-in like any other frame', async () => {
-    const replay = fakeReplay('loading');
-    const m = mount(replay);
-    await nextTick();
-    const set = (r: unknown, v: unknown) => ((r as { value: unknown }).value = v);
-    const frame = (labels: string[]) => ({
+  describe('throw-in', () => {
+    let queued: Array<(ms: number) => void> = [];
+    let clockMs = 1000;
+    const originalRaf = window.requestAnimationFrame;
+    const originalCaf = window.cancelAnimationFrame;
+
+    beforeEach(() => {
+      queued = [];
+      clockMs = 1000;
+      renderFrame.mockClear();
+      setView.mockClear();
+      window.requestAnimationFrame = ((cb: (ms: number) => void) => {
+        queued.push(cb);
+        return queued.length;
+      }) as typeof window.requestAnimationFrame;
+      window.cancelAnimationFrame = (() => {
+        queued = [];
+      }) as typeof window.cancelAnimationFrame;
+    });
+
+    afterEach(() => {
+      window.requestAnimationFrame = originalRaf;
+      window.cancelAnimationFrame = originalCaf;
+    });
+
+    async function animate(ms: number) {
+      const end = clockMs + ms;
+      // Whole frames only, so 50 ms is three frames however it rounds.
+      while (clockMs < end - 1e-6) {
+        clockMs += 1000 / 60;
+        const cbs = queued;
+        queued = [];
+        cbs.forEach((cb) => cb(clockMs));
+      }
+      await nextTick();
+    }
+
+    type Writable = { value: unknown };
+    const set = (r: unknown, v: unknown) => ((r as Writable).value = v);
+    /** A record: the ball at `ballX` along the pitch, or lost, and the labels it carries. */
+    const frameAt = (ballX: number | null, labels: string[] = []) => ({
       pitch_dimensions: { length: 105, width: 68 },
-      teams: [{ team_id: 0, players: [{ track_id: 1, projected_coordinates: { x: 0, y: 0 } }] }],
-      balls: [{ projected_coordinates: { x: 10, y: -30 } }],
+      teams: [
+        {
+          team_id: 0,
+          players: [{ track_id: 4, person_type: 'PersonType.PLAYER', projected_coordinates: { x: 3, y: 2 } }],
+        },
+      ],
+      balls: ballX === null ? [] : [{ projected_coordinates: { x: ballX, y: 33 } }],
       state: { actions: labels.map((action_type) => ({ action_type })) },
       frame_data: [{ frame_count: 1 }],
     });
-    set(replay.currentTime, 10);
-    set(replay.frame, frame([]));
-    set(replay.state, 'ready');
-    set(replay.isPlaying, true);
-    await nextTick();
-    // The layers drawn with something in them.
-    const drawn = () =>
-      Object.entries(renderFrame.mock.calls.at(-1)?.[1] ?? {})
-        .filter(([, v]) => v !== undefined)
-        .map(([k]) => k)
-        .sort();
-    const plain = drawn();
-    setView.mockClear();
-    for (let i = 0; i < 20; i++) {
-      set(replay.currentTime, (replay.currentTime.value as number) + 0.04);
-      set(replay.frame, frame(['Throw in']));
+    const THROW_IN = ['EventType.THROW_IN'];
+    const NOBODY = { possession: null, attacks: { 0: 1, 1: -1 }, states: { 0: null, 1: null } };
+
+    async function ready() {
+      const replay = fakeReplay('loading');
+      const m = mount(replay);
+      await nextTick();
+      set(replay.currentTime, 10);
+      set(replay.frame, frameAt(0));
+      set(replay.phase, NOBODY);
+      set(replay.state, 'ready');
+      await nextTick();
+      set(replay.isPlaying, true);
+      await nextTick();
+      return { replay, m };
+    }
+
+    /** The next record by playback, `step` seconds on (a seek when large). */
+    async function record(replay: PipelineReplay, ballX: number | null, labels: string[] = [], step = 0.04) {
+      set(replay.currentTime, (replay.currentTime.value as number) + step);
+      set(replay.frame, frameAt(ballX, labels));
       await nextTick();
     }
-    expect(setView).not.toHaveBeenCalled();
-    expect(drawn()).toEqual(plain);
-    m.unmount();
+
+    const last = () => renderFrame.mock.calls.at(-1)?.[1] as
+      | { throwIn?: { intensity: number; slide: number; side: number | null }; freeKick?: unknown }
+      | undefined;
+    const lastThrowIn = () => last()?.throwIn;
+
+    it('slides in from the left for a throw-in in the left half, the players left as they are', async () => {
+      const { replay, m } = await ready();
+      setView.mockClear();
+      await record(replay, -30, THROW_IN);
+      await animate(150);
+      const early = lastThrowIn()!;
+      expect(early.side).toBe(-1);
+      expect(early.slide).toBeGreaterThan(0);
+      expect(early.slide).toBeLessThan(1);
+      expect(early.intensity).toBe(early.slide);
+      await animate(500);
+      expect(lastThrowIn()).toEqual({ intensity: 1, slide: 1, side: -1 });
+      // Nothing else on the pitch changes for it: no fade, no zoom.
+      expect(last()?.freeKick).toBeUndefined();
+      expect(setView).not.toHaveBeenCalled();
+      m.unmount();
+    });
+
+    it('slides in from the right for a throw-in in the right half', async () => {
+      const { replay, m } = await ready();
+      await record(replay, 30, THROW_IN);
+      await animate(600);
+      expect(lastThrowIn()?.side).toBe(1);
+      m.unmount();
+    });
+
+    // The ball is often lost as it goes out.
+    it('goes by the last tracked ball when the label’s frame has none, and fades in place with none', async () => {
+      const { replay, m } = await ready();
+      await record(replay, 40);
+      await record(replay, null);
+      await record(replay, null, THROW_IN);
+      await animate(600);
+      expect(lastThrowIn()?.side).toBe(1);
+      m.unmount();
+
+      const other = await ready();
+      await record(other.replay, null, [], 30);
+      for (let i = 0; i < 130; i++) await record(other.replay, null);
+      await record(other.replay, null, THROW_IN);
+      await animate(600);
+      expect(lastThrowIn()).toEqual({ intensity: 1, slide: 1, side: null });
+      other.m.unmount();
+    });
+
+    it('slides back out the way it came after THROW_IN_SHOW_MS', async () => {
+      const { replay, m } = await ready();
+      await record(replay, -30, THROW_IN);
+      await animate(2000 + 150);
+      const going = lastThrowIn()!;
+      expect(going.side).toBe(-1);
+      expect(going.slide).toBeGreaterThan(0);
+      expect(going.slide).toBeLessThan(1);
+      await animate(400);
+      expect(lastThrowIn()).toBeUndefined();
+      m.unmount();
+    });
+
+    it('is shown once for a label that flickers, and again for a later throw-in', async () => {
+      const { replay, m } = await ready();
+      await record(replay, -30, THROW_IN);
+      for (let i = 0; i < 70; i++) {
+        await record(replay, -30, i % 3 === 0 ? THROW_IN : []);
+        await animate(50);
+      }
+      expect(lastThrowIn()).toBeUndefined();
+      for (let i = 0; i < 130; i++) await record(replay, -30);
+      await record(replay, -30, THROW_IN);
+      await animate(100);
+      expect(lastThrowIn()).toBeDefined();
+      m.unmount();
+    });
+
+    it('is not shown for a throw-in a seek lands in the middle of', async () => {
+      const { replay, m } = await ready();
+      await record(replay, -30, THROW_IN, 30);
+      await record(replay, -30, THROW_IN);
+      await animate(300);
+      expect(lastThrowIn()).toBeUndefined();
+      m.unmount();
+    });
+
+    it('stops at once on a pause', async () => {
+      const { replay, m } = await ready();
+      await record(replay, -30, THROW_IN);
+      await animate(500);
+      set(replay.isPlaying, false);
+      await nextTick();
+      expect(lastThrowIn()).toBeUndefined();
+      m.unmount();
+    });
+
+    it('gives way to a free kick, and does not start while one shows', async () => {
+      const { replay, m } = await ready();
+      await record(replay, -30, THROW_IN);
+      await animate(200);
+      await record(replay, -30, ['EventType.FREE_KICK']);
+      await animate(100);
+      expect(lastThrowIn()).toBeUndefined();
+      expect(last()?.freeKick).toBeDefined();
+      for (let i = 0; i < 130; i++) await record(replay, -30, ['EventType.FREE_KICK']);
+      await record(replay, -30, THROW_IN);
+      await animate(100);
+      expect(lastThrowIn()).toBeUndefined();
+      m.unmount();
+    });
+
+    it('shows nothing while the layer is off, and stops when it is turned off', async () => {
+      const { replay, m } = await ready();
+      await record(replay, -30, THROW_IN);
+      await animate(300);
+      expect(lastThrowIn()).toBeDefined();
+      (at(m.root, 'pipeline-layers-toggle') as HTMLElement).click();
+      await nextTick();
+      (m.root.querySelector('[data-layer="throwInBanner"]') as HTMLElement).click();
+      await nextTick();
+      expect(lastThrowIn()).toBeUndefined();
+      for (let i = 0; i < 130; i++) await record(replay, -30);
+      await record(replay, -30, THROW_IN);
+      await animate(300);
+      expect(lastThrowIn()).toBeUndefined();
+      (m.root.querySelector('[data-layer="throwInBanner"]') as HTMLElement).click();
+      await nextTick();
+      m.unmount();
+    });
+
+    it('shows in place, without sliding, under reduced motion', async () => {
+      const originalMatchMedia = window.matchMedia;
+      window.matchMedia = ((query: string) => ({
+        matches: query.includes('prefers-reduced-motion'),
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      })) as unknown as typeof window.matchMedia;
+      try {
+        const { replay, m } = await ready();
+        await record(replay, -30, THROW_IN);
+        await animate(50);
+        expect(lastThrowIn()).toEqual({ intensity: 1, slide: 1, side: null });
+        await animate(2000);
+        expect(lastThrowIn()).toBeUndefined();
+        m.unmount();
+      } finally {
+        window.matchMedia = originalMatchMedia;
+      }
+    });
+  });
+
+  describe('playing moments by hand', () => {
+    let queued: Array<(ms: number) => void> = [];
+    let clockMs = 1000;
+    const originalRaf = window.requestAnimationFrame;
+    const originalCaf = window.cancelAnimationFrame;
+
+    beforeEach(() => {
+      queued = [];
+      clockMs = 1000;
+      renderFrame.mockClear();
+      window.requestAnimationFrame = ((cb: (ms: number) => void) => {
+        queued.push(cb);
+        return queued.length;
+      }) as typeof window.requestAnimationFrame;
+      window.cancelAnimationFrame = (() => {
+        queued = [];
+      }) as typeof window.cancelAnimationFrame;
+    });
+
+    afterEach(() => {
+      window.requestAnimationFrame = originalRaf;
+      window.cancelAnimationFrame = originalCaf;
+    });
+
+    async function animate(ms: number) {
+      const end = clockMs + ms;
+      while (clockMs < end - 1e-6) {
+        clockMs += 1000 / 60;
+        const cbs = queued;
+        queued = [];
+        cbs.forEach((cb) => cb(clockMs));
+      }
+      await nextTick();
+    }
+
+    type Writable = { value: unknown };
+    const set = (r: unknown, v: unknown) => ((r as Writable).value = v);
+    const frameAt = (ballX: number | null, labels: string[] = []) => ({
+      pitch_dimensions: { length: 105, width: 68 },
+      teams: [
+        {
+          team_id: 0,
+          players: [{ track_id: 4, person_type: 'PersonType.PLAYER', projected_coordinates: { x: 3, y: 2 } }],
+        },
+      ],
+      balls: ballX === null ? [] : [{ projected_coordinates: { x: ballX, y: 5 } }],
+      state: { actions: labels.map((action_type) => ({ action_type })) },
+      frame_data: [{ frame_count: 1 }],
+    });
+    const KNOWN_ENDS = { possession: null, attacks: { 0: 1, 1: -1 }, states: { 0: null, 1: null } };
+
+    async function ready(ballX: number | null = 20, phase: unknown = KNOWN_ENDS) {
+      const replay = fakeReplay('loading');
+      const m = mount(replay, { teamNames: ['Manchester City', 'PSG'] });
+      await nextTick();
+      set(replay.currentTime, 10);
+      set(replay.frame, frameAt(ballX));
+      set(replay.phase, phase);
+      set(replay.state, 'ready');
+      await nextTick();
+      return { replay, m };
+    }
+
+    const last = () =>
+      renderFrame.mock.calls.at(-1)?.[1] as {
+        goal?: { net: { side: number } };
+        attack?: { team: number; name: string; ball?: { x: number; y: number } };
+        freeKick?: { intensity: number };
+        throwIn?: { side: number | null };
+      };
+
+    async function layerOff(root: HTMLElement, key: string) {
+      (at(root, 'pipeline-layers-toggle') as HTMLElement).click();
+      await nextTick();
+      (root.querySelector(`[data-layer="${key}"]`) as HTMLElement).click();
+      await nextTick();
+    }
+
+    // The flow for recording: the layer off, so it never plays by itself,
+    // and played by hand at the moment it should be seen.
+    it('plays the free kick by hand with its layer off and no label, even paused', async () => {
+      const { m } = await ready();
+      await layerOff(m.root, 'freeKick');
+      m.surface().triggerMoment('freeKick');
+      await animate(600);
+      expect(last().freeKick).toMatchObject({ intensity: 1 });
+      m.unmount();
+    });
+
+    // Nothing to wait on when played by hand: no label, no cutaway.
+    it('shows a free kick played by hand for 4 s, whatever play does, then fades out', async () => {
+      const { replay, m } = await ready(null);
+      set(replay.isPlaying, true);
+      await nextTick();
+      m.surface().triggerMoment('freeKick');
+      // The ball is lost and nobody moves: a free kick off its label would hold.
+      for (let i = 0; i < 70; i++) {
+        set(replay.currentTime, (replay.currentTime.value as number) + 0.04);
+        set(replay.frame, frameAt(null));
+        await nextTick();
+        await animate(50);
+      }
+      expect(last().freeKick).toMatchObject({ intensity: 1 });
+      await animate(300);
+      const going = last().freeKick!;
+      expect(going.intensity).toBeGreaterThan(0);
+      expect(going.intensity).toBeLessThan(1);
+      // 4 s from its first frame, a frame after the button.
+      await animate(250);
+      expect(last().freeKick).toBeUndefined();
+      m.unmount();
+    });
+
+    it('shows a free kick played by hand for 4 s under reduced motion too', async () => {
+      const originalMatchMedia = window.matchMedia;
+      window.matchMedia = ((query: string) => ({
+        matches: query.includes('prefers-reduced-motion'),
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      })) as unknown as typeof window.matchMedia;
+      try {
+        const { m } = await ready();
+        m.surface().triggerMoment('freeKick');
+        await animate(3950);
+        expect(last().freeKick).toMatchObject({ intensity: 1 });
+        await animate(100);
+        expect(last().freeKick).toBeUndefined();
+        m.unmount();
+      } finally {
+        window.matchMedia = originalMatchMedia;
+      }
+    });
+
+    it('plays the throw-in by hand, sliding in from the ball’s half', async () => {
+      const { m } = await ready(-25);
+      m.surface().triggerMoment('throwIn');
+      await animate(600);
+      expect(last().throwIn?.side).toBe(-1);
+      m.unmount();
+    });
+
+    it('plays a team’s attack by hand, holding the ball where it is', async () => {
+      const { m } = await ready(-12);
+      m.surface().triggerMoment('attack', 1);
+      await animate(1000);
+      expect(last().attack).toMatchObject({ team: 1, name: 'PSG', ball: { x: -12, y: 5 } });
+      m.unmount();
+    });
+
+    it('plays the goal by hand, into the goal in the ball’s half', async () => {
+      const { m } = await ready(30);
+      m.surface().triggerMoment('goal');
+      await animate(100);
+      expect(last().goal?.net.side).toBe(1);
+      m.unmount();
+    });
+
+    // The shot is seen first; the card comes up as it reaches the net and
+    // goes as the camera eases back.
+    it('brings the goal’s card up as the ball reaches the net, and takes it down at the end', async () => {
+      const { m } = await ready(30);
+      m.surface().triggerMoment('goal');
+      await animate(150);
+      expect(renderFrame.mock.calls.at(-1)?.[1]?.goalBanner).toBeUndefined();
+      await animate(1500);
+      expect(renderFrame.mock.calls.at(-1)?.[1]?.goalBanner).toMatchObject({ intensity: 1 });
+      await animate(2000);
+      expect(renderFrame.mock.calls.at(-1)?.[1]?.goalBanner).toBeUndefined();
+      m.unmount();
+    });
+
+    it('takes over from a moment already showing', async () => {
+      const { m } = await ready();
+      m.surface().triggerMoment('throwIn');
+      await animate(300);
+      m.surface().triggerMoment('freeKick');
+      await animate(100);
+      expect(last().throwIn).toBeUndefined();
+      expect(last().freeKick).toBeDefined();
+      m.unmount();
+    });
+
+    it('says what can be played: no goal without a ball, no attack without a direction', async () => {
+      const withBall = await ready(20);
+      expect(withBall.m.surface().momentAvailability).toEqual({
+        goal: true,
+        attack: { 0: true, 1: true },
+        freeKick: true,
+        throwIn: true,
+      });
+      withBall.m.unmount();
+
+      const without = await ready(null, { possession: null, attacks: { 0: null, 1: null }, states: { 0: null, 1: null } });
+      expect(without.m.surface().momentAvailability).toMatchObject({ goal: false, attack: { 0: false, 1: false } });
+      without.m.surface().triggerMoment('goal');
+      without.m.surface().triggerMoment('attack', 0);
+      await animate(300);
+      expect(last().goal).toBeUndefined();
+      expect(last().attack).toBeUndefined();
+      without.m.unmount();
+    });
+
+    it('is ended by a seek, as the others are', async () => {
+      const { replay, m } = await ready();
+      m.surface().triggerMoment('freeKick');
+      await animate(300);
+      set(replay.currentTime, 60);
+      await nextTick();
+      expect(last().freeKick).toBeUndefined();
+      m.unmount();
+    });
   });
 
   describe('layers menu', () => {
@@ -2022,7 +2442,7 @@ describe('PipelineOutputSurface', () => {
       const { m } = await ready();
       await open(m.root);
       const options = [...m.root.querySelectorAll('[data-testid="pipeline-layer-option"]')];
-      expect(options).toHaveLength(8);
+      expect(options).toHaveLength(9);
       expect(options.every((o) => o.getAttribute('aria-checked') === 'true')).toBe(true);
       m.unmount();
     });

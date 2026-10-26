@@ -117,6 +117,15 @@ useEscapeToClose(() => props.isVisible, closeModal);
 // Add new entries to the TOP of this array
 const changelogEntries = ref([
   {
+    version: 'Beta v3.35',
+    date: 'October 26, 2026',
+    changes: [
+      'A throw-in indicator on the 2D replay: a small banner slides in along the bottom touchline from the side of the throw-in',
+      'A GOAL card comes up over the goal animation as the ball hits the net',
+      'Demo controls beside the Video / Pipeline output tabs play the goal, attack, free kick and throw-in animations by hand, for recording the replay',
+    ],
+  },
+  {
     version: 'Beta v3.34',
     date: 'October 26, 2026',
     changes: [

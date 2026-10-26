@@ -26,7 +26,9 @@
 //    the pitch shaded behind the attack, with a label, under the players,
 //    everyone faded out, and a pulsing ring round the ball (attackIndicator.ts).
 //  - renderFrame takes an optional free kick banner, drawn over everything on
-//    the pitch with everyone faded out (freeKick.ts).
+//    the pitch with everyone faded out (freeKick.ts), and an optional throw-in
+//    indicator sliding in along the bottom touchline (throwIn.ts), and the
+//    goal's card over the goal sequence, fixed to the frame (goalBanner.ts).
 //  - renderFrame takes an optional ball trail, drawn over the players: the
 //    path the tracked ball took, with a dot wherever it turned (ballTrail.ts).
 //  - players are not labelled with their tracking id: it is the tracker's
@@ -80,6 +82,8 @@ import {
 } from './attackIndicator'
 import { trailOpacity, type BallTrail, type TrailPoint } from './ballTrail'
 import { drawFreeKickBanner, type FreeKickBanner } from './freeKick'
+import { drawThrowInIndicator, type ThrowInIndicator } from './throwIn'
+import { drawGoalBanner, type GoalBanner } from './goalBanner'
 import { footballPatches, UPRIGHT, type Spin } from './football'
 import {
   computeViewMatrix,
@@ -176,6 +180,10 @@ export interface FrameLayers {
   attack?: AttackIndicator | undefined
   /** The free kick banner, over everything on the pitch. */
   freeKick?: FreeKickBanner | undefined
+  /** The throw-in indicator, over everything on the pitch, the players left as they are. */
+  throwIn?: ThrowInIndicator | undefined
+  /** The goal's card, over everything, fixed to the frame while the view zooms. */
+  goalBanner?: GoalBanner | undefined
   /** Ring strengths, for a caller that fades the rings in and out. */
   rings?: RingStrengths | undefined
   /** Whether players far from the ball are drawn faint. Default on. */
@@ -402,7 +410,15 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
       ctx.globalAlpha = 1
     }
 
+    if (layers.throwIn) drawThrowInIndicator(ctx as CanvasRenderingContext2D, pd, transform2d, layers.throwIn)
     if (layers.freeKick) drawFreeKickBanner(ctx as CanvasRenderingContext2D, transform2d, layers.freeKick)
+    if (layers.goalBanner) {
+      // Fixed to the frame: the goal sequence zooms the view in on the net
+      // behind it, and at that scale the card would cover the screen.
+      ctx.setTransform(sx, 0, 0, sy, 0, 0)
+      drawGoalBanner(ctx as CanvasRenderingContext2D, transform2d, layers.goalBanner)
+      ctx.setTransform(...matrix)
+    }
 
     // ── Overlay HUD ────────────────────────────────────────────────────────
     const fc = frame.frame_data?.[0]?.frame_count ?? null

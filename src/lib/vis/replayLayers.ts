@@ -10,6 +10,7 @@ export type ReplayLayerKey =
   | 'goal'
   | 'attack'
   | 'freeKick'
+  | 'throwInBanner'
   | 'ballTrail'
   | 'phaseLabels'
   | 'nearbyRings'
@@ -17,6 +18,13 @@ export type ReplayLayerKey =
   | 'ringFades';
 
 export type ReplayLayers = Record<ReplayLayerKey, boolean>;
+
+/**
+ * The moments the replay plays over the data. Each plays by itself on its
+ * label (or, for an attack, its phase) while its layer is on, and can be
+ * played by hand from the demo controls whether or not it is.
+ */
+export type ReplayMoment = 'goal' | 'attack' | 'freeKick' | 'throwIn';
 
 /** In the order the menu lists them. */
 export const REPLAY_LAYERS: ReadonlyArray<{ key: ReplayLayerKey; label: string; hint: string }> = [
@@ -30,6 +38,13 @@ export const REPLAY_LAYERS: ReadonlyArray<{ key: ReplayLayerKey; label: string; 
     key: 'freeKick',
     label: 'Free kick',
     hint: 'A banner on a free kick label, held while play is stopped',
+  },
+  {
+    // Not "throwIn": that was the removed throw-in zoom's key, and a browser
+    // that switched it off would hide this without anyone choosing to.
+    key: 'throwInBanner',
+    label: 'Throw-in',
+    hint: "A banner on a throw-in label, sliding in from the ball's half",
   },
   { key: 'ballTrail', label: 'Ball trail', hint: "The ball's path, with a dot at each turn" },
   {
@@ -58,6 +73,7 @@ export const DEFAULT_REPLAY_LAYERS: ReplayLayers = {
   goal: true,
   attack: true,
   freeKick: true,
+  throwInBanner: true,
   ballTrail: true,
   phaseLabels: true,
   nearbyRings: true,
