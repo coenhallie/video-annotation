@@ -1,17 +1,12 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { httpRangeFetcher } from '@/lib/pipelineData/rangeFetcher';
+import { httpRangeFetcher, RENEW_AFTER_MS } from '@/lib/pipelineData/rangeFetcher';
 
 const URL = 'https://s3.example.com/presigned.jsonl?sig=1';
 
 function mockFetch(status: number, body = '') {
-  return vi.fn(async (_url: string, init?: { headers?: Record<string, string> }) => ({
-    ok: status < 400,
-    status,
-    headers: { get: () => null },
-    text: async () => body,
-    // Expose what was sent so tests can assert on the Range header.
-    __init: init,
-  }));
+  return vi.fn(async (_url: string, _init?: { headers?: Record<string, string> }) =>
+    new Response(body, { status })
+  );
 }
 
 afterEach(() => {
@@ -38,14 +33,25 @@ describe('httpRangeFetcher', () => {
 
   // A seek a newer one has replaced cancels its reads, so the request has to
   // carry the signal through to fetch() for the browser to stop downloading.
-  it('passes the abort signal through to the request', async () => {
-    const f = mockFetch(206, 'hello');
-    vi.stubGlobal('fetch', f);
+  it('cancels a request in flight when the abort signal fires', async () => {
+    let sent: AbortSignal | undefined;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        (_url: string, init?: RequestInit) =>
+          new Promise<Response>((_, reject) => {
+            sent = init?.signal ?? undefined;
+            sent?.addEventListener('abort', () => reject(sent?.reason));
+          })
+      )
+    );
     const fetcher = httpRangeFetcher(URL, { size: 100, acceptsRanges: true });
     const controller = new AbortController();
-    await fetcher.range(10, 20, controller.signal);
-    const init = f.mock.calls[0]?.[1] as { signal?: AbortSignal };
-    expect(init?.signal).toBe(controller.signal);
+    const read = fetcher.range(10, 20, controller.signal).catch((e) => e);
+    await vi.waitFor(() => expect(sent).toBeDefined());
+    controller.abort();
+    expect(((await read) as Error).name).toBe('AbortError');
+    expect(sent?.aborted).toBe(true);
   });
 
   it('rejects a 200 answer to a ranged request rather than treating it as the slice', async () => {
@@ -77,9 +83,93 @@ describe('httpRangeFetcher', () => {
   });
 
   it('throws when the underlying request fails', async () => {
-    const f = mockFetch(500);
+    const f = mockFetch(404);
     vi.stubGlobal('fetch', f);
     const fetcher = httpRangeFetcher(URL, { size: 100, acceptsRanges: true });
     await expect(fetcher.range(0, 10)).rejects.toThrow(/request failed/i);
   });
+
+  // The replay stays open for a whole match; S3 signs a URL for 900 s.
+  describe('presigned URL renewal', () => {
+    const FRESH = 'https://s3.example.com/presigned.jsonl?sig=2';
+
+    function byUrl(replies: Record<string, number[]>) {
+      const calls: string[] = [];
+      const f = vi.fn(async (url: string) => {
+        calls.push(url);
+        const status = replies[url]?.shift() ?? 404;
+        return new Response(status === 206 ? 'data' : '', { status });
+      });
+      vi.stubGlobal('fetch', f);
+      return calls;
+    }
+
+    it('renews the URL when S3 refuses it, and reads the same range again', async () => {
+      const calls = byUrl({ [URL]: [403], [FRESH]: [206] });
+      const renewUrl = vi.fn(async () => FRESH);
+      const fetcher = httpRangeFetcher(URL, { size: 100, acceptsRanges: true }, { renewUrl });
+      await expect(fetcher.range(0, 10)).resolves.toBe('data');
+      expect(calls).toEqual([URL, FRESH]);
+      expect(renewUrl).toHaveBeenCalledTimes(1);
+    });
+
+    it('renews ahead of the expiry, without a refused read first', async () => {
+      const calls = byUrl({ [URL]: [206], [FRESH]: [206] });
+      let clock = 0;
+      const fetcher = httpRangeFetcher(
+        URL,
+        { size: 100, acceptsRanges: true },
+        { renewUrl: async () => FRESH, now: () => clock }
+      );
+      await fetcher.range(0, 10);
+      clock = RENEW_AFTER_MS;
+      await fetcher.range(0, 10);
+      expect(calls).toEqual([URL, FRESH]);
+    });
+
+    it('shares one renewal between reads made together', async () => {
+      byUrl({ [URL]: [403, 403], [FRESH]: [206, 206] });
+      let release!: (url: string) => void;
+      const renewUrl = vi.fn(() => new Promise<string>((r) => (release = r)));
+      const fetcher = httpRangeFetcher(URL, { size: 100, acceptsRanges: true }, { renewUrl });
+      const a = fetcher.range(0, 1);
+      const b = fetcher.range(2, 3);
+      await vi.waitFor(() => expect(renewUrl).toHaveBeenCalledTimes(1));
+      release(FRESH);
+      await expect(Promise.all([a, b])).resolves.toEqual(['data', 'data']);
+      expect(renewUrl).toHaveBeenCalledTimes(1);
+    });
+
+    it('reports the refusal when no fresh URL can be had, or one for another object', async () => {
+      for (const fresh of [null, 'https://elsewhere.example/other.jsonl?sig=1']) {
+        byUrl({ [URL]: [403] });
+        const fetcher = httpRangeFetcher(
+          URL,
+          { size: 100, acceptsRanges: true },
+          { renewUrl: async () => fresh }
+        );
+        await expect(fetcher.range(0, 10)).rejects.toThrow('Pipeline data request failed (403)');
+      }
+    });
+  });
+
+  it('tries a 5xx again after a pause', async () => {
+    vi.useFakeTimers();
+    try {
+      const statuses = [503, 206];
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => {
+          const status = statuses.shift() as number;
+          return new Response(status === 206 ? 'data' : '', { status });
+        })
+      );
+      const read = httpRangeFetcher(URL, { size: 100, acceptsRanges: true }).range(0, 10);
+      await vi.advanceTimersByTimeAsync(1000);
+      await expect(read).resolves.toBe('data');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
+

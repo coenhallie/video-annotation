@@ -88,19 +88,32 @@ interface Foreground {
   promise: Promise<void>;
 }
 
-const DEFAULT_WINDOW_SECONDS = 30;
-const DEFAULT_LRU = 4;
-/** How close to the end of the loaded window playback may get before the next
- *  one is fetched. Without this the pitch freezes at every window boundary
- *  while the range request is in flight. */
-const PREFETCH_SECONDS = 8;
+/**
+ * Seconds of records a window holds: about 1.9 MB on a real export. Small, so
+ * a seek can start playing as soon as one arrives; playback reads several
+ * ahead (LOOKAHEAD_SECONDS), so their size does not limit how far ahead it is.
+ */
+const DEFAULT_WINDOW_SECONDS = 10;
+/**
+ * Windows kept: the history behind a seek's record, the one playing, and
+ * LOOKAHEAD_SECONDS of them ahead, with room to spare.
+ */
+const DEFAULT_LRU = 12;
+/**
+ * How far ahead of the playhead playback keeps records loaded, in seconds,
+ * reading the window after the last loaded one until it is. A window used to
+ * be read only 8 s before the playhead reached it; a 5.7 MB window takes
+ * longer than that on a connection under about 6 Mbit/s, and the pitch froze
+ * at every boundary until it arrived.
+ */
+export const LOOKAHEAD_SECONDS = 40;
 /**
  * Bytes a seek reads at a time while it looks for its record.
  *
  * Deliberately far smaller than a window: a seek only has to find one record
- * to draw, and on a real export a window is 5.7 MB, which is most of a second
- * on a fast connection spent downloading 30 seconds of data to show one
- * frame. The window around the record is read after it is on screen.
+ * to draw, and on a real export a window is 1.9 MB, a noticeable wait spent
+ * downloading 10 seconds of data to show one frame. The window around the
+ * record is read after it is on screen.
  */
 const SEEK_PROBE_BYTES = 65536;
 
@@ -513,23 +526,37 @@ export function usePipelineReplay(opts: {
     pause();
   }
 
+  /** The cached window that carries on from `win`'s last byte, if any. */
+  function following(win: LoadedWindow): LoadedWindow | null {
+    return (
+      windows.find(
+        (w) => w !== win && w.firstOffset <= win.nextOffset && win.nextOffset < w.nextOffset
+      ) ?? null
+    );
+  }
+
   /**
-   * Pull the next window in while the playing one still has room.
+   * Pull the next window in until LOOKAHEAD_SECONDS past the playhead are
+   * loaded.
    *
    * Fire and forget: playback must not wait on it. One at a time, because
-   * every rAF tick asks and a boundary is many ticks wide. It reads on from
-   * the exact byte the playing window ends at rather than estimating where
-   * the next stretch of time starts, so nothing already cached is downloaded
-   * again.
+   * every rAF tick asks; the next is started by the first tick after one
+   * lands. It reads on from the exact byte the loaded run ends at rather than
+   * estimating where the next stretch of time starts, so nothing already
+   * cached is downloaded again.
    */
   function maybePrefetch(current: LoadedWindow): void {
     if (prefetching || foreground || !index) return;
-    const lastT = current.records[current.records.length - 1]?.t;
+    // The run of cached windows that carries on from the playing one.
+    let last = current;
+    for (let i = 0, next = following(last); next && i < windows.length; i++, next = following(last)) {
+      last = next;
+    }
+    const lastT = last.records[last.records.length - 1]?.t;
     if (lastT === undefined) return;
-    if (abs(currentTime.value) < lastT - PREFETCH_SECONDS) return;
-    const from = current.nextOffset;
+    if (lastT - abs(currentTime.value) >= LOOKAHEAD_SECONDS) return;
+    const from = last.nextOffset;
     if (from >= index.size) return;
-    if (windows.some((w) => w.firstOffset <= from && from < w.nextOffset)) return;
 
     const controller = new AbortController();
     prefetchController = controller;

@@ -9,6 +9,7 @@
 export type ReplayLayerKey =
   | 'goal'
   | 'attack'
+  | 'freeKick'
   | 'ballTrail'
   | 'phaseLabels'
   | 'nearbyRings'
@@ -24,6 +25,11 @@ export const REPLAY_LAYERS: ReadonlyArray<{ key: ReplayLayerKey; label: string; 
     key: 'attack',
     label: 'Attack',
     hint: 'Worked out from possession: shade and team name',
+  },
+  {
+    key: 'freeKick',
+    label: 'Free kick',
+    hint: 'A banner on a free kick label, held while play is stopped',
   },
   { key: 'ballTrail', label: 'Ball trail', hint: "The ball's path, with a dot at each turn" },
   {
@@ -51,6 +57,7 @@ export const REPLAY_LAYERS: ReadonlyArray<{ key: ReplayLayerKey; label: string; 
 export const DEFAULT_REPLAY_LAYERS: ReplayLayers = {
   goal: true,
   attack: true,
+  freeKick: true,
   ballTrail: true,
   phaseLabels: true,
   nearbyRings: true,

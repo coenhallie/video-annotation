@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { watch } from 'vue';
-import { usePipelineReplay } from '@/composables/usePipelineReplay';
+import { usePipelineReplay, LOOKAHEAD_SECONDS } from '@/composables/usePipelineReplay';
 import { TRAIL_HISTORY_S } from '@/lib/vis/ballTrail';
 import type { RangeFetcher } from '@/lib/pipelineData/jsonlIndex';
 import {
@@ -725,6 +725,63 @@ describe('usePipelineReplay under network latency', () => {
     // At most the record the playing window cut off is read again, plus the
     // one byte a ranged read backs up by.
     expect(prefetch![0]).toBeGreaterThanOrEqual(playing![1] - (RECORD_BYTES + 1));
+  });
+
+  // A window takes longer to arrive than the few seconds before the playhead
+  // reaches it on a slow connection. Reading only one ahead, playback froze at
+  // every boundary until it did.
+  it('keeps LOOKAHEAD_SECONDS of data ahead, so a slow read does not stall playback', async () => {
+    const clock = manualClock();
+    const g = gated(fakeFile(4000));
+    const r = usePipelineReplay({
+      openFetcher: async () => g.fetcher,
+      raf: clock.raf,
+      caf: clock.caf,
+      windowSeconds: 10,
+    });
+    await r.load();
+    await r.whenIdle();
+    r.play();
+    clock.tick(0);
+    for (let ms = 100; ms <= 1000; ms += 100) {
+      clock.tick(ms);
+      await r.whenIdle();
+    }
+    // From here on the network gives nothing at all.
+    g.hold();
+    for (let ms = 1010; ms <= 35000; ms += 10) {
+      clock.tick(ms);
+      expect(r.buffering.value).toBe(false);
+    }
+    expect(r.currentTime.value).toBeGreaterThan(34);
+    g.release();
+    r.pause();
+  });
+
+  it('reads no further ahead than LOOKAHEAD_SECONDS', async () => {
+    const clock = manualClock();
+    const { fetcher, calls } = counting(fakeFile(4000));
+    const r = usePipelineReplay({
+      openFetcher: async () => fetcher,
+      raf: clock.raf,
+      caf: clock.caf,
+      windowSeconds: 10,
+    });
+    await r.load();
+    await r.whenIdle();
+    // The index is built from probes across the whole file: only what
+    // playback reads from here on counts.
+    const before = calls.length;
+    r.play();
+    clock.tick(0);
+    for (let ms = 100; ms <= 3000; ms += 100) {
+      clock.tick(ms);
+      await r.whenIdle();
+    }
+    const furthest = Math.max(...calls.slice(before).map(([, end]) => end));
+    // 3 s played, LOOKAHEAD_SECONDS ahead of that, and one window of slack.
+    expect(furthest / RECORD_BYTES / 25).toBeLessThan(3 + LOOKAHEAD_SECONDS + 10 + 1);
+    r.pause();
   });
 
   it('plays across a prefetched window boundary without stalling', async () => {

@@ -12,50 +12,7 @@ import {
   sameObject,
 } from '../fragmentedMp4';
 
-// ---- tiny box builders -------------------------------------------------------
-
-const u32 = (n: number) => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
-const u64 = (n: number) => [...u32(Math.floor(n / 2 ** 32)), ...u32(n >>> 0)];
-const str = (s: string) => [...s].map((c) => c.charCodeAt(0));
-const zeros = (n: number) => new Array<number>(n).fill(0);
-const box = (type: string, ...parts: number[][]): number[] => {
-  const body = parts.flat();
-  return [...u32(8 + body.length), ...str(type), ...body];
-};
-const full = (type: string, version: number, flags: number, ...parts: number[][]) =>
-  box(type, [version, (flags >> 16) & 255, (flags >> 8) & 255, flags & 255], ...parts);
-const bytes = (arr: number[]) => Uint8Array.from(arr).buffer;
-
-const TIMESCALE = 12800;
-
-function initSegment(opts: { mvex?: boolean; sampleCount?: number; traks?: number; entry?: string } = {}) {
-  const { mvex = true, sampleCount = 0, traks = 1, entry = 'avc1' } = opts;
-  const ftyp = box('ftyp', str('iso5'), u32(0x200), str('iso5'), str('iso6'), str('mp41'));
-  const mvhd = full('mvhd', 0, 0, u32(0), u32(0), u32(1000), u32(0), zeros(80));
-  const mdhd = full('mdhd', 0, 0, u32(0), u32(0), u32(TIMESCALE), u32(0), [0x55, 0xc4], [0, 0]);
-  // configurationVersion, profile, compat, level, then a couple of filler bytes
-  const avcC = box('avcC', [1, 0x42, 0xc0, 0x20, 0xff, 0xe1]);
-  const sampleEntry = box(entry, zeros(78), avcC);
-  const stsd = full('stsd', 0, 0, u32(1), sampleEntry);
-  const stsz = full('stsz', 0, 0, u32(0), u32(sampleCount));
-  const stbl = box('stbl', stsd, stsz);
-  const trak = box('trak', box('mdia', mdhd, box('minf', stbl)));
-  const trex = full('trex', 0, 0, u32(1), u32(1), u32(512), u32(0), u32(0));
-  const moovParts = [mvhd, ...new Array(traks).fill(trak)];
-  if (mvex) moovParts.push(box('mvex', trex));
-  const moov = box('moov', ...moovParts);
-  return { ftyp, moov, all: [...ftyp, ...moov] };
-}
-
-function mfraBox(entries: { time: number; offset: number }[], version: 0 | 1 = 1) {
-  const rows = entries.flatMap(({ time, offset }) =>
-    version === 1 ? [...u64(time), ...u64(offset), 1, 1, 1] : [...u32(time), ...u32(offset), 1, 1, 1]
-  );
-  const tfra = full('tfra', version, 0, u32(1), u32(0), u32(entries.length), rows);
-  const size = 8 + tfra.length + 16;
-  const mfro = full('mfro', 0, 0, u32(size));
-  return box('mfra', tfra, mfro);
-}
+import { u32, u64, str, zeros, full, box, bytes, TIMESCALE, initSegment, mfraBox } from './mp4Fixture';
 
 // ---- tests -----------------------------------------------------------------
 

@@ -282,10 +282,16 @@ const pipelineReplay = usePipelineReplay({
     const outputVideoId = String(video.videoId).replace(/^aws:/, '');
     const source = await AwsStorageService.getPipelineDataSource(outputVideoId);
     if (!source) return null;
-    return httpRangeFetcher(source.url, {
-      size: source.size,
-      acceptsRanges: source.acceptsRanges,
-    });
+    // The presigned URL lasts 900 s and the replay stays open for a whole
+    // match, so the fetcher asks for a fresh one before it runs out.
+    return httpRangeFetcher(
+      source.url,
+      { size: source.size, acceptsRanges: source.acceptsRanges },
+      {
+        renewUrl: async () =>
+          (await AwsStorageService.getPipelineDataSource(outputVideoId))?.url ?? null,
+      }
+    );
   },
 });
 

@@ -14,7 +14,8 @@
  *
  * Presigned URLs expire mid-session (900 s on S3, against two-hour videos).
  * A 401/403 on any fetch asks `refreshUrl` for a replacement and retries in
- * place: the element, its buffer and the playhead are untouched.
+ * place: the element, its buffer and the playhead are untouched. A request
+ * that stalls or fails in passing is tried again (utils/rangeDownload.ts).
  */
 import {
   buildFragmentIndex,
@@ -28,6 +29,12 @@ import {
   type FragmentIndexEntry,
 } from '@/utils/fragmentedMp4';
 import { snapFrameRate } from '@/utils/frameRate';
+import {
+  download,
+  transientStatus,
+  TransientDownloadError,
+  withRetries,
+} from '@/utils/rangeDownload';
 
 /** Returns a fresh URL for the same object as `staleUrl`, or null to give up. */
 export type RefreshVideoUrl = (staleUrl: string) => Promise<string | null>;
@@ -67,11 +74,17 @@ export interface FragmentedMp4Source {
 
 /** Bytes fetched to find the init segment, and to read a `moof` header. */
 const PROBE_BYTES = 65536;
-/** Slack when matching fragment bounds against `SourceBuffer.buffered`. */
+/**
+ * Slack when matching fragment bounds against `SourceBuffer.buffered`, at
+ * most a quarter of the fragment: the last one can be a fraction of a second.
+ */
 const RANGE_TOLERANCE = 0.15;
 const DEFAULT_LOOKAHEAD = 3;
 const DEFAULT_BACK_BUFFER = 60;
-/** Appends of the same fragment before it is written off as unbufferable. */
+/**
+ * Appends in a row that leave the same fragment still not showing as
+ * buffered before it is written off as unbufferable.
+ */
 const MAX_APPENDS_PER_FRAGMENT = 3;
 
 export class RangeRequestError extends Error {
@@ -95,20 +108,24 @@ export class RangeClient {
     end: number,
     signal?: AbortSignal
   ): Promise<{ data: ArrayBuffer; total: number }> {
-    for (let attempt = 0; ; attempt++) {
-      const init: RequestInit = { headers: { Range: `bytes=${start}-${end}` }, cache: 'no-store' };
-      if (signal) init.signal = signal;
-      const res = await fetch(this.url, init);
-      if (res.status === 206) {
-        const total = Number(res.headers.get('Content-Range')?.split('/')[1] ?? NaN);
-        return { data: await res.arrayBuffer(), total };
+    return withRetries(async () => {
+      for (let attempt = 0; ; attempt++) {
+        const init: RequestInit = { headers: { Range: `bytes=${start}-${end}` }, cache: 'no-store' };
+        if (signal) init.signal = signal;
+        // Only a 206 is read: a 200 of the whole object is not pulled through the pipe.
+        const res = await download(this.url, init, (status) => status === 206);
+        if (res.status === 206 && res.data) {
+          const total = Number(res.headers.get('Content-Range')?.split('/')[1] ?? NaN);
+          return { data: res.data, total };
+        }
+        const rejected = res.status === 401 || res.status === 403;
+        if (rejected && attempt === 0 && (await this.renew())) continue;
+        if (transientStatus(res.status)) {
+          throw new TransientDownloadError(`Range request failed with HTTP ${res.status}`);
+        }
+        throw new RangeRequestError(res.status);
       }
-      // Do not pull a 200 of the whole object through the pipe.
-      await res.body?.cancel().catch(() => undefined);
-      const rejected = res.status === 401 || res.status === 403;
-      if (rejected && attempt === 0 && (await this.renew())) continue;
-      throw new RangeRequestError(res.status);
-    }
+    }, signal);
   }
 
   private renew(): Promise<boolean> {
@@ -217,7 +234,12 @@ class Source implements FragmentedMp4Source {
   private generation = 0;
   private abort = new AbortController();
   private pumping = false;
-  private readonly appends = new Map<number, number>();
+  /**
+   * Fragments appended in full that still did not show as buffered, and how
+   * many times in a row. Cleared as soon as one does, so a fragment trimmed
+   * from behind the playhead is fetched again however often it is gone back to.
+   */
+  private readonly unbuffered = new Map<number, number>();
   private readonly listeners: Array<[EventTarget, string, EventListener]> = [];
 
   constructor(
@@ -275,7 +297,9 @@ class Source implements FragmentedMp4Source {
   }
 
   private async onSourceOpen(): Promise<void> {
-    if (!this.alive) return;
+    // An ended MediaSource opens again by itself when a seek or an append
+    // follows, and fires sourceopen again: the stream is already set up.
+    if (!this.alive || this.sourceBuffer) return;
     try {
       const sb = this.mediaSource.addSourceBuffer(this.mime);
       sb.mode = 'segments';
@@ -322,6 +346,10 @@ class Source implements FragmentedMp4Source {
         const { data } = await this.client.fetch(fragment.start, fragment.end, this.abort.signal);
         if (!this.alive || generation !== this.generation) break;
         await this.appendFragment(i, data);
+        // An append a seek cut short says nothing about the fragment.
+        if (!this.alive || generation !== this.generation) break;
+        if (this.holds(i)) this.unbuffered.delete(i);
+        else this.unbuffered.set(i, (this.unbuffered.get(i) ?? 0) + 1);
       }
       if (this.alive && generation === this.generation) this.maybeEndOfStream();
     } catch (e) {
@@ -346,13 +374,18 @@ class Source implements FragmentedMp4Source {
   }
 
   private isBuffered(i: number): boolean {
-    if ((this.appends.get(i) ?? 0) >= MAX_APPENDS_PER_FRAGMENT) return true;
+    return (this.unbuffered.get(i) ?? 0) >= MAX_APPENDS_PER_FRAGMENT || this.holds(i);
+  }
+
+  /** Whether the buffer holds fragment `i`, give or take the tolerance. */
+  private holds(i: number): boolean {
     const sb = this.sourceBuffer;
     if (!sb) return false;
     const [from, to] = this.fragmentBounds(i);
-    const start = from + RANGE_TOLERANCE;
-    const end = to - RANGE_TOLERANCE;
-    if (end <= start) return true;
+    if (to <= from) return true;
+    const tolerance = Math.min(RANGE_TOLERANCE, (to - from) / 4);
+    const start = from + tolerance;
+    const end = to - tolerance;
     const ranges = sb.buffered;
     for (let k = 0; k < ranges.length; k++) {
       if (ranges.start(k) <= start && ranges.end(k) >= end) return true;
@@ -361,7 +394,6 @@ class Source implements FragmentedMp4Source {
   }
 
   private async appendFragment(i: number, data: ArrayBuffer): Promise<void> {
-    this.appends.set(i, (this.appends.get(i) ?? 0) + 1);
     await this.trimBackBuffer();
     for (let attempt = 0; ; attempt++) {
       try {
@@ -398,18 +430,16 @@ class Source implements FragmentedMp4Source {
     }
   }
 
-  /** Signal the end once the playhead is inside a fully buffered last fragment. */
+  /**
+   * Signal the end once everything from the playhead to the end of the video
+   * is buffered, so the element plays out to the end rather than waiting for
+   * more. A later seek or append opens the MediaSource again by itself.
+   */
   private maybeEndOfStream(): void {
-    const lastIndex = this.index.length - 1;
-    if (
-      this.mediaSource.readyState === 'open' &&
-      !this.sourceBuffer?.updating &&
-      findFragment(this.index, this.video.currentTime) === lastIndex &&
-      this.isBuffered(lastIndex)
-    ) {
-      // A later append past this point reopens the MediaSource by itself.
-      this.mediaSource.endOfStream();
-    }
+    if (this.mediaSource.readyState !== 'open' || this.sourceBuffer?.updating) return;
+    const current = findFragment(this.index, this.video.currentTime);
+    for (let i = current; i < this.index.length; i++) if (!this.isBuffered(i)) return;
+    this.mediaSource.endOfStream();
   }
 
   private async trimBackBuffer(): Promise<void> {

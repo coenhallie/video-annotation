@@ -139,8 +139,14 @@ export function recordingCtx() {
       const size = Number(/([\d.]+)px/.exec(ctx.font)?.[1] ?? 10);
       return { width: text.length * size * 0.6 };
     },
-    drawImage() {
-      ctx.snap('drawImage');
+    drawImage(...args: unknown[]) {
+      ctx.snap('drawImage', args);
+    },
+    shadowOffsetX: 0,
+    shadowOffsetY: 0,
+    // Frame units drawn at their own size, as on a 1280x720 bitmap.
+    getTransform() {
+      return { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
     },
     // The renderer clears and sets the view matrix at the top of every frame.
     // Recorded rather than ignored so tests can assert the transform actually
