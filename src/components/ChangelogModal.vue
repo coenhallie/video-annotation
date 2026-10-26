@@ -117,6 +117,16 @@ useEscapeToClose(() => props.isVisible, closeModal);
 // Add new entries to the TOP of this array
 const changelogEntries = ref([
   {
+    version: 'Beta v3.34',
+    date: 'October 26, 2026',
+    changes: [
+      'A free kick banner on the 2D replay: it fades in over the pitch on a free kick and stays while the broadcast cuts away, until play is back',
+      'The video no longer freezes after jumping back to the same moment several times, and plays through to the end of the match',
+      'The 2D replay keeps working past 15 minutes, and no longer pauses every 30 seconds while it loads on slower connections',
+      'Both players now retry a download that stalls or fails for a moment instead of freezing or stopping',
+    ],
+  },
+  {
     version: 'Beta v3.33',
     date: 'October 25, 2026',
     changes: [
