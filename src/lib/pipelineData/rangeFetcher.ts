@@ -1,4 +1,29 @@
 import type { RangeFetcher } from './jsonlIndex';
+import { sameObject } from '@/utils/fragmentedMp4';
+import {
+  download,
+  transientStatus,
+  TransientDownloadError,
+  withRetries,
+} from '@/utils/rangeDownload';
+
+/**
+ * A presigned URL is renewed once it is this old, ahead of S3's 900 s expiry,
+ * so a read never has to fail first. The replay stays open for the whole of a
+ * two-hour match; before this, every read after the first fifteen minutes was
+ * refused and the replay stopped with "Pipeline data request failed (403)".
+ */
+export const RENEW_AFTER_MS = 10 * 60 * 1000;
+
+export interface RangeFetcherOptions {
+  /**
+   * A fresh presigned URL for the same object, or null when none can be had.
+   * Without it the URL is used until it expires.
+   */
+  renewUrl?: (() => Promise<string | null>) | undefined;
+  /** The clock the URL's age is measured by. For tests. */
+  now?: (() => number) | undefined;
+}
 
 /**
  * Range reads against a presigned URL.
@@ -11,11 +36,42 @@ import type { RangeFetcher } from './jsonlIndex';
  *
  * Nothing here reads a response header, only bodies, so the bucket needs no
  * `Access-Control-Expose-Headers` for any of this to work.
+ *
+ * The URL is renewed before it expires, and again if S3 refuses it anyway (a
+ * laptop asleep past the expiry). A read that stalls or fails in passing is
+ * tried again (utils/rangeDownload.ts).
  */
 export function httpRangeFetcher(
-  url: string,
-  meta: { size: number; acceptsRanges: boolean }
+  initialUrl: string,
+  meta: { size: number; acceptsRanges: boolean },
+  options: RangeFetcherOptions = {}
 ): RangeFetcher {
+  const now = options.now ?? (() => Date.now());
+  let url = initialUrl;
+  let signedAt = now();
+  let renewing: Promise<boolean> | null = null;
+
+  /** Replace the URL, once for every read that asks at the same time. */
+  function renew(): Promise<boolean> {
+    const renewUrl = options.renewUrl;
+    if (!renewUrl) return Promise.resolve(false);
+    if (!renewing) {
+      const stale = url;
+      renewing = renewUrl()
+        .then((fresh) => {
+          if (!fresh || !sameObject(fresh, stale)) return false;
+          url = fresh;
+          signedAt = now();
+          return true;
+        })
+        .catch(() => false)
+        .finally(() => {
+          renewing = null;
+        });
+    }
+    return renewing;
+  }
+
   return {
     async head() {
       return { size: meta.size, acceptsRanges: meta.acceptsRanges };
@@ -39,23 +95,34 @@ export function httpRangeFetcher(
         );
       }
 
-      const res = await fetch(url, {
-        cache: 'no-store',
-        signal: signal ?? null,
-        ...(wantsWholeObject
-          ? {}
-          : { headers: { Range: `bytes=${start}-${endInclusive}` } }),
-      });
+      return withRetries(async () => {
+        // Renewed ahead of time; if that fails, the URL may still have a while.
+        if (now() - signedAt >= RENEW_AFTER_MS) await renew();
+        for (let attempt = 0; ; attempt++) {
+          const res = await download(
+            url,
+            {
+              cache: 'no-store',
+              signal: signal ?? null,
+              ...(wantsWholeObject
+                ? {}
+                : { headers: { Range: `bytes=${start}-${endInclusive}` } }),
+            },
+            (status) => (wantsWholeObject ? status >= 200 && status < 300 : status === 206)
+          );
+          if (res.data) return new TextDecoder().decode(res.data);
 
-      if (!res.ok) {
-        throw new Error(`Pipeline data request failed (${res.status})`);
-      }
-      if (!wantsWholeObject && res.status !== 206) {
-        throw new Error(
-          `Pipeline data server ignored the range request (${res.status})`
-        );
-      }
-      return res.text();
+          const rejected = res.status === 401 || res.status === 403;
+          if (rejected && attempt === 0 && (await renew())) continue;
+          if (transientStatus(res.status)) {
+            throw new TransientDownloadError(`Pipeline data request failed (${res.status})`);
+          }
+          if (res.status < 200 || res.status >= 300) {
+            throw new Error(`Pipeline data request failed (${res.status})`);
+          }
+          throw new Error(`Pipeline data server ignored the range request (${res.status})`);
+        }
+      }, signal);
     },
   };
 }

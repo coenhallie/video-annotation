@@ -93,4 +93,57 @@ describe('RangeClient', () => {
     await expect(client.fetch(0, 0)).rejects.toBeInstanceOf(RangeRequestError);
     expect(refresh).not.toHaveBeenCalled();
   });
+
+  // S3 answers 503 SlowDown under load, and connections drop: one blip used
+  // to stop playback with an error.
+  it('tries a 5xx again, after a pause, and gets the bytes', async () => {
+    vi.useFakeTimers();
+    try {
+      const { fetch, calls } = fakeFetch({
+        [STALE]: [{ status: 503 }, { status: 206, total: 5000, body: [7] }],
+      });
+      globalThis.fetch = fetch as unknown as typeof globalThis.fetch;
+      const got = new RangeClient(STALE, undefined).fetch(0, 0);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect([...new Uint8Array((await got).data)]).toEqual([7]);
+      expect(calls).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('tries a dropped connection again', async () => {
+    vi.useFakeTimers();
+    try {
+      let n = 0;
+      globalThis.fetch = vi.fn(async () => {
+        if (n++ === 0) throw new TypeError('Failed to fetch');
+        return new Response(Uint8Array.from([5]), {
+          status: 206,
+          headers: { 'Content-Range': 'bytes 0-0/10' },
+        });
+      }) as unknown as typeof globalThis.fetch;
+      const got = new RangeClient(STALE, undefined).fetch(0, 0);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect([...new Uint8Array((await got).data)]).toEqual([5]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not try again a request the player cancelled', async () => {
+    const f = vi.fn(
+      (_url: string, init?: RequestInit) =>
+        new Promise<Response>((_, reject) =>
+          init?.signal?.addEventListener('abort', () => reject(init.signal?.reason))
+        )
+    );
+    globalThis.fetch = f as unknown as typeof globalThis.fetch;
+    const controller = new AbortController();
+    const got = new RangeClient(STALE, undefined).fetch(0, 0, controller.signal).catch((e) => e);
+    controller.abort();
+    expect(((await got) as Error).name).toBe('AbortError');
+    expect(f).toHaveBeenCalledTimes(1);
+  });
 });
+
