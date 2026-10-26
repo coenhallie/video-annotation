@@ -1,6 +1,6 @@
 import type { Frame, Transform2D } from './types';
 import { frameHasAction } from './actionLabels';
-import { designUnit, worldToPx } from './pitchGeometry';
+import { CARD_MIDDLE_PX, drawCentreCard } from './eventBanner';
 
 /**
  * The free kick, as the match-summary design shows it: "FREE KICK" and the
@@ -29,6 +29,13 @@ export interface FreeKickBanner {
 export const FREE_KICK_IN_MS = 400;
 export const FREE_KICK_SHOW_MS = 2000;
 export const FREE_KICK_OUT_MS = 400;
+
+/**
+ * How long a free kick played by hand from the demo controls is on screen,
+ * fading in and out included. It has no label or cutaway to wait on, so it
+ * runs for a set time, for recording.
+ */
+export const FREE_KICK_DEMO_MS = 4000;
 
 /**
  * Play counts as stopped once nobody has moved for this long, in seconds of
@@ -99,33 +106,20 @@ export function playMoved(prev: Frame, next: Frame): boolean {
 }
 
 /**
- * The banner, in design pixels (designUnit), so it keeps its size against the
- * pitch at any zoom. Measured from the design's frame, from the band's top
- * left corner; the band is centred on the pitch.
+ * The free kick's card (vp-pitch-1, node 5:22): "FREE KICK", and the free
+ * kick icon inset in its 219 px slot at (265, 124) as the design places it.
  */
-const BAND_WIDTH_PX = 736;
-const BAND_HEIGHT_PX = 373;
-/** The band's colour, solid from a quarter of the way across to three quarters, clear at each end. */
-const BAND_RGB = '12, 63, 47';
-const BAND_SOLID_FROM = 0.25;
-const BAND_SOLID_TO = 0.75481;
-/** "FREE KICK": its left edge, its baseline and its size. */
-const TITLE_LEFT_PX = BAND_WIDTH_PX / 2 - 232;
-const TITLE_BASELINE_PX = 13 + 92 * 0.96875;
-const TITLE_FONT_PX = 92;
-export const TITLE_FONT = 'Inter, sans-serif';
-/** The title's shadow: 0 4px 24px, black at 15%. */
-const TITLE_SHADOW_Y_PX = 4;
-const TITLE_SHADOW_BLUR_PX = 24;
-const TITLE_SHADOW_COLOR = 'rgba(0, 0, 0, 0.15)';
-/** The icon's drawing, inset in its 219 px slot as the design places it. */
-const ICON_SLOT_LEFT_PX = 265;
-const ICON_SLOT_TOP_PX = 124;
 const ICON_SLOT_PX = 219;
-const ICON_LEFT_PX = ICON_SLOT_LEFT_PX + ICON_SLOT_PX * 0.1406;
-const ICON_TOP_PX = ICON_SLOT_TOP_PX + ICON_SLOT_PX * 0.1727;
-const ICON_WIDTH_PX = ICON_SLOT_PX * (1 - 0.1406 - 0.1484);
-const ICON_HEIGHT_PX = ICON_SLOT_PX * (1 - 0.1727 - 0.1875);
+const FREE_KICK_CARD = {
+  title: 'FREE KICK',
+  titleLeftPx: CARD_MIDDLE_PX - 232,
+  iconBox: {
+    left: 265 + ICON_SLOT_PX * 0.1406,
+    top: 124 + ICON_SLOT_PX * 0.1727,
+    width: ICON_SLOT_PX * (1 - 0.1406 - 0.1484),
+    height: ICON_SLOT_PX * (1 - 0.1727 - 0.1875),
+  },
+};
 
 const clamp01 = (k: number) => Math.min(1, Math.max(0, k));
 
@@ -138,45 +132,5 @@ export function drawFreeKickBanner(
   t: Transform2D,
   banner: FreeKickBanner
 ): void {
-  const alpha = clamp01(banner.intensity);
-  if (alpha <= 0) return;
-  const u = designUnit(t);
-  const [cx, cy] = worldToPx(0, 0, t);
-  const left = cx - (BAND_WIDTH_PX / 2) * u;
-  const top = cy - (BAND_HEIGHT_PX / 2) * u;
-  const width = BAND_WIDTH_PX * u;
-
-  ctx.save();
-  ctx.globalAlpha = alpha;
-  const band = ctx.createLinearGradient(left, 0, left + width, 0);
-  band.addColorStop(0, `rgba(${BAND_RGB}, 0)`);
-  band.addColorStop(BAND_SOLID_FROM, `rgb(${BAND_RGB})`);
-  band.addColorStop(BAND_SOLID_TO, `rgb(${BAND_RGB})`);
-  band.addColorStop(1, `rgba(${BAND_RGB}, 0)`);
-  ctx.fillStyle = band;
-  ctx.fillRect(left, top, width, BAND_HEIGHT_PX * u);
-
-  // A shadow is drawn in the bitmap's pixels, whatever the transform.
-  const scale = ctx.getTransform().a * u;
-  ctx.shadowColor = TITLE_SHADOW_COLOR;
-  ctx.shadowBlur = TITLE_SHADOW_BLUR_PX * scale;
-  ctx.shadowOffsetX = 0;
-  ctx.shadowOffsetY = TITLE_SHADOW_Y_PX * scale;
-  ctx.font = `italic 900 ${TITLE_FONT_PX * u}px ${TITLE_FONT}`;
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'alphabetic';
-  ctx.fillStyle = '#ffffff';
-  ctx.fillText('FREE KICK', left + TITLE_LEFT_PX * u, top + TITLE_BASELINE_PX * u);
-  ctx.shadowColor = 'transparent';
-
-  if (banner.icon) {
-    ctx.drawImage(
-      banner.icon,
-      left + ICON_LEFT_PX * u,
-      top + ICON_TOP_PX * u,
-      ICON_WIDTH_PX * u,
-      ICON_HEIGHT_PX * u
-    );
-  }
-  ctx.restore();
+  drawCentreCard(ctx, t, { ...FREE_KICK_CARD, icon: banner.icon }, clamp01(banner.intensity));
 }

@@ -23,6 +23,8 @@ import DashboardModals from '@/components/DashboardModals.vue';
 import AnnotationQuickPick from '@/components/AnnotationQuickPick.vue';
 import EditorSurfaceTabs from '@/components/EditorSurfaceTabs.vue';
 import PipelineOutputSurface from '@/components/PipelineOutputSurface.vue';
+import ReplayMomentTriggers from '@/components/ReplayMomentTriggers.vue';
+import { PERSON_COLORS } from '@/lib/vis/constants';
 import DrawingCanvas from '@/components/DrawingCanvas.vue';
 import { usePipelineReplay } from '@/composables/usePipelineReplay';
 import { httpRangeFetcher } from '@/lib/pipelineData/rangeFetcher';
@@ -304,6 +306,18 @@ const pipelineReplay = usePipelineReplay({
 // at all, and mounting on every editor open would fire a request for each
 // one that can only fail.
 const pipelineEverOpened = ref(false);
+
+// The replay surface, for the demo controls beside its tab that play its
+// moments by hand (ReplayMomentTriggers). Named as the replay names them:
+// after the match title's teams, first-named as team 0, or by their colours.
+const pipelineSurfaceRef = ref<InstanceType<typeof PipelineOutputSurface> | null>(null);
+const replayTeams = computed(() => {
+  const names = pipelineTeamNames(currentVideoObject.value?.title);
+  return [
+    { name: names?.[0] ?? 'Red', color: PERSON_COLORS.home.fill },
+    { name: names?.[1] ?? 'Blue', color: PERSON_COLORS.away.fill },
+  ] as [{ name: string; color: string }, { name: string; color: string }];
+});
 
 // The two raw sources `timeline` and `annotationStampFor` both read from.
 // Named separately so a new annotation's stamp can be derived from the same
@@ -2048,7 +2062,14 @@ watch(
         <EditorSurfaceTabs
           v-if="hasPipelineSurface"
           v-model="activeSurface"
-        />
+        >
+          <ReplayMomentTriggers
+            v-if="activeSurface === 'pipeline' && pipelineEverOpened"
+            :availability="pipelineSurfaceRef?.momentAvailability ?? null"
+            :teams="replayTeams"
+            @trigger="(moment, team) => pipelineSurfaceRef?.triggerMoment(moment, team)"
+          />
+        </EditorSurfaceTabs>
         <div class="flex min-h-0 flex-1 items-center justify-center p-2 lg:p-6">
           <div class="w-full h-full flex flex-col items-center justify-center">
             <!--
@@ -2109,6 +2130,7 @@ watch(
               class="relative h-full w-full"
             >
               <PipelineOutputSurface
+                ref="pipelineSurfaceRef"
                 :replay="pipelineReplay"
                 :team-names="pipelineTeamNames(currentVideoObject?.title)"
                 @context-menu="openQuickPick"

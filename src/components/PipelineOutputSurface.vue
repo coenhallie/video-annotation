@@ -16,6 +16,7 @@ import {
 } from '@/lib/vis/attackIndicator';
 import type { BallTrail } from '@/lib/vis/ballTrail';
 import {
+  FREE_KICK_DEMO_MS,
   FREE_KICK_IN_MS,
   FREE_KICK_LABEL_HOLD_S,
   FREE_KICK_OUT_MS,
@@ -27,11 +28,22 @@ import {
   type FreeKickBanner,
 } from '@/lib/vis/freeKick';
 import freeKickIconUrl from '@/assets/free-kick.svg';
+import goalIconUrl from '@/assets/goal-net.svg';
+import { goalBannerIntensity, type GoalBanner } from '@/lib/vis/goalBanner';
+import {
+  THROW_IN_IN_MS,
+  THROW_IN_OUT_MS,
+  THROW_IN_REARM_S,
+  THROW_IN_SHOW_MS,
+  isThrowInFrame,
+  type ThrowInIndicator,
+} from '@/lib/vis/throwIn';
 import {
   REPLAY_LAYERS,
   readReplayLayers,
   writeReplayLayers,
   type ReplayLayerKey,
+  type ReplayMoment,
 } from '@/lib/vis/replayLayers';
 import {
   goalCamera,
@@ -100,6 +112,7 @@ function toggleLayer(key: ReplayLayerKey): void {
   if (key === 'goal' && !layers.goal) stopGoal();
   if (key === 'attack' && !layers.attack) stopAttack();
   if (key === 'freeKick' && !layers.freeKick) stopFreeKick();
+  if (key === 'throwInBanner' && !layers.throwInBanner) stopThrowIn();
   if (key === 'ringFades' && !layers.ringFades) settleRings();
   paint();
 }
@@ -181,6 +194,8 @@ function paint(): void {
       goal,
       attack: attackShown,
       freeKick: freeKickValue(),
+      throwIn: throwInValue(),
+      goalBanner: goalBannerValue(),
       rings: {
         nearby: layers.nearbyRings ? new Map(nearbyRings) : new Map(),
         possession: new Map(possessionRings),
@@ -407,6 +422,8 @@ function step(frames: number) {
 //
 // When playback runs into a frame the pipeline labels GOAL, a ball is shot into
 // the net and settles there, in place of the tracked ball. See goalSequence.ts.
+// As it reaches the net the goal's card comes up, fixed to the frame while the
+// view zooms behind it (goalBanner.ts).
 //
 // It only ever plays during playback, and anything that means someone wants
 // the real frame - pausing, seeking, stepping, pressing on the drawing layer -
@@ -453,6 +470,17 @@ function goalOverlay(): GoalOverlay | undefined {
     trail: state.trail,
     net: { side: goal.plan.side, y: goal.plan.impact.y, metres: state.netBulge },
   };
+}
+
+/**
+ * The goal's card over the sequence (goalBanner.ts): in as the ball reaches
+ * the net, out as the camera eases back. With reduced motion the ball is in
+ * the net from the start, and so is the card.
+ */
+function goalBannerValue(): GoalBanner | undefined {
+  if (!goal) return undefined;
+  const intensity = prefersReducedMotion() ? 1 : goalBannerIntensity(goal.plan, goal.elapsedMs);
+  return intensity > 0 ? { intensity, icon: goalIcon } : undefined;
 }
 
 function renderedWidth(): number {
@@ -540,9 +568,12 @@ watch(
       stopGoal();
       stopAttack();
       stopFreeKick();
+      stopThrowIn();
       // Wherever the clock went, nothing seen before counts from here: the
-      // frame watcher notes the label again if the new record carries it.
+      // frame watcher notes the labels and the ball again from the new record.
       freeKickLabelAt = null;
+      throwInLabelAt = null;
+      lastBall = null;
       playMovedAt = now;
     }
   },
@@ -556,6 +587,7 @@ watch(
     stopGoal();
     stopAttack();
     stopFreeKick();
+    stopThrowIn();
     settleRings();
     paint();
   }
@@ -566,6 +598,7 @@ function stopSequences(): void {
   stopGoal();
   stopAttack();
   stopFreeKick();
+  stopThrowIn();
 }
 
 // ── Attack ──────────────────────────────────────────────────────────────────
@@ -637,7 +670,7 @@ let attackMoment: {
   color: string;
   direction: 1 | -1;
   /** The ball, its trail and how it was turned when the attack was shown. */
-  ball: { x: number; y: number };
+  ball: { x: number; y: number } | null;
   trail: BallTrail | null;
   spin: Spin;
   startedMs: number | null;
@@ -681,7 +714,7 @@ function attackValue(): AttackIndicator | undefined {
     intensity,
     leaving,
     playersFade,
-    ball: m.ball,
+    ...(m.ball ? { ball: m.ball } : {}),
     ...(still ? {} : { pulse: (e / ATTACK_PULSE_MS) % 1 }),
   };
 }
@@ -702,7 +735,7 @@ function attackStep(ms: number): void {
 
 function startAttack(
   target: { team: TeamId; direction: 1 | -1; color: string },
-  ball: { x: number; y: number }
+  ball: { x: number; y: number } | null
 ): void {
   attackMoment = {
     ...target,
@@ -771,6 +804,8 @@ let freeKick: {
   elapsedMs: number;
   /** When it started to fade out, in ms from its start; null until then. */
   leavingFromMs: number | null;
+  /** Played by hand: on screen for FREE_KICK_DEMO_MS, whatever play does. */
+  byHand: boolean;
 } | null = null;
 let freeKickRaf: number | null = null;
 /** The replay time the free kick label was last seen at, or null. */
@@ -779,6 +814,8 @@ let freeKickLabelAt: number | null = null;
 let playMovedAt = 0;
 /** The free kick icon, once it has loaded. */
 let freeKickIcon: HTMLImageElement | null = null;
+/** The goal card's icon, once it has loaded. */
+let goalIcon: HTMLImageElement | null = null;
 
 /**
  * Whether the free kick is still being taken: its label is on, nobody has
@@ -808,11 +845,10 @@ function freeKickStep(ms: number): void {
   if (!freeKick) return;
   if (freeKick.startedMs === null) freeKick.startedMs = ms;
   freeKick.elapsedMs = ms - freeKick.startedMs;
-  if (
-    freeKick.leavingFromMs === null &&
-    freeKick.elapsedMs >= FREE_KICK_SHOW_MS &&
-    !freeKickUnderWay()
-  ) {
+  const over = freeKick.byHand
+    ? freeKick.elapsedMs >= FREE_KICK_DEMO_MS - (prefersReducedMotion() ? 0 : FREE_KICK_OUT_MS)
+    : freeKick.elapsedMs >= FREE_KICK_SHOW_MS && !freeKickUnderWay();
+  if (freeKick.leavingFromMs === null && over) {
     if (prefersReducedMotion()) {
       stopFreeKick();
       return;
@@ -857,19 +893,176 @@ function updateFreeKick(frame: Frame, prevFrame: Frame | null | undefined, now: 
   freeKickLabelAt = now;
   if (!fresh || !layers.freeKick || goal || freeKick) return;
   stopAttack();
-  freeKick = { startedMs: null, elapsedMs: 0, leavingFromMs: null };
+  stopThrowIn();
+  startFreeKick();
+}
+
+function startFreeKick(byHand = false): void {
+  freeKick = { startedMs: null, elapsedMs: 0, leavingFromMs: null, byHand };
   freeKickRaf = window.requestAnimationFrame(freeKickStep);
 }
 
-function loadFreeKickIcon(): void {
+/** Load the event cards' icons, repainting as each arrives. */
+function loadEventIcons(): void {
   if (typeof Image === 'undefined') return;
-  const icon = new Image();
-  icon.onload = () => {
-    freeKickIcon = icon;
-    paint();
+  const load = (url: string, loaded: (icon: HTMLImageElement) => void) => {
+    const icon = new Image();
+    icon.onload = () => {
+      loaded(icon);
+      paint();
+    };
+    icon.src = url;
   };
-  icon.src = freeKickIconUrl;
+  load(freeKickIconUrl, (icon) => (freeKickIcon = icon));
+  load(goalIconUrl, (icon) => (goalIcon = icon));
 }
+
+// ── Throw-in ────────────────────────────────────────────────────────────────
+//
+// When playback runs into a frame the pipeline labels a throw-in, a small
+// "THROW IN" band slides in along the bottom touchline, as on the design,
+// stays until THROW_IN_SHOW_MS from the start, and slides back out the way it
+// came (throwIn.ts). The players are left as they are.
+//
+// The export does not say which team takes a throw-in, so it slides in from
+// the side of the half the ball is in: the ball on the frame, or the last one
+// tracked within BALL_MEMORY_S, as the ball is often lost as it goes out.
+// With no ball to go by it fades in where it stands.
+//
+// Shown once per throw-in, as the label flickers (THROW_IN_REARM_S). Like the
+// other moments it only plays during playback and anything that means someone
+// wants the real frame stops it; a free kick or a goal takes over from it.
+
+/** How long, in seconds of replay time, the last tracked ball says which half play is in. */
+const BALL_MEMORY_S = 5;
+
+let throwIn: { side: -1 | 1 | null; startedMs: number | null; elapsedMs: number } | null = null;
+let throwInRaf: number | null = null;
+/** The replay time the throw-in label was last seen at, or null. */
+let throwInLabelAt: number | null = null;
+/** Where along the pitch the ball was last tracked, in metres, and when. */
+let lastBall: { x: number; at: number } | null = null;
+
+function throwInValue(): ThrowInIndicator | undefined {
+  const m = throwIn;
+  if (!m) return undefined;
+  if (prefersReducedMotion()) return { intensity: 1, slide: 1, side: null };
+  const e = m.elapsedMs;
+  const k =
+    e >= THROW_IN_SHOW_MS
+      ? Math.max(0, 1 - (e - THROW_IN_SHOW_MS) / THROW_IN_OUT_MS)
+      : Math.min(1, e / THROW_IN_IN_MS);
+  return { intensity: k, slide: k, side: m.side };
+}
+
+function throwInStep(ms: number): void {
+  throwInRaf = null;
+  if (!throwIn) return;
+  if (throwIn.startedMs === null) throwIn.startedMs = ms;
+  throwIn.elapsedMs = ms - throwIn.startedMs;
+  const end = prefersReducedMotion() ? THROW_IN_SHOW_MS : THROW_IN_SHOW_MS + THROW_IN_OUT_MS;
+  if (throwIn.elapsedMs >= end) {
+    stopThrowIn();
+    return;
+  }
+  paint();
+  throwInRaf = window.requestAnimationFrame(throwInStep);
+}
+
+/** End the throw-in at once, back to the frame as it is. */
+function stopThrowIn(): void {
+  if (!throwIn && throwInRaf === null) return;
+  if (throwInRaf !== null) window.cancelAnimationFrame(throwInRaf);
+  throwInRaf = null;
+  throwIn = null;
+  paint();
+}
+
+/**
+ * Note where the ball is on `frame`, and show the throw-in if it is one that
+ * playback has just run into. Called for every frame drawn, after the free
+ * kick has had its say.
+ */
+function updateThrowIn(frame: Frame, now: number): void {
+  const ball = shownBall(frame, undefined);
+  if (ball) lastBall = { x: ball.x, at: now };
+  const labelled = isThrowInFrame(frame);
+  // Landed on by a seek or a step: a throw-in under way has been seen.
+  if (!lastStepWasPlayback) {
+    throwInLabelAt = labelled ? now : null;
+    return;
+  }
+  if (!labelled) return;
+  const fresh = throwInLabelAt === null || now - throwInLabelAt > THROW_IN_REARM_S;
+  throwInLabelAt = now;
+  if (!fresh || !layers.throwInBanner || goal || freeKick || throwIn) return;
+  startThrowIn(now);
+}
+
+/** Slide in from the half the ball is in, or was last tracked in, as of `now`. */
+function startThrowIn(now: number): void {
+  const side = lastBall && now - lastBall.at <= BALL_MEMORY_S ? (lastBall.x < 0 ? -1 : 1) : null;
+  throwIn = { side, startedMs: null, elapsedMs: 0 };
+  throwInRaf = window.requestAnimationFrame(throwInStep);
+}
+
+// ── Playing a moment by hand ────────────────────────────────────────────────
+//
+// For recording the replay: each moment can be played from the demo controls
+// outside the replay (ReplayMomentTriggers.vue) at the moment it should be
+// seen, whether or not its layer plays it by itself. One played by hand takes
+// over from whatever is showing and runs as it would on its label, during
+// playback or not, except the free kick: with no label or cutaway to wait
+// on, it is on screen for FREE_KICK_DEMO_MS. A seek or a step ends any of
+// them, as it ends the others.
+
+/** Which moments can be played on the frame on screen. */
+const momentAvailability = computed(() => {
+  const frame = props.replay.frame.value;
+  const phase = props.replay.phase.value;
+  const ready = props.replay.state.value === 'ready' && frame !== null;
+  return {
+    // The goal it goes in is the one in the ball's half.
+    goal: ready && planGoal(frame) !== null,
+    // Without a direction there is no telling which goal a team attacks.
+    attack: {
+      0: ready && phase?.attacks[0] != null,
+      1: ready && phase?.attacks[1] != null,
+    } as Record<TeamId, boolean>,
+    freeKick: ready,
+    throwIn: ready,
+  };
+});
+
+/** Play `moment` now; for an attack, `team`'s. Nothing happens if it cannot be played here. */
+function triggerMoment(moment: ReplayMoment, team: TeamId = 0): void {
+  const frame = props.replay.frame.value;
+  if (props.replay.state.value !== 'ready' || !frame) return;
+  const now = props.replay.currentTime.value;
+  if (moment === 'goal') {
+    if (!planGoal(frame)) return;
+    stopSequences();
+    startGoal(frame);
+  } else if (moment === 'attack') {
+    const direction = props.replay.phase.value?.attacks[team];
+    if (direction == null) return;
+    stopSequences();
+    // Seen, so it does not play again by itself once this one is over.
+    attackSeen = `${team}:${direction}`;
+    startAttack({ team, direction, color: PHASE_TEAMS[team].color }, shownBall(frame, undefined));
+  } else if (moment === 'freeKick') {
+    stopSequences();
+    freeKickLabelAt = now;
+    startFreeKick(true);
+  } else {
+    stopSequences();
+    throwInLabelAt = now;
+    startThrowIn(now);
+  }
+  paint();
+}
+
+defineExpose({ triggerMoment, momentAvailability });
 
 // ── Rings ───────────────────────────────────────────────────────────────────
 //
@@ -1087,13 +1280,15 @@ watch(
       ensureRenderer();
       const labelled = isGoalFrame(frame);
       if (labelled && layers.goal && !goalLabelSeen && !goal && lastStepWasPlayback) {
-        // The goal takes over from an attack or a free kick still showing.
+        // The goal takes over from any other moment still showing.
         stopAttack();
         stopFreeKick();
+        stopThrowIn();
         startGoal(frame);
       }
       goalLabelSeen = labelled;
       updateFreeKick(frame, prevFrame, now);
+      updateThrowIn(frame, now);
       maybeStartAttack(frame);
     }
     // A fade that has just finished still needs the paint that shows its end.
@@ -1126,7 +1321,7 @@ watch(
 onMounted(() => {
   watchPixelRatio();
   loadLabelFont();
-  loadFreeKickIcon();
+  loadEventIcons();
   void props.replay.load();
 });
 
@@ -1156,6 +1351,7 @@ onUnmounted(() => {
   stopGoal();
   stopAttack();
   stopFreeKick();
+  stopThrowIn();
   dprQuery?.removeEventListener('change', onPixelRatioChange);
   dprQuery = null;
   props.replay.dispose();

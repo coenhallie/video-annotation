@@ -23,27 +23,33 @@ const select = (surface: AnnotationSurface) => {
 </script>
 
 <template>
-  <div
-    role="tablist"
-    aria-label="Editor surface"
-    class="flex shrink-0 items-center gap-1 border-b border-white/10 bg-black px-4"
-  >
-    <button
-      v-for="tab in TABS"
-      :key="tab.id"
-      type="button"
-      role="tab"
-      :data-testid="`surface-tab-${tab.id}`"
-      :aria-selected="tab.id === modelValue ? 'true' : 'false'"
-      class="relative -mb-px border-b-2 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] transition-colors"
-      :class="
-        tab.id === modelValue
-          ? 'border-white text-white'
-          : 'border-transparent text-gray-500 hover:text-gray-300'
-      "
-      @click="select(tab.id)"
+  <div class="flex shrink-0 items-center border-b border-white/10 bg-black px-4">
+    <div
+      role="tablist"
+      aria-label="Editor surface"
+      class="flex items-center gap-1"
     >
-      {{ tab.label }}
-    </button>
+      <button
+        v-for="tab in TABS"
+        :key="tab.id"
+        type="button"
+        role="tab"
+        :data-testid="`surface-tab-${tab.id}`"
+        :aria-selected="tab.id === modelValue ? 'true' : 'false'"
+        class="relative -mb-px border-b-2 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] transition-colors"
+        :class="
+          tab.id === modelValue
+            ? 'border-white text-white'
+            : 'border-transparent text-gray-500 hover:text-gray-300'
+        "
+        @click="select(tab.id)"
+      >
+        {{ tab.label }}
+      </button>
+    </div>
+    <!-- Controls for the surface on show, kept out of the tablist itself. -->
+    <div class="ml-auto flex min-w-0 items-center">
+      <slot />
+    </div>
   </div>
 </template>
