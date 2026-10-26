@@ -16,6 +16,18 @@ import {
 } from '@/lib/vis/attackIndicator';
 import type { BallTrail } from '@/lib/vis/ballTrail';
 import {
+  FREE_KICK_IN_MS,
+  FREE_KICK_LABEL_HOLD_S,
+  FREE_KICK_OUT_MS,
+  FREE_KICK_REARM_S,
+  FREE_KICK_SHOW_MS,
+  FREE_KICK_STALL_S,
+  isFreeKickFrame,
+  playMoved,
+  type FreeKickBanner,
+} from '@/lib/vis/freeKick';
+import freeKickIconUrl from '@/assets/free-kick.svg';
+import {
   REPLAY_LAYERS,
   readReplayLayers,
   writeReplayLayers,
@@ -87,6 +99,7 @@ function toggleLayer(key: ReplayLayerKey): void {
   // A sequence switched off mid-way ends now, putting the user's view back.
   if (key === 'goal' && !layers.goal) stopGoal();
   if (key === 'attack' && !layers.attack) stopAttack();
+  if (key === 'freeKick' && !layers.freeKick) stopFreeKick();
   if (key === 'ringFades' && !layers.ringFades) settleRings();
   paint();
 }
@@ -167,6 +180,7 @@ function paint(): void {
     renderer?.renderFrame(frame, {
       goal,
       attack: attackShown,
+      freeKick: freeKickValue(),
       rings: {
         nearby: layers.nearbyRings ? new Map(nearbyRings) : new Map(),
         possession: new Map(possessionRings),
@@ -525,6 +539,11 @@ watch(
     if (!lastStepWasPlayback) {
       stopGoal();
       stopAttack();
+      stopFreeKick();
+      // Wherever the clock went, nothing seen before counts from here: the
+      // frame watcher notes the label again if the new record carries it.
+      freeKickLabelAt = null;
+      playMovedAt = now;
     }
   },
   { flush: 'sync' }
@@ -536,15 +555,17 @@ watch(
     if (playing) return;
     stopGoal();
     stopAttack();
+    stopFreeKick();
     settleRings();
     paint();
   }
 );
 
-/** Someone wants the real frame and their own view: end both sequences. */
+/** Someone wants the real frame and their own view: end every sequence. */
 function stopSequences(): void {
   stopGoal();
   stopAttack();
+  stopFreeKick();
 }
 
 // ── Attack ──────────────────────────────────────────────────────────────────
@@ -722,7 +743,132 @@ function maybeStartAttack(frame: Frame): void {
   // Not yet in the other team's half: not shown until it is.
   if (!ball || target.direction * ball.x <= 0) return;
   attackSeen = key;
-  if (layers.attack && !goal && !attackMoment) startAttack(target, ball);
+  if (layers.attack && !goal && !freeKick && !attackMoment) startAttack(target, ball);
+}
+
+// ── Free kick ───────────────────────────────────────────────────────────────
+//
+// When playback runs into a frame the pipeline labels a free kick, "FREE KICK"
+// is shown across the middle of the pitch, as on the design, fading in as
+// everyone on the pitch fades out (freeKick.ts).
+//
+// A free kick is usually prepared off camera, and while the broadcast is away
+// the data stops: it loses the ball, then repeats everyone's last positions,
+// or has no records at all, and the pitch stands still. So the banner stays
+// for at least FREE_KICK_SHOW_MS, and after that for as long as the label is
+// on or play is stopped; once neither is true, with everyone moving and the
+// ball back, it fades out onto play as it is.
+//
+// The label flickers on and off over a few records around one free kick, so
+// it is shown once, the first time it is seen after being off for
+// FREE_KICK_REARM_S. Like the other sequences it only ever plays during
+// playback, anything that means someone wants the real frame stops it at
+// once, and a free kick a seek or a step lands in is not shown when play then
+// carries on. It takes over from an attack, and a goal takes over from it.
+
+let freeKick: {
+  startedMs: number | null;
+  elapsedMs: number;
+  /** When it started to fade out, in ms from its start; null until then. */
+  leavingFromMs: number | null;
+} | null = null;
+let freeKickRaf: number | null = null;
+/** The replay time the free kick label was last seen at, or null. */
+let freeKickLabelAt: number | null = null;
+/** The replay time anyone on the pitch, or the ball, last moved at. */
+let playMovedAt = 0;
+/** The free kick icon, once it has loaded. */
+let freeKickIcon: HTMLImageElement | null = null;
+
+/**
+ * Whether the free kick is still being taken: its label is on, nobody has
+ * moved for FREE_KICK_STALL_S of replay time, or the ball is not tracked.
+ */
+function freeKickUnderWay(): boolean {
+  const now = props.replay.currentTime.value;
+  const labelOn = freeKickLabelAt !== null && now - freeKickLabelAt < FREE_KICK_LABEL_HOLD_S;
+  const frame = props.replay.frame.value;
+  const ballGone = !frame || shownBall(frame, undefined) === null;
+  return labelOn || ballGone || now - playMovedAt >= FREE_KICK_STALL_S;
+}
+
+function freeKickValue(): FreeKickBanner | undefined {
+  const m = freeKick;
+  if (!m) return undefined;
+  const intensity = prefersReducedMotion()
+    ? 1
+    : m.leavingFromMs !== null
+      ? Math.max(0, 1 - (m.elapsedMs - m.leavingFromMs) / FREE_KICK_OUT_MS)
+      : Math.min(1, m.elapsedMs / FREE_KICK_IN_MS);
+  return { intensity, playersFade: intensity, icon: freeKickIcon };
+}
+
+function freeKickStep(ms: number): void {
+  freeKickRaf = null;
+  if (!freeKick) return;
+  if (freeKick.startedMs === null) freeKick.startedMs = ms;
+  freeKick.elapsedMs = ms - freeKick.startedMs;
+  if (
+    freeKick.leavingFromMs === null &&
+    freeKick.elapsedMs >= FREE_KICK_SHOW_MS &&
+    !freeKickUnderWay()
+  ) {
+    if (prefersReducedMotion()) {
+      stopFreeKick();
+      return;
+    }
+    freeKick.leavingFromMs = freeKick.elapsedMs;
+  }
+  if (
+    freeKick.leavingFromMs !== null &&
+    freeKick.elapsedMs - freeKick.leavingFromMs >= FREE_KICK_OUT_MS
+  ) {
+    stopFreeKick();
+    return;
+  }
+  paint();
+  freeKickRaf = window.requestAnimationFrame(freeKickStep);
+}
+
+/** End the free kick at once, back to the frame as it is. */
+function stopFreeKick(): void {
+  if (!freeKick && freeKickRaf === null) return;
+  if (freeKickRaf !== null) window.cancelAnimationFrame(freeKickRaf);
+  freeKickRaf = null;
+  freeKick = null;
+  paint();
+}
+
+/**
+ * Note whether play moved on `frame`, and show the free kick if it is one
+ * that playback has just run into. Called for every frame drawn, after the
+ * goal sequence has had its say.
+ */
+function updateFreeKick(frame: Frame, prevFrame: Frame | null | undefined, now: number): void {
+  if (!lastStepWasPlayback || !prevFrame || playMoved(prevFrame, frame)) playMovedAt = now;
+  const labelled = isFreeKickFrame(frame);
+  // Landed on by a seek or a step: a free kick under way has been seen.
+  if (!lastStepWasPlayback) {
+    freeKickLabelAt = labelled ? now : null;
+    return;
+  }
+  if (!labelled) return;
+  const fresh = freeKickLabelAt === null || now - freeKickLabelAt > FREE_KICK_REARM_S;
+  freeKickLabelAt = now;
+  if (!fresh || !layers.freeKick || goal || freeKick) return;
+  stopAttack();
+  freeKick = { startedMs: null, elapsedMs: 0, leavingFromMs: null };
+  freeKickRaf = window.requestAnimationFrame(freeKickStep);
+}
+
+function loadFreeKickIcon(): void {
+  if (typeof Image === 'undefined') return;
+  const icon = new Image();
+  icon.onload = () => {
+    freeKickIcon = icon;
+    paint();
+  };
+  icon.src = freeKickIconUrl;
 }
 
 // ── Rings ───────────────────────────────────────────────────────────────────
@@ -941,11 +1087,13 @@ watch(
       ensureRenderer();
       const labelled = isGoalFrame(frame);
       if (labelled && layers.goal && !goalLabelSeen && !goal && lastStepWasPlayback) {
-        // The goal takes over from an attack still showing.
+        // The goal takes over from an attack or a free kick still showing.
         stopAttack();
+        stopFreeKick();
         startGoal(frame);
       }
       goalLabelSeen = labelled;
+      updateFreeKick(frame, prevFrame, now);
       maybeStartAttack(frame);
     }
     // A fade that has just finished still needs the paint that shows its end.
@@ -978,19 +1126,24 @@ watch(
 onMounted(() => {
   watchPixelRatio();
   loadLabelFont();
+  loadFreeKickIcon();
   void props.replay.load();
 });
 
 /**
- * The attack's label is drawn on the canvas in the app's web font, which a
- * canvas does not wait for: until it arrives, text is drawn in a fallback, and
- * nothing redraws a paused replay once it has. So load both weights the label
- * uses, and repaint when they are in.
+ * The attack's label and the free kick's title are drawn on the canvas in web
+ * fonts, which a canvas does not wait for: until they arrive, text is drawn in
+ * a fallback, and nothing redraws a paused replay once they have. So load
+ * every weight they use, and repaint when they are in.
  */
 function loadLabelFont(): void {
   const fonts = typeof document !== 'undefined' ? document.fonts : undefined;
   if (!fonts?.load) return;
-  Promise.all([fonts.load('600 16px Montserrat'), fonts.load('700 16px Montserrat')]).then(
+  Promise.all([
+    fonts.load('600 16px Montserrat'),
+    fonts.load('700 16px Montserrat'),
+    fonts.load('italic 900 16px Inter'),
+  ]).then(
     () => paint(),
     () => {
       // Unavailable: the fallback stands.
@@ -1002,6 +1155,7 @@ onUnmounted(() => {
   document.removeEventListener('keydown', onLayersKeydown);
   stopGoal();
   stopAttack();
+  stopFreeKick();
   dprQuery?.removeEventListener('change', onPixelRatioChange);
   dprQuery = null;
   props.replay.dispose();

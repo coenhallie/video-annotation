@@ -1142,6 +1142,393 @@ describe('PipelineOutputSurface', () => {
       }
     });
   });
+  describe('free kick', () => {
+    let queued: Array<(ms: number) => void> = [];
+    let clockMs = 1000;
+    const originalRaf = window.requestAnimationFrame;
+    const originalCaf = window.cancelAnimationFrame;
+
+    beforeEach(() => {
+      queued = [];
+      clockMs = 1000;
+      renderFrame.mockClear();
+      window.requestAnimationFrame = ((cb: (ms: number) => void) => {
+        queued.push(cb);
+        return queued.length;
+      }) as typeof window.requestAnimationFrame;
+      window.cancelAnimationFrame = (() => {
+        queued = [];
+      }) as typeof window.cancelAnimationFrame;
+    });
+
+    afterEach(() => {
+      window.requestAnimationFrame = originalRaf;
+      window.cancelAnimationFrame = originalCaf;
+    });
+
+    async function animate(ms: number) {
+      const end = clockMs + ms;
+      // Whole frames only, so 50 ms is three frames however it rounds.
+      while (clockMs < end - 1e-6) {
+        clockMs += 1000 / 60;
+        const cbs = queued;
+        queued = [];
+        cbs.forEach((cb) => cb(clockMs));
+      }
+      await nextTick();
+    }
+
+    type Writable = { value: unknown };
+    const set = (r: unknown, v: unknown) => ((r as Writable).value = v);
+    /** A record: someone at `x`, the ball unless it is lost, and the labels it carries. */
+    const frameAt = (x: number, labels: string[] = [], ball = true) => ({
+      pitch_dimensions: { length: 105, width: 68 },
+      teams: [
+        {
+          team_id: 0,
+          players: [{ track_id: 4, person_type: 'PersonType.PLAYER', projected_coordinates: { x, y: 2 } }],
+        },
+      ],
+      balls: ball ? [{ projected_coordinates: { x: 10, y: 0 } }] : [],
+      state: { actions: labels.map((action_type) => ({ action_type })) },
+      frame_data: [{ frame_count: 1 }],
+    });
+    const FREE_KICK = ['EventType.FREE_KICK'];
+    const NOBODY = { possession: null, attacks: { 0: 1, 1: -1 }, states: { 0: null, 1: null } };
+    const BLUE_ATTACKING = {
+      possession: 1,
+      attacks: { 0: 1, 1: -1 },
+      states: { 0: 'defending', 1: 'attacking' },
+    };
+
+    let x = 0;
+    async function ready() {
+      x = 0;
+      const replay = fakeReplay('loading');
+      const m = mount(replay);
+      await nextTick();
+      set(replay.currentTime, 10);
+      set(replay.frame, frameAt(x));
+      set(replay.phase, NOBODY);
+      set(replay.state, 'ready');
+      await nextTick();
+      set(replay.isPlaying, true);
+      await nextTick();
+      return { replay, m };
+    }
+
+    /**
+     * The next record by playback, 0.04 s on: play moving, unless `still`,
+     * when everyone is where they were, as off camera.
+     */
+    async function record(
+      replay: PipelineReplay,
+      labels: string[] = [],
+      { still = false, ball = true, step = 0.04, phase = NOBODY as unknown } = {}
+    ) {
+      if (!still) x += 0.1;
+      set(replay.currentTime, (replay.currentTime.value as number) + step);
+      set(replay.frame, frameAt(x, labels, ball));
+      set(replay.phase, phase);
+      await nextTick();
+    }
+
+    /** Playback with the clock moving on and no new records, as across a gap in the data. */
+    async function tick(replay: PipelineReplay, step = 0.04) {
+      set(replay.currentTime, (replay.currentTime.value as number) + step);
+      await nextTick();
+    }
+
+    const lastFreeKick = () =>
+      renderFrame.mock.calls.at(-1)?.[1]?.freeKick as
+        | { intensity: number; playersFade: number }
+        | undefined;
+    const lastAttack = () => renderFrame.mock.calls.at(-1)?.[1]?.attack;
+
+    it('fades in on a free kick label, fading the players out with it', async () => {
+      const { replay, m } = await ready();
+      await record(replay, FREE_KICK);
+      await animate(150);
+      const early = lastFreeKick()!;
+      expect(early.intensity).toBeGreaterThan(0);
+      expect(early.intensity).toBeLessThan(1);
+      expect(early.playersFade).toBe(early.intensity);
+      await animate(400);
+      expect(lastFreeKick()).toMatchObject({ intensity: 1, playersFade: 1 });
+      m.unmount();
+    });
+
+    it('goes after FREE_KICK_SHOW_MS when play carries on, fading out onto it', async () => {
+      const { replay, m } = await ready();
+      await record(replay, FREE_KICK);
+      for (let i = 0; i < 30; i++) {
+        await record(replay);
+        await animate(50);
+      }
+      expect(lastFreeKick()).toMatchObject({ intensity: 1 });
+      for (let i = 0; i < 12; i++) {
+        await record(replay);
+        await animate(50);
+      }
+      const going = lastFreeKick()!;
+      expect(going.intensity).toBeGreaterThan(0);
+      expect(going.intensity).toBeLessThan(1);
+      expect(going.playersFade).toBe(going.intensity);
+      await record(replay);
+      await animate(400);
+      expect(lastFreeKick()).toBeUndefined();
+      m.unmount();
+    });
+
+    // Off camera the data repeats everyone's last positions.
+    it('stays while the records stand still, and goes once play moves again', async () => {
+      const { replay, m } = await ready();
+      await record(replay, FREE_KICK);
+      for (let i = 0; i < 150; i++) {
+        await record(replay, [], { still: true });
+        await animate(50);
+      }
+      expect(lastFreeKick()).toMatchObject({ intensity: 1 });
+      await record(replay);
+      await animate(50);
+      await record(replay);
+      await animate(200);
+      const going = lastFreeKick()!;
+      expect(going.intensity).toBeLessThan(1);
+      await animate(300);
+      expect(lastFreeKick()).toBeUndefined();
+      m.unmount();
+    });
+
+    // Or has no records at all: the replay holds the last one.
+    it('stays across a gap in the records', async () => {
+      const { replay, m } = await ready();
+      await record(replay, FREE_KICK);
+      for (let i = 0; i < 150; i++) {
+        await tick(replay);
+        await animate(50);
+      }
+      expect(lastFreeKick()).toMatchObject({ intensity: 1 });
+      await record(replay);
+      await animate(500);
+      expect(lastFreeKick()).toBeUndefined();
+      m.unmount();
+    });
+
+    it('holds when the stop starts during it', async () => {
+      const { replay, m } = await ready();
+      await record(replay, FREE_KICK);
+      for (let i = 0; i < 25; i++) {
+        await record(replay);
+        await animate(50);
+      }
+      for (let i = 0; i < 100; i++) {
+        await record(replay, [], { still: true });
+        await animate(50);
+      }
+      expect(lastFreeKick()).toMatchObject({ intensity: 1 });
+      m.unmount();
+    });
+
+    it('stays while the label is on, and goes once it is off', async () => {
+      const { replay, m } = await ready();
+      for (let i = 0; i < 80; i++) {
+        await record(replay, FREE_KICK);
+        await animate(50);
+      }
+      expect(lastFreeKick()).toMatchObject({ intensity: 1 });
+      for (let i = 0; i < 25; i++) {
+        await record(replay);
+        await animate(50);
+      }
+      expect(lastFreeKick()).toBeUndefined();
+      m.unmount();
+    });
+
+    // The broadcast often cuts away just as the label goes, before the
+    // records can be seen to stand still.
+    it('holds through a stop that starts as the label goes', async () => {
+      const { replay, m } = await ready();
+      for (let i = 0; i < 40; i++) {
+        await record(replay, FREE_KICK);
+        await animate(50);
+      }
+      for (let i = 0; i < 100; i++) {
+        await record(replay, [], { still: true });
+        await animate(50);
+      }
+      expect(lastFreeKick()).toMatchObject({ intensity: 1 });
+      m.unmount();
+    });
+
+    // The broadcast goes to a close-up, and the ball is lost, before the
+    // records stand still.
+    it('holds while the ball is lost, and goes once it is back', async () => {
+      const { replay, m } = await ready();
+      await record(replay, FREE_KICK);
+      for (let i = 0; i < 80; i++) {
+        await record(replay, [], { ball: false });
+        await animate(50);
+      }
+      expect(lastFreeKick()).toMatchObject({ intensity: 1 });
+      for (let i = 0; i < 12; i++) {
+        await record(replay);
+        await animate(50);
+      }
+      expect(lastFreeKick()).toBeUndefined();
+      m.unmount();
+    });
+
+    it('arrives on a label shown during the stop, and holds', async () => {
+      const { replay, m } = await ready();
+      for (let i = 0; i < 10; i++) await record(replay, [], { still: true });
+      await record(replay, FREE_KICK, { still: true });
+      for (let i = 0; i < 80; i++) {
+        await record(replay, FREE_KICK, { still: true });
+        await animate(50);
+      }
+      expect(lastFreeKick()).toMatchObject({ intensity: 1 });
+      m.unmount();
+    });
+
+    // The label flickers on and off over a few records around one free kick.
+    it('is shown once for a label that flickers, and again for a later free kick', async () => {
+      const { replay, m } = await ready();
+      await record(replay, FREE_KICK);
+      for (let i = 0; i < 70; i++) {
+        await record(replay, i % 3 === 0 ? FREE_KICK : []);
+        await animate(50);
+      }
+      for (let i = 0; i < 25; i++) {
+        await record(replay);
+        await animate(50);
+      }
+      expect(lastFreeKick()).toBeUndefined();
+      await record(replay, FREE_KICK);
+      await animate(100);
+      expect(lastFreeKick()).toBeUndefined();
+      // Off for long enough: a new one.
+      for (let i = 0; i < 130; i++) await record(replay);
+      await record(replay, FREE_KICK);
+      await animate(100);
+      expect(lastFreeKick()).toBeDefined();
+      m.unmount();
+    });
+
+    it('is not shown for a free kick a seek lands in the middle of', async () => {
+      const { replay, m } = await ready();
+      await record(replay, FREE_KICK, { step: 30 });
+      await record(replay, FREE_KICK);
+      await animate(300);
+      expect(lastFreeKick()).toBeUndefined();
+      m.unmount();
+    });
+
+    it('is shown after a seek back to before it', async () => {
+      const { replay, m } = await ready();
+      await record(replay, FREE_KICK);
+      await animate(100);
+      set(replay.currentTime, 5);
+      await nextTick();
+      expect(lastFreeKick()).toBeUndefined();
+      await record(replay);
+      await record(replay, FREE_KICK);
+      await animate(100);
+      expect(lastFreeKick()).toBeDefined();
+      m.unmount();
+    });
+
+    it('stops at once on a pause', async () => {
+      const { replay, m } = await ready();
+      await record(replay, FREE_KICK);
+      await animate(500);
+      set(replay.isPlaying, false);
+      await nextTick();
+      expect(lastFreeKick()).toBeUndefined();
+      m.unmount();
+    });
+
+    it('stops at once on a seek', async () => {
+      const { replay, m } = await ready();
+      await record(replay, FREE_KICK);
+      await animate(500);
+      set(replay.currentTime, 60);
+      await nextTick();
+      expect(lastFreeKick()).toBeUndefined();
+      m.unmount();
+    });
+
+    it('takes over from an attack, and holds the next one back', async () => {
+      const { replay, m } = await ready();
+      await record(replay, [], { phase: BLUE_ATTACKING });
+      set(replay.frame, { ...frameAt(x), balls: [{ projected_coordinates: { x: -12, y: 0 } }] });
+      await nextTick();
+      await animate(100);
+      expect(lastAttack()).toBeDefined();
+      await record(replay, FREE_KICK, { phase: BLUE_ATTACKING });
+      await animate(100);
+      expect(lastAttack()).toBeUndefined();
+      expect(lastFreeKick()).toBeDefined();
+      m.unmount();
+    });
+
+    it('gives way to a goal', async () => {
+      const { replay, m } = await ready();
+      await record(replay, FREE_KICK);
+      await animate(500);
+      await record(replay, ['EventType.GOAL']);
+      await animate(100);
+      expect(lastFreeKick()).toBeUndefined();
+      expect(renderFrame.mock.calls.at(-1)?.[1]?.goal).toBeDefined();
+      m.unmount();
+    });
+
+    it('shows nothing while the layer is off, and stops when it is turned off', async () => {
+      const { replay, m } = await ready();
+      await record(replay, FREE_KICK);
+      await animate(500);
+      expect(lastFreeKick()).toBeDefined();
+      (at(m.root, 'pipeline-layers-toggle') as HTMLElement).click();
+      await nextTick();
+      (m.root.querySelector('[data-layer="freeKick"]') as HTMLElement).click();
+      await nextTick();
+      expect(lastFreeKick()).toBeUndefined();
+      for (let i = 0; i < 130; i++) await record(replay);
+      await record(replay, FREE_KICK);
+      await animate(300);
+      expect(lastFreeKick()).toBeUndefined();
+      (m.root.querySelector('[data-layer="freeKick"]') as HTMLElement).click();
+      await nextTick();
+      m.unmount();
+    });
+
+    it('shows at once, without fading, under reduced motion, and still waits for play', async () => {
+      const originalMatchMedia = window.matchMedia;
+      window.matchMedia = ((query: string) => ({
+        matches: query.includes('prefers-reduced-motion'),
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      })) as unknown as typeof window.matchMedia;
+      try {
+        const { replay, m } = await ready();
+        await record(replay, FREE_KICK);
+        await animate(50);
+        expect(lastFreeKick()).toMatchObject({ intensity: 1, playersFade: 1 });
+        for (let i = 0; i < 100; i++) {
+          await tick(replay);
+          await animate(50);
+        }
+        expect(lastFreeKick()).toMatchObject({ intensity: 1 });
+        await record(replay);
+        await animate(50);
+        expect(lastFreeKick()).toBeUndefined();
+        m.unmount();
+      } finally {
+        window.matchMedia = originalMatchMedia;
+      }
+    });
+  });
   describe('ring fade', () => {
     type Writable = { value: unknown };
     const set = (r: unknown, v: unknown) => ((r as Writable).value = v);
@@ -1635,7 +2022,7 @@ describe('PipelineOutputSurface', () => {
       const { m } = await ready();
       await open(m.root);
       const options = [...m.root.querySelectorAll('[data-testid="pipeline-layer-option"]')];
-      expect(options).toHaveLength(7);
+      expect(options).toHaveLength(8);
       expect(options.every((o) => o.getAttribute('aria-checked') === 'true')).toBe(true);
       m.unmount();
     });

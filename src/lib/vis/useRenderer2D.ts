@@ -25,6 +25,8 @@
 //    one (goalNets.ts, goalSequence.ts), and an optional attack indicator:
 //    the pitch shaded behind the attack, with a label, under the players,
 //    everyone faded out, and a pulsing ring round the ball (attackIndicator.ts).
+//  - renderFrame takes an optional free kick banner, drawn over everything on
+//    the pitch with everyone faded out (freeKick.ts).
 //  - renderFrame takes an optional ball trail, drawn over the players: the
 //    path the tracked ball took, with a dot wherever it turned (ballTrail.ts).
 //  - players are not labelled with their tracking id: it is the tracker's
@@ -77,6 +79,7 @@ import {
   type AttackIndicator,
 } from './attackIndicator'
 import { trailOpacity, type BallTrail, type TrailPoint } from './ballTrail'
+import { drawFreeKickBanner, type FreeKickBanner } from './freeKick'
 import { footballPatches, UPRIGHT, type Spin } from './football'
 import {
   computeViewMatrix,
@@ -171,6 +174,8 @@ export interface FrameLayers {
   goal?: GoalOverlay | undefined
   /** The attack: its shade and label under the players, its rings round the ball. */
   attack?: AttackIndicator | undefined
+  /** The free kick banner, over everything on the pitch. */
+  freeKick?: FreeKickBanner | undefined
   /** Ring strengths, for a caller that fades the rings in and out. */
   rings?: RingStrengths | undefined
   /** Whether players far from the ball are drawn faint. Default on. */
@@ -329,9 +334,11 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
       if (rings && id != null) return rings.possession.get(id) ?? 0
       return p.player.in_possession ? 1 : 0
     }
-    // During an attack everyone fades out, players and officials alike,
-    // leaving the ball. Everything drawn for a person goes through here.
-    const shown = 1 - Math.min(1, Math.max(0, attack?.playersFade ?? 0))
+    // During an attack or a free kick everyone fades out, players and
+    // officials alike, leaving the ball. Everything drawn for a person goes
+    // through here.
+    const fade = Math.max(attack?.playersFade ?? 0, layers.freeKick?.playersFade ?? 0)
+    const shown = 1 - Math.min(1, Math.max(0, fade))
     const alphaOf = (p: { faded: boolean }) =>
       (p.faded && fadeFar ? DIMMED_PLAYER_ALPHA : 1) * shown
     // The player with the ball is drawn bigger, so on top of those around them.
@@ -395,6 +402,7 @@ export function useRenderer2D(canvas: HTMLCanvasElement) {
       ctx.globalAlpha = 1
     }
 
+    if (layers.freeKick) drawFreeKickBanner(ctx as CanvasRenderingContext2D, transform2d, layers.freeKick)
 
     // ── Overlay HUD ────────────────────────────────────────────────────────
     const fc = frame.frame_data?.[0]?.frame_count ?? null
