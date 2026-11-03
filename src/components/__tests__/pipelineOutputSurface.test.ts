@@ -616,14 +616,18 @@ describe('PipelineOutputSurface', () => {
       m.unmount();
     });
 
-    // In the widget the overlay is inside its zoom-and-pan viewport, which
-    // master's transport was not: a press there would start a pan when
-    // zoomed in, and take the click from the button with it, and a double
-    // click on a step would reset the zoom. A ctrl/⌘ + wheel still goes
-    // through, so it zooms the pitch rather than the page.
-    it('keeps its presses from the pitch’s pan and zoom reset, but not the wheel', async () => {
+    // Zoom and pan leave an element marked data-match-tracker-keep alone
+    // (match tracker 0.1.3), so the transport needs no stopPropagation of its
+    // own: being inside the kept HUD is enough. What the widget then does with
+    // a press or a double click on it is proved against the real widget in
+    // pipelineOutputSurfaceWidget.test.ts.
+    it('sits inside the kept HUD and stops nothing from reaching the widget', async () => {
       const m = mount(fakeReplay('ready'));
       await settled();
+      const controls = at(m.root, 'pipeline-controls')!;
+      expect(controls.closest('[data-match-tracker-keep]')).toBe(at(m.root, 'pipeline-hud'));
+      expect(tracker().overlay.contains(controls)).toBe(true);
+
       const seen: string[] = [];
       for (const type of ['pointerdown', 'dblclick', 'wheel']) {
         tracker().host.addEventListener(type, () => seen.push(type));
@@ -632,7 +636,8 @@ describe('PipelineOutputSurface', () => {
       press(button);
       button.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, composed: true }));
       button.dispatchEvent(new WheelEvent('wheel', { bubbles: true, composed: true, ctrlKey: true, deltaY: -100 }));
-      expect(seen).toEqual(['wheel']);
+      expect(seen).toEqual(['pointerdown', 'dblclick', 'wheel']);
+      expect(tracker().stopAll).not.toHaveBeenCalled();
       m.unmount();
     });
 

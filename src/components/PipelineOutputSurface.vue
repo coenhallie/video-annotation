@@ -343,11 +343,11 @@ onUnmounted(() => {
           </div>
 
           <!--
-            The overlay is inside the tracker's zoom-and-pan viewport. Zoomed
-            in, a press there starts a pan and captures the pointer, which
-            takes the click from the button, and a double click resets the
-            zoom. Neither may start on the transport. A ctrl/⌘ + wheel still
-            goes through, so it zooms the pitch rather than the page.
+            Inside the HUD, so marked data-match-tracker-keep: the widget's
+            zoom and pan leave it alone. Zoomed in, a press on the transport
+            starts no pan and a double click on it leaves the zoom. A
+            ctrl/⌘ + wheel still goes through, so it zooms the pitch rather
+            than the page.
 
             Inert while drawing: pointer-events alone would not do, since the
             focus-visible rule turns them back on.
@@ -356,8 +356,6 @@ onUnmounted(() => {
             class="absolute inset-x-0 bottom-2 flex justify-center"
             data-testid="pipeline-controls"
             v-bind="transportInert"
-            @pointerdown.stop
-            @dblclick.stop
           >
             <div
               class="flex items-center gap-1 rounded-full bg-black/60 p-1 text-white shadow-lg ring-1 ring-white/10 backdrop-blur-sm transition duration-200 has-[:focus-visible]:pointer-events-auto has-[:focus-visible]:translate-y-0 has-[:focus-visible]:opacity-100 motion-reduce:transition-none"
