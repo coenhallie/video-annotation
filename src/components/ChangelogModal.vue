@@ -124,6 +124,7 @@ const changelogEntries = ref([
       'The developer console shows which version of the match tracker the 2D replay runs',
       'The 2D replay shows corners: a CORNER banner, with the corner it is taken from lit up. Demo has a Corner button to play it by hand',
       'The free kick banner now fades out the ball too, and the throw-in banner fades in where it stands instead of sliding in',
+      'The corner lights up more strongly, and each wave across it is easier to see',
     ],
   },
   {
