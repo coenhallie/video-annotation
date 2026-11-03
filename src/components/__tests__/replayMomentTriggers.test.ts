@@ -4,7 +4,7 @@ import { createApp, defineComponent, h, nextTick, ref } from 'vue';
 import type { MomentAvailability } from '@coenhallie/match-tracker';
 import ReplayMomentTriggers from '@/components/ReplayMomentTriggers.vue';
 
-const ALL: MomentAvailability = { goal: true, attack: { 0: true, 1: true }, freeKick: true, throwIn: true };
+const ALL: MomentAvailability = { goal: true, attack: { 0: true, 1: true }, freeKick: true, corner: true, throwIn: true };
 const TEAMS: [{ name: string; color: string }, { name: string; color: string }] = [
   { name: 'Manchester City', color: '#e51a1a' },
   { name: 'PSG', color: '#184fe7' },
@@ -68,7 +68,7 @@ describe('ReplayMomentTriggers', () => {
     const m = mount();
     at(m.root, 'moment-demo-toggle')!.click();
     await nextTick();
-    for (const id of ['moment-goal', 'moment-attack-1', 'moment-attack-0', 'moment-freeKick', 'moment-throwIn']) {
+    for (const id of ['moment-goal', 'moment-attack-1', 'moment-attack-0', 'moment-freeKick', 'moment-corner', 'moment-throwIn']) {
       at(m.root, id)!.click();
     }
     expect(m.played).toEqual([
@@ -76,6 +76,7 @@ describe('ReplayMomentTriggers', () => {
       ['attack', 1],
       ['attack', 0],
       ['freeKick', undefined],
+      ['corner', undefined],
       ['throwIn', undefined],
     ]);
     expect(at(m.root, 'moment-attack-0')!.textContent).toContain('Manchester City attack');
@@ -83,7 +84,7 @@ describe('ReplayMomentTriggers', () => {
   });
 
   it('disables what cannot be played on the frame on screen, and everything before the replay is up', async () => {
-    const m = mount({ goal: false, attack: { 0: true, 1: false }, freeKick: true, throwIn: true });
+    const m = mount({ goal: false, attack: { 0: true, 1: false }, freeKick: true, corner: true, throwIn: true });
     at(m.root, 'moment-demo-toggle')!.click();
     await nextTick();
     expect(at(m.root, 'moment-goal')!.disabled).toBe(true);
@@ -91,7 +92,7 @@ describe('ReplayMomentTriggers', () => {
     expect(at(m.root, 'moment-attack-0')!.disabled).toBe(false);
     m.available.value = null;
     await nextTick();
-    for (const id of ['moment-goal', 'moment-attack-0', 'moment-freeKick', 'moment-throwIn']) {
+    for (const id of ['moment-goal', 'moment-attack-0', 'moment-freeKick', 'moment-corner', 'moment-throwIn']) {
       expect(at(m.root, id)!.disabled).toBe(true);
     }
     m.unmount();

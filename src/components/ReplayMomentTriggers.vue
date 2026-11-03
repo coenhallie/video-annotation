@@ -102,6 +102,16 @@ const IDLE = 'text-white/80 ring-white/10 hover:text-white enabled:hover:ring-wh
       </button>
       <button
         type="button"
+        data-testid="moment-corner"
+        :class="[BUTTON, IDLE]"
+        :disabled="!can('corner')"
+        title="Play the corner banner"
+        @click="emit('trigger', 'corner')"
+      >
+        Corner
+      </button>
+      <button
+        type="button"
         data-testid="moment-throwIn"
         :class="[BUTTON, IDLE]"
         :disabled="!can('throwIn')"
