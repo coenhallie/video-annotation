@@ -121,6 +121,7 @@ const changelogEntries = ref([
     date: 'November 3, 2026',
     changes: [
       'Zoomed in on the 2D replay, the play and frame-step buttons now work with a single click, and double-clicking Next frame no longer resets the zoom',
+      'The developer console shows which version of the match tracker the 2D replay runs',
     ],
   },
   {

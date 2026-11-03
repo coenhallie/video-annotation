@@ -1,6 +1,7 @@
 import './assets/main.css';
 
 import { createApp } from 'vue';
+import { logMatchTrackerBanner } from '@coenhallie/match-tracker/banner';
 import App from './App.vue';
 
 import { createPinia } from 'pinia';
@@ -26,3 +27,6 @@ app.config.errorHandler = (error, instance, info) => {
 };
 
 app.mount('#app');
+
+// The match tracker version, for anyone who opens the developer console.
+logMatchTrackerBanner();
