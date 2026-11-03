@@ -14,6 +14,7 @@ function mount(availability: MomentAvailability | null = ALL) {
   const root = document.createElement('div');
   document.body.appendChild(root);
   const played: Array<[string, number | undefined]> = [];
+  const demo: boolean[] = [];
   const available = ref(availability);
   const app = createApp(
     defineComponent({
@@ -22,6 +23,7 @@ function mount(availability: MomentAvailability | null = ALL) {
           availability: available.value,
           teams: TEAMS,
           onTrigger: (moment: string, team?: number) => played.push([moment, team]),
+          onDemo: (on: boolean) => demo.push(on),
         }),
     })
   );
@@ -29,6 +31,7 @@ function mount(availability: MomentAvailability | null = ALL) {
   return {
     root,
     played,
+    demo,
     available,
     unmount: () => {
       app.unmount();
@@ -51,6 +54,15 @@ describe('ReplayMomentTriggers', () => {
     await nextTick();
     expect(at(m.root, 'moment-triggers')).not.toBeNull();
     expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    m.unmount();
+  });
+
+  it('says whether Demo is on, as it mounts and as it changes', async () => {
+    const m = mount();
+    expect(m.demo).toEqual([false]);
+    at(m.root, 'moment-demo-toggle')!.click();
+    await nextTick();
+    expect(m.demo).toEqual([false, true]);
     m.unmount();
   });
 

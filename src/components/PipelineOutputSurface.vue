@@ -51,6 +51,12 @@ const props = defineProps<{
    * would change the frame under the stroke.
    */
   drawing?: boolean;
+  /**
+   * The tracker's developer mode (its debug option): a badge over the pitch
+   * while the pipeline has lost track of players, saying whether the attack
+   * shown is covering the loss. On while the replay's Demo controls are.
+   */
+  debug?: boolean;
 }>();
 
 const emit = defineEmits<{ (e: 'context-menu', ev: MouseEvent): void }>();
@@ -98,6 +104,7 @@ watch(
       locale: 'en',
       layersStorageKey: LAYERS_STORAGE_KEY,
       teams: teamsFor(props.teamNames),
+      debug: props.debug ?? false,
     });
     made.on('availability', (next) => {
       momentAvailability.value = next;
@@ -112,6 +119,11 @@ watch(
     });
   },
   { flush: 'post' }
+);
+
+watch(
+  () => props.debug,
+  (debug) => tracker.value?.setOptions({ debug: debug ?? false })
 );
 
 // Compared name by name: the editor hands over a new array on every render.
