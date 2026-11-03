@@ -38,7 +38,6 @@ interface FakeTracker {
 const NOTHING: MomentAvailability = {
   goal: false,
   attack: { 0: false, 1: false },
-  freeKick: false,
   corner: false,
   throwIn: false,
 };
@@ -67,7 +66,7 @@ const { createMatchTracker, makeTracker, trackers } = vi.hoisted(() => {
       host,
       options,
       overlay,
-      available: { goal: false, attack: { 0: false, 1: false }, freeKick: false, corner: false, throwIn: false },
+      available: { goal: false, attack: { 0: false, 1: false }, corner: false, throwIn: false },
       present: vi.fn(),
       trigger: vi.fn(() => true),
       setOptions: vi.fn(),
@@ -132,7 +131,7 @@ const set = <T>(r: unknown, value: T) => {
 
 /** What the surface exposes to the editor: playing its moments by hand. */
 interface SurfaceExpose {
-  triggerMoment: (moment: 'goal' | 'attack' | 'freeKick' | 'corner' | 'throwIn', team?: 0 | 1) => boolean;
+  triggerMoment: (moment: 'goal' | 'attack' | 'corner' | 'throwIn', team?: 0 | 1) => boolean;
   momentAvailability: MomentAvailability;
 }
 
@@ -703,7 +702,7 @@ describe('PipelineOutputSurface', () => {
     it('says what the tracker can play, and follows it', async () => {
       createMatchTracker.mockImplementationOnce((host, options) => {
         const made = makeTracker(host, options);
-        made.available = { goal: false, attack: { 0: true, 1: false }, freeKick: true, corner: true, throwIn: true };
+        made.available = { goal: false, attack: { 0: true, 1: false }, corner: true, throwIn: true };
         return made;
       });
       const m = mount(fakeReplay('ready'));
@@ -712,17 +711,15 @@ describe('PipelineOutputSurface', () => {
       expect(m.surface().momentAvailability).toEqual({
         goal: false,
         attack: { 0: true, 1: false },
-        freeKick: true,
         corner: true,
         throwIn: true,
       });
 
-      tracker().emit('availability', { goal: true, attack: { 0: true, 1: true }, freeKick: true, corner: true, throwIn: true });
+      tracker().emit('availability', { goal: true, attack: { 0: true, 1: true }, corner: true, throwIn: true });
       await nextTick();
       expect(m.surface().momentAvailability).toEqual({
         goal: true,
         attack: { 0: true, 1: true },
-        freeKick: true,
         corner: true,
         throwIn: true,
       });
@@ -743,7 +740,7 @@ describe('PipelineOutputSurface', () => {
       const replay = fakeReplay('ready');
       const m = mount(replay);
       await nextTick();
-      tracker().emit('availability', { goal: true, attack: { 0: true, 1: true }, freeKick: true, corner: true, throwIn: true });
+      tracker().emit('availability', { goal: true, attack: { 0: true, 1: true }, corner: true, throwIn: true });
       set(replay.state, 'error');
       await nextTick();
       await nextTick();

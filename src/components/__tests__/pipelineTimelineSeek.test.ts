@@ -137,13 +137,13 @@ describe('the pipeline surface presents the position it is seeked to', () => {
     await nextTick();
 
     const { tracker } = last();
-    // Nothing before its first frame: a free kick can be played on any frame.
-    expect(tracker.availability().freeKick).toBe(false);
+    // Nothing before its first frame: a corner can be played on any frame.
+    expect(tracker.availability().corner).toBe(false);
     await nextFrame();
-    expect(tracker.availability().freeKick).toBe(true);
+    expect(tracker.availability().corner).toBe(true);
 
     view.unmount();
     // Unmounting takes the tracker down with the surface.
-    expect(tracker.availability().freeKick).toBe(false);
+    expect(tracker.availability().corner).toBe(false);
   });
 });
