@@ -24,7 +24,7 @@ import AnnotationQuickPick from '@/components/AnnotationQuickPick.vue';
 import EditorSurfaceTabs from '@/components/EditorSurfaceTabs.vue';
 import PipelineOutputSurface from '@/components/PipelineOutputSurface.vue';
 import ReplayMomentTriggers from '@/components/ReplayMomentTriggers.vue';
-import { PERSON_COLORS } from '@/lib/vis/constants';
+import { DEFAULT_PERSON_COLORS } from '@coenhallie/match-tracker';
 import DrawingCanvas from '@/components/DrawingCanvas.vue';
 import { usePipelineReplay } from '@/composables/usePipelineReplay';
 import { httpRangeFetcher } from '@/lib/pipelineData/rangeFetcher';
@@ -314,8 +314,8 @@ const pipelineSurfaceRef = ref<InstanceType<typeof PipelineOutputSurface> | null
 const replayTeams = computed(() => {
   const names = pipelineTeamNames(currentVideoObject.value?.title);
   return [
-    { name: names?.[0] ?? 'Red', color: PERSON_COLORS.home.fill },
-    { name: names?.[1] ?? 'Blue', color: PERSON_COLORS.away.fill },
+    { name: names?.[0] ?? 'Red', color: DEFAULT_PERSON_COLORS.home.fill },
+    { name: names?.[1] ?? 'Blue', color: DEFAULT_PERSON_COLORS.away.fill },
   ] as [{ name: string; color: string }, { name: string; color: string }];
 });
 

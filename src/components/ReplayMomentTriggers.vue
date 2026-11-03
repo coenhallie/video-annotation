@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
-import type { ReplayMoment } from '@/lib/vis/replayLayers';
+import type { MomentAvailability, ReplayMoment, TeamId } from '@coenhallie/match-tracker';
 
 /**
  * Demo controls for the 2D replay: play any of its moments by hand, at the
@@ -12,13 +12,6 @@ import type { ReplayMoment } from '@/lib/vis/replayLayers';
  * by itself, and these then decide when it plays.
  */
 
-export interface MomentAvailability {
-  goal: boolean;
-  attack: Record<0 | 1, boolean>;
-  freeKick: boolean;
-  throwIn: boolean;
-}
-
 const props = defineProps<{
   /** What can be played on the frame on screen; null before the replay is up. */
   availability: MomentAvailability | null;
@@ -27,7 +20,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'trigger', moment: ReplayMoment, team?: 0 | 1): void;
+  (e: 'trigger', moment: ReplayMoment, team?: TeamId): void;
 }>();
 
 const STORAGE_KEY = 'perspecto.replayDemo';
@@ -50,7 +43,7 @@ watch(open, (on) => {
 });
 
 const can = (moment: Exclude<ReplayMoment, 'attack'>) => props.availability?.[moment] ?? false;
-const canAttack = (team: 0 | 1) => props.availability?.attack[team] ?? false;
+const canAttack = (team: TeamId) => props.availability?.attack[team] ?? false;
 
 const BUTTON =
   'flex h-6 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[10px] font-semibold uppercase tracking-widest ring-1 transition-colors focus-visible:outline-none focus-visible:ring-white/60 motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-35';
