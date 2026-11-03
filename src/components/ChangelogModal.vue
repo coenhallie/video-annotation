@@ -117,6 +117,13 @@ useEscapeToClose(() => props.isVisible, closeModal);
 // Add new entries to the TOP of this array
 const changelogEntries = ref([
   {
+    version: 'Beta v3.37',
+    date: 'November 3, 2026',
+    changes: [
+      'Zoomed in on the 2D replay, the play and frame-step buttons now work with a single click, and double-clicking Next frame no longer resets the zoom',
+    ],
+  },
+  {
     version: 'Beta v3.36',
     date: 'November 2, 2026',
     changes: [
