@@ -7,7 +7,6 @@ import {
   type MomentAvailability,
   type ReplayMoment,
   type TeamId,
-  type TrackerBox,
 } from '@coenhallie/match-tracker';
 import type { PipelineReplay } from '@/composables/usePipelineReplay';
 import { replayDrawingFrame } from '@/utils/timelineBinding';
@@ -23,6 +22,20 @@ import { replayDrawingFrame } from '@/utils/timelineBinding';
  * widget leaves to its host: loading, the empty and error states, the
  * transport and the frame badge, the drawing layer over the pitch, and the
  * context menu.
+ *
+ * The transport, the frame badge and the drawing layer all go in the
+ * tracker's overlay, which lies exactly over the pitch. Top to bottom:
+ *
+ *   the drawing layer, in drawing mode (DrawingCanvas: z-index 100)
+ *   the widget's open layers menu (z-index 50)
+ *   the drawing layer, otherwise (z-index 40, and no pointer events)
+ *   the widget's phase row, layers button and zoom badge
+ *   this HUD (the transport, the frame badge)
+ *   the pitch
+ *
+ * In the overlay, the drawing layer and this HUD share the widget's stacking
+ * context, so while drawing the layer covers the transport and takes its
+ * presses, and the open layers menu covers the transport.
  */
 
 const props = defineProps<{
@@ -32,6 +45,12 @@ const props = defineProps<{
    * or null when it names none. Team 0 is taken to be the first-named.
    */
   teamNames?: [string, string] | null;
+  /**
+   * Whether the drawing layer is in drawing mode. The transport is inert
+   * while it is: the layer already covers it, and a play or a step mid-stroke
+   * would change the frame under the stroke.
+   */
+  drawing?: boolean;
 }>();
 
 const emit = defineEmits<{ (e: 'context-menu', ev: MouseEvent): void }>();
@@ -63,8 +82,6 @@ function teamsFor(
 
 const hostRef = ref<HTMLElement | null>(null);
 const tracker = shallowRef<MatchTrackerInstance | null>(null);
-/** The pitch's box in the stage, which the HUD is placed on. */
-const box = shallowRef<TrackerBox | null>(null);
 /** Which moments can be played by hand on the frame on screen. */
 const momentAvailability = shallowRef<MomentAvailability>(NOTHING_AVAILABLE);
 
@@ -81,19 +98,13 @@ watch(
       layersStorageKey: LAYERS_STORAGE_KEY,
       teams: teamsFor(props.teamNames),
     });
-    made.on('box', (next) => {
-      box.value = next;
-    });
     made.on('availability', (next) => {
       momentAvailability.value = next;
     });
-    // The box measured at mount is not sent as an event.
-    box.value = made.box;
     momentAvailability.value = made.availability();
     tracker.value = made;
     onCleanup(() => {
       tracker.value = null;
-      box.value = null;
       momentAvailability.value = NOTHING_AVAILABLE;
       // Takes the overlay out of the host, with the drawing layer in it.
       made.destroy();
@@ -147,21 +158,6 @@ const overlayFrame = computed(() =>
   })
 );
 
-/**
- * The pitch's box, for the HUD. The tracker's host fills the stage, so its
- * box from the host's corner is its box in the stage.
- */
-const boxStyle = computed(() => {
-  const b = box.value;
-  if (!b) return undefined;
-  return {
-    left: `${b.left}px`,
-    top: `${b.top}px`,
-    width: `${b.width}px`,
-    height: `${b.height}px`,
-  };
-});
-
 // ── Transport ───────────────────────────────────────────────────────────────
 //
 // The replay has no video element, so it has no native controls either. These
@@ -186,6 +182,14 @@ const hovering = ref(false);
 const controlsVisible = computed(
   () => !props.replay.isPlaying.value || hovering.value
 );
+
+/**
+ * `inert` on the transport while drawing, and no attribute at all otherwise.
+ * Bound as an object because `:inert="false"` renders `inert="false"` where
+ * the element has no `inert` property (jsdom), which an attribute check
+ * reads as inert.
+ */
+const transportInert = computed(() => (props.drawing ? { inert: true } : {}));
 
 function togglePlay() {
   if (props.replay.isPlaying.value) props.replay.pause();
@@ -298,32 +302,26 @@ onUnmounted(() => {
       />
 
       <!--
-        The drawing layer goes in the tracker's overlay, which lies exactly
-        over the pitch and is in the page's DOM, so the app's CSS reaches it.
-        Its pointer events are off unless the layer turns them on for itself,
-        so zoom and pan work through it, and a press on it stops every moment.
+        The HUD and the drawing layer go in the tracker's overlay, which lies
+        exactly over the pitch and is in the page's DOM, so the app's CSS
+        reaches them. Its pointer events are off unless an element turns them
+        on for itself, so zoom and pan work through it. One Teleport, so the
+        HUD stays before the drawing layer.
       -->
       <Teleport
         v-if="tracker"
         :to="tracker.overlay"
       >
-        <slot
-          name="overlay"
-          :current-frame="overlayFrame"
-        />
-      </Teleport>
-
-      <!--
-        The HUD, on the pitch's box rather than the stage, which has black
-        bands either side of the pitch. Over the tracker but outside its
-        overlay: a press in the overlay stops every moment, and pressing play
-        must not stop a moment played by hand while paused.
-      -->
-      <div class="pointer-events-none absolute inset-0">
+        <!--
+          On the pitch, not in the black bands either side of it. A press in
+          the overlay stops every moment, except inside an element marked
+          data-match-tracker-keep: pressing Play must not stop a moment
+          played by hand while paused.
+        -->
         <div
-          class="absolute"
-          :style="boxStyle"
+          class="pointer-events-none absolute inset-0"
           data-testid="pipeline-hud"
+          data-match-tracker-keep
         >
           <div
             data-testid="pipeline-frame"
@@ -344,9 +342,22 @@ onUnmounted(() => {
             />
           </div>
 
+          <!--
+            The overlay is inside the tracker's zoom-and-pan viewport. Zoomed
+            in, a press there starts a pan and captures the pointer, which
+            takes the click from the button, and a double click resets the
+            zoom. Neither may start on the transport. A ctrl/⌘ + wheel still
+            goes through, so it zooms the pitch rather than the page.
+
+            Inert while drawing: pointer-events alone would not do, since the
+            focus-visible rule turns them back on.
+          -->
           <div
             class="absolute inset-x-0 bottom-2 flex justify-center"
             data-testid="pipeline-controls"
+            v-bind="transportInert"
+            @pointerdown.stop
+            @dblclick.stop
           >
             <div
               class="flex items-center gap-1 rounded-full bg-black/60 p-1 text-white shadow-lg ring-1 ring-white/10 backdrop-blur-sm transition duration-200 has-[:focus-visible]:pointer-events-auto has-[:focus-visible]:translate-y-0 has-[:focus-visible]:opacity-100 motion-reduce:transition-none"
@@ -447,7 +458,17 @@ onUnmounted(() => {
             </div>
           </div>
         </div>
-      </div>
+
+        <!--
+          The drawing layer, after the HUD. Its pointer events are off unless
+          it turns them on for itself while drawing, and a press on it stops
+          every moment.
+        -->
+        <slot
+          name="overlay"
+          :current-frame="overlayFrame"
+        />
+      </Teleport>
     </template>
   </div>
 </template>

@@ -3,7 +3,9 @@
 // The surface as a host of the match tracker widget. The widget itself is
 // proved against this app's own recordings in its own repo, so here it is a
 // fake that records what the surface hands it and lets a test say what it
-// would report back: its pitch box, and the moments it can play.
+// would report back: the moments it can play. Its overlay stops every moment
+// on a press, as the widget's does, except inside an element marked
+// data-match-tracker-keep.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createApp, defineComponent, h, nextTick, ref, shallowRef } from 'vue';
 import PipelineOutputSurface from '@/components/PipelineOutputSurface.vue';
@@ -12,7 +14,6 @@ import type { ReplayRecord } from '@/lib/pipelineData/frameWindow';
 import type {
   MatchTrackerOptions,
   MomentAvailability,
-  TrackerBox,
   TrackerEvents,
 } from '@coenhallie/match-tracker';
 
@@ -20,11 +21,12 @@ interface FakeTracker {
   host: HTMLElement;
   options: MatchTrackerOptions;
   overlay: HTMLElement;
-  box: TrackerBox | null;
   present: ReturnType<typeof vi.fn>;
   trigger: ReturnType<typeof vi.fn>;
   setOptions: ReturnType<typeof vi.fn>;
   destroy: ReturnType<typeof vi.fn>;
+  /** The widget's stop path: what a press in its overlay calls. */
+  stopAll: ReturnType<typeof vi.fn>;
   availability: () => MomentAvailability;
   on: ReturnType<typeof vi.fn>;
   /** Say `value` as the widget would, to every listener of `event`. */
@@ -47,16 +49,29 @@ const { createMatchTracker, makeTracker, trackers } = vi.hoisted(() => {
     overlay.slot = 'overlay';
     host.append(overlay);
     const listeners = new Map<string, Set<(value: unknown) => void>>();
+    const stopAll = vi.fn();
+    // The widget's rule (0.1.2): a press anywhere in the overlay stops every
+    // moment, unless it is inside an element in the overlay marked
+    // data-match-tracker-keep. Listened for in the capture phase, as there.
+    overlay.addEventListener(
+      'pointerdown',
+      (event) => {
+        const kept = (event.target as Element | null)?.closest('[data-match-tracker-keep]');
+        if (kept && overlay.contains(kept)) return;
+        stopAll();
+      },
+      { capture: true }
+    );
     const tracker: FakeTracker = {
       host,
       options,
       overlay,
-      box: null,
       available: { goal: false, attack: { 0: false, 1: false }, freeKick: false, throwIn: false },
       present: vi.fn(),
       trigger: vi.fn(() => true),
       setOptions: vi.fn(),
       destroy: vi.fn(() => overlay.remove()),
+      stopAll,
       availability: () => structuredClone(tracker.available),
       on: vi.fn((event: string, listener: (value: unknown) => void) => {
         const set = listeners.get(event) ?? new Set();
@@ -122,13 +137,14 @@ interface SurfaceExpose {
 
 function mount(
   replay: PipelineReplay,
-  props: { teamNames?: [string, string] | null } = {},
+  props: { teamNames?: [string, string] | null; drawing?: boolean } = {},
   slots: Record<string, (slotProps: Record<string, unknown>) => unknown> = {}
 ) {
   const root = document.createElement('div');
   document.body.appendChild(root);
   const surface = ref<SurfaceExpose | null>(null);
   const teamNames = ref(props.teamNames);
+  const drawing = ref(props.drawing);
   const app = createApp(
     defineComponent({
       setup: () => () =>
@@ -138,6 +154,7 @@ function mount(
             ref: surface,
             replay,
             ...(teamNames.value !== undefined ? { teamNames: teamNames.value } : {}),
+            ...(drawing.value !== undefined ? { drawing: drawing.value } : {}),
           },
           slots
         ),
@@ -147,6 +164,7 @@ function mount(
   return {
     root,
     teamNames,
+    drawing,
     surface: () => surface.value as SurfaceExpose,
     unmount: () => {
       app.unmount();
@@ -159,6 +177,16 @@ const at = (root: ParentNode, id: string) => root.querySelector(`[data-testid="$
 
 /** The tracker mounted last. */
 const tracker = () => trackers[trackers.length - 1]!;
+
+/** Until the tracker is made and the HUD and the overlay slot are teleported into its overlay. */
+const settled = async () => {
+  await nextTick();
+  await nextTick();
+};
+
+/** A press as the browser starts one, bubbling from `el`. */
+const press = (el: Element | null) =>
+  el?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, composed: true }));
 
 /** What the surface presented last. */
 const lastPresented = () => tracker().present.mock.calls.at(-1)?.[0];
@@ -405,53 +433,62 @@ describe('PipelineOutputSurface', () => {
   });
 
   describe('the HUD', () => {
-    const style = (el: Element | null) => {
-      const s = (el as HTMLElement | null)?.style;
-      return [s?.left, s?.top, s?.width, s?.height];
-    };
-
-    // The transport and the frame badge sit on the pitch, not in the black
-    // band the pitch is letterboxed in: the tracker says where the pitch is.
-    it('sits on the tracker’s pitch box, and follows it', async () => {
+    // The transport, the frame badge and the buffering spinner sit in the
+    // tracker's overlay, which lies exactly over the pitch: on the pitch, not
+    // in the black band it is letterboxed in, and under the widget's own HUD
+    // (its layers menu) and the drawing layer, as on master.
+    it('sits in the tracker’s overlay, marked to keep moments running', async () => {
       const m = mount(fakeReplay('ready'));
-      await nextTick();
-      tracker().emit('box', { left: 14.75, top: 40, width: 1066.5, height: 600 });
-      await nextTick();
-      expect(style(at(m.root, 'pipeline-hud'))).toEqual(['14.75px', '40px', '1066.5px', '600px']);
-
-      tracker().emit('box', { left: 0, top: 52, width: 800, height: 450 });
-      await nextTick();
-      expect(style(at(m.root, 'pipeline-hud'))).toEqual(['0px', '52px', '800px', '450px']);
+      await settled();
+      const hud = at(m.root, 'pipeline-hud') as HTMLElement | null;
+      expect(hud?.parentElement).toBe(tracker().overlay);
+      expect(hud?.hasAttribute('data-match-tracker-keep')).toBe(true);
+      for (const id of ['pipeline-controls', 'pipeline-frame', 'pipeline-play-pause']) {
+        expect(tracker().overlay.contains(at(m.root, id))).toBe(true);
+      }
       m.unmount();
     });
 
-    it('takes the box the tracker measured at mount', async () => {
-      createMatchTracker.mockImplementationOnce((host, options) => {
-        const made = makeTracker(host, options);
-        made.box = { left: 0, top: 40, width: 768, height: 432 };
-        return made;
+    it('fills the pitch box without placing itself on it', async () => {
+      const m = mount(fakeReplay('ready'));
+      await settled();
+      const hud = at(m.root, 'pipeline-hud') as HTMLElement;
+      expect(hud.classList.contains('absolute')).toBe(true);
+      expect(hud.classList.contains('inset-0')).toBe(true);
+      expect(hud.style.left).toBe('');
+      expect(hud.style.width).toBe('');
+      m.unmount();
+    });
+
+    // DrawingCanvas lifts itself with z-index (40, and 100 while drawing).
+    // In the same stacking context as the HUD, which has none, the layer
+    // after it in the overlay paints and takes presses over it either way.
+    it('comes before the drawing layer, which stacks above it', async () => {
+      const m = mount(fakeReplay('ready'), {}, {
+        overlay: () => h('div', { 'data-testid': 'drawing-layer' }),
       });
-      const m = mount(fakeReplay('ready'));
-      await nextTick();
-      await nextTick();
-      expect(style(at(m.root, 'pipeline-hud'))).toEqual(['0px', '40px', '768px', '432px']);
+      await settled();
+      const children = [...tracker().overlay.children];
+      const hud = at(m.root, 'pipeline-hud')!;
+      const layer = at(m.root, 'drawing-layer')!;
+      expect(children).toContain(hud);
+      expect(children).toContain(layer);
+      expect(hud.compareDocumentPosition(layer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(getComputedStyle(hud).zIndex).toMatch(/^(auto|)$/);
       m.unmount();
     });
 
-    // Outside the overlay, because a press anywhere in it stops every moment:
-    // a moment played by hand while paused carries on when play is pressed.
-    it('is not in the tracker’s overlay', async () => {
-      const m = mount(fakeReplay('ready'));
-      await nextTick();
-      expect(tracker().overlay.contains(at(m.root, 'pipeline-controls'))).toBe(false);
-      expect(tracker().host.contains(at(m.root, 'pipeline-hud'))).toBe(false);
+    it('waits for the tracker', async () => {
+      const m = mount(fakeReplay('loading'));
+      await settled();
+      expect(at(m.root, 'pipeline-hud')).toBeNull();
       m.unmount();
     });
 
     it('shows the frame on screen', async () => {
       const replay = fakeReplay('ready');
       const m = mount(replay);
-      await nextTick();
+      await settled();
       expect(at(m.root, 'pipeline-frame')?.textContent).toContain('F457');
       set(replay.currentFrame, 1203);
       await nextTick();
@@ -464,7 +501,7 @@ describe('PipelineOutputSurface', () => {
     it('marks the frame label while the replay waits on data', async () => {
       const replay = fakeReplay('ready');
       const { root, unmount } = mount(replay);
-      await nextTick();
+      await settled();
       expect(at(root, 'pipeline-buffering')).toBeNull();
 
       set(replay.buffering, true);
@@ -486,7 +523,7 @@ describe('PipelineOutputSurface', () => {
     it('starts playback and pauses it again from one button', async () => {
       const replay = fakeReplay('ready');
       const m = mount(replay);
-      await nextTick();
+      await settled();
 
       (at(m.root, 'pipeline-play-pause') as HTMLButtonElement).click();
       expect(replay.play).toHaveBeenCalledOnce();
@@ -502,7 +539,7 @@ describe('PipelineOutputSurface', () => {
 
     it('stays visible while paused, so the tab never looks control-less', async () => {
       const m = mount(fakeReplay('ready'));
-      await nextTick();
+      await settled();
       expect(bar(m.root).className).toContain('opacity-100');
       m.unmount();
     });
@@ -510,7 +547,7 @@ describe('PipelineOutputSurface', () => {
     it('hides during playback, and comes back on hover', async () => {
       const replay = fakeReplay('ready');
       const m = mount(replay);
-      await nextTick();
+      await settled();
 
       set(replay.isPlaying, true);
       await nextTick();
@@ -537,7 +574,7 @@ describe('PipelineOutputSurface', () => {
       // so this asserts the rule is present; the behaviour itself is checked
       // against a real browser.
       const m = mount(fakeReplay('ready'));
-      await nextTick();
+      await settled();
       expect(bar(m.root).className).toContain('has-[:focus-visible]:opacity-100');
       m.unmount();
     });
@@ -547,7 +584,7 @@ describe('PipelineOutputSurface', () => {
       // 10 s in at 25 fps: frame 250 on the grid the step snaps to.
       set(replay.currentTime, 10);
       const m = mount(replay);
-      await nextTick();
+      await settled();
 
       // The millisecond over the grid position is the deliberate slack that
       // keeps a step off the record it is stepping away from.
@@ -558,6 +595,74 @@ describe('PipelineOutputSurface', () => {
       (at(m.root, 'pipeline-step-back') as HTMLButtonElement).click();
       expect(vi.mocked(replay.seek).mock.calls[1]?.[0]).toBeCloseTo(249 / 25 + 0.001, 4);
       m.unmount();
+    });
+
+    // A moment played by hand while paused carries on when Play is pressed:
+    // the demo-recording path. The drawing layer, in the same overlay, still
+    // stops it, so what is drawn on is the data.
+    it('leaves the tracker’s moments running when pressed, unlike the drawing layer', async () => {
+      const m = mount(fakeReplay('ready'), {}, {
+        overlay: () => h('div', { 'data-testid': 'drawing-layer' }),
+      });
+      await settled();
+      for (const id of ['pipeline-play-pause', 'pipeline-step-forward', 'pipeline-step-back']) {
+        press(at(m.root, id));
+      }
+      press(at(m.root, 'pipeline-frame'));
+      expect(tracker().stopAll).not.toHaveBeenCalled();
+
+      press(at(m.root, 'drawing-layer'));
+      expect(tracker().stopAll).toHaveBeenCalledOnce();
+      m.unmount();
+    });
+
+    // In the widget the overlay is inside its zoom-and-pan viewport, which
+    // master's transport was not: a press there would start a pan when
+    // zoomed in, and take the click from the button with it, and a double
+    // click on a step would reset the zoom. A ctrl/⌘ + wheel still goes
+    // through, so it zooms the pitch rather than the page.
+    it('keeps its presses from the pitch’s pan and zoom reset, but not the wheel', async () => {
+      const m = mount(fakeReplay('ready'));
+      await settled();
+      const seen: string[] = [];
+      for (const type of ['pointerdown', 'dblclick', 'wheel']) {
+        tracker().host.addEventListener(type, () => seen.push(type));
+      }
+      const button = at(m.root, 'pipeline-step-forward')!;
+      press(button);
+      button.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, composed: true }));
+      button.dispatchEvent(new WheelEvent('wheel', { bubbles: true, composed: true, ctrlKey: true, deltaY: -100 }));
+      expect(seen).toEqual(['wheel']);
+      m.unmount();
+    });
+
+    describe('while drawing', () => {
+      // The drawing layer stacks above the transport, as on master. inert
+      // also takes it out of the pointer's and the keyboard's reach, which
+      // pointer-events alone cannot: the focus-visible rule turns them back
+      // on, and a Tab would still reach it.
+      it('is inert, and comes back when drawing stops', async () => {
+        const m = mount(fakeReplay('ready'), { drawing: true });
+        await settled();
+        const controls = at(m.root, 'pipeline-controls') as HTMLElement;
+        expect(controls.hasAttribute('inert')).toBe(true);
+
+        m.drawing.value = false;
+        await nextTick();
+        expect(controls.hasAttribute('inert')).toBe(false);
+
+        m.drawing.value = true;
+        await nextTick();
+        expect(controls.hasAttribute('inert')).toBe(true);
+        m.unmount();
+      });
+
+      it('is not inert when the editor says nothing about drawing', async () => {
+        const m = mount(fakeReplay('ready'));
+        await settled();
+        expect((at(m.root, 'pipeline-controls') as HTMLElement).hasAttribute('inert')).toBe(false);
+        m.unmount();
+      });
     });
   });
 

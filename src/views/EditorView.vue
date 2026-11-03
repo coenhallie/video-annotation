@@ -2133,6 +2133,7 @@ watch(
                 ref="pipelineSurfaceRef"
                 :replay="pipelineReplay"
                 :team-names="pipelineTeamNames(currentVideoObject?.title)"
+                :drawing="drawingCanvasPipeline.isDrawingMode.value"
                 @context-menu="openQuickPick"
               >
                 <!--
