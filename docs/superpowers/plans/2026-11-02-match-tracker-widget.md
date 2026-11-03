@@ -64,7 +64,7 @@
 - `src/views/EditorView.vue`, only where props or events change;
 - `src/components/__tests__/pipelineOutputSurface.test.ts` and `src/components/__tests__/pipelineTimelineSeek.test.ts`.
 
-- [ ] Install with `npm install @coenhallie/match-tracker@0.1.0 --save-exact`.
+- [ ] Install with `npm install @coenhallie/match-tracker@0.1.1 --save-exact`.
 - [ ] Mount `createMatchTracker(host, options)` in the stage, or use `MatchTracker` from `@coenhallie/match-tracker/vue`. On every replay tick, call `present({ time: currentTime, playing: isPlaying, record, lookback })`.
 - [ ] Teleport the `overlay` slot into `tracker.overlay`, still passing the slot prop `current-frame`.
 - [ ] Keep these exactly as they are today:
