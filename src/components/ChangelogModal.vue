@@ -123,6 +123,7 @@ const changelogEntries = ref([
       'The 2D replay now runs on the same match tracker as the match share site, so both draw a match the same way',
       'To zoom the 2D replay, hold Ctrl or ⌘ while you scroll, or pinch on a trackpad or touch screen. A plain scroll now scrolls the page',
       'A click outside the layers menu closes it and now also reaches what you clicked. Escape closes the menu while the replay has focus',
+      'While you draw on the 2D replay, its play and frame-step buttons can be neither clicked nor reached with Tab',
     ],
   },
   {
