@@ -311,6 +311,9 @@ const pipelineEverOpened = ref(false);
 // moments by hand (ReplayMomentTriggers). Named as the replay names them:
 // after the match title's teams, first-named as team 0, or by their colours.
 const pipelineSurfaceRef = ref<InstanceType<typeof PipelineOutputSurface> | null>(null);
+// Whether the replay's Demo controls are on, which also turns on the tracker's
+// developer badge for lost players (ReplayMomentTriggers says so).
+const replayDemo = ref(false);
 const replayTeams = computed(() => {
   const names = pipelineTeamNames(currentVideoObject.value?.title);
   return [
@@ -2068,6 +2071,7 @@ watch(
             :availability="pipelineSurfaceRef?.momentAvailability ?? null"
             :teams="replayTeams"
             @trigger="(moment, team) => pipelineSurfaceRef?.triggerMoment(moment, team)"
+            @demo="(on) => (replayDemo = on)"
           />
         </EditorSurfaceTabs>
         <div class="flex min-h-0 flex-1 items-center justify-center p-2 lg:p-6">
@@ -2134,6 +2138,7 @@ watch(
                 :replay="pipelineReplay"
                 :team-names="pipelineTeamNames(currentVideoObject?.title)"
                 :drawing="drawingCanvasPipeline.isDrawingMode.value"
+                :debug="replayDemo"
                 @context-menu="openQuickPick"
               >
                 <!--

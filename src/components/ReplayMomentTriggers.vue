@@ -21,6 +21,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'trigger', moment: ReplayMoment, team?: TeamId): void;
+  /** Whether Demo is on: said on mount and on every change, for the replay's developer badge. */
+  (e: 'demo', on: boolean): void;
 }>();
 
 const STORAGE_KEY = 'perspecto.replayDemo';
@@ -41,6 +43,8 @@ watch(open, (on) => {
     // Private mode or full: the choice lasts for this visit only.
   }
 });
+
+watch(open, (on) => emit('demo', on), { immediate: true });
 
 const can = (moment: Exclude<ReplayMoment, 'attack'>) => props.availability?.[moment] ?? false;
 const canAttack = (team: TeamId) => props.availability?.attack[team] ?? false;

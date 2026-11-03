@@ -138,7 +138,7 @@ interface SurfaceExpose {
 
 function mount(
   replay: PipelineReplay,
-  props: { teamNames?: [string, string] | null; drawing?: boolean } = {},
+  props: { teamNames?: [string, string] | null; drawing?: boolean; debug?: boolean } = {},
   slots: Record<string, (slotProps: Record<string, unknown>) => unknown> = {}
 ) {
   const root = document.createElement('div');
@@ -146,6 +146,7 @@ function mount(
   const surface = ref<SurfaceExpose | null>(null);
   const teamNames = ref(props.teamNames);
   const drawing = ref(props.drawing);
+  const debug = ref(props.debug);
   const app = createApp(
     defineComponent({
       setup: () => () =>
@@ -156,6 +157,7 @@ function mount(
             replay,
             ...(teamNames.value !== undefined ? { teamNames: teamNames.value } : {}),
             ...(drawing.value !== undefined ? { drawing: drawing.value } : {}),
+            ...(debug.value !== undefined ? { debug: debug.value } : {}),
           },
           slots
         ),
@@ -166,6 +168,7 @@ function mount(
     root,
     teamNames,
     drawing,
+    debug,
     surface: () => surface.value as SurfaceExpose,
     unmount: () => {
       app.unmount();
@@ -301,6 +304,22 @@ describe('PipelineOutputSurface', () => {
       await nextTick();
       expect(tracker().options.teams).toEqual({ home: {}, away: {} });
       m.unmount();
+    });
+
+    it('turns the tracker’s developer badge on and off with Demo', async () => {
+      const m = mount(fakeReplay('ready'));
+      await nextTick();
+      expect(tracker().options.debug).toBe(false);
+      m.debug.value = true;
+      await nextTick();
+      await nextTick();
+      expect(tracker().setOptions).toHaveBeenLastCalledWith({ debug: true });
+      m.unmount();
+
+      const on = mount(fakeReplay('ready'), { debug: true });
+      await nextTick();
+      expect(tracker().options.debug).toBe(true);
+      on.unmount();
     });
 
     it('names the teams again when the match changes', async () => {
