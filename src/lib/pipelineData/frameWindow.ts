@@ -1,4 +1,4 @@
-import type { Frame } from '@/lib/vis/types';
+import type { Frame } from '@coenhallie/match-tracker';
 
 /** One JSONL record, reduced to what the replay and the renderer need. */
 export interface ReplayRecord {

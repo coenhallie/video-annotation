@@ -1,8 +1,6 @@
-import { computed, ref, type Ref } from 'vue';
-import type { Frame } from '@/lib/vis/types';
+import { computed, ref, shallowRef, type Ref, type ShallowRef } from 'vue';
+import { REPLAY_LOOKBACK_S } from '@coenhallie/match-tracker';
 import { parseWindowAt, type ReplayRecord } from '@/lib/pipelineData/frameWindow';
-import { samePhase, teamPhaseAt, PHASE_LOOKBACK_S, type TeamPhase } from '@/lib/vis/teamPhase';
-import { ballTrailAt, sameTrail, TRAIL_LOOKBACK_S, type BallTrail } from '@/lib/vis/ballTrail';
 import {
   buildIndex,
   estimateOffset,
@@ -20,25 +18,22 @@ export interface PipelineReplay {
   totalFrames: Ref<number>;
   fps: Ref<number>;
   isPlaying: Ref<boolean>;
-  frame: Ref<Frame | null>;
+  /** The record on screen, or null before the first one is shown. */
+  record: Readonly<ShallowRef<ReplayRecord | null>>;
+  /**
+   * The records held from REPLAY_LOOKBACK_S before the record on screen up to
+   * it, one per frame and in time order, ending with that record: what the
+   * match tracker works the phase and the ball trail out from. A new array
+   * only when the record changes or a window brings records into it, as the
+   * tracker works them out again whenever it changes.
+   */
+  lookback: Readonly<ShallowRef<readonly ReplayRecord[]>>;
   /**
    * True while the pitch is waiting on data: a seek has not found its frame
    * yet, or playback has run into a stretch that is still loading and is
    * holding the clock until it arrives.
    */
   buffering: Readonly<Ref<boolean>>;
-  /**
-   * Who is attacking and who is defending at the frame on screen, derived from
-   * the frames up to PHASE_LOOKBACK_S before it (see teamPhase.ts). Null until
-   * a frame is shown.
-   */
-  phase: Ref<TeamPhase | null>;
-  /**
-   * The ball's trail at the frame on screen: where the ball was played from
-   * while it travels, derived from the frames before it (see ballTrail.ts).
-   * Null when there is none.
-   */
-  ballTrail: Ref<BallTrail | null>;
   state: Ref<ReplayState>;
   error: Ref<string | null>;
   load(): Promise<void>;
@@ -168,7 +163,9 @@ export function usePipelineReplay(opts: {
   const totalFrames = ref(0);
   const fps = ref(25);
   const isPlaying = ref(false);
-  const frame = ref<Frame | null>(null);
+  // Shallow: the records are large, and go to the tracker as they are.
+  const record = shallowRef<ReplayRecord | null>(null);
+  const lookback = shallowRef<readonly ReplayRecord[]>([]);
   const state = ref<ReplayState>('idle');
   const error = ref<string | null>(null);
 
@@ -178,11 +175,6 @@ export function usePipelineReplay(opts: {
   const awaitingFrame = ref(false);
   const held = ref(false);
   const buffering = computed(() => awaitingFrame.value || held.value);
-  const phase = ref<TeamPhase | null>(null);
-  const ballTrail = ref<BallTrail | null>(null);
-  // The record on screen, so its phase and trail can be worked out again when
-  // the frames before it arrive after it does.
-  let shown: ReplayRecord | null = null;
 
   let fetcher: RangeFetcher | null = null;
   let index: JsonlIndex | null = null;
@@ -313,8 +305,8 @@ export function usePipelineReplay(opts: {
     if (cache) {
       touch(win);
       // A window that arrives after its frame was shown may hold the history
-      // that frame's phase and trail were missing.
-      if (shown) setHistory(shown);
+      // that frame's lookback was missing.
+      if (record.value) setLookback(record.value);
     }
     return { from, end, first, last, firstOffset, lastOffset, win };
   }
@@ -451,18 +443,14 @@ export function usePipelineReplay(opts: {
       if (!found || controller.signal.aborted || startEpoch !== epoch) return;
       onLocated?.(found.record);
       fg.fillFrom = found.read.first.t;
-      // Started far enough back to hold the lookback the team phase and the
-      // ball trail read, so a frame reached by a seek has the same history as
-      // one reached by playing into it. The mean record size is the largest
-      // sampled, which keeps this on the generous side.
-      const lookback = index
-        ? Math.round(
-            fps.value *
-              index.meanRecordBytes *
-              (Math.max(PHASE_LOOKBACK_S, TRAIL_LOOKBACK_S) + 1)
-          )
+      // Started far enough back to hold the lookback the tracker reads its
+      // team phase and ball trail from, so a frame reached by a seek has the
+      // same history as one reached by playing into it. The mean record size
+      // is the largest sampled, which keeps this on the generous side.
+      const lookbackBytes = index
+        ? Math.round(fps.value * index.meanRecordBytes * (REPLAY_LOOKBACK_S + 1))
         : 0;
-      const fillFrom = Math.max(0, found.read.firstOffset - lookback);
+      const fillFrom = Math.max(0, found.read.firstOffset - lookbackBytes);
       await readWindow(
         fillFrom,
         windowBytes() + (found.read.firstOffset - fillFrom),
@@ -478,45 +466,38 @@ export function usePipelineReplay(opts: {
   }
 
   /**
-   * Work out what the frames before this record decide: its phase and its
-   * trail, from the cached records up to the longer of their lookbacks before
-   * it. Each reads only its own lookback of them.
+   * The cached records from REPLAY_LOOKBACK_S before `at` up to it, one per
+   * frame, with `at` itself standing for its frame: a cached window holds its
+   * own copy of the record shown. The array is kept when it would hold the
+   * same frames, so the tracker is not made to work them out again.
    */
-  function setHistory(record: ReplayRecord): void {
-    const from = record.t - Math.max(PHASE_LOOKBACK_S, TRAIL_LOOKBACK_S);
-    const byFrame = new Map<number, ReplayRecord>([[record.frameCount, record]]);
+  function setLookback(at: ReplayRecord): void {
+    const from = at.t - REPLAY_LOOKBACK_S;
+    const byFrame = new Map<number, ReplayRecord>([[at.frameCount, at]]);
     for (const win of windows) {
       for (const r of win.records) {
-        if (r.t >= from && r.t <= record.t) byFrame.set(r.frameCount, r);
+        if (r.frameCount !== at.frameCount && r.t >= from && r.t <= at.t) {
+          byFrame.set(r.frameCount, r);
+        }
       }
     }
-    const recent = [...byFrame.values()].sort((a, b) => a.t - b.t);
-    // By frame number: a cached window holds its own copy of the record shown.
-    const at = recent.findIndex((r) => r.frameCount === record.frameCount);
-    setPhase(teamPhaseAt(recent, at));
-    const trail = ballTrailAt(recent, at);
-    if (!sameTrail(ballTrail.value, trail)) ballTrail.value = trail;
+    const next = [...byFrame.values()].sort((a, b) => a.t - b.t);
+    const was = lookback.value;
+    const same =
+      was.length === next.length &&
+      was.at(-1) === at &&
+      was.every((r, i) => r.frameCount === next[i]?.frameCount);
+    if (!same) lookback.value = next;
   }
 
-  /**
-   * Replace the phase only when it says something new. It is worked out for
-   * every record but holds for seconds at a time, and every replacement
-   * re-renders and repaints whatever shows it.
-   */
-  function setPhase(next: TeamPhase): void {
-    if (!phase.value || !samePhase(phase.value, next)) phase.value = next;
-  }
-
-  function show(record: ReplayRecord): void {
+  function show(next: ReplayRecord): void {
     // The clock ticks at display rate, faster than records arrive, so most
     // ticks show the record already on screen: nothing about it has changed.
-    // When the history behind it does, readWindow works the phase and trail
-    // out again.
-    if (record === shown) return;
-    shown = record;
-    frame.value = record.frame;
-    currentFrame.value = record.frameCount;
-    setHistory(record);
+    // When the history behind it does, readWindow sets the lookback again.
+    if (next === record.value) return;
+    record.value = next;
+    currentFrame.value = next.frameCount;
+    setLookback(next);
   }
 
   function fail(err: unknown): void {
@@ -783,9 +764,8 @@ export function usePipelineReplay(opts: {
     windows = [];
     index = null;
     fetcher = null;
-    shown = null;
-    phase.value = null;
-    ballTrail.value = null;
+    record.value = null;
+    lookback.value = [];
     awaitingFrame.value = false;
     // Not just bookkeeping: play() guards on state === 'ready', so leaving it
     // there would let a stray play() after unmount re-arm the clock over no
@@ -800,10 +780,9 @@ export function usePipelineReplay(opts: {
     totalFrames,
     fps,
     isPlaying,
-    frame,
+    record,
+    lookback,
     buffering,
-    phase,
-    ballTrail,
     state,
     error,
     load,

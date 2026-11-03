@@ -1,7 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { watch } from 'vue';
 import { usePipelineReplay, LOOKAHEAD_SECONDS } from '@/composables/usePipelineReplay';
-import { TRAIL_HISTORY_S } from '@/lib/vis/ballTrail';
+import { REPLAY_LOOKBACK_S } from '@coenhallie/match-tracker';
 import type { RangeFetcher } from '@/lib/pipelineData/jsonlIndex';
 import {
   bandedFile,
@@ -149,7 +148,8 @@ describe('usePipelineReplay', () => {
     await r.load();
     expect(r.currentTime.value).toBe(0);
     expect(r.currentFrame.value).toBe(457);
-    expect(r.frame.value).not.toBeNull();
+    expect(r.record.value).toMatchObject({ frameCount: 457, t: 1000 });
+    expect(r.record.value?.frame).toBeTruthy();
   });
 
   // The index already knows exactly where the first record is, so finding it
@@ -899,36 +899,19 @@ describe('usePipelineReplay seeking a file with uneven time per byte', () => {
   });
 });
 
-describe('usePipelineReplay team phase', () => {
+describe('usePipelineReplay lookback', () => {
   /**
-   * Team 0 carries the ball until `switchAt` seconds, team 1 after. Keepers at
-   * -45 (team 0) and +45 (team 1), ball at x = 20. Records are padded wide,
-   * so the probes a seek makes carry well under a second of history on their
-   * own: the lookback has to be fetched on purpose.
+   * 300 s of records, padded wide, so the probes a seek makes carry well
+   * under a second of history on their own: the lookback has to be fetched
+   * on purpose.
    */
-  function phaseFile(count: number, switchAt: number, width = 4000) {
+  function wideFile(count: number, width = 4000) {
     const lines: string[] = [];
     for (let i = 0; i < count; i++) {
       const t = i * 0.04;
-      const carrier = t < switchAt ? 0 : 1;
       const body: Record<string, unknown> = {
-        teams: [
-          {
-            team_id: 0,
-            players: [
-              { track_id: 1, person_type: 'PersonType.PLAYER', projected_coordinates: { x: 0, y: 5 }, in_possession: carrier === 0 },
-              { track_id: 2, person_type: 'PersonType.GOALKEEPER', projected_coordinates: { x: -45, y: 0 } },
-            ],
-          },
-          {
-            team_id: 1,
-            players: [
-              { track_id: 3, person_type: 'PersonType.PLAYER', projected_coordinates: { x: 0, y: -5 }, in_possession: carrier === 1 },
-              { track_id: 4, person_type: 'PersonType.GOALKEEPER', projected_coordinates: { x: 45, y: 0 } },
-            ],
-          },
-        ],
-        balls: [{ projected_coordinates: { x: 20, y: 0 } }],
+        teams: [],
+        balls: [{ projected_coordinates: { x: 0, y: 0 } }],
         state: { actions: [] },
         frame_data: [{ frame_count: 457 + i, frame_uuid: [{ timestamp: Number((1000 + t).toFixed(4)), uuid: 'x' }] }],
         pad: '',
@@ -939,159 +922,78 @@ describe('usePipelineReplay team phase', () => {
     return lines.join('\n');
   }
 
-  // 300 s of play, the hand-over at 150 s: far from the window loaded first.
-  const text = phaseFile(7500, 150);
+  const text = wideFile(7500);
+  const frames = (records: readonly { frameCount: number }[]) => records.map((r) => r.frameCount);
 
-  it('reports the phase of the frame on screen', async () => {
-    const r = usePipelineReplay({ openFetcher: async () => fetcherFor(text) });
-    await r.load();
-    await r.seek(100);
-    await r.whenIdle();
-    expect(r.phase.value).toMatchObject({ possession: 0, states: { 0: 'attacking', 1: 'defending' } });
-  });
-
-  // Just after the hand-over, team 1 has carried for 0.6 s: not yet enough,
-  // so team 0 is still in possession. Telling that needs the seconds before
-  // the frame, which a seek on its own does not load.
-  it('looks back before a seek target', async () => {
+  it('holds the records from REPLAY_LOOKBACK_S before the record on screen up to it, in time order', async () => {
     const r = usePipelineReplay({ openFetcher: async () => fetcherFor(text) });
     await r.load();
     await r.seek(150.6);
     await r.whenIdle();
-    expect(r.phase.value?.possession).toBe(0);
-
-    await r.seek(151.5);
-    await r.whenIdle();
-    expect(r.phase.value?.possession).toBe(1);
+    const record = r.record.value!;
+    const lookback = r.lookback.value;
+    expect(record.frameCount).toBe(r.currentFrame.value);
+    expect(lookback.at(-1)?.frameCount).toBe(record.frameCount);
+    // Every record of the window is there, one per frame, in order.
+    const from = record.t - REPLAY_LOOKBACK_S;
+    expect(lookback.every((x) => x.t >= from && x.t <= record.t)).toBe(true);
+    expect(lookback[0]!.t - from).toBeLessThan(0.04 + 1e-6);
+    const counts = frames(lookback);
+    expect(counts).toEqual(counts.map((_, i) => counts[0]! + i));
   });
 
-  // The clock ticks at display rate and records arrive at the data's rate, so
-  // most ticks bring no new record, and the phase itself holds for seconds at
-  // a time. A new phase object on every tick re-rendered and repainted
-  // everything that shows it, 120 times a second.
-  it('keeps the same phase while playing on through a stretch where it does not change', async () => {
+  // A seek's own probes hold well under a second before the frame, so the
+  // lookback is only there if the window read after it starts far enough back.
+  it('reaches back the whole lookback before a seek target, which a seek on its own does not load', async () => {
+    const r = usePipelineReplay({ openFetcher: async () => fetcherFor(text) });
+    await r.load();
+    await r.seek(200);
+    await r.whenIdle();
+    const record = r.record.value!;
+    expect(record.t - r.lookback.value[0]!.t).toBeGreaterThan(REPLAY_LOOKBACK_S - 0.05);
+  });
+
+  it('is empty at the first record, apart from that record', async () => {
+    const r = usePipelineReplay({ openFetcher: async () => fetcherFor(text) });
+    await r.load();
+    await r.whenIdle();
+    expect(frames(r.lookback.value)).toEqual([457]);
+  });
+
+  // The widget works the phase and the trail out again whenever the lookback
+  // changes, by identity. The clock ticks at display rate and records arrive
+  // at the data's rate, so most ticks bring nothing new.
+  it('keeps the same lookback while the clock moves on without a new record', async () => {
     const clock = manualClock();
     const r = usePipelineReplay({ openFetcher: async () => fetcherFor(text), raf: clock.raf, caf: clock.caf });
     await r.load();
     await r.seek(100);
     await r.whenIdle();
-    const before = r.phase.value;
-    let changes = 0;
-    const stop = watch(r.phase, () => changes++, { flush: 'sync' });
     r.play();
     clock.tick(0);
-    for (let ms = 8; ms <= 2000; ms += 8) {
+    // Playback reads the record from the window now cached around it.
+    clock.tick(5);
+    await r.whenIdle();
+    const record = r.record.value;
+    const lookback = r.lookback.value;
+    // 30 ms on: records are 40 ms apart, so the one on screen is still showing.
+    for (let ms = 10; ms <= 30; ms += 10) {
       clock.tick(ms);
       await r.whenIdle();
     }
-    r.pause();
-    stop();
-    expect(r.currentTime.value).toBeGreaterThan(101.9);
-    expect(changes).toBe(0);
-    expect(r.phase.value).toBe(before);
-  });
+    expect(r.currentTime.value).toBeGreaterThan(100.02);
+    expect(r.record.value).toBe(record);
+    expect(r.lookback.value).toBe(lookback);
 
-  it('still changes the phase while playing, the moment it changes', async () => {
-    const clock = manualClock();
-    const r = usePipelineReplay({ openFetcher: async () => fetcherFor(text), raf: clock.raf, caf: clock.caf });
-    await r.load();
-    await r.seek(150.5);
+    clock.tick(50);
     await r.whenIdle();
-    expect(r.phase.value?.possession).toBe(0);
-    r.play();
-    clock.tick(0);
-    for (let ms = 8; ms <= 1200; ms += 8) {
-      clock.tick(ms);
-      await r.whenIdle();
-    }
     r.pause();
-    // Team 1 has carried since 150 s: possession passes once it has for 1 s.
-    expect(r.phase.value?.possession).toBe(1);
+    expect(r.record.value).not.toBe(record);
+    expect(r.lookback.value).not.toBe(lookback);
+    expect(r.lookback.value.at(-1)).toBe(r.record.value);
   });
 
-  it('gives a frame the same phase whether it was reached by playing or by seeking', async () => {
-    const clock = manualClock();
-    const played = usePipelineReplay({ openFetcher: async () => fetcherFor(text), raf: clock.raf, caf: clock.caf });
-    await played.load();
-    await played.seek(149);
-    await played.whenIdle();
-    played.play();
-    clock.tick(0);
-    for (let ms = 40; ms <= 1640; ms += 40) {
-      clock.tick(ms);
-      await played.whenIdle();
-    }
-    played.pause();
-
-    const sought = usePipelineReplay({ openFetcher: async () => fetcherFor(text) });
-    await sought.load();
-    await sought.seek(played.currentTime.value);
-    await sought.whenIdle();
-
-    expect(sought.currentFrame.value).toBe(played.currentFrame.value);
-    expect(sought.phase.value).toEqual(played.phase.value);
-  });
-});
-
-describe('usePipelineReplay ball trail', () => {
-  /**
-   * The ball stands at (0, 5) until `passAt` seconds, runs along x at 10 m/s
-   * for a second, then turns and runs along y. Padded wide like the phase
-   * file, so a seek's probes do not carry the seconds before their target.
-   */
-  function passFile(count: number, passAt: number, width = 4000) {
-    const lines: string[] = [];
-    for (let i = 0; i < count; i++) {
-      const t = i * 0.04;
-      const body: Record<string, unknown> = {
-        teams: [
-          {
-            team_id: 0,
-            players: [
-              { track_id: 1, person_type: 'PersonType.PLAYER', projected_coordinates: { x: 0, y: 5 }, in_possession: t < passAt },
-            ],
-          },
-        ],
-        balls: [
-          {
-            projected_coordinates:
-              t < passAt
-                ? { x: 0, y: 5 }
-                : t < passAt + 1
-                  ? { x: (t - passAt) * 10, y: 5 }
-                  : { x: 10, y: 5 + (t - passAt - 1) * 10 },
-          },
-        ],
-        state: { actions: [] },
-        frame_data: [{ frame_count: 457 + i, frame_uuid: [{ timestamp: Number((1000 + t).toFixed(4)), uuid: 'x' }] }],
-        pad: '',
-      };
-      body.pad = 'p'.repeat(Math.max(0, width - JSON.stringify(body).length));
-      lines.push(JSON.stringify(body));
-    }
-    return lines.join('\n');
-  }
-
-  const text = passFile(7500, 150);
-
-  it('reports the trail of the frame on screen, from the frames before a seek target', async () => {
-    const r = usePipelineReplay({ openFetcher: async () => fetcherFor(text) });
-    await r.load();
-    await r.seek(152);
-    await r.whenIdle();
-    const trail = r.ballTrail.value!;
-    const path = trail.runs.flat();
-    // It ends at the ball, and reaches the whole history back, which a seek
-    // on its own does not load.
-    expect(path.at(-1)).toMatchObject({ x: 10, y: 15, age: 0 });
-    expect(path[0]!.age).toBeGreaterThan(TRAIL_HISTORY_S - 0.1);
-    expect(path[0]).toMatchObject({ x: 0, y: 5 });
-    expect(trail.turns).toHaveLength(1);
-    expect(trail.turns[0]!.x).toBeCloseTo(10);
-    expect(trail.turns[0]!.y).toBeCloseTo(5);
-  });
-
-  it('gives a frame the same trail whether it was reached by playing or by seeking', async () => {
+  it('gives a frame the same lookback whether it was reached by playing or by seeking', async () => {
     const clock = manualClock();
     const played = usePipelineReplay({ openFetcher: async () => fetcherFor(text), raf: clock.raf, caf: clock.caf });
     await played.load();
@@ -1104,7 +1006,6 @@ describe('usePipelineReplay ball trail', () => {
       await played.whenIdle();
     }
     played.pause();
-    expect(played.ballTrail.value).not.toBeNull();
 
     const sought = usePipelineReplay({ openFetcher: async () => fetcherFor(text) });
     await sought.load();
@@ -1112,7 +1013,15 @@ describe('usePipelineReplay ball trail', () => {
     await sought.whenIdle();
 
     expect(sought.currentFrame.value).toBe(played.currentFrame.value);
-    expect(sought.ballTrail.value).toEqual(played.ballTrail.value);
+    expect(frames(sought.lookback.value)).toEqual(frames(played.lookback.value));
+  });
+
+  it('lets go of the record and the lookback on dispose', async () => {
+    const r = usePipelineReplay({ openFetcher: async () => fetcherFor(text) });
+    await r.load();
+    await r.whenIdle();
+    r.dispose();
+    expect(r.record.value).toBeNull();
+    expect(r.lookback.value).toEqual([]);
   });
 });
-

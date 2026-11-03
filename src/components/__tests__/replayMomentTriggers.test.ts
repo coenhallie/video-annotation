@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createApp, defineComponent, h, nextTick, ref } from 'vue';
-import ReplayMomentTriggers, { type MomentAvailability } from '@/components/ReplayMomentTriggers.vue';
+import type { MomentAvailability } from '@coenhallie/match-tracker';
+import ReplayMomentTriggers from '@/components/ReplayMomentTriggers.vue';
 
 const ALL: MomentAvailability = { goal: true, attack: { 0: true, 1: true }, freeKick: true, throwIn: true };
 const TEAMS: [{ name: string; color: string }, { name: string; color: string }] = [

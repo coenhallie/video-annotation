@@ -1,41 +1,108 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { createApp, defineComponent, h, nextTick, ref } from 'vue';
+//
+// The surface as a host of the match tracker widget. The widget itself is
+// proved against this app's own recordings in its own repo, so here it is a
+// fake that records what the surface hands it and lets a test say what it
+// would report back: the moments it can play. Its overlay stops every moment
+// on a press, as the widget's does, except inside an element marked
+// data-match-tracker-keep.
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { createApp, defineComponent, h, nextTick, ref, shallowRef } from 'vue';
 import PipelineOutputSurface from '@/components/PipelineOutputSurface.vue';
 import type { PipelineReplay, ReplayState } from '@/composables/usePipelineReplay';
-import { GOAL_SEQUENCE_MS } from '@/lib/vis/goalSequence';
-import {
-  PERSON_COLORS,
-  POSSESSION_FADE_IN_S,
-  RECEIVE_FADE_S,
-  RECEIVE_SHOW_S,
-  RING_FADE_S,
-} from '@/lib/vis/constants';
-import { UPRIGHT } from '@/lib/vis/football';
+import type { ReplayRecord } from '@/lib/pipelineData/frameWindow';
+import type {
+  MatchTrackerOptions,
+  MomentAvailability,
+  TrackerEvents,
+} from '@coenhallie/match-tracker';
 
-/**
- * Declared through vi.hoisted because vi.mock is hoisted above the imports,
- * and plain const declarations would still be in their temporal dead zone
- * when the factory runs (see drawingCanvas.test.ts for the same pattern).
- */
-const { renderFrame, setView, useRenderer2D } = vi.hoisted(() => {
-  const renderFrame = vi.fn();
-  const invalidateCache = vi.fn();
-  // Zoom and pan go through the renderer now, not a CSS transform on the
-  // canvas, so the stub has to carry setView or mounting throws.
-  const setView = vi.fn();
-  const useRenderer2D = vi.fn(() => ({ renderFrame, invalidateCache, setView }));
-  return { renderFrame, setView, useRenderer2D };
+interface FakeTracker {
+  host: HTMLElement;
+  options: MatchTrackerOptions;
+  overlay: HTMLElement;
+  present: ReturnType<typeof vi.fn>;
+  trigger: ReturnType<typeof vi.fn>;
+  setOptions: ReturnType<typeof vi.fn>;
+  destroy: ReturnType<typeof vi.fn>;
+  /** The widget's stop path: what a press in its overlay calls. */
+  stopAll: ReturnType<typeof vi.fn>;
+  availability: () => MomentAvailability;
+  on: ReturnType<typeof vi.fn>;
+  /** Say `value` as the widget would, to every listener of `event`. */
+  emit<K extends keyof TrackerEvents>(event: K, value: TrackerEvents[K]): void;
+  /** What availability() answers. */
+  available: MomentAvailability;
+}
+
+const NOTHING: MomentAvailability = {
+  goal: false,
+  attack: { 0: false, 1: false },
+  freeKick: false,
+  throwIn: false,
+};
+
+const { createMatchTracker, makeTracker, trackers } = vi.hoisted(() => {
+  const trackers: FakeTracker[] = [];
+  const makeTracker = (host: HTMLElement, options: MatchTrackerOptions) => {
+    const overlay = document.createElement('div');
+    overlay.slot = 'overlay';
+    host.append(overlay);
+    const listeners = new Map<string, Set<(value: unknown) => void>>();
+    const stopAll = vi.fn();
+    // The widget's rule (0.1.2): a press anywhere in the overlay stops every
+    // moment, unless it is inside an element in the overlay marked
+    // data-match-tracker-keep. Listened for in the capture phase, as there.
+    overlay.addEventListener(
+      'pointerdown',
+      (event) => {
+        const kept = (event.target as Element | null)?.closest('[data-match-tracker-keep]');
+        if (kept && overlay.contains(kept)) return;
+        stopAll();
+      },
+      { capture: true }
+    );
+    const tracker: FakeTracker = {
+      host,
+      options,
+      overlay,
+      available: { goal: false, attack: { 0: false, 1: false }, freeKick: false, throwIn: false },
+      present: vi.fn(),
+      trigger: vi.fn(() => true),
+      setOptions: vi.fn(),
+      destroy: vi.fn(() => overlay.remove()),
+      stopAll,
+      availability: () => structuredClone(tracker.available),
+      on: vi.fn((event: string, listener: (value: unknown) => void) => {
+        const set = listeners.get(event) ?? new Set();
+        set.add(listener);
+        listeners.set(event, set);
+        return () => set.delete(listener);
+      }),
+      emit(event, value) {
+        listeners.get(event)?.forEach((listener) => listener(value));
+      },
+    };
+    trackers.push(tracker);
+    return tracker;
+  };
+  const createMatchTracker = vi.fn(makeTracker);
+  return { createMatchTracker, makeTracker, trackers };
 });
 
-// Only the renderer is stubbed: the surface also uses the module's pure
-// helpers (nearbyTrackIds), which work without a canvas.
-vi.mock('@/lib/vis/useRenderer2D', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/vis/useRenderer2D')>()),
-  useRenderer2D,
+vi.mock('@coenhallie/match-tracker', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@coenhallie/match-tracker')>()),
+  createMatchTracker,
 }));
 
+const record = (frameCount: number, t = 1000): ReplayRecord => ({
+  frameCount,
+  t,
+  frame: { teams: [], balls: [], frame_data: [{ frame_count: frameCount }] } as unknown as ReplayRecord['frame'],
+});
+
 function fakeReplay(state: ReplayState, message: string | null = null) {
+  const first = record(457);
   return {
     currentTime: ref(0),
     duration: ref(120),
@@ -43,10 +110,9 @@ function fakeReplay(state: ReplayState, message: string | null = null) {
     totalFrames: ref(3000),
     fps: ref(25),
     isPlaying: ref(false),
-    frame: ref(null),
+    record: shallowRef<ReplayRecord | null>(state === 'ready' ? first : null),
+    lookback: shallowRef<readonly ReplayRecord[]>(state === 'ready' ? [first] : []),
     buffering: ref(false),
-    phase: ref(null),
-    ballTrail: ref(null),
     state: ref(state),
     error: ref(message),
     load: vi.fn(async () => {}),
@@ -58,34 +124,47 @@ function fakeReplay(state: ReplayState, message: string | null = null) {
   } as unknown as PipelineReplay;
 }
 
+/** Writable access to a replay's refs, which the type has as read-only. */
+const set = <T>(r: unknown, value: T) => {
+  (r as { value: T }).value = value;
+};
+
 /** What the surface exposes to the editor: playing its moments by hand. */
 interface SurfaceExpose {
-  triggerMoment: (moment: 'goal' | 'attack' | 'freeKick' | 'throwIn', team?: 0 | 1) => void;
-  momentAvailability: {
-    goal: boolean;
-    attack: Record<0 | 1, boolean>;
-    freeKick: boolean;
-    throwIn: boolean;
-  };
+  triggerMoment: (moment: 'goal' | 'attack' | 'freeKick' | 'throwIn', team?: 0 | 1) => boolean;
+  momentAvailability: MomentAvailability;
 }
 
-function mount(replay: PipelineReplay, props: { teamNames?: [string, string] | null | undefined } = {}) {
+function mount(
+  replay: PipelineReplay,
+  props: { teamNames?: [string, string] | null; drawing?: boolean } = {},
+  slots: Record<string, (slotProps: Record<string, unknown>) => unknown> = {}
+) {
   const root = document.createElement('div');
   document.body.appendChild(root);
   const surface = ref<SurfaceExpose | null>(null);
+  const teamNames = ref(props.teamNames);
+  const drawing = ref(props.drawing);
   const app = createApp(
     defineComponent({
       setup: () => () =>
-        h(PipelineOutputSurface, {
-          ref: surface,
-          replay,
-          ...(props.teamNames !== undefined ? { teamNames: props.teamNames } : {}),
-        }),
+        h(
+          PipelineOutputSurface,
+          {
+            ref: surface,
+            replay,
+            ...(teamNames.value !== undefined ? { teamNames: teamNames.value } : {}),
+            ...(drawing.value !== undefined ? { drawing: drawing.value } : {}),
+          },
+          slots
+        ),
     })
   );
   app.mount(root);
   return {
     root,
+    teamNames,
+    drawing,
     surface: () => surface.value as SurfaceExpose,
     unmount: () => {
       app.unmount();
@@ -94,34 +173,35 @@ function mount(replay: PipelineReplay, props: { teamNames?: [string, string] | n
   };
 }
 
-const at = (root: HTMLElement, id: string) =>
-  root.querySelector(`[data-testid="${id}"]`);
+const at = (root: ParentNode, id: string) => root.querySelector(`[data-testid="${id}"]`);
+
+/** The tracker mounted last. */
+const tracker = () => trackers[trackers.length - 1]!;
+
+/** Until the tracker is made and the HUD and the overlay slot are teleported into its overlay. */
+const settled = async () => {
+  await nextTick();
+  await nextTick();
+};
+
+/** A press as the browser starts one, bubbling from `el`. */
+const press = (el: Element | null) =>
+  el?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, composed: true }));
+
+/** What the surface presented last. */
+const lastPresented = () => tracker().present.mock.calls.at(-1)?.[0];
 
 describe('PipelineOutputSurface', () => {
   beforeEach(() => {
-    renderFrame.mockClear();
-    useRenderer2D.mockClear();
-    // jsdom has no 2D context. Give it a stub so renderer attachment is
-    // observable; without this ensureRenderer bails and the tests cannot see
-    // the bug it exists to catch.
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
-      {} as unknown as CanvasRenderingContext2D
-    );
-  });
-
-  afterEach(() => {
-    // Deliberately not vi.restoreAllMocks(): that calls mockRestore() on
-    // every mock, and for a plain vi.fn() (as opposed to a vi.spyOn) restore
-    // behaves like reset and wipes the implementation set at creation - which
-    // would silently break useRenderer2D's mocked return value for every test
-    // that runs after the first one that touches it. Undo only the spy.
-    vi.mocked(HTMLCanvasElement.prototype.getContext).mockRestore();
+    trackers.length = 0;
+    createMatchTracker.mockClear();
   });
 
   it('shows the loading state', async () => {
     const m = mount(fakeReplay('loading'));
     await nextTick();
     expect(at(m.root, 'pipeline-loading')).not.toBeNull();
+    expect(createMatchTracker).not.toHaveBeenCalled();
     m.unmount();
   });
 
@@ -129,327 +209,21 @@ describe('PipelineOutputSurface', () => {
     const m = mount(fakeReplay('empty'));
     await nextTick();
     expect(at(m.root, 'pipeline-empty')).not.toBeNull();
+    expect(createMatchTracker).not.toHaveBeenCalled();
     m.unmount();
   });
 
-  it('shows the error state with its message', async () => {
-    const m = mount(fakeReplay('error', 'range request failed'));
+  it('shows the error state with its message, and loads again on request', async () => {
+    const replay = fakeReplay('error', 'range request failed');
+    const m = mount(replay);
     await nextTick();
     const el = at(m.root, 'pipeline-error');
     expect(el?.textContent).toContain('range request failed');
+    expect(createMatchTracker).not.toHaveBeenCalled();
+    vi.mocked(replay.load).mockClear();
+    (el?.querySelector('button') as HTMLButtonElement).click();
+    expect(replay.load).toHaveBeenCalledOnce();
     m.unmount();
-  });
-
-  /**
-   * The overlay is where the drawing layer mounts, and strokes only land on the
-   * right pitch positions if it covers exactly the canvas's rendered rect; the
-   * HUD has to sit on the pitch the same way. All three are placed from one
-   * computed box. Matching CSS clamps were not enough: a canvas and a div given
-   * the same clamps resolve differently once the stage is wider than 16:9.
-   *
-   * jsdom does no layout, so the stage's rect and the resize notification are
-   * supplied here.
-   */
-  describe('sizing', () => {
-    let observed: Array<() => void> = [];
-    const originalObserver = globalThis.ResizeObserver;
-    const originalDpr = window.devicePixelRatio;
-
-    beforeEach(() => {
-      observed = [];
-      globalThis.ResizeObserver = class {
-        private readonly notify: () => void;
-        constructor(cb: () => void) {
-          this.notify = cb;
-        }
-        observe() {
-          observed.push(this.notify);
-        }
-        unobserve() {}
-        disconnect() {}
-      } as unknown as typeof ResizeObserver;
-      Object.defineProperty(window, 'devicePixelRatio', { value: 2, configurable: true });
-      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
-        function (this: HTMLElement) {
-          return this.dataset.testid === 'pipeline-viewport'
-            ? ({ left: 0, top: 0, width: 1096, height: 640 } as DOMRect)
-            : ({ left: 0, top: 0, width: 0, height: 0 } as DOMRect);
-        }
-      );
-    });
-
-    afterEach(() => {
-      globalThis.ResizeObserver = originalObserver;
-      Object.defineProperty(window, 'devicePixelRatio', {
-        value: originalDpr,
-        configurable: true,
-      });
-      vi.mocked(HTMLElement.prototype.getBoundingClientRect).mockRestore();
-    });
-
-    const box = (el: Element | null) => {
-      const style = (el as HTMLElement | null)?.style;
-      return [style?.left, style?.top, style?.width, style?.height];
-    };
-
-    it('places the canvas, the drawing overlay and the HUD in one box', async () => {
-      const m = mount(fakeReplay('ready'));
-      await nextTick();
-      observed.forEach((notify) => notify());
-      await nextTick();
-
-      const canvasBox = box(at(m.root, 'pipeline-canvas'));
-      // 1096x640, less the 40 px row kept above the pitch for the team labels.
-      expect(canvasBox[2]).toBe('1066.5px');
-      expect(box(at(m.root, 'pipeline-overlay'))).toEqual(canvasBox);
-      expect(box(at(m.root, 'pipeline-hud'))).toEqual(canvasBox);
-      m.unmount();
-    });
-
-    // The labels sit above the pitch, never over it: anything standing on the
-    // near touchline would otherwise be hidden under them.
-    it('keeps a row above the pitch for the team labels', async () => {
-      const m = mount(fakeReplay('ready'));
-      await nextTick();
-      observed.forEach((notify) => notify());
-      await nextTick();
-
-      const style = (at(m.root, 'pipeline-canvas') as HTMLElement).style;
-      expect(parseFloat(style.top)).toBeGreaterThanOrEqual(40);
-      expect(parseFloat(style.top) + parseFloat(style.height)).toBeLessThanOrEqual(640);
-      m.unmount();
-    });
-
-    it('gives the canvas one bitmap pixel per device pixel', async () => {
-      const m = mount(fakeReplay('ready'));
-      await nextTick();
-      observed.forEach((notify) => notify());
-      await nextTick();
-
-      const canvas = at(m.root, 'pipeline-canvas') as HTMLCanvasElement;
-      expect([canvas.width, canvas.height]).toEqual([2133, 1200]);
-      m.unmount();
-    });
-
-    // Dragging the window to a display with another pixel ratio leaves its CSS
-    // size alone, so no resize is reported. The resolution query is what says.
-    it('resizes the bitmap when the device pixel ratio changes', async () => {
-      const listeners: Array<() => void> = [];
-      const originalMatchMedia = window.matchMedia;
-      window.matchMedia = ((query: string) => ({
-        media: query,
-        addEventListener: (_: string, cb: () => void) => listeners.push(cb),
-        removeEventListener: () => {},
-      })) as unknown as typeof window.matchMedia;
-      try {
-        const m = mount(fakeReplay('ready'));
-        await nextTick();
-        observed.forEach((notify) => notify());
-        await nextTick();
-
-        Object.defineProperty(window, 'devicePixelRatio', { value: 3, configurable: true });
-        listeners.splice(0).forEach((cb) => cb());
-        await nextTick();
-
-        const canvas = at(m.root, 'pipeline-canvas') as HTMLCanvasElement;
-        expect(canvas.width).toBe(3200);
-        m.unmount();
-      } finally {
-        window.matchMedia = originalMatchMedia;
-      }
-    });
-
-    it('draws the current frame again once the bitmap is resized', async () => {
-      // The order load() produces: mounted while loading, then a frame and
-      // ready together, which is what attaches the renderer.
-      const replay = fakeReplay('loading');
-      const m = mount(replay);
-      await nextTick();
-      (replay.frame as unknown as { value: unknown }).value = {
-        teams: [],
-        balls: [],
-        state: { actions: [] },
-        frame_data: [{ frame_count: 1 }],
-      };
-      (replay.state as unknown as { value: string }).value = 'ready';
-      await nextTick();
-      renderFrame.mockClear();
-      observed.forEach((notify) => notify());
-      await nextTick();
-
-      // Resizing a canvas clears it, so a paused replay would go blank.
-      expect(renderFrame).toHaveBeenCalled();
-      m.unmount();
-    });
-  });
-
-  // Zoom and pan live in the renderer now. A transform on the element would put
-  // the drawing layer in a different coordinate system from the pitch.
-  it('leaves the canvas element free of a zoom or pan transform', async () => {
-    const m = mount(fakeReplay('ready'));
-    await nextTick();
-
-    const canvas = at(m.root, 'pipeline-canvas');
-    expect(canvas).not.toBeNull();
-    expect(canvas!.getAttribute('style') ?? '').not.toContain('scale(');
-
-    m.unmount();
-  });
-
-  it('shows the canvas when ready', async () => {
-    const m = mount(fakeReplay('ready'));
-    await nextTick();
-    expect(at(m.root, 'pipeline-canvas')).not.toBeNull();
-    expect(at(m.root, 'pipeline-empty')).toBeNull();
-    m.unmount();
-  });
-
-  // The replay holds its clock while it waits on data, and a playhead that
-  // stops with nothing on screen saying why reads as a freeze.
-  it('marks the frame label while the replay waits on data', async () => {
-    const replay = fakeReplay('ready');
-    const { root, unmount } = mount(replay);
-    await nextTick();
-    expect(at(root, 'pipeline-buffering')).toBeNull();
-
-    (replay.buffering as unknown as { value: boolean }).value = true;
-    await nextTick();
-    expect(at(root, 'pipeline-buffering')?.getAttribute('role')).toBe('status');
-
-    (replay.buffering as unknown as { value: boolean }).value = false;
-    await nextTick();
-    expect(at(root, 'pipeline-buffering')).toBeNull();
-    unmount();
-  });
-
-  describe('team phase labels', () => {
-    type Phase = PipelineReplay['phase']['value'];
-    async function withPhase(phase: Phase, teamNames?: [string, string] | null) {
-      const replay = fakeReplay('ready');
-      (replay.phase as unknown as { value: Phase }).value = phase;
-      const m = mount(replay, { teamNames });
-      await nextTick();
-      return m;
-    }
-    const label = (root: HTMLElement, team: 0 | 1) =>
-      root.querySelector(`[data-testid="pipeline-phase-team-${team}"]`) as HTMLElement | null;
-
-    it('shows each team with its state', async () => {
-      const m = await withPhase({
-        possession: 0,
-        attacks: { 0: 1, 1: -1 },
-        states: { 0: 'attacking', 1: 'defending' },
-      });
-      expect(label(m.root, 0)?.textContent).toMatch(/Red\s*Attacking/i);
-      expect(label(m.root, 1)?.textContent).toMatch(/Defending\s*Blue/i);
-      expect(label(m.root, 0)?.dataset.state).toBe('attacking');
-      expect(label(m.root, 1)?.dataset.state).toBe('defending');
-      m.unmount();
-    });
-
-    it('fills the label of the team with the ball in its colour', async () => {
-      const m = await withPhase({
-        possession: 1,
-        attacks: { 0: 1, 1: -1 },
-        states: { 0: 'defending', 1: 'attacking' },
-      });
-      expect(label(m.root, 1)?.style.backgroundColor).not.toBe('');
-      expect(label(m.root, 0)?.style.backgroundColor).toBe('');
-      m.unmount();
-    });
-
-    // A team keeping the ball for less than the attack hold is not attacking,
-    // and a filled label would say it was.
-    it('does not fill the label of a team that has the ball but is not attacking yet', async () => {
-      const m = await withPhase({
-        possession: 1,
-        attacks: { 0: 1, 1: -1 },
-        states: { 0: null, 1: null },
-      });
-      expect(label(m.root, 1)?.style.backgroundColor).toBe('');
-      expect(label(m.root, 1)?.textContent?.trim()).toMatch(/^Blue$/i);
-      m.unmount();
-    });
-
-    // A third of real frames have nobody clearly in possession: say nothing
-    // rather than guess.
-    it('shows both teams without a state when nobody is in possession', async () => {
-      const m = await withPhase({
-        possession: null,
-        attacks: { 0: 1, 1: -1 },
-        states: { 0: null, 1: null },
-      });
-      expect(label(m.root, 0)?.textContent?.trim()).toMatch(/^Red$/i);
-      expect(label(m.root, 1)?.textContent?.trim()).toMatch(/^Blue$/i);
-      expect(label(m.root, 0)?.dataset.state).toBe('none');
-      m.unmount();
-    });
-
-    it('describes the phase for screen readers', async () => {
-      const m = await withPhase({
-        possession: 0,
-        attacks: { 0: 1, 1: -1 },
-        states: { 0: 'attacking', 1: 'defending' },
-      });
-      expect(at(m.root, 'pipeline-phase')?.getAttribute('aria-label')).toBe(
-        'Red attacking, Blue defending'
-      );
-      m.unmount();
-    });
-
-    // Team 0 is taken to be the first team the match title names (see
-    // pipelineTeamNames): the export itself names neither team.
-    it('names the teams when the match is known, first-named as Red', async () => {
-      const m = await withPhase(
-        { possession: 0, attacks: { 0: 1, 1: -1 }, states: { 0: 'attacking', 1: 'defending' } },
-        ['Manchester City', 'PSG']
-      );
-      expect(label(m.root, 0)?.textContent).toMatch(/Manchester City\s*Attacking/i);
-      expect(label(m.root, 1)?.textContent).toMatch(/Defending\s*PSG/i);
-      expect(at(m.root, 'pipeline-phase')?.getAttribute('aria-label')).toBe(
-        'Manchester City attacking, PSG defending'
-      );
-      m.unmount();
-    });
-
-    it('keeps the colours for the names', async () => {
-      const m = await withPhase(
-        { possession: 1, attacks: { 0: 1, 1: -1 }, states: { 0: 'defending', 1: 'attacking' } },
-        ['Manchester City', 'PSG']
-      );
-      expect(label(m.root, 0)?.style.borderColor).toBe(PERSON_COLORS.home.fill);
-      // jsdom reports a background as rgb(), so compare it the same way.
-      const probe = document.createElement('div');
-      probe.style.backgroundColor = PERSON_COLORS.away.fill;
-      expect(label(m.root, 1)?.style.backgroundColor).toBe(probe.style.backgroundColor);
-      m.unmount();
-    });
-
-    // A long name is cut short on screen, so the whole of it goes on hover.
-    it('shows a team name in full on hover', async () => {
-      const m = await withPhase(
-        { possession: null, attacks: { 0: 1, 1: -1 }, states: { 0: null, 1: null } },
-        ['Borussia Mönchengladbach', 'PSG']
-      );
-      expect(label(m.root, 0)?.getAttribute('title')).toBe('Borussia Mönchengladbach');
-      m.unmount();
-    });
-
-    it('falls back to the colours when the match is not known', async () => {
-      const m = await withPhase(
-        { possession: null, attacks: { 0: 1, 1: -1 }, states: { 0: null, 1: null } },
-        null
-      );
-      expect(label(m.root, 0)?.textContent?.trim()).toMatch(/^Red$/i);
-      expect(label(m.root, 1)?.textContent?.trim()).toMatch(/^Blue$/i);
-      m.unmount();
-    });
-
-    it('shows nothing before the first frame has a phase', async () => {
-      const m = await withPhase(null);
-      expect(at(m.root, 'pipeline-phase')).toBeNull();
-      m.unmount();
-    });
   });
 
   it('calls load on mount', async () => {
@@ -460,12 +234,14 @@ describe('PipelineOutputSurface', () => {
     m.unmount();
   });
 
-  it('disposes on unmount', async () => {
+  it('disposes the replay and destroys the tracker on unmount', async () => {
     const replay = fakeReplay('ready');
     const m = mount(replay);
     await nextTick();
+    const mounted = tracker();
     m.unmount();
     expect(replay.dispose).toHaveBeenCalledOnce();
+    expect(mounted.destroy).toHaveBeenCalledOnce();
   });
 
   it('emits context-menu instead of opening the browser menu', async () => {
@@ -485,56 +261,258 @@ describe('PipelineOutputSurface', () => {
     app.mount(root);
     await nextTick();
 
-    const stage = root.querySelector('[data-testid="pipeline-stage"]')!;
-    stage.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    const stage = at(root, 'pipeline-stage')!;
+    const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+    stage.dispatchEvent(event);
     expect(seen).toHaveLength(1);
+    expect(event.defaultPrevented).toBe(true);
 
     app.unmount();
     root.remove();
   });
 
-  it('attaches the renderer and draws when state flips to ready', async () => {
-    const replay = fakeReplay('loading');
-    const m = mount(replay);
-    await nextTick();
+  describe('the tracker', () => {
+    it('mounts one replay tracker in the stage once the replay is ready', async () => {
+      const m = mount(fakeReplay('ready'));
+      await nextTick();
+      expect(createMatchTracker).toHaveBeenCalledOnce();
+      const { host, options } = tracker();
+      expect(at(m.root, 'pipeline-tracker')).toBe(host);
+      expect(options).toMatchObject({
+        mode: 'replay',
+        locale: 'en',
+        // The key the replay's own layers menu kept its choice under, so
+        // nobody loses theirs.
+        layersStorageKey: 'perspecto.replayLayers',
+      });
+      m.unmount();
+    });
 
-    // Exactly what usePipelineReplay.load() does: set the frame, then the
-    // state, synchronously in one tick.
-    (replay.frame as unknown as { value: unknown }).value = {
-      teams: [],
-      balls: [],
-      state: { actions: [] },
-      frame_data: [{ frame_count: 1 }],
-    };
-    (replay.state as unknown as { value: string }).value = 'ready';
-    await nextTick();
+    it('names the teams after the match, first-named as home', async () => {
+      const m = mount(fakeReplay('ready'), { teamNames: ['Ajax', 'PSV'] });
+      await nextTick();
+      expect(tracker().options.teams).toEqual({ home: { name: 'Ajax' }, away: { name: 'PSV' } });
+      m.unmount();
+    });
 
-    expect(useRenderer2D).toHaveBeenCalledTimes(1);
-    expect(renderFrame).toHaveBeenCalled();
-    m.unmount();
+    it('leaves the teams to the tracker when the match is not known', async () => {
+      const m = mount(fakeReplay('ready'), { teamNames: null });
+      await nextTick();
+      expect(tracker().options.teams).toEqual({ home: {}, away: {} });
+      m.unmount();
+    });
+
+    it('names the teams again when the match changes', async () => {
+      const m = mount(fakeReplay('ready'), { teamNames: ['Ajax', 'PSV'] });
+      await nextTick();
+      m.teamNames.value = ['Feyenoord', 'AZ'];
+      await nextTick();
+      await nextTick();
+      expect(tracker().setOptions).toHaveBeenLastCalledWith({
+        teams: { home: { name: 'Feyenoord' }, away: { name: 'AZ' } },
+      });
+      m.unmount();
+    });
+
+    // The order load() produces: mounted while loading, then a record and
+    // ready in one tick. The tracker only exists once the stage is drawn, so
+    // the record already on screen must still reach it.
+    it('presents the record on screen as soon as the tracker is mounted', async () => {
+      const replay = fakeReplay('loading');
+      const m = mount(replay);
+      await nextTick();
+      const first = record(457);
+      set(replay.record, first);
+      set(replay.lookback, [first]);
+      set(replay.state, 'ready');
+      await nextTick();
+      await nextTick();
+
+      expect(lastPresented()).toEqual({ time: 0, playing: false, record: first, lookback: [first] });
+      m.unmount();
+    });
+
+    it('presents the replay on every tick of its clock', async () => {
+      const replay = fakeReplay('ready');
+      const m = mount(replay);
+      await nextTick();
+
+      const records = [record(457, 1000), record(458, 1000.04)];
+      set(replay.isPlaying, true);
+      set(replay.currentTime, 0.02);
+      await nextTick();
+      expect(lastPresented()).toMatchObject({ time: 0.02, playing: true });
+
+      // A tick that brings no new record still moves the clock.
+      set(replay.currentTime, 0.03);
+      await nextTick();
+      expect(lastPresented()).toMatchObject({ time: 0.03, playing: true });
+
+      set(replay.currentTime, 0.05);
+      set(replay.record, records[1]);
+      set(replay.lookback, records);
+      await nextTick();
+      expect(lastPresented()).toEqual({ time: 0.05, playing: true, record: records[1], lookback: records });
+      m.unmount();
+    });
+
+    // Pausing stops every moment in the tracker, and a pause does not move
+    // the clock.
+    it('presents a pause, though the clock stands still', async () => {
+      const replay = fakeReplay('ready');
+      set(replay.isPlaying, true);
+      set(replay.currentTime, 3);
+      const m = mount(replay);
+      await nextTick();
+      const calls = tracker().present.mock.calls.length;
+
+      set(replay.isPlaying, false);
+      await nextTick();
+      expect(tracker().present.mock.calls.length).toBe(calls + 1);
+      expect(lastPresented()).toMatchObject({ time: 3, playing: false });
+      m.unmount();
+    });
+
+    it('destroys the tracker when the replay fails, and mounts a new one when it is back', async () => {
+      const replay = fakeReplay('ready');
+      const m = mount(replay);
+      await nextTick();
+      const first = tracker();
+
+      set(replay.state, 'error');
+      await nextTick();
+      await nextTick();
+      expect(first.destroy).toHaveBeenCalledOnce();
+
+      set(replay.state, 'ready');
+      await nextTick();
+      await nextTick();
+      expect(createMatchTracker).toHaveBeenCalledTimes(2);
+      expect(tracker()).not.toBe(first);
+      expect(lastPresented()).toMatchObject({ record: replay.record.value });
+      m.unmount();
+    });
   });
 
-  it('draws immediately when state flips to ready and the frame was already set', async () => {
-    // Covers the reverse ordering from usePipelineReplay: a case where
-    // `frame` is already populated (e.g. left over from a prior load) by the
-    // time `state` becomes 'ready'. The state watcher, not the frame watcher,
-    // is what must pick this up.
-    const replay = fakeReplay('loading');
-    (replay.frame as unknown as { value: unknown }).value = {
-      teams: [],
-      balls: [],
-      state: { actions: [] },
-      frame_data: [{ frame_count: 1 }],
-    };
-    const m = mount(replay);
-    await nextTick();
+  describe('the overlay', () => {
+    it('mounts the overlay slot in the tracker’s overlay', async () => {
+      const m = mount(fakeReplay('ready'), {}, {
+        overlay: () => h('div', { 'data-testid': 'drawing-layer' }),
+      });
+      await nextTick();
+      await nextTick();
+      const layer = at(document, 'drawing-layer');
+      expect(layer).not.toBeNull();
+      expect(layer?.parentElement).toBe(tracker().overlay);
+      m.unmount();
+    });
 
-    (replay.state as unknown as { value: string }).value = 'ready';
-    await nextTick();
+    /**
+     * DrawingCanvas shows a drawing only where drawing.frame equals the frame
+     * it is given. Pipeline drawings are stamped round(replayTime * fps),
+     * zero-based, because the pipeline's own frame_count is not (see
+     * annotationStampFor).
+     */
+    it('gives the overlay the same frame number drawings are stamped with', async () => {
+      const replay = fakeReplay('ready');
+      set(replay.currentTime, 4);
+      let seen: Record<string, unknown> | null = null;
+      const m = mount(replay, {}, {
+        overlay: (slotProps) => {
+          seen = slotProps;
+          return null;
+        },
+      });
+      await nextTick();
+      await nextTick();
 
-    expect(useRenderer2D).toHaveBeenCalledTimes(1);
-    expect(renderFrame).toHaveBeenCalled();
-    m.unmount();
+      // 4 s at 25 fps. The record's own number, 457, is not what drawings carry.
+      expect(seen).toMatchObject({ currentFrame: 100 });
+      m.unmount();
+    });
+  });
+
+  describe('the HUD', () => {
+    // The transport, the frame badge and the buffering spinner sit in the
+    // tracker's overlay, which lies exactly over the pitch: on the pitch, not
+    // in the black band it is letterboxed in, and under the widget's own HUD
+    // (its layers menu) and the drawing layer, as on master.
+    it('sits in the tracker’s overlay, marked to keep moments running', async () => {
+      const m = mount(fakeReplay('ready'));
+      await settled();
+      const hud = at(m.root, 'pipeline-hud') as HTMLElement | null;
+      expect(hud?.parentElement).toBe(tracker().overlay);
+      expect(hud?.hasAttribute('data-match-tracker-keep')).toBe(true);
+      for (const id of ['pipeline-controls', 'pipeline-frame', 'pipeline-play-pause']) {
+        expect(tracker().overlay.contains(at(m.root, id))).toBe(true);
+      }
+      m.unmount();
+    });
+
+    it('fills the pitch box without placing itself on it', async () => {
+      const m = mount(fakeReplay('ready'));
+      await settled();
+      const hud = at(m.root, 'pipeline-hud') as HTMLElement;
+      expect(hud.classList.contains('absolute')).toBe(true);
+      expect(hud.classList.contains('inset-0')).toBe(true);
+      expect(hud.style.left).toBe('');
+      expect(hud.style.width).toBe('');
+      m.unmount();
+    });
+
+    // DrawingCanvas lifts itself with z-index (40, and 100 while drawing).
+    // In the same stacking context as the HUD, which has none, the layer
+    // after it in the overlay paints and takes presses over it either way.
+    it('comes before the drawing layer, which stacks above it', async () => {
+      const m = mount(fakeReplay('ready'), {}, {
+        overlay: () => h('div', { 'data-testid': 'drawing-layer' }),
+      });
+      await settled();
+      const children = [...tracker().overlay.children];
+      const hud = at(m.root, 'pipeline-hud')!;
+      const layer = at(m.root, 'drawing-layer')!;
+      expect(children).toContain(hud);
+      expect(children).toContain(layer);
+      expect(hud.compareDocumentPosition(layer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(getComputedStyle(hud).zIndex).toMatch(/^(auto|)$/);
+      m.unmount();
+    });
+
+    it('waits for the tracker', async () => {
+      const m = mount(fakeReplay('loading'));
+      await settled();
+      expect(at(m.root, 'pipeline-hud')).toBeNull();
+      m.unmount();
+    });
+
+    it('shows the frame on screen', async () => {
+      const replay = fakeReplay('ready');
+      const m = mount(replay);
+      await settled();
+      expect(at(m.root, 'pipeline-frame')?.textContent).toContain('F457');
+      set(replay.currentFrame, 1203);
+      await nextTick();
+      expect(at(m.root, 'pipeline-frame')?.textContent).toContain('F1203');
+      m.unmount();
+    });
+
+    // The replay holds its clock while it waits on data, and a playhead that
+    // stops with nothing on screen saying why reads as a freeze.
+    it('marks the frame label while the replay waits on data', async () => {
+      const replay = fakeReplay('ready');
+      const { root, unmount } = mount(replay);
+      await settled();
+      expect(at(root, 'pipeline-buffering')).toBeNull();
+
+      set(replay.buffering, true);
+      await nextTick();
+      expect(at(root, 'pipeline-buffering')?.getAttribute('role')).toBe('status');
+
+      set(replay.buffering, false);
+      await nextTick();
+      expect(at(root, 'pipeline-buffering')).toBeNull();
+      unmount();
+    });
   });
 
   describe('transport', () => {
@@ -542,23 +520,17 @@ describe('PipelineOutputSurface', () => {
     const bar = (root: HTMLElement) =>
       at(root, 'pipeline-controls')?.firstElementChild as HTMLElement;
 
-    const setPlaying = (replay: PipelineReplay, playing: boolean) => {
-      (replay.isPlaying as unknown as { value: boolean }).value = playing;
-    };
-
     it('starts playback and pauses it again from one button', async () => {
       const replay = fakeReplay('ready');
       const m = mount(replay);
-      await nextTick();
+      await settled();
 
       (at(m.root, 'pipeline-play-pause') as HTMLButtonElement).click();
       expect(replay.play).toHaveBeenCalledOnce();
 
-      setPlaying(replay, true);
+      set(replay.isPlaying, true);
       await nextTick();
-      expect(at(m.root, 'pipeline-play-pause')?.getAttribute('aria-label')).toBe(
-        'Pause'
-      );
+      expect(at(m.root, 'pipeline-play-pause')?.getAttribute('aria-label')).toBe('Pause');
 
       (at(m.root, 'pipeline-play-pause') as HTMLButtonElement).click();
       expect(replay.pause).toHaveBeenCalledOnce();
@@ -567,7 +539,7 @@ describe('PipelineOutputSurface', () => {
 
     it('stays visible while paused, so the tab never looks control-less', async () => {
       const m = mount(fakeReplay('ready'));
-      await nextTick();
+      await settled();
       expect(bar(m.root).className).toContain('opacity-100');
       m.unmount();
     });
@@ -575,9 +547,9 @@ describe('PipelineOutputSurface', () => {
     it('hides during playback, and comes back on hover', async () => {
       const replay = fakeReplay('ready');
       const m = mount(replay);
-      await nextTick();
+      await settled();
 
-      setPlaying(replay, true);
+      set(replay.isPlaying, true);
       await nextTick();
       expect(bar(m.root).className).toContain('opacity-0');
       // A hidden bar must not swallow pan drags that start over it. Checked
@@ -602,7 +574,7 @@ describe('PipelineOutputSurface', () => {
       // so this asserts the rule is present; the behaviour itself is checked
       // against a real browser.
       const m = mount(fakeReplay('ready'));
-      await nextTick();
+      await settled();
       expect(bar(m.root).className).toContain('has-[:focus-visible]:opacity-100');
       m.unmount();
     });
@@ -610,1957 +582,146 @@ describe('PipelineOutputSurface', () => {
     it('steps a frame either way, pausing first', async () => {
       const replay = fakeReplay('ready');
       // 10 s in at 25 fps: frame 250 on the grid the step snaps to.
-      (replay.currentTime as unknown as { value: number }).value = 10;
+      set(replay.currentTime, 10);
       const m = mount(replay);
-      await nextTick();
+      await settled();
 
       // The millisecond over the grid position is the deliberate slack that
       // keeps a step off the record it is stepping away from.
       (at(m.root, 'pipeline-step-forward') as HTMLButtonElement).click();
       expect(replay.pause).toHaveBeenCalled();
-      expect(vi.mocked(replay.seek).mock.calls[0]?.[0]).toBeCloseTo(
-        251 / 25 + 0.001,
-        4
-      );
+      expect(vi.mocked(replay.seek).mock.calls[0]?.[0]).toBeCloseTo(251 / 25 + 0.001, 4);
 
       (at(m.root, 'pipeline-step-back') as HTMLButtonElement).click();
-      expect(vi.mocked(replay.seek).mock.calls[1]?.[0]).toBeCloseTo(
-        249 / 25 + 0.001,
-        4
-      );
-      m.unmount();
-    });
-  });
-
-  /**
-   * DrawingCanvas shows a drawing only where drawing.frame equals the frame it
-   * is given. Pipeline drawings are stamped round(replayTime * fps), zero-based,
-   * because the pipeline's own frame_count is not (see annotationStampFor). The
-   * overlay used to hand the canvas frame_count, so a saved pipeline drawing
-   * never came back on any export whose numbering does not start at zero.
-   */
-  it('gives the overlay the same frame number drawings are stamped with', async () => {
-    const replay = fakeReplay('ready');
-    replay.currentTime.value = 4;
-    let seen: Record<string, unknown> | null = null;
-    const root = document.createElement('div');
-    document.body.appendChild(root);
-    const app = createApp(
-      defineComponent({
-        setup: () => () =>
-          h(PipelineOutputSurface, { replay }, {
-            overlay: (slotProps: Record<string, unknown>) => {
-              seen = slotProps;
-              return null;
-            },
-          }),
-      })
-    );
-    app.mount(root);
-    await nextTick();
-
-    // 4s at 25 fps. The record's own number, 457, is not what drawings carry.
-    expect(seen).toMatchObject({ currentFrame: 100 });
-    app.unmount();
-    root.remove();
-  });
-
-  describe('goal sequence', () => {
-    let queued: Array<(ms: number) => void> = [];
-    let clockMs = 1000;
-    const originalRaf = window.requestAnimationFrame;
-    const originalCaf = window.cancelAnimationFrame;
-
-    beforeEach(() => {
-      queued = [];
-      clockMs = 1000;
-      renderFrame.mockClear();
-      window.requestAnimationFrame = ((cb: (ms: number) => void) => {
-        queued.push(cb);
-        return queued.length;
-      }) as typeof window.requestAnimationFrame;
-      window.cancelAnimationFrame = (() => {
-        queued = [];
-      }) as typeof window.cancelAnimationFrame;
-    });
-
-    afterEach(() => {
-      window.requestAnimationFrame = originalRaf;
-      window.cancelAnimationFrame = originalCaf;
-    });
-
-    async function animate(ms: number) {
-      const end = clockMs + ms;
-      while (clockMs < end) {
-        clockMs += 1000 / 60;
-        const cbs = queued;
-        queued = [];
-        cbs.forEach((cb) => cb(clockMs));
-      }
-      await nextTick();
-    }
-
-    function goalFrame(labels: string[], ball: { x: number; y: number } | null = { x: 30, y: 5 }) {
-      return {
-        pitch_dimensions: { length: 105, width: 68, goal_width: 7.32 },
-        teams: [],
-        balls: ball ? [{ projected_coordinates: ball }] : [],
-        state: { actions: labels.map((action_type) => ({ action_type })) },
-        frame_data: [{ frame_count: 1 }],
-      };
-    }
-
-    type Writable = { value: unknown };
-    const set = (r: unknown, v: unknown) => ((r as Writable).value = v);
-
-    /** Mounted the way load() leaves it, then playing at 10 s. */
-    async function playing() {
-      const replay = fakeReplay('loading');
-      const m = mount(replay);
-      await nextTick();
-      set(replay.currentTime, 10);
-      set(replay.frame, goalFrame(['other']));
-      set(replay.state, 'ready');
-      set(replay.isPlaying, true);
-      await nextTick();
-      return { replay, m };
-    }
-
-    /** One playback tick: the clock moves on a frame and the next record shows. */
-    async function tick(replay: PipelineReplay, frame: unknown, step = 0.04) {
-      set(replay.currentTime, (replay.currentTime.value as number) + step);
-      set(replay.frame, frame);
-      await nextTick();
-    }
-
-    const lastOverlay = () => renderFrame.mock.calls.at(-1)?.[1]?.goal;
-
-    it('rolls its ball into the net', async () => {
-      const { replay, m } = await playing();
-      await tick(replay, goalFrame(['GOAL']));
-      await animate(16);
-      const before = renderFrame.mock.calls.at(-1)?.[1]?.ballSpin;
-      await animate(400);
-      expect(lastOverlay()).toBeDefined();
-      expect(renderFrame.mock.calls.at(-1)?.[1]?.ballSpin).not.toEqual(before);
+      expect(vi.mocked(replay.seek).mock.calls[1]?.[0]).toBeCloseTo(249 / 25 + 0.001, 4);
       m.unmount();
     });
 
-    it('plays when playback runs into a GOAL label', async () => {
-      const { replay, m } = await playing();
-      await tick(replay, goalFrame(['GOAL']));
-      await animate(1200);
-      expect(lastOverlay()).toBeDefined();
-      // Only the shot itself: no text over the pitch.
-      expect(m.root.textContent).not.toMatch(/GOAL/);
-      m.unmount();
-    });
-
-    it('ends by itself and goes back to the tracked ball', async () => {
-      const { replay, m } = await playing();
-      await tick(replay, goalFrame(['GOAL']));
-      await animate(GOAL_SEQUENCE_MS + 200);
-      expect(lastOverlay()).toBeUndefined();
-      m.unmount();
-    });
-
-    // A seek is not a goal happening: it would replace the frame someone
-    // jumped to look at with an animation.
-    it('does not play when a seek lands on a GOAL label', async () => {
-      const { replay, m } = await playing();
-      await tick(replay, goalFrame(['GOAL']), 250);
-      await animate(1200);
-      expect(lastOverlay()).toBeUndefined();
-      m.unmount();
-    });
-
-    it('does not play while paused, for example when stepping a frame', async () => {
-      const { replay, m } = await playing();
-      set(replay.isPlaying, false);
-      await nextTick();
-      await tick(replay, goalFrame(['GOAL']));
-      await animate(1200);
-      expect(lastOverlay()).toBeUndefined();
-      m.unmount();
-    });
-
-    it('stops and shows the real frame the moment playback pauses', async () => {
-      const { replay, m } = await playing();
-      await tick(replay, goalFrame(['GOAL']));
-      await animate(500);
-      set(replay.isPlaying, false);
-      await nextTick();
-      expect(lastOverlay()).toBeUndefined();
-      m.unmount();
-    });
-
-    it('stops on a seek made while it plays', async () => {
-      const { replay, m } = await playing();
-      await tick(replay, goalFrame(['GOAL']));
-      await animate(500);
-      await tick(replay, goalFrame(['other']), 120);
-      expect(lastOverlay()).toBeUndefined();
-      m.unmount();
-    });
-
-    // A drawing stamped on a frame whose ball is the animation's would record
-    // something the pipeline never produced.
-    it('stops the moment someone presses on the drawing layer', async () => {
-      const { replay, m } = await playing();
-      await tick(replay, goalFrame(['GOAL']));
-      await animate(500);
-      at(m.root, 'pipeline-overlay')!.dispatchEvent(
-        new Event('pointerdown', { bubbles: true })
-      );
-      await nextTick();
-      expect(lastOverlay()).toBeUndefined();
-      m.unmount();
-    });
-
-    it('plays once per GOAL label, not again on its following frames', async () => {
-      const { replay, m } = await playing();
-      await tick(replay, goalFrame(['GOAL']));
-      await animate(GOAL_SEQUENCE_MS + 200);
-      await tick(replay, goalFrame(['GOAL']));
-      await animate(300);
-      expect(lastOverlay()).toBeUndefined();
-
-      // A new label, after one without it, is a new goal.
-      await tick(replay, goalFrame(['other']));
-      await tick(replay, goalFrame(['GOAL']));
-      await animate(300);
-      expect(lastOverlay()).toBeDefined();
-      m.unmount();
-    });
-
-    const lastView = () =>
-      setView.mock.calls.at(-1)?.[0] as { zoom: number; panX: number; panY: number } | undefined;
-
-    it('zooms in on the goal while the sequence plays', async () => {
-      const { replay, m } = await playing();
-      await tick(replay, goalFrame(['GOAL']));
-      await animate(1000);
-      expect(lastView()!.zoom).toBeGreaterThanOrEqual(1.4);
-      m.unmount();
-    });
-
-    it('eases back out to the view it started from', async () => {
-      const { replay, m } = await playing();
-      await tick(replay, goalFrame(['GOAL']));
-      await animate(GOAL_SEQUENCE_MS + 200);
-      expect(lastView()).toMatchObject({ zoom: 1, panX: 0, panY: 0 });
-      m.unmount();
-    });
-
-    it('snaps back to the view it started from the moment playback pauses', async () => {
-      const { replay, m } = await playing();
-      await tick(replay, goalFrame(['GOAL']));
-      await animate(800);
-      set(replay.isPlaying, false);
-      await nextTick();
-      expect(lastView()).toMatchObject({ zoom: 1, panX: 0, panY: 0 });
-      m.unmount();
-    });
-
-    it('hands the view over, and leaves it, when the user scrolls during it', async () => {
-      const { replay, m } = await playing();
-      await tick(replay, goalFrame(['GOAL']));
-      await animate(800);
-      const zoomed = lastView()!.zoom;
-      at(m.root, 'pipeline-viewport')!.dispatchEvent(
-        new WheelEvent('wheel', { deltaY: -100, bubbles: true, cancelable: true })
-      );
-      await nextTick();
-      const own = lastView()!.zoom;
-      expect(own).toBeCloseTo(zoomed + 0.15, 6);
-
-      await animate(GOAL_SEQUENCE_MS);
-      expect(lastView()!.zoom).toBeCloseTo(own, 6);
-      // The shot itself still finished.
-      expect(lastOverlay()).toBeUndefined();
-      m.unmount();
-    });
-
-    it('does not play without a ball to tell which goal it went in', async () => {
-      const { replay, m } = await playing();
-      await tick(replay, goalFrame(['GOAL'], null));
-      await animate(500);
-      expect(lastOverlay()).toBeUndefined();
-      m.unmount();
-    });
-  });
-
-  describe('attack', () => {
-    let queued: Array<(ms: number) => void> = [];
-    let clockMs = 1000;
-    const originalRaf = window.requestAnimationFrame;
-    const originalCaf = window.cancelAnimationFrame;
-
-    beforeEach(() => {
-      queued = [];
-      clockMs = 1000;
-      renderFrame.mockClear();
-      window.requestAnimationFrame = ((cb: (ms: number) => void) => {
-        queued.push(cb);
-        return queued.length;
-      }) as typeof window.requestAnimationFrame;
-      window.cancelAnimationFrame = (() => {
-        queued = [];
-      }) as typeof window.cancelAnimationFrame;
-    });
-
-    afterEach(() => {
-      window.requestAnimationFrame = originalRaf;
-      window.cancelAnimationFrame = originalCaf;
-    });
-
-    async function animate(ms: number) {
-      const end = clockMs + ms;
-      while (clockMs < end) {
-        clockMs += 1000 / 60;
-        const cbs = queued;
-        queued = [];
-        cbs.forEach((cb) => cb(clockMs));
-      }
-      await nextTick();
-    }
-
-    type Writable = { value: unknown };
-    const set = (r: unknown, v: unknown) => ((r as Writable).value = v);
-    const frameAt = (ballX = 10) => ({
-      pitch_dimensions: { length: 105, width: 68 },
-      teams: [],
-      balls: [{ projected_coordinates: { x: ballX, y: 0 } }],
-      state: { actions: [] },
-      frame_data: [{ frame_count: 1 }],
-    });
-    // Blue attacks toward x < 0, so its opponent's half is x < 0.
-    const BLUE_ATTACKING = {
-      possession: 1,
-      attacks: { 0: 1, 1: -1 },
-      states: { 0: 'defending', 1: 'attacking' },
-    };
-    const NOBODY = { possession: null, attacks: { 0: 1, 1: -1 }, states: { 0: null, 1: null } };
-
-    async function ready(teamNames?: [string, string] | null) {
-      const replay = fakeReplay('loading');
-      const m = mount(replay, { teamNames });
-      await nextTick();
-      set(replay.currentTime, 10);
-      set(replay.frame, frameAt());
-      set(replay.phase, NOBODY);
-      set(replay.state, 'ready');
-      await nextTick();
-      set(replay.isPlaying, true);
-      await nextTick();
-      return { replay, m };
-    }
-
-    /** A new frame and phase, arrived at by playback (step s) or a seek. */
-    async function arrive(replay: PipelineReplay, phase: unknown, ballX = 10, step = 0.04) {
-      set(replay.currentTime, (replay.currentTime.value as number) + step);
-      set(replay.frame, frameAt(ballX));
-      set(replay.phase, phase);
-      await nextTick();
-    }
-
-    const lastAttack = () =>
-      renderFrame.mock.calls.at(-1)?.[1]?.attack as
-        | {
-            team: number;
-            color: string;
-            name: string;
-            direction: number;
-            intensity: number;
-            leaving?: boolean;
-            playersFade?: number;
-            pulse?: number;
-            ball?: { x: number; y: number };
-          }
-        | undefined;
-
-    it('shows an attack that reaches the other team’s half, for the team attacking', async () => {
-      const { replay, m } = await ready(['Manchester City', 'PSG']);
-      await arrive(replay, BLUE_ATTACKING, -12);
-      await animate(1000);
-      expect(lastAttack()).toMatchObject({
-        color: PERSON_COLORS.away.fill,
-        team: 1,
-        name: 'PSG',
-        direction: -1,
-        intensity: 1,
-        leaving: false,
-        playersFade: 1,
-        ball: { x: -12, y: 0 },
+    // A moment played by hand while paused carries on when Play is pressed:
+    // the demo-recording path. The drawing layer, in the same overlay, still
+    // stops it, so what is drawn on is the data.
+    it('leaves the tracker’s moments running when pressed, unlike the drawing layer', async () => {
+      const m = mount(fakeReplay('ready'), {}, {
+        overlay: () => h('div', { 'data-testid': 'drawing-layer' }),
       });
-      m.unmount();
-    });
-
-    it('waits for the attack to reach the other team’s half', async () => {
-      const { replay, m } = await ready();
-      await arrive(replay, BLUE_ATTACKING, 12);
-      await animate(100);
-      expect(lastAttack()).toBeUndefined();
-      await arrive(replay, BLUE_ATTACKING, 5);
-      await animate(100);
-      expect(lastAttack()).toBeUndefined();
-      await arrive(replay, BLUE_ATTACKING, -2);
-      await animate(100);
-      expect(lastAttack()?.ball).toEqual({ x: -2, y: 0 });
-      m.unmount();
-    });
-
-    it('shows nothing while nobody is attacking, or with no direction to attack in', async () => {
-      const { replay, m } = await ready();
-      await arrive(replay, NOBODY, -12);
-      await arrive(replay, { ...BLUE_ATTACKING, attacks: { 0: null, 1: null } }, -14);
-      await animate(500);
-      expect(lastAttack()).toBeUndefined();
-      m.unmount();
-    });
-
-    it('sweeps in, fades the players out, holds, then fades out onto play as it is', async () => {
-      const { replay, m } = await ready();
-      await arrive(replay, BLUE_ATTACKING, -12);
-      await animate(150);
-      const early = lastAttack()!;
-      expect(early.intensity).toBeGreaterThan(0);
-      expect(early.intensity).toBeLessThan(0.5);
-      expect(early.playersFade).toBe(0);
-      await animate(300);
-      const later = lastAttack()!;
-      expect(later.playersFade).toBeGreaterThan(0);
-      expect(later.playersFade).toBeLessThan(1);
-      await animate(1300);
-      expect(lastAttack()).toMatchObject({ intensity: 1, playersFade: 1, leaving: false });
-      await animate(400);
-      const going = lastAttack()!;
-      expect(going.leaving).toBe(true);
-      expect(going.intensity).toBeGreaterThan(0);
-      expect(going.intensity).toBeLessThan(1);
-      expect(going.playersFade).toBe(going.intensity);
-      await animate(400);
-      expect(lastAttack()).toBeUndefined();
-      m.unmount();
-    });
-
-    // Play carries on underneath: only the ball, and its trail, stay put.
-    it('holds the ball and its trail where they were while play carries on', async () => {
-      const { replay, m } = await ready();
-      const trail = { runs: [[{ x: -5, y: 0, age: 1 }, { x: -12, y: 0, age: 0 }]], turns: [] };
-      set(replay.ballTrail, trail);
-      await arrive(replay, BLUE_ATTACKING, -12);
-      set(replay.ballTrail, { runs: [[{ x: -12, y: 0, age: 1 }, { x: -30, y: 0, age: 0 }]], turns: [] });
-      await arrive(replay, BLUE_ATTACKING, -30);
-      await animate(500);
-      expect(replay.currentTime.value).toBeGreaterThan(10.07);
-      expect(lastAttack()!.ball).toEqual({ x: -12, y: 0 });
-      expect(renderFrame.mock.calls.at(-1)?.[1]?.trail).toEqual(trail);
-      m.unmount();
-    });
-
-    it('pulses the ball’s border while it shows', async () => {
-      const { replay, m } = await ready();
-      await arrive(replay, BLUE_ATTACKING, -12);
-      await animate(100);
-      const a = lastAttack()!.pulse!;
-      await animate(200);
-      expect(lastAttack()!.pulse).not.toBeCloseTo(a, 3);
-      m.unmount();
-    });
-
-    it('shows each attack once', async () => {
-      const { replay, m } = await ready();
-      await arrive(replay, BLUE_ATTACKING, -12);
-      await animate(3000);
-      expect(lastAttack()).toBeUndefined();
-      await arrive(replay, { ...BLUE_ATTACKING }, -20);
-      await animate(100);
-      expect(lastAttack()).toBeUndefined();
-      // Over, and a new one: shown again.
-      await arrive(replay, NOBODY, -20);
-      await arrive(replay, BLUE_ATTACKING, -22);
-      await animate(100);
-      expect(lastAttack()).toBeDefined();
-      m.unmount();
-    });
-
-    // A frame looked at shows the data as it is.
-    it('is not shown for an attack a seek lands in the middle of', async () => {
-      const { replay, m } = await ready();
-      await arrive(replay, BLUE_ATTACKING, -12, 30);
-      await arrive(replay, { ...BLUE_ATTACKING }, -14);
-      await animate(300);
-      expect(lastAttack()).toBeUndefined();
-      m.unmount();
-    });
-
-    it('stops at once on a pause', async () => {
-      const { replay, m } = await ready();
-      await arrive(replay, BLUE_ATTACKING, -12);
-      await animate(500);
-      set(replay.isPlaying, false);
-      await nextTick();
-      expect(lastAttack()).toBeUndefined();
-      m.unmount();
-    });
-
-    it('stops at once on a seek', async () => {
-      const { replay, m } = await ready();
-      await arrive(replay, BLUE_ATTACKING, -12);
-      await animate(500);
-      set(replay.currentTime, 60);
-      await nextTick();
-      expect(lastAttack()).toBeUndefined();
-      m.unmount();
-    });
-
-    it('shows nothing while the layer is off, and stops when it is turned off', async () => {
-      const { replay, m } = await ready();
-      await arrive(replay, BLUE_ATTACKING, -12);
-      await animate(500);
-      expect(lastAttack()).toBeDefined();
-      (at(m.root, 'pipeline-layers-toggle') as HTMLElement).click();
-      await nextTick();
-      (m.root.querySelector('[data-layer="attack"]') as HTMLElement).click();
-      await nextTick();
-      expect(lastAttack()).toBeUndefined();
-      await arrive(replay, NOBODY, -12);
-      await arrive(replay, BLUE_ATTACKING, -14);
-      await animate(300);
-      expect(lastAttack()).toBeUndefined();
-      (m.root.querySelector('[data-layer="attack"]') as HTMLElement).click();
-      await nextTick();
-      m.unmount();
-    });
-
-    it('shows at once, without moving, under reduced motion', async () => {
-      const originalMatchMedia = window.matchMedia;
-      window.matchMedia = ((query: string) => ({
-        matches: query.includes('prefers-reduced-motion'),
-        media: query,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-      })) as unknown as typeof window.matchMedia;
-      try {
-        const { replay, m } = await ready();
-        await arrive(replay, BLUE_ATTACKING, -12);
-        await animate(100);
-        expect(lastAttack()).toMatchObject({ intensity: 1, playersFade: 1 });
-        expect(lastAttack()!.pulse).toBeUndefined();
-        await animate(2000);
-        expect(lastAttack()).toBeUndefined();
-        m.unmount();
-      } finally {
-        window.matchMedia = originalMatchMedia;
+      await settled();
+      for (const id of ['pipeline-play-pause', 'pipeline-step-forward', 'pipeline-step-back']) {
+        press(at(m.root, id));
       }
-    });
-  });
-  describe('free kick', () => {
-    let queued: Array<(ms: number) => void> = [];
-    let clockMs = 1000;
-    const originalRaf = window.requestAnimationFrame;
-    const originalCaf = window.cancelAnimationFrame;
+      press(at(m.root, 'pipeline-frame'));
+      expect(tracker().stopAll).not.toHaveBeenCalled();
 
-    beforeEach(() => {
-      queued = [];
-      clockMs = 1000;
-      renderFrame.mockClear();
-      window.requestAnimationFrame = ((cb: (ms: number) => void) => {
-        queued.push(cb);
-        return queued.length;
-      }) as typeof window.requestAnimationFrame;
-      window.cancelAnimationFrame = (() => {
-        queued = [];
-      }) as typeof window.cancelAnimationFrame;
+      press(at(m.root, 'drawing-layer'));
+      expect(tracker().stopAll).toHaveBeenCalledOnce();
+      m.unmount();
     });
 
-    afterEach(() => {
-      window.requestAnimationFrame = originalRaf;
-      window.cancelAnimationFrame = originalCaf;
-    });
-
-    async function animate(ms: number) {
-      const end = clockMs + ms;
-      // Whole frames only, so 50 ms is three frames however it rounds.
-      while (clockMs < end - 1e-6) {
-        clockMs += 1000 / 60;
-        const cbs = queued;
-        queued = [];
-        cbs.forEach((cb) => cb(clockMs));
+    // In the widget the overlay is inside its zoom-and-pan viewport, which
+    // master's transport was not: a press there would start a pan when
+    // zoomed in, and take the click from the button with it, and a double
+    // click on a step would reset the zoom. A ctrl/⌘ + wheel still goes
+    // through, so it zooms the pitch rather than the page.
+    it('keeps its presses from the pitch’s pan and zoom reset, but not the wheel', async () => {
+      const m = mount(fakeReplay('ready'));
+      await settled();
+      const seen: string[] = [];
+      for (const type of ['pointerdown', 'dblclick', 'wheel']) {
+        tracker().host.addEventListener(type, () => seen.push(type));
       }
-      await nextTick();
-    }
-
-    type Writable = { value: unknown };
-    const set = (r: unknown, v: unknown) => ((r as Writable).value = v);
-    /** A record: someone at `x`, the ball unless it is lost, and the labels it carries. */
-    const frameAt = (x: number, labels: string[] = [], ball = true) => ({
-      pitch_dimensions: { length: 105, width: 68 },
-      teams: [
-        {
-          team_id: 0,
-          players: [{ track_id: 4, person_type: 'PersonType.PLAYER', projected_coordinates: { x, y: 2 } }],
-        },
-      ],
-      balls: ball ? [{ projected_coordinates: { x: 10, y: 0 } }] : [],
-      state: { actions: labels.map((action_type) => ({ action_type })) },
-      frame_data: [{ frame_count: 1 }],
-    });
-    const FREE_KICK = ['EventType.FREE_KICK'];
-    const NOBODY = { possession: null, attacks: { 0: 1, 1: -1 }, states: { 0: null, 1: null } };
-    const BLUE_ATTACKING = {
-      possession: 1,
-      attacks: { 0: 1, 1: -1 },
-      states: { 0: 'defending', 1: 'attacking' },
-    };
-
-    let x = 0;
-    async function ready() {
-      x = 0;
-      const replay = fakeReplay('loading');
-      const m = mount(replay);
-      await nextTick();
-      set(replay.currentTime, 10);
-      set(replay.frame, frameAt(x));
-      set(replay.phase, NOBODY);
-      set(replay.state, 'ready');
-      await nextTick();
-      set(replay.isPlaying, true);
-      await nextTick();
-      return { replay, m };
-    }
-
-    /**
-     * The next record by playback, 0.04 s on: play moving, unless `still`,
-     * when everyone is where they were, as off camera.
-     */
-    async function record(
-      replay: PipelineReplay,
-      labels: string[] = [],
-      { still = false, ball = true, step = 0.04, phase = NOBODY as unknown } = {}
-    ) {
-      if (!still) x += 0.1;
-      set(replay.currentTime, (replay.currentTime.value as number) + step);
-      set(replay.frame, frameAt(x, labels, ball));
-      set(replay.phase, phase);
-      await nextTick();
-    }
-
-    /** Playback with the clock moving on and no new records, as across a gap in the data. */
-    async function tick(replay: PipelineReplay, step = 0.04) {
-      set(replay.currentTime, (replay.currentTime.value as number) + step);
-      await nextTick();
-    }
-
-    const lastFreeKick = () =>
-      renderFrame.mock.calls.at(-1)?.[1]?.freeKick as
-        | { intensity: number; playersFade: number }
-        | undefined;
-    const lastAttack = () => renderFrame.mock.calls.at(-1)?.[1]?.attack;
-
-    it('fades in on a free kick label, fading the players out with it', async () => {
-      const { replay, m } = await ready();
-      await record(replay, FREE_KICK);
-      await animate(150);
-      const early = lastFreeKick()!;
-      expect(early.intensity).toBeGreaterThan(0);
-      expect(early.intensity).toBeLessThan(1);
-      expect(early.playersFade).toBe(early.intensity);
-      await animate(400);
-      expect(lastFreeKick()).toMatchObject({ intensity: 1, playersFade: 1 });
+      const button = at(m.root, 'pipeline-step-forward')!;
+      press(button);
+      button.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, composed: true }));
+      button.dispatchEvent(new WheelEvent('wheel', { bubbles: true, composed: true, ctrlKey: true, deltaY: -100 }));
+      expect(seen).toEqual(['wheel']);
       m.unmount();
     });
 
-    it('goes after FREE_KICK_SHOW_MS when play carries on, fading out onto it', async () => {
-      const { replay, m } = await ready();
-      await record(replay, FREE_KICK);
-      for (let i = 0; i < 30; i++) {
-        await record(replay);
-        await animate(50);
-      }
-      expect(lastFreeKick()).toMatchObject({ intensity: 1 });
-      for (let i = 0; i < 12; i++) {
-        await record(replay);
-        await animate(50);
-      }
-      const going = lastFreeKick()!;
-      expect(going.intensity).toBeGreaterThan(0);
-      expect(going.intensity).toBeLessThan(1);
-      expect(going.playersFade).toBe(going.intensity);
-      await record(replay);
-      await animate(400);
-      expect(lastFreeKick()).toBeUndefined();
-      m.unmount();
-    });
+    describe('while drawing', () => {
+      // The drawing layer stacks above the transport, as on master. inert
+      // also takes it out of the pointer's and the keyboard's reach, which
+      // pointer-events alone cannot: the focus-visible rule turns them back
+      // on, and a Tab would still reach it.
+      it('is inert, and comes back when drawing stops', async () => {
+        const m = mount(fakeReplay('ready'), { drawing: true });
+        await settled();
+        const controls = at(m.root, 'pipeline-controls') as HTMLElement;
+        expect(controls.hasAttribute('inert')).toBe(true);
 
-    // Off camera the data repeats everyone's last positions.
-    it('stays while the records stand still, and goes once play moves again', async () => {
-      const { replay, m } = await ready();
-      await record(replay, FREE_KICK);
-      for (let i = 0; i < 150; i++) {
-        await record(replay, [], { still: true });
-        await animate(50);
-      }
-      expect(lastFreeKick()).toMatchObject({ intensity: 1 });
-      await record(replay);
-      await animate(50);
-      await record(replay);
-      await animate(200);
-      const going = lastFreeKick()!;
-      expect(going.intensity).toBeLessThan(1);
-      await animate(300);
-      expect(lastFreeKick()).toBeUndefined();
-      m.unmount();
-    });
-
-    // Or has no records at all: the replay holds the last one.
-    it('stays across a gap in the records', async () => {
-      const { replay, m } = await ready();
-      await record(replay, FREE_KICK);
-      for (let i = 0; i < 150; i++) {
-        await tick(replay);
-        await animate(50);
-      }
-      expect(lastFreeKick()).toMatchObject({ intensity: 1 });
-      await record(replay);
-      await animate(500);
-      expect(lastFreeKick()).toBeUndefined();
-      m.unmount();
-    });
-
-    it('holds when the stop starts during it', async () => {
-      const { replay, m } = await ready();
-      await record(replay, FREE_KICK);
-      for (let i = 0; i < 25; i++) {
-        await record(replay);
-        await animate(50);
-      }
-      for (let i = 0; i < 100; i++) {
-        await record(replay, [], { still: true });
-        await animate(50);
-      }
-      expect(lastFreeKick()).toMatchObject({ intensity: 1 });
-      m.unmount();
-    });
-
-    it('stays while the label is on, and goes once it is off', async () => {
-      const { replay, m } = await ready();
-      for (let i = 0; i < 80; i++) {
-        await record(replay, FREE_KICK);
-        await animate(50);
-      }
-      expect(lastFreeKick()).toMatchObject({ intensity: 1 });
-      for (let i = 0; i < 25; i++) {
-        await record(replay);
-        await animate(50);
-      }
-      expect(lastFreeKick()).toBeUndefined();
-      m.unmount();
-    });
-
-    // The broadcast often cuts away just as the label goes, before the
-    // records can be seen to stand still.
-    it('holds through a stop that starts as the label goes', async () => {
-      const { replay, m } = await ready();
-      for (let i = 0; i < 40; i++) {
-        await record(replay, FREE_KICK);
-        await animate(50);
-      }
-      for (let i = 0; i < 100; i++) {
-        await record(replay, [], { still: true });
-        await animate(50);
-      }
-      expect(lastFreeKick()).toMatchObject({ intensity: 1 });
-      m.unmount();
-    });
-
-    // The broadcast goes to a close-up, and the ball is lost, before the
-    // records stand still.
-    it('holds while the ball is lost, and goes once it is back', async () => {
-      const { replay, m } = await ready();
-      await record(replay, FREE_KICK);
-      for (let i = 0; i < 80; i++) {
-        await record(replay, [], { ball: false });
-        await animate(50);
-      }
-      expect(lastFreeKick()).toMatchObject({ intensity: 1 });
-      for (let i = 0; i < 12; i++) {
-        await record(replay);
-        await animate(50);
-      }
-      expect(lastFreeKick()).toBeUndefined();
-      m.unmount();
-    });
-
-    it('arrives on a label shown during the stop, and holds', async () => {
-      const { replay, m } = await ready();
-      for (let i = 0; i < 10; i++) await record(replay, [], { still: true });
-      await record(replay, FREE_KICK, { still: true });
-      for (let i = 0; i < 80; i++) {
-        await record(replay, FREE_KICK, { still: true });
-        await animate(50);
-      }
-      expect(lastFreeKick()).toMatchObject({ intensity: 1 });
-      m.unmount();
-    });
-
-    // The label flickers on and off over a few records around one free kick.
-    it('is shown once for a label that flickers, and again for a later free kick', async () => {
-      const { replay, m } = await ready();
-      await record(replay, FREE_KICK);
-      for (let i = 0; i < 70; i++) {
-        await record(replay, i % 3 === 0 ? FREE_KICK : []);
-        await animate(50);
-      }
-      for (let i = 0; i < 25; i++) {
-        await record(replay);
-        await animate(50);
-      }
-      expect(lastFreeKick()).toBeUndefined();
-      await record(replay, FREE_KICK);
-      await animate(100);
-      expect(lastFreeKick()).toBeUndefined();
-      // Off for long enough: a new one.
-      for (let i = 0; i < 130; i++) await record(replay);
-      await record(replay, FREE_KICK);
-      await animate(100);
-      expect(lastFreeKick()).toBeDefined();
-      m.unmount();
-    });
-
-    it('is not shown for a free kick a seek lands in the middle of', async () => {
-      const { replay, m } = await ready();
-      await record(replay, FREE_KICK, { step: 30 });
-      await record(replay, FREE_KICK);
-      await animate(300);
-      expect(lastFreeKick()).toBeUndefined();
-      m.unmount();
-    });
-
-    it('is shown after a seek back to before it', async () => {
-      const { replay, m } = await ready();
-      await record(replay, FREE_KICK);
-      await animate(100);
-      set(replay.currentTime, 5);
-      await nextTick();
-      expect(lastFreeKick()).toBeUndefined();
-      await record(replay);
-      await record(replay, FREE_KICK);
-      await animate(100);
-      expect(lastFreeKick()).toBeDefined();
-      m.unmount();
-    });
-
-    it('stops at once on a pause', async () => {
-      const { replay, m } = await ready();
-      await record(replay, FREE_KICK);
-      await animate(500);
-      set(replay.isPlaying, false);
-      await nextTick();
-      expect(lastFreeKick()).toBeUndefined();
-      m.unmount();
-    });
-
-    it('stops at once on a seek', async () => {
-      const { replay, m } = await ready();
-      await record(replay, FREE_KICK);
-      await animate(500);
-      set(replay.currentTime, 60);
-      await nextTick();
-      expect(lastFreeKick()).toBeUndefined();
-      m.unmount();
-    });
-
-    it('takes over from an attack, and holds the next one back', async () => {
-      const { replay, m } = await ready();
-      await record(replay, [], { phase: BLUE_ATTACKING });
-      set(replay.frame, { ...frameAt(x), balls: [{ projected_coordinates: { x: -12, y: 0 } }] });
-      await nextTick();
-      await animate(100);
-      expect(lastAttack()).toBeDefined();
-      await record(replay, FREE_KICK, { phase: BLUE_ATTACKING });
-      await animate(100);
-      expect(lastAttack()).toBeUndefined();
-      expect(lastFreeKick()).toBeDefined();
-      m.unmount();
-    });
-
-    it('gives way to a goal', async () => {
-      const { replay, m } = await ready();
-      await record(replay, FREE_KICK);
-      await animate(500);
-      await record(replay, ['EventType.GOAL']);
-      await animate(100);
-      expect(lastFreeKick()).toBeUndefined();
-      expect(renderFrame.mock.calls.at(-1)?.[1]?.goal).toBeDefined();
-      m.unmount();
-    });
-
-    it('shows nothing while the layer is off, and stops when it is turned off', async () => {
-      const { replay, m } = await ready();
-      await record(replay, FREE_KICK);
-      await animate(500);
-      expect(lastFreeKick()).toBeDefined();
-      (at(m.root, 'pipeline-layers-toggle') as HTMLElement).click();
-      await nextTick();
-      (m.root.querySelector('[data-layer="freeKick"]') as HTMLElement).click();
-      await nextTick();
-      expect(lastFreeKick()).toBeUndefined();
-      for (let i = 0; i < 130; i++) await record(replay);
-      await record(replay, FREE_KICK);
-      await animate(300);
-      expect(lastFreeKick()).toBeUndefined();
-      (m.root.querySelector('[data-layer="freeKick"]') as HTMLElement).click();
-      await nextTick();
-      m.unmount();
-    });
-
-    it('shows at once, without fading, under reduced motion, and still waits for play', async () => {
-      const originalMatchMedia = window.matchMedia;
-      window.matchMedia = ((query: string) => ({
-        matches: query.includes('prefers-reduced-motion'),
-        media: query,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-      })) as unknown as typeof window.matchMedia;
-      try {
-        const { replay, m } = await ready();
-        await record(replay, FREE_KICK);
-        await animate(50);
-        expect(lastFreeKick()).toMatchObject({ intensity: 1, playersFade: 1 });
-        for (let i = 0; i < 100; i++) {
-          await tick(replay);
-          await animate(50);
-        }
-        expect(lastFreeKick()).toMatchObject({ intensity: 1 });
-        await record(replay);
-        await animate(50);
-        expect(lastFreeKick()).toBeUndefined();
-        m.unmount();
-      } finally {
-        window.matchMedia = originalMatchMedia;
-      }
-    });
-  });
-  describe('ring fade', () => {
-    type Writable = { value: unknown };
-    const set = (r: unknown, v: unknown) => ((r as Writable).value = v);
-    const person = (track_id: number, x: number, ball = false) => ({
-      track_id,
-      person_type: 'PersonType.PLAYER',
-      projected_coordinates: { x, y: 0 },
-      in_possession: ball,
-    });
-    /**
-     * Red's carrier (track 1) at x = 0, and track 2 at `x`: ringed within
-     * 15 m. Without `carrier`, nobody has the ball.
-     */
-    const frameWith = (x: number, carrier = true) => ({
-      pitch_dimensions: { length: 105, width: 68 },
-      teams: [{ team_id: 0, players: [person(1, 0, carrier), person(2, x)] }],
-      balls: [{ projected_coordinates: { x: 0, y: 0 } }],
-      state: { actions: [] },
-      frame_data: [{ frame_count: 1 }],
-    });
-    const NEAR = 10;
-    const FAR = 30;
-
-    async function ready(x: number) {
-      const replay = fakeReplay('loading');
-      const m = mount(replay);
-      await nextTick();
-      set(replay.currentTime, 10);
-      set(replay.frame, frameWith(x));
-      set(replay.state, 'ready');
-      await nextTick();
-      return { replay, m };
-    }
-
-    /** One step of playback, `step` seconds on, showing a fresh record. */
-    async function step(replay: PipelineReplay, x: number, by = 0.04, carrier = true) {
-      set(replay.currentTime, (replay.currentTime.value as number) + by);
-      set(replay.frame, frameWith(x, carrier));
-      await nextTick();
-    }
-
-    type Rings = { nearby: Map<number, number>; possession: Map<number, number> };
-    const rings = () => renderFrame.mock.calls.at(-1)?.[1]?.rings as Rings | undefined;
-    /** The white ring's strength on track `id`. */
-    const ring = (id: number) => rings()?.nearby.get(id) ?? 0;
-    /** The possession ring's strength on track `id`. */
-    const held = (id: number) => rings()?.possession.get(id) ?? 0;
-
-    beforeEach(() => renderFrame.mockClear());
-
-    it('shows the rings at once on a frame reached by a seek', async () => {
-      const { replay, m } = await ready(FAR);
-      await step(replay, NEAR, 30);
-      expect(ring(2)).toBe(1);
-      expect(ring(1)).toBe(1);
-      m.unmount();
-    });
-
-    // Possession changes many times a minute, and rings that snapped on and
-    // off with it were jarring.
-    it('fades a ring in during playback', async () => {
-      const { replay, m } = await ready(FAR);
-      set(replay.isPlaying, true);
-      await nextTick();
-      await step(replay, NEAR);
-      expect(ring(2)).toBeGreaterThan(0);
-      expect(ring(2)).toBeLessThan(1);
-      for (let t = 0; t < RING_FADE_S; t += 0.04) await step(replay, NEAR);
-      expect(ring(2)).toBe(1);
-      m.unmount();
-    });
-
-    it('fades a ring out during playback when its player leaves the area', async () => {
-      const { replay, m } = await ready(NEAR);
-      set(replay.isPlaying, true);
-      await nextTick();
-      await step(replay, FAR);
-      expect(ring(2)).toBeGreaterThan(0);
-      expect(ring(2)).toBeLessThan(1);
-      for (let t = 0; t < RING_FADE_S; t += 0.04) await step(replay, FAR);
-      expect(ring(2)).toBe(0);
-      m.unmount();
-    });
-
-    // The clock ticks faster than records arrive: a fade that moved only on
-    // new records would move in steps.
-    it('moves a fade on with the clock between records', async () => {
-      const { replay, m } = await ready(FAR);
-      set(replay.isPlaying, true);
-      await nextTick();
-      await step(replay, NEAR);
-      const before = ring(2);
-      set(replay.currentTime, (replay.currentTime.value as number) + 0.016);
-      await nextTick();
-      expect(ring(2)).toBeGreaterThan(before);
-      m.unmount();
-    });
-
-    it('settles at once when playback pauses partway through a fade', async () => {
-      const { replay, m } = await ready(FAR);
-      set(replay.isPlaying, true);
-      await nextTick();
-      await step(replay, NEAR);
-      set(replay.isPlaying, false);
-      await nextTick();
-      expect(ring(2)).toBe(1);
-      m.unmount();
-    });
-
-    // The data loses the carrier for a frame or two at a time, and the
-    // possession ring blinked with it.
-    it('fades the possession ring out when nobody has the ball, and back in', async () => {
-      const { replay, m } = await ready(NEAR);
-      expect(held(1)).toBe(1);
-      set(replay.isPlaying, true);
-      await nextTick();
-      await step(replay, NEAR, 0.04, false);
-      expect(held(1)).toBeGreaterThan(0);
-      expect(held(1)).toBeLessThan(1);
-      const dipped = held(1);
-      await step(replay, NEAR, 0.04, true);
-      expect(held(1)).toBeGreaterThan(dipped);
-      for (let t = 0; t < RING_FADE_S; t += 0.04) await step(replay, NEAR);
-      expect(held(1)).toBe(1);
-      m.unmount();
-    });
-
-    it('shows the possession ring at once on a frame reached by a seek', async () => {
-      const { replay, m } = await ready(NEAR);
-      await step(replay, NEAR, 30, false);
-      expect(held(1)).toBe(0);
-      await step(replay, NEAR, 30, true);
-      expect(held(1)).toBe(1);
-      m.unmount();
-    });
-
-    it('settles the possession ring at once when playback pauses', async () => {
-      const { replay, m } = await ready(NEAR);
-      set(replay.isPlaying, true);
-      await nextTick();
-      await step(replay, NEAR, 0.04, false);
-      set(replay.isPlaying, false);
-      await nextTick();
-      expect(held(1)).toBe(0);
-      m.unmount();
-    });
-
-    // The data flags the carrier in bursts of a few frames: faded in over
-    // RING_FADE_S, most of them never got past a fifth of full strength.
-    it('brings the possession ring in quickly, and fades it out slowly', async () => {
-      const { replay, m } = await ready(NEAR);
-      set(replay.isPlaying, true);
-      await nextTick();
-      for (let t = 0; t <= RING_FADE_S; t += 0.04) await step(replay, NEAR, 0.04, false);
-      expect(held(1)).toBe(0);
-      for (let t = 0; t < POSSESSION_FADE_IN_S - 1e-9; t += 0.04) await step(replay, NEAR);
-      expect(held(1)).toBeCloseTo(1, 9);
-      // It still fades out over RING_FADE_S.
-      await step(replay, NEAR, 0.04, false);
-      expect(held(1)).toBeCloseTo(1 - 0.04 / RING_FADE_S);
-      m.unmount();
-    });
-
-    /** How strongly track `id` is drawn over the ball, having just received it. */
-    const cover = (id: number) =>
-      (renderFrame.mock.calls.at(-1)?.[1]?.received as Map<number, number> | undefined)?.get(id) ?? 0;
-    /** Play on `s` seconds, a frame at a time. */
-    async function playFor(replay: PipelineReplay, s: number, carrier = true) {
-      for (let t = 0; t < s - 1e-9; t += 0.04) await step(replay, NEAR, 0.04, carrier);
-    }
-    /** Playing, with nobody having had the ball for long enough to forget it. */
-    async function playingWithoutBall() {
-      const { replay, m } = await ready(NEAR);
-      set(replay.isPlaying, true);
-      await nextTick();
-      await playFor(replay, RING_FADE_S + 0.08, false);
-      return { replay, m };
-    }
-
-    // The ball sits on the circle of the player with it, over their number.
-    it('draws a player who receives the ball over it for a moment, then fades them to show it', async () => {
-      const { replay, m } = await playingWithoutBall();
-      expect(cover(1)).toBe(0);
-      await step(replay, NEAR);
-      expect(cover(1)).toBe(1);
-      await playFor(replay, RECEIVE_SHOW_S - 0.04);
-      expect(cover(1)).toBe(1);
-      await playFor(replay, RECEIVE_FADE_S / 2);
-      expect(cover(1)).toBeGreaterThan(0);
-      expect(cover(1)).toBeLessThan(1);
-      await playFor(replay, RECEIVE_FADE_S / 2 + 0.04);
-      expect(cover(1)).toBe(0);
-      m.unmount();
-    });
-
-    // The data loses the carrier for a frame or two at a time.
-    it('does not start again when the data loses the player with the ball for a frame or two', async () => {
-      const { replay, m } = await playingWithoutBall();
-      await step(replay, NEAR);
-      await playFor(replay, RECEIVE_SHOW_S + RECEIVE_FADE_S);
-      expect(cover(1)).toBe(0);
-      await playFor(replay, 0.08, false);
-      await step(replay, NEAR);
-      expect(cover(1)).toBe(0);
-      m.unmount();
-    });
-
-    // The cover is not a ring fade: switching those off must not lose it.
-    describe('with ring fades switched off', () => {
-      beforeEach(() =>
-        localStorage.setItem('perspecto.replayLayers', JSON.stringify({ ringFades: false })),
-      );
-      afterEach(() => localStorage.clear());
-
-      it('still draws a player who receives the ball over it, and fades them', async () => {
-        const { replay, m } = await playingWithoutBall();
-        await step(replay, NEAR);
-        expect(cover(1)).toBe(1);
-        await playFor(replay, RECEIVE_SHOW_S + RECEIVE_FADE_S / 2);
-        expect(cover(1)).toBeGreaterThan(0);
-        expect(cover(1)).toBeLessThan(1);
-        m.unmount();
-      });
-
-      it('still does not start again when the data loses the player for a frame or two', async () => {
-        const { replay, m } = await playingWithoutBall();
-        await step(replay, NEAR);
-        await playFor(replay, RECEIVE_SHOW_S + RECEIVE_FADE_S);
-        await playFor(replay, 0.08, false);
-        await step(replay, NEAR);
-        expect(cover(1)).toBe(0);
-        m.unmount();
-      });
-    });
-
-    it('draws nobody over the ball on a frame reached by a seek, or while paused', async () => {
-      const { replay, m } = await ready(FAR);
-      await step(replay, NEAR, 30, false);
-      await step(replay, NEAR, 30, true);
-      expect(cover(1)).toBe(0);
-      set(replay.isPlaying, true);
-      await nextTick();
-      await playFor(replay, RING_FADE_S + 0.08, false);
-      await step(replay, NEAR);
-      expect(cover(1)).toBe(1);
-      set(replay.isPlaying, false);
-      await nextTick();
-      expect(cover(1)).toBe(0);
-      m.unmount();
-    });
-
-    it('does not fade under reduced motion', async () => {
-      const originalMatchMedia = window.matchMedia;
-      window.matchMedia = ((query: string) => ({
-        matches: query.includes('prefers-reduced-motion'),
-        media: query,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-      })) as unknown as typeof window.matchMedia;
-      try {
-        const { replay, m } = await ready(FAR);
-        set(replay.isPlaying, true);
+        m.drawing.value = false;
         await nextTick();
-        await step(replay, NEAR);
-        expect(ring(2)).toBe(1);
-        // Nor draw the player with the ball over it, which would only flash.
-        expect(cover(1)).toBe(0);
+        expect(controls.hasAttribute('inert')).toBe(false);
+
+        m.drawing.value = true;
+        await nextTick();
+        expect(controls.hasAttribute('inert')).toBe(true);
         m.unmount();
-      } finally {
-        window.matchMedia = originalMatchMedia;
-      }
-    });
-  });
-  describe('ball roll', () => {
-    type Writable = { value: unknown };
-    const set = (r: unknown, v: unknown) => ((r as Writable).value = v);
-    const frameWith = (ballX: number) => ({
-      pitch_dimensions: { length: 105, width: 68 },
-      teams: [],
-      balls: [{ projected_coordinates: { x: ballX, y: 0 } }],
-      state: { actions: [] },
-      frame_data: [{ frame_count: 1 }],
-    });
-    const spin = () => renderFrame.mock.calls.at(-1)?.[1]?.ballSpin;
+      });
 
-    async function ready() {
-      const replay = fakeReplay('loading');
-      const m = mount(replay);
-      await nextTick();
-      set(replay.currentTime, 10);
-      set(replay.frame, frameWith(0));
-      set(replay.state, 'ready');
-      await nextTick();
-      return { replay, m };
-    }
-    async function step(replay: PipelineReplay, ballX: number, by = 0.04) {
-      set(replay.currentTime, (replay.currentTime.value as number) + by);
-      set(replay.frame, frameWith(ballX));
-      await nextTick();
-    }
-    async function playing() {
-      const r = await ready();
-      set(r.replay.isPlaying, true);
-      await nextTick();
-      return r;
-    }
-
-    beforeEach(() => renderFrame.mockClear());
-
-    it('rolls the ball as it moves during playback, and only then', async () => {
-      const { replay, m } = await playing();
-      expect(spin()).toEqual(UPRIGHT);
-      await step(replay, 0.5);
-      const turned = spin();
-      expect(turned).not.toEqual(UPRIGHT);
-      // Still: the clock moves, the ball does not.
-      set(replay.currentTime, (replay.currentTime.value as number) + 0.02);
-      await nextTick();
-      expect(spin()).toEqual(turned);
-      m.unmount();
-    });
-
-    it('keeps the ball as it was across a seek, or a step while paused', async () => {
-      const { replay, m } = await ready();
-      await step(replay, 0.5);
-      expect(spin()).toEqual(UPRIGHT);
-      set(replay.isPlaying, true);
-      await nextTick();
-      await step(replay, 5, 30);
-      expect(spin()).toEqual(UPRIGHT);
-      m.unmount();
-    });
-
-    it('does not roll the ball across a jump in its tracking', async () => {
-      const { replay, m } = await playing();
-      await step(replay, 20);
-      expect(spin()).toEqual(UPRIGHT);
-      m.unmount();
-    });
-
-    it('does not roll the ball under reduced motion', async () => {
-      const originalMatchMedia = window.matchMedia;
-      window.matchMedia = ((query: string) => ({
-        matches: query.includes('prefers-reduced-motion'),
-        media: query,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-      })) as unknown as typeof window.matchMedia;
-      try {
-        const { replay, m } = await playing();
-        await step(replay, 0.5);
-        expect(spin()).toEqual(UPRIGHT);
+      it('is not inert when the editor says nothing about drawing', async () => {
+        const m = mount(fakeReplay('ready'));
+        await settled();
+        expect((at(m.root, 'pipeline-controls') as HTMLElement).hasAttribute('inert')).toBe(false);
         m.unmount();
-      } finally {
-        window.matchMedia = originalMatchMedia;
-      }
-    });
-  });
-  describe('throw-in', () => {
-    let queued: Array<(ms: number) => void> = [];
-    let clockMs = 1000;
-    const originalRaf = window.requestAnimationFrame;
-    const originalCaf = window.cancelAnimationFrame;
-
-    beforeEach(() => {
-      queued = [];
-      clockMs = 1000;
-      renderFrame.mockClear();
-      setView.mockClear();
-      window.requestAnimationFrame = ((cb: (ms: number) => void) => {
-        queued.push(cb);
-        return queued.length;
-      }) as typeof window.requestAnimationFrame;
-      window.cancelAnimationFrame = (() => {
-        queued = [];
-      }) as typeof window.cancelAnimationFrame;
-    });
-
-    afterEach(() => {
-      window.requestAnimationFrame = originalRaf;
-      window.cancelAnimationFrame = originalCaf;
-    });
-
-    async function animate(ms: number) {
-      const end = clockMs + ms;
-      // Whole frames only, so 50 ms is three frames however it rounds.
-      while (clockMs < end - 1e-6) {
-        clockMs += 1000 / 60;
-        const cbs = queued;
-        queued = [];
-        cbs.forEach((cb) => cb(clockMs));
-      }
-      await nextTick();
-    }
-
-    type Writable = { value: unknown };
-    const set = (r: unknown, v: unknown) => ((r as Writable).value = v);
-    /** A record: the ball at `ballX` along the pitch, or lost, and the labels it carries. */
-    const frameAt = (ballX: number | null, labels: string[] = []) => ({
-      pitch_dimensions: { length: 105, width: 68 },
-      teams: [
-        {
-          team_id: 0,
-          players: [{ track_id: 4, person_type: 'PersonType.PLAYER', projected_coordinates: { x: 3, y: 2 } }],
-        },
-      ],
-      balls: ballX === null ? [] : [{ projected_coordinates: { x: ballX, y: 33 } }],
-      state: { actions: labels.map((action_type) => ({ action_type })) },
-      frame_data: [{ frame_count: 1 }],
-    });
-    const THROW_IN = ['EventType.THROW_IN'];
-    const NOBODY = { possession: null, attacks: { 0: 1, 1: -1 }, states: { 0: null, 1: null } };
-
-    async function ready() {
-      const replay = fakeReplay('loading');
-      const m = mount(replay);
-      await nextTick();
-      set(replay.currentTime, 10);
-      set(replay.frame, frameAt(0));
-      set(replay.phase, NOBODY);
-      set(replay.state, 'ready');
-      await nextTick();
-      set(replay.isPlaying, true);
-      await nextTick();
-      return { replay, m };
-    }
-
-    /** The next record by playback, `step` seconds on (a seek when large). */
-    async function record(replay: PipelineReplay, ballX: number | null, labels: string[] = [], step = 0.04) {
-      set(replay.currentTime, (replay.currentTime.value as number) + step);
-      set(replay.frame, frameAt(ballX, labels));
-      await nextTick();
-    }
-
-    const last = () => renderFrame.mock.calls.at(-1)?.[1] as
-      | { throwIn?: { intensity: number; slide: number; side: number | null }; freeKick?: unknown }
-      | undefined;
-    const lastThrowIn = () => last()?.throwIn;
-
-    it('slides in from the left for a throw-in in the left half, the players left as they are', async () => {
-      const { replay, m } = await ready();
-      setView.mockClear();
-      await record(replay, -30, THROW_IN);
-      await animate(150);
-      const early = lastThrowIn()!;
-      expect(early.side).toBe(-1);
-      expect(early.slide).toBeGreaterThan(0);
-      expect(early.slide).toBeLessThan(1);
-      expect(early.intensity).toBe(early.slide);
-      await animate(500);
-      expect(lastThrowIn()).toEqual({ intensity: 1, slide: 1, side: -1 });
-      // Nothing else on the pitch changes for it: no fade, no zoom.
-      expect(last()?.freeKick).toBeUndefined();
-      expect(setView).not.toHaveBeenCalled();
-      m.unmount();
-    });
-
-    it('slides in from the right for a throw-in in the right half', async () => {
-      const { replay, m } = await ready();
-      await record(replay, 30, THROW_IN);
-      await animate(600);
-      expect(lastThrowIn()?.side).toBe(1);
-      m.unmount();
-    });
-
-    // The ball is often lost as it goes out.
-    it('goes by the last tracked ball when the label’s frame has none, and fades in place with none', async () => {
-      const { replay, m } = await ready();
-      await record(replay, 40);
-      await record(replay, null);
-      await record(replay, null, THROW_IN);
-      await animate(600);
-      expect(lastThrowIn()?.side).toBe(1);
-      m.unmount();
-
-      const other = await ready();
-      await record(other.replay, null, [], 30);
-      for (let i = 0; i < 130; i++) await record(other.replay, null);
-      await record(other.replay, null, THROW_IN);
-      await animate(600);
-      expect(lastThrowIn()).toEqual({ intensity: 1, slide: 1, side: null });
-      other.m.unmount();
-    });
-
-    it('slides back out the way it came after THROW_IN_SHOW_MS', async () => {
-      const { replay, m } = await ready();
-      await record(replay, -30, THROW_IN);
-      await animate(2000 + 150);
-      const going = lastThrowIn()!;
-      expect(going.side).toBe(-1);
-      expect(going.slide).toBeGreaterThan(0);
-      expect(going.slide).toBeLessThan(1);
-      await animate(400);
-      expect(lastThrowIn()).toBeUndefined();
-      m.unmount();
-    });
-
-    it('is shown once for a label that flickers, and again for a later throw-in', async () => {
-      const { replay, m } = await ready();
-      await record(replay, -30, THROW_IN);
-      for (let i = 0; i < 70; i++) {
-        await record(replay, -30, i % 3 === 0 ? THROW_IN : []);
-        await animate(50);
-      }
-      expect(lastThrowIn()).toBeUndefined();
-      for (let i = 0; i < 130; i++) await record(replay, -30);
-      await record(replay, -30, THROW_IN);
-      await animate(100);
-      expect(lastThrowIn()).toBeDefined();
-      m.unmount();
-    });
-
-    it('is not shown for a throw-in a seek lands in the middle of', async () => {
-      const { replay, m } = await ready();
-      await record(replay, -30, THROW_IN, 30);
-      await record(replay, -30, THROW_IN);
-      await animate(300);
-      expect(lastThrowIn()).toBeUndefined();
-      m.unmount();
-    });
-
-    it('stops at once on a pause', async () => {
-      const { replay, m } = await ready();
-      await record(replay, -30, THROW_IN);
-      await animate(500);
-      set(replay.isPlaying, false);
-      await nextTick();
-      expect(lastThrowIn()).toBeUndefined();
-      m.unmount();
-    });
-
-    it('gives way to a free kick, and does not start while one shows', async () => {
-      const { replay, m } = await ready();
-      await record(replay, -30, THROW_IN);
-      await animate(200);
-      await record(replay, -30, ['EventType.FREE_KICK']);
-      await animate(100);
-      expect(lastThrowIn()).toBeUndefined();
-      expect(last()?.freeKick).toBeDefined();
-      for (let i = 0; i < 130; i++) await record(replay, -30, ['EventType.FREE_KICK']);
-      await record(replay, -30, THROW_IN);
-      await animate(100);
-      expect(lastThrowIn()).toBeUndefined();
-      m.unmount();
-    });
-
-    it('shows nothing while the layer is off, and stops when it is turned off', async () => {
-      const { replay, m } = await ready();
-      await record(replay, -30, THROW_IN);
-      await animate(300);
-      expect(lastThrowIn()).toBeDefined();
-      (at(m.root, 'pipeline-layers-toggle') as HTMLElement).click();
-      await nextTick();
-      (m.root.querySelector('[data-layer="throwInBanner"]') as HTMLElement).click();
-      await nextTick();
-      expect(lastThrowIn()).toBeUndefined();
-      for (let i = 0; i < 130; i++) await record(replay, -30);
-      await record(replay, -30, THROW_IN);
-      await animate(300);
-      expect(lastThrowIn()).toBeUndefined();
-      (m.root.querySelector('[data-layer="throwInBanner"]') as HTMLElement).click();
-      await nextTick();
-      m.unmount();
-    });
-
-    it('shows in place, without sliding, under reduced motion', async () => {
-      const originalMatchMedia = window.matchMedia;
-      window.matchMedia = ((query: string) => ({
-        matches: query.includes('prefers-reduced-motion'),
-        media: query,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-      })) as unknown as typeof window.matchMedia;
-      try {
-        const { replay, m } = await ready();
-        await record(replay, -30, THROW_IN);
-        await animate(50);
-        expect(lastThrowIn()).toEqual({ intensity: 1, slide: 1, side: null });
-        await animate(2000);
-        expect(lastThrowIn()).toBeUndefined();
-        m.unmount();
-      } finally {
-        window.matchMedia = originalMatchMedia;
-      }
+      });
     });
   });
 
   describe('playing moments by hand', () => {
-    let queued: Array<(ms: number) => void> = [];
-    let clockMs = 1000;
-    const originalRaf = window.requestAnimationFrame;
-    const originalCaf = window.cancelAnimationFrame;
-
-    beforeEach(() => {
-      queued = [];
-      clockMs = 1000;
-      renderFrame.mockClear();
-      window.requestAnimationFrame = ((cb: (ms: number) => void) => {
-        queued.push(cb);
-        return queued.length;
-      }) as typeof window.requestAnimationFrame;
-      window.cancelAnimationFrame = (() => {
-        queued = [];
-      }) as typeof window.cancelAnimationFrame;
-    });
-
-    afterEach(() => {
-      window.requestAnimationFrame = originalRaf;
-      window.cancelAnimationFrame = originalCaf;
-    });
-
-    async function animate(ms: number) {
-      const end = clockMs + ms;
-      while (clockMs < end - 1e-6) {
-        clockMs += 1000 / 60;
-        const cbs = queued;
-        queued = [];
-        cbs.forEach((cb) => cb(clockMs));
-      }
+    it('says nothing can be played before the tracker is up', async () => {
+      const m = mount(fakeReplay('loading'));
       await nextTick();
-    }
-
-    type Writable = { value: unknown };
-    const set = (r: unknown, v: unknown) => ((r as Writable).value = v);
-    const frameAt = (ballX: number | null, labels: string[] = []) => ({
-      pitch_dimensions: { length: 105, width: 68 },
-      teams: [
-        {
-          team_id: 0,
-          players: [{ track_id: 4, person_type: 'PersonType.PLAYER', projected_coordinates: { x: 3, y: 2 } }],
-        },
-      ],
-      balls: ballX === null ? [] : [{ projected_coordinates: { x: ballX, y: 5 } }],
-      state: { actions: labels.map((action_type) => ({ action_type })) },
-      frame_data: [{ frame_count: 1 }],
+      expect(m.surface().momentAvailability).toEqual(NOTHING);
+      expect(m.surface().triggerMoment('goal')).toBe(false);
+      m.unmount();
     });
-    const KNOWN_ENDS = { possession: null, attacks: { 0: 1, 1: -1 }, states: { 0: null, 1: null } };
 
-    async function ready(ballX: number | null = 20, phase: unknown = KNOWN_ENDS) {
-      const replay = fakeReplay('loading');
-      const m = mount(replay, { teamNames: ['Manchester City', 'PSG'] });
+    it('says what the tracker can play, and follows it', async () => {
+      createMatchTracker.mockImplementationOnce((host, options) => {
+        const made = makeTracker(host, options);
+        made.available = { goal: false, attack: { 0: true, 1: false }, freeKick: true, throwIn: true };
+        return made;
+      });
+      const m = mount(fakeReplay('ready'));
       await nextTick();
-      set(replay.currentTime, 10);
-      set(replay.frame, frameAt(ballX));
-      set(replay.phase, phase);
-      set(replay.state, 'ready');
       await nextTick();
-      return { replay, m };
-    }
+      expect(m.surface().momentAvailability).toEqual({
+        goal: false,
+        attack: { 0: true, 1: false },
+        freeKick: true,
+        throwIn: true,
+      });
 
-    const last = () =>
-      renderFrame.mock.calls.at(-1)?.[1] as {
-        goal?: { net: { side: number } };
-        attack?: { team: number; name: string; ball?: { x: number; y: number } };
-        freeKick?: { intensity: number };
-        throwIn?: { side: number | null };
-      };
-
-    async function layerOff(root: HTMLElement, key: string) {
-      (at(root, 'pipeline-layers-toggle') as HTMLElement).click();
+      tracker().emit('availability', { goal: true, attack: { 0: true, 1: true }, freeKick: true, throwIn: true });
       await nextTick();
-      (root.querySelector(`[data-layer="${key}"]`) as HTMLElement).click();
-      await nextTick();
-    }
-
-    // The flow for recording: the layer off, so it never plays by itself,
-    // and played by hand at the moment it should be seen.
-    it('plays the free kick by hand with its layer off and no label, even paused', async () => {
-      const { m } = await ready();
-      await layerOff(m.root, 'freeKick');
-      m.surface().triggerMoment('freeKick');
-      await animate(600);
-      expect(last().freeKick).toMatchObject({ intensity: 1 });
-      m.unmount();
-    });
-
-    // Nothing to wait on when played by hand: no label, no cutaway.
-    it('shows a free kick played by hand for 4 s, whatever play does, then fades out', async () => {
-      const { replay, m } = await ready(null);
-      set(replay.isPlaying, true);
-      await nextTick();
-      m.surface().triggerMoment('freeKick');
-      // The ball is lost and nobody moves: a free kick off its label would hold.
-      for (let i = 0; i < 70; i++) {
-        set(replay.currentTime, (replay.currentTime.value as number) + 0.04);
-        set(replay.frame, frameAt(null));
-        await nextTick();
-        await animate(50);
-      }
-      expect(last().freeKick).toMatchObject({ intensity: 1 });
-      await animate(300);
-      const going = last().freeKick!;
-      expect(going.intensity).toBeGreaterThan(0);
-      expect(going.intensity).toBeLessThan(1);
-      // 4 s from its first frame, a frame after the button.
-      await animate(250);
-      expect(last().freeKick).toBeUndefined();
-      m.unmount();
-    });
-
-    it('shows a free kick played by hand for 4 s under reduced motion too', async () => {
-      const originalMatchMedia = window.matchMedia;
-      window.matchMedia = ((query: string) => ({
-        matches: query.includes('prefers-reduced-motion'),
-        media: query,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-      })) as unknown as typeof window.matchMedia;
-      try {
-        const { m } = await ready();
-        m.surface().triggerMoment('freeKick');
-        await animate(3950);
-        expect(last().freeKick).toMatchObject({ intensity: 1 });
-        await animate(100);
-        expect(last().freeKick).toBeUndefined();
-        m.unmount();
-      } finally {
-        window.matchMedia = originalMatchMedia;
-      }
-    });
-
-    it('plays the throw-in by hand, sliding in from the ball’s half', async () => {
-      const { m } = await ready(-25);
-      m.surface().triggerMoment('throwIn');
-      await animate(600);
-      expect(last().throwIn?.side).toBe(-1);
-      m.unmount();
-    });
-
-    it('plays a team’s attack by hand, holding the ball where it is', async () => {
-      const { m } = await ready(-12);
-      m.surface().triggerMoment('attack', 1);
-      await animate(1000);
-      expect(last().attack).toMatchObject({ team: 1, name: 'PSG', ball: { x: -12, y: 5 } });
-      m.unmount();
-    });
-
-    it('plays the goal by hand, into the goal in the ball’s half', async () => {
-      const { m } = await ready(30);
-      m.surface().triggerMoment('goal');
-      await animate(100);
-      expect(last().goal?.net.side).toBe(1);
-      m.unmount();
-    });
-
-    // The shot is seen first; the card comes up as it reaches the net and
-    // goes as the camera eases back.
-    it('brings the goal’s card up as the ball reaches the net, and takes it down at the end', async () => {
-      const { m } = await ready(30);
-      m.surface().triggerMoment('goal');
-      await animate(150);
-      expect(renderFrame.mock.calls.at(-1)?.[1]?.goalBanner).toBeUndefined();
-      await animate(1500);
-      expect(renderFrame.mock.calls.at(-1)?.[1]?.goalBanner).toMatchObject({ intensity: 1 });
-      await animate(2000);
-      expect(renderFrame.mock.calls.at(-1)?.[1]?.goalBanner).toBeUndefined();
-      m.unmount();
-    });
-
-    it('takes over from a moment already showing', async () => {
-      const { m } = await ready();
-      m.surface().triggerMoment('throwIn');
-      await animate(300);
-      m.surface().triggerMoment('freeKick');
-      await animate(100);
-      expect(last().throwIn).toBeUndefined();
-      expect(last().freeKick).toBeDefined();
-      m.unmount();
-    });
-
-    it('says what can be played: no goal without a ball, no attack without a direction', async () => {
-      const withBall = await ready(20);
-      expect(withBall.m.surface().momentAvailability).toEqual({
+      expect(m.surface().momentAvailability).toEqual({
         goal: true,
         attack: { 0: true, 1: true },
         freeKick: true,
         throwIn: true,
       });
-      withBall.m.unmount();
-
-      const without = await ready(null, { possession: null, attacks: { 0: null, 1: null }, states: { 0: null, 1: null } });
-      expect(without.m.surface().momentAvailability).toMatchObject({ goal: false, attack: { 0: false, 1: false } });
-      without.m.surface().triggerMoment('goal');
-      without.m.surface().triggerMoment('attack', 0);
-      await animate(300);
-      expect(last().goal).toBeUndefined();
-      expect(last().attack).toBeUndefined();
-      without.m.unmount();
-    });
-
-    it('is ended by a seek, as the others are', async () => {
-      const { replay, m } = await ready();
-      m.surface().triggerMoment('freeKick');
-      await animate(300);
-      set(replay.currentTime, 60);
-      await nextTick();
-      expect(last().freeKick).toBeUndefined();
       m.unmount();
     });
-  });
 
-  describe('layers menu', () => {
-    let queued: Array<(ms: number) => void> = [];
-    let clockMs = 1000;
-    const originalRaf = window.requestAnimationFrame;
-    const originalCaf = window.cancelAnimationFrame;
-
-    beforeEach(() => {
-      localStorage.clear();
-      queued = [];
-      clockMs = 1000;
-      renderFrame.mockClear();
-      setView.mockClear();
-      window.requestAnimationFrame = ((cb: (ms: number) => void) => {
-        queued.push(cb);
-        return queued.length;
-      }) as typeof window.requestAnimationFrame;
-      window.cancelAnimationFrame = (() => {
-        queued = [];
-      }) as typeof window.cancelAnimationFrame;
-    });
-
-    afterEach(() => {
-      window.requestAnimationFrame = originalRaf;
-      window.cancelAnimationFrame = originalCaf;
-      localStorage.clear();
-    });
-
-    async function animate(ms: number) {
-      const end = clockMs + ms;
-      while (clockMs < end) {
-        clockMs += 1000 / 60;
-        const cbs = queued;
-        queued = [];
-        cbs.forEach((cb) => cb(clockMs));
-      }
+    it('plays a moment through the tracker', async () => {
+      const m = mount(fakeReplay('ready'));
       await nextTick();
-    }
-
-    type Writable = { value: unknown };
-    const set = (r: unknown, v: unknown) => ((r as Writable).value = v);
-    const person = (track_id: number, x: number, ball = false) => ({
-      track_id,
-      person_type: 'PersonType.PLAYER',
-      projected_coordinates: { x, y: 0 },
-      in_possession: ball,
+      expect(m.surface().triggerMoment('attack', 1)).toBe(true);
+      expect(tracker().trigger).toHaveBeenLastCalledWith('attack', 1);
+      m.surface().triggerMoment('goal');
+      expect(tracker().trigger).toHaveBeenLastCalledWith('goal', 0);
+      m.unmount();
     });
-    /** Red's carrier at x = 0 and a teammate at x = 10, with optional labels. */
-    const frameWith = (labels: string[] = [], ball = { x: 0, y: -30 }) => ({
-      pitch_dimensions: { length: 105, width: 68, goal_width: 7.32 },
-      teams: [{ team_id: 0, players: [person(1, 0, true), person(2, 10)] }],
-      balls: [{ projected_coordinates: ball }],
-      state: { actions: labels.map((action_type) => ({ action_type })) },
-      frame_data: [{ frame_count: 1 }],
-    });
-    const BLUE_ATTACKING = {
-      possession: 1,
-      attacks: { 0: 1, 1: -1 },
-      states: { 0: 'defending', 1: 'attacking' },
-    };
 
-    async function ready() {
-      const replay = fakeReplay('loading');
+    it('says nothing can be played once the tracker is gone', async () => {
+      const replay = fakeReplay('ready');
       const m = mount(replay);
       await nextTick();
-      set(replay.currentTime, 10);
-      set(replay.frame, frameWith());
-      set(replay.phase, BLUE_ATTACKING);
-      set(replay.state, 'ready');
+      tracker().emit('availability', { goal: true, attack: { 0: true, 1: true }, freeKick: true, throwIn: true });
+      set(replay.state, 'error');
       await nextTick();
-      return { replay, m };
-    }
-
-    async function tick(replay: PipelineReplay, frame: unknown, step = 0.04) {
-      set(replay.currentTime, (replay.currentTime.value as number) + step);
-      set(replay.frame, frame);
       await nextTick();
-    }
-
-    const layersOf = () => renderFrame.mock.calls.at(-1)?.[1];
-    const lastView = () =>
-      setView.mock.calls.at(-1)?.[0] as { zoom: number; panX: number; panY: number } | undefined;
-
-    async function open(root: HTMLElement) {
-      (at(root, 'pipeline-layers-toggle') as HTMLElement).click();
-      await nextTick();
-    }
-    const option = (root: HTMLElement, key: string) =>
-      root.querySelector(`[data-testid="pipeline-layer-option"][data-layer="${key}"]`) as HTMLElement;
-    async function toggle(root: HTMLElement, key: string) {
-      if (!at(root, 'pipeline-layers-menu')) await open(root);
-      option(root, key).click();
-      await nextTick();
-    }
-
-    it('lists every layer, all shown by default', async () => {
-      const { m } = await ready();
-      await open(m.root);
-      const options = [...m.root.querySelectorAll('[data-testid="pipeline-layer-option"]')];
-      expect(options).toHaveLength(9);
-      expect(options.every((o) => o.getAttribute('aria-checked') === 'true')).toBe(true);
-      m.unmount();
-    });
-
-    it('hides the attacking and defending labels', async () => {
-      const { m } = await ready();
-      expect(at(m.root, 'pipeline-phase')).not.toBeNull();
-      await toggle(m.root, 'phaseLabels');
-      expect(at(m.root, 'pipeline-phase')).toBeNull();
-      expect(option(m.root, 'phaseLabels').getAttribute('aria-checked')).toBe('false');
-      m.unmount();
-    });
-
-    // Showing and stopping the attack itself is covered under 'attack'.
-    it('leaves the attacking and defending labels to their own layer', async () => {
-      const { m } = await ready();
-      await toggle(m.root, 'attack');
-      expect(option(m.root, 'attack').getAttribute('aria-checked')).toBe('false');
-      expect(at(m.root, 'pipeline-phase')).not.toBeNull();
-      m.unmount();
-    });
-
-    it('draws far players solid when their fade is off', async () => {
-      const { m } = await ready();
-      expect(layersOf()?.fadeFar).toBe(true);
-      await toggle(m.root, 'farFade');
-      expect(layersOf()?.fadeFar).toBe(false);
-      m.unmount();
-    });
-
-    it('draws the ball trail the replay reports, and none when it is off', async () => {
-      const { replay, m } = await ready();
-      const trail = { runs: [[{ x: -5, y: -30, age: 1 }, { x: 0, y: -30, age: 0 }]], turns: [] };
-      set(replay.ballTrail, trail);
-      await nextTick();
-      expect(layersOf()?.trail).toEqual(trail);
-      await toggle(m.root, 'ballTrail');
-      expect(layersOf()?.trail).toBeUndefined();
-      m.unmount();
-    });
-
-    it('repaints when the trail changes without a new frame', async () => {
-      const { replay, m } = await ready();
-      const calls = renderFrame.mock.calls.length;
-      set(replay.ballTrail, { runs: [[{ x: 1, y: 2, age: 1 }, { x: 2, y: 2, age: 0 }]], turns: [] });
-      await nextTick();
-      expect(renderFrame.mock.calls.length).toBe(calls + 1);
-      m.unmount();
-    });
-
-    it('drops the white rings, and only them', async () => {
-      const { m } = await ready();
-      expect(layersOf()?.rings.nearby.size).toBeGreaterThan(0);
-      await toggle(m.root, 'nearbyRings');
-      expect(layersOf()?.rings.nearby.size).toBe(0);
-      expect(layersOf()?.rings.possession.get(1)).toBe(1);
-      m.unmount();
-    });
-
-    it('snaps the rings during playback when smooth changes are off', async () => {
-      const { replay, m } = await ready();
-      await toggle(m.root, 'ringFades');
-      set(replay.isPlaying, true);
-      await nextTick();
-      await tick(replay, { ...frameWith(), teams: [{ team_id: 0, players: [person(1, 0, true), person(2, 30)] }] });
-      expect(layersOf()?.rings.nearby.get(2)).toBeUndefined();
-      await tick(replay, frameWith());
-      expect(layersOf()?.rings.nearby.get(2)).toBe(1);
-      m.unmount();
-    });
-
-    it('does not play the goal animation when it is off', async () => {
-      const { replay, m } = await ready();
-      await toggle(m.root, 'goal');
-      set(replay.isPlaying, true);
-      await nextTick();
-      await tick(replay, frameWith(['GOAL'], { x: 30, y: 5 }));
-      await animate(1000);
-      expect(layersOf()?.goal).toBeUndefined();
-      m.unmount();
-    });
-
-    it('stops a goal animation that is playing when it is switched off, view and all', async () => {
-      const { replay, m } = await ready();
-      set(replay.isPlaying, true);
-      await nextTick();
-      await tick(replay, frameWith(['GOAL'], { x: 30, y: 5 }));
-      await animate(800);
-      expect(layersOf()?.goal).toBeDefined();
-      await toggle(m.root, 'goal');
-      expect(layersOf()?.goal).toBeUndefined();
-      expect(lastView()).toMatchObject({ zoom: 1, panX: 0, panY: 0 });
-      m.unmount();
-    });
-
-    it('remembers the choice for the next time the replay opens', async () => {
-      const first = await ready();
-      await toggle(first.m.root, 'ballTrail');
-      first.m.unmount();
-      const second = await ready();
-      await open(second.m.root);
-      expect(option(second.m.root, 'ballTrail').getAttribute('aria-checked')).toBe('false');
-      expect(option(second.m.root, 'goal').getAttribute('aria-checked')).toBe('true');
-      second.m.unmount();
-    });
-
-    it('closes on Escape, and on a click outside it', async () => {
-      const { m } = await ready();
-      await open(m.root);
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-      await nextTick();
-      expect(at(m.root, 'pipeline-layers-menu')).toBeNull();
-      await open(m.root);
-      (at(m.root, 'pipeline-layers-backdrop') as HTMLElement).click();
-      await nextTick();
-      expect(at(m.root, 'pipeline-layers-menu')).toBeNull();
+      expect(m.surface().momentAvailability).toEqual(NOTHING);
       m.unmount();
     });
   });
 });
-
