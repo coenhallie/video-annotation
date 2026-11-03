@@ -21,7 +21,7 @@
 ## Global Constraints
 
 - **Package:**
-  - `@coenhallie/match-tracker`, exactly `0.1.0`, with no `^`.
+  - `@coenhallie/match-tracker`, exactly `0.1.1`, with no `^`.
   - `.npmrc` contains `@coenhallie:registry=https://npm.pkg.github.com`. The token goes in the user's `~/.npmrc` and is never committed.
 - **Widget options:**
   - `mode: 'replay'`
@@ -53,7 +53,7 @@
 - [ ] Add `record: Ref<TrackerRecord | null>` (`{ t, frameCount, frame }`) and `lookback: Ref<readonly TrackerRecord[]>`. `lookback` is the same `recent` array `setHistory` builds today, in the same order.
 - [ ] Remove `phase` and `ballTrail`, together with their computation and tests, because the widget derives both now. Keep every load, seek, buffering and prefetch test.
 - [ ] Keep `frame` until Task 2 lands. Then remove it if nothing else uses it.
-- [ ] Run `npm run check` and commit with the message "Expose the replay window for the match tracker".
+- [ ] Do not commit yet. The surface still reads `phase` and `ballTrail` until Task 2, so Tasks 1 and 2 land together as one commit, "Draw the replay with the match tracker widget".
 
 ### Task 2: Host the widget in `PipelineOutputSurface.vue`
 
@@ -66,7 +66,10 @@
 
 - [ ] Install with `npm install @coenhallie/match-tracker@0.1.1 --save-exact`.
 - [ ] Mount `createMatchTracker(host, options)` in the stage, or use `MatchTracker` from `@coenhallie/match-tracker/vue`. On every replay tick, call `present({ time: currentTime, playing: isPlaying, record, lookback })`.
-- [ ] Teleport the `overlay` slot into `tracker.overlay`, still passing the slot prop `current-frame`.
+- [ ] Mount the `overlay` slot content in `tracker.overlay`, still passing the slot prop `current-frame`. In 0.1.1 this is a light-DOM element slotted over the pitch, so the app's own CSS applies to it.
+- [ ] Anchor the frame badge and the transport bar to `tracker.box`, and follow its `box` event.
+- [ ] Drive the demo buttons' disabled state from `tracker.availability()` and its `availability` event.
+- [ ] Pass `lookback` as the records within `REPLAY_LOOKBACK_S` of the record on screen.
 - [ ] Keep these exactly as they are today:
   - the transport bar
   - the frame badge
