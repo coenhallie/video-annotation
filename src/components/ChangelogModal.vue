@@ -126,6 +126,7 @@ const changelogEntries = ref([
       'The free kick banner now fades out the ball too, and the throw-in banner fades in where it stands instead of sliding in',
       'The corner lights up more strongly, and each wave across it is easier to see',
       'The 2D replay no longer shows a free kick banner: through a free kick, play shows as it is. Demo has no Free kick button',
+      "The 2D replay plays a goal, a corner or a throw-in only on a human's label, never on one the AI made",
       'While the tracking has lost most players, the 2D replay shows an attack instead of a nearly empty pitch. With Demo on, a red badge says when that is what you see, and how many players are tracked',
     ],
   },
