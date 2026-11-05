@@ -305,19 +305,21 @@ describe('PipelineOutputSurface', () => {
       m.unmount();
     });
 
-    it('turns the tracker’s developer badge on and off with Demo', async () => {
+    it('turns the tracker’s developer badge and AI labels on and off with Demo', async () => {
       const m = mount(fakeReplay('ready'));
       await nextTick();
       expect(tracker().options.debug).toBe(false);
+      expect(tracker().options.aiLabels).toBe(false);
       m.debug.value = true;
       await nextTick();
       await nextTick();
-      expect(tracker().setOptions).toHaveBeenLastCalledWith({ debug: true });
+      expect(tracker().setOptions).toHaveBeenLastCalledWith({ debug: true, aiLabels: true });
       m.unmount();
 
       const on = mount(fakeReplay('ready'), { debug: true });
       await nextTick();
       expect(tracker().options.debug).toBe(true);
+      expect(tracker().options.aiLabels).toBe(true);
       on.unmount();
     });
 
