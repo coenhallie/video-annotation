@@ -117,6 +117,13 @@ useEscapeToClose(() => props.isVisible, closeModal);
 // Add new entries to the TOP of this array
 const changelogEntries = ref([
   {
+    version: 'Beta v3.38',
+    date: 'November 5, 2026',
+    changes: [
+      "The 2D replay's label text, bottom left, lists only the labels a human gave. With Demo on, it lists the AI's labels too",
+    ],
+  },
+  {
     version: 'Beta v3.37',
     date: 'November 3, 2026',
     changes: [
