@@ -4,7 +4,7 @@ import { createApp, defineComponent, h, nextTick, ref } from 'vue';
 import type { MomentAvailability } from '@coenhallie/match-tracker';
 import ReplayMomentTriggers from '@/components/ReplayMomentTriggers.vue';
 
-const ALL: MomentAvailability = { goal: true, attack: { 0: true, 1: true }, corner: true, throwIn: true, varCheck: true, goalDisallowed: true, halfTime: true };
+const ALL: MomentAvailability = { goal: true, attack: { 0: true, 1: true }, corner: true, throwIn: true, varCheck: true, goalDisallowed: true, halfTime: true, secondHalf: true, fullTime: true, foul: true, shotOnGoal: true, headerOnGoal: true };
 const TEAMS: [{ name: string; color: string }, { name: string; color: string }] = [
   { name: 'Manchester City', color: '#e51a1a' },
   { name: 'PSG', color: '#184fe7' },
@@ -95,7 +95,7 @@ describe('ReplayMomentTriggers', () => {
   });
 
   it('disables what cannot be played on the frame on screen, and everything before the replay is up', async () => {
-    const m = mount({ goal: false, attack: { 0: true, 1: false }, corner: true, throwIn: true, varCheck: true, goalDisallowed: true, halfTime: true });
+    const m = mount({ goal: false, attack: { 0: true, 1: false }, corner: true, throwIn: true, varCheck: true, goalDisallowed: true, halfTime: true, secondHalf: true, fullTime: true, foul: true, shotOnGoal: true, headerOnGoal: true });
     at(m.root, 'moment-demo-toggle')!.click();
     await nextTick();
     expect(at(m.root, 'moment-goal')!.disabled).toBe(true);
