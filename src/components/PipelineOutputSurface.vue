@@ -74,6 +74,11 @@ const NOTHING_AVAILABLE: MomentAvailability = {
   varCheck: false,
   goalDisallowed: false,
   halfTime: false,
+  secondHalf: false,
+  fullTime: false,
+  foul: false,
+  shotOnGoal: false,
+  headerOnGoal: false,
 };
 
 /**

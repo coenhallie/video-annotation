@@ -43,6 +43,11 @@ const NOTHING: MomentAvailability = {
   varCheck: false,
   goalDisallowed: false,
   halfTime: false,
+  secondHalf: false,
+  fullTime: false,
+  foul: false,
+  shotOnGoal: false,
+  headerOnGoal: false,
 };
 
 const { createMatchTracker, makeTracker, trackers } = vi.hoisted(() => {
@@ -69,7 +74,7 @@ const { createMatchTracker, makeTracker, trackers } = vi.hoisted(() => {
       host,
       options,
       overlay,
-      available: { goal: false, attack: { 0: false, 1: false }, corner: false, throwIn: false, varCheck: false, goalDisallowed: false, halfTime: false },
+      available: { goal: false, attack: { 0: false, 1: false }, corner: false, throwIn: false, varCheck: false, goalDisallowed: false, halfTime: false, secondHalf: false, fullTime: false, foul: false, shotOnGoal: false, headerOnGoal: false },
       present: vi.fn(),
       trigger: vi.fn(() => true),
       setOptions: vi.fn(),
@@ -707,7 +712,7 @@ describe('PipelineOutputSurface', () => {
     it('says what the tracker can play, and follows it', async () => {
       createMatchTracker.mockImplementationOnce((host, options) => {
         const made = makeTracker(host, options);
-        made.available = { goal: false, attack: { 0: true, 1: false }, corner: true, throwIn: true, varCheck: true, goalDisallowed: true, halfTime: true };
+        made.available = { goal: false, attack: { 0: true, 1: false }, corner: true, throwIn: true, varCheck: true, goalDisallowed: true, halfTime: true, secondHalf: true, fullTime: true, foul: true, shotOnGoal: true, headerOnGoal: true };
         return made;
       });
       const m = mount(fakeReplay('ready'));
@@ -721,9 +726,14 @@ describe('PipelineOutputSurface', () => {
         varCheck: true,
         goalDisallowed: true,
         halfTime: true,
+        secondHalf: true,
+        fullTime: true,
+        foul: true,
+        shotOnGoal: true,
+        headerOnGoal: true,
       });
 
-      tracker().emit('availability', { goal: true, attack: { 0: true, 1: true }, corner: true, throwIn: true, varCheck: true, goalDisallowed: true, halfTime: true });
+      tracker().emit('availability', { goal: true, attack: { 0: true, 1: true }, corner: true, throwIn: true, varCheck: true, goalDisallowed: true, halfTime: true, secondHalf: true, fullTime: true, foul: true, shotOnGoal: true, headerOnGoal: true });
       await nextTick();
       expect(m.surface().momentAvailability).toEqual({
         goal: true,
@@ -733,6 +743,11 @@ describe('PipelineOutputSurface', () => {
         varCheck: true,
         goalDisallowed: true,
         halfTime: true,
+        secondHalf: true,
+        fullTime: true,
+        foul: true,
+        shotOnGoal: true,
+        headerOnGoal: true,
       });
       m.unmount();
     });
@@ -751,7 +766,7 @@ describe('PipelineOutputSurface', () => {
       const replay = fakeReplay('ready');
       const m = mount(replay);
       await nextTick();
-      tracker().emit('availability', { goal: true, attack: { 0: true, 1: true }, corner: true, throwIn: true, varCheck: true, goalDisallowed: true, halfTime: true });
+      tracker().emit('availability', { goal: true, attack: { 0: true, 1: true }, corner: true, throwIn: true, varCheck: true, goalDisallowed: true, halfTime: true, secondHalf: true, fullTime: true, foul: true, shotOnGoal: true, headerOnGoal: true });
       set(replay.state, 'error');
       await nextTick();
       await nextTick();
