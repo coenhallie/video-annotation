@@ -71,6 +71,9 @@ const NOTHING_AVAILABLE: MomentAvailability = {
   attack: { 0: false, 1: false },
   corner: false,
   throwIn: false,
+  varCheck: false,
+  goalDisallowed: false,
+  halfTime: false,
 };
 
 /**
