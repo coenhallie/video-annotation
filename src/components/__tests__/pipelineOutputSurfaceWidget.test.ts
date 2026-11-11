@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 //
-// The surface over the real match tracker widget, not a fake: what zoom and
-// pan do to the transport is the widget's behaviour (0.1.3 and later, which
-// leave anything marked data-match-tracker-keep alone), so it is proved there.
+// The surface over the real match tracker widget, not a fake: what a press, a
+// wheel and a double click on the transport do is the widget's behaviour (it
+// leaves anything marked data-match-tracker-keep alone, and since 0.12.0 takes
+// no zoom or pan by hand), so it is proved there.
 // Only the canvas is stubbed, since jsdom has no 2D context.
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createApp, defineComponent, h, nextTick, ref, shallowRef } from 'vue';
@@ -96,10 +97,6 @@ async function mountReal(props: { drawing?: boolean } = {}) {
   return { app, root, tracker, zooms, byId };
 }
 
-const wheelIn = (el: Element) =>
-  el.dispatchEvent(
-    new WheelEvent('wheel', { bubbles: true, cancelable: true, composed: true, ctrlKey: true, deltaY: -100 })
-  );
 const press = (el: Element) =>
   el.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, composed: true }));
 const doubleClick = (el: Element) =>
@@ -113,43 +110,30 @@ describe('PipelineOutputSurface on the real match tracker', () => {
     m.app.unmount();
   });
 
-  it('lets a ctrl/⌘ + wheel over the transport zoom the pitch', async () => {
+  it('leaves a ctrl/⌘ + wheel and a double click, over the transport or the pitch, to the page: nothing zooms', async () => {
     const m = await mountReal();
-    wheelIn(m.byId('pipeline-step-forward'));
-    expect(m.zooms.at(-1)).toBeGreaterThan(1);
+    for (const el of [m.byId('pipeline-step-forward'), m.tracker.overlay]) {
+      const wheel = new WheelEvent('wheel', { bubbles: true, cancelable: true, composed: true, ctrlKey: true, deltaY: -100 });
+      el.dispatchEvent(wheel);
+      expect(wheel.defaultPrevented).toBe(false);
+      doubleClick(el);
+    }
+    expect(m.zooms).toEqual([]);
     m.app.unmount();
   });
 
-  it('starts no pan on a press on the transport when zoomed in', async () => {
+  it('takes no pointer on a press on the transport or the pitch, and the click lands', async () => {
     const m = await mountReal();
-    wheelIn(m.byId('pipeline-step-forward'));
     const button = m.byId('pipeline-step-forward');
     const clicked = vi.fn();
     button.addEventListener('click', clicked);
 
     press(button);
-    expect(capture).not.toHaveBeenCalled();
-
-    // The same press on the pitch is a pan, so the check above can fail.
     press(m.tracker.overlay);
-    expect(capture).toHaveBeenCalledOnce();
+    expect(capture).not.toHaveBeenCalled();
 
     button.click();
     expect(clicked).toHaveBeenCalledOnce();
-    m.app.unmount();
-  });
-
-  it('leaves the zoom on a double click on the transport, and resets it on the pitch', async () => {
-    const m = await mountReal();
-    wheelIn(m.byId('pipeline-step-forward'));
-    const zoomed = m.zooms.at(-1)!;
-    expect(zoomed).toBeGreaterThan(1);
-
-    doubleClick(m.byId('pipeline-step-forward'));
-    expect(m.zooms.at(-1)).toBe(zoomed);
-
-    doubleClick(m.tracker.overlay);
-    expect(m.zooms.at(-1)).toBe(1);
     m.app.unmount();
   });
 

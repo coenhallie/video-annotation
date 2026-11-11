@@ -17,7 +17,8 @@ import { replayDrawingFrame } from '@/utils/timelineBinding';
  * match share site draw the same, versioned picture.
  *
  * The widget owns the pitch and everything on it: the moments, the
- * attacking/defending row above it, the layers menu, zoom and pan, sizing and
+ * attacking/defending row above it, the layers menu, the view (which only its
+ * animations zoom: there is no zoom or pan by hand since 0.12.0), sizing and
  * the pixel ratio, and its fonts and icons. This component keeps what the
  * widget leaves to its host: loading, the empty and error states, the
  * transport and the frame badge, the drawing layer over the pitch, and the
@@ -29,7 +30,7 @@ import { replayDrawingFrame } from '@/utils/timelineBinding';
  *   the drawing layer, in drawing mode (DrawingCanvas: z-index 100)
  *   the widget's open layers menu (z-index 50)
  *   the drawing layer, otherwise (z-index 40, and no pointer events)
- *   the widget's phase row, layers button and zoom badge
+ *   the widget's phase row and layers button
  *   this HUD (the transport, the frame badge)
  *   the pitch
  *
@@ -328,7 +329,7 @@ onUnmounted(() => {
         The HUD and the drawing layer go in the tracker's overlay, which lies
         exactly over the pitch and is in the page's DOM, so the app's CSS
         reaches them. Its pointer events are off unless an element turns them
-        on for itself, so zoom and pan work through it. One Teleport, so the
+        on for itself, so the pitch is pressed through it. One Teleport, so the
         HUD stays before the drawing layer.
       -->
       <Teleport
@@ -366,11 +367,8 @@ onUnmounted(() => {
           </div>
 
           <!--
-            Inside the HUD, so marked data-match-tracker-keep: the widget's
-            zoom and pan leave it alone. Zoomed in, a press on the transport
-            starts no pan and a double click on it leaves the zoom. A
-            ctrl/⌘ + wheel still goes through, so it zooms the pitch rather
-            than the page.
+            Inside the HUD, so marked data-match-tracker-keep: a press on the
+            transport stops no moment, and its click lands.
 
             Inert while drawing: pointer-events alone would not do, since the
             focus-visible rule turns them back on.
