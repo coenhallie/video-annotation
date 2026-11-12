@@ -80,6 +80,8 @@ const NOTHING_AVAILABLE: MomentAvailability = {
   foul: false,
   shotOnGoal: false,
   headerOnGoal: false,
+  yellowCard: false,
+  redCard: false,
 };
 
 /**
