@@ -16,7 +16,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@coenhallie/match-tracker": "0.18.0",
+    "@coenhallie/match-tracker": "0.19.0",
     "@supabase/supabase-js": "^2.52.0",
     "@tailwindcss/vite": "^4.1.11",
     "fabric": "^6.7.1",
