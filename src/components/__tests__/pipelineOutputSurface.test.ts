@@ -52,6 +52,9 @@ const NOTHING: MomentAvailability = {
   yellowCard: false,
   redCard: false,
   substitution: false,
+  penalty: false,
+  penaltyScored: false,
+  penaltyMissed: false,
 };
 
 const { createMatchTracker, makeTracker, trackers } = vi.hoisted(() => {
@@ -78,7 +81,7 @@ const { createMatchTracker, makeTracker, trackers } = vi.hoisted(() => {
       host,
       options,
       overlay,
-      available: { goal: false, attack: { 0: false, 1: false }, corner: false, freeKick: false, throwIn: false, varCheck: false, goalDisallowed: false, halfTime: false, secondHalf: false, fullTime: false, foul: false, shotOnGoal: false, headerOnGoal: false, yellowCard: false, redCard: false, substitution: false },
+      available: { goal: false, attack: { 0: false, 1: false }, corner: false, freeKick: false, throwIn: false, varCheck: false, goalDisallowed: false, halfTime: false, secondHalf: false, fullTime: false, foul: false, shotOnGoal: false, headerOnGoal: false, yellowCard: false, redCard: false, substitution: false, penalty: false, penaltyScored: false, penaltyMissed: false },
       present: vi.fn(),
       trigger: vi.fn(() => true),
       setOptions: vi.fn(),
@@ -716,7 +719,7 @@ describe('PipelineOutputSurface', () => {
     it('says what the tracker can play, and follows it', async () => {
       createMatchTracker.mockImplementationOnce((host, options) => {
         const made = makeTracker(host, options);
-        made.available = { goal: false, attack: { 0: true, 1: false }, corner: true, freeKick: true, throwIn: true, varCheck: true, goalDisallowed: true, halfTime: true, secondHalf: true, fullTime: true, foul: true, shotOnGoal: true, headerOnGoal: true, yellowCard: true, redCard: true, substitution: true };
+        made.available = { goal: false, attack: { 0: true, 1: false }, corner: true, freeKick: true, throwIn: true, varCheck: true, goalDisallowed: true, halfTime: true, secondHalf: true, fullTime: true, foul: true, shotOnGoal: true, headerOnGoal: true, yellowCard: true, redCard: true, substitution: true, penalty: true, penaltyScored: true, penaltyMissed: true };
         return made;
       });
       const m = mount(fakeReplay('ready'));
@@ -739,9 +742,12 @@ describe('PipelineOutputSurface', () => {
         yellowCard: true,
         redCard: true,
         substitution: true,
+        penalty: true,
+        penaltyScored: true,
+        penaltyMissed: true,
       });
 
-      tracker().emit('availability', { goal: true, attack: { 0: true, 1: true }, corner: true, freeKick: true, throwIn: true, varCheck: true, goalDisallowed: true, halfTime: true, secondHalf: true, fullTime: true, foul: true, shotOnGoal: true, headerOnGoal: true, yellowCard: true, redCard: true, substitution: true });
+      tracker().emit('availability', { goal: true, attack: { 0: true, 1: true }, corner: true, freeKick: true, throwIn: true, varCheck: true, goalDisallowed: true, halfTime: true, secondHalf: true, fullTime: true, foul: true, shotOnGoal: true, headerOnGoal: true, yellowCard: true, redCard: true, substitution: true, penalty: true, penaltyScored: true, penaltyMissed: true });
       await nextTick();
       expect(m.surface().momentAvailability).toEqual({
         goal: true,
@@ -760,6 +766,9 @@ describe('PipelineOutputSurface', () => {
         yellowCard: true,
         redCard: true,
         substitution: true,
+        penalty: true,
+        penaltyScored: true,
+        penaltyMissed: true,
       });
       m.unmount();
     });
@@ -778,7 +787,7 @@ describe('PipelineOutputSurface', () => {
       const replay = fakeReplay('ready');
       const m = mount(replay);
       await nextTick();
-      tracker().emit('availability', { goal: true, attack: { 0: true, 1: true }, corner: true, freeKick: true, throwIn: true, varCheck: true, goalDisallowed: true, halfTime: true, secondHalf: true, fullTime: true, foul: true, shotOnGoal: true, headerOnGoal: true, yellowCard: true, redCard: true, substitution: true });
+      tracker().emit('availability', { goal: true, attack: { 0: true, 1: true }, corner: true, freeKick: true, throwIn: true, varCheck: true, goalDisallowed: true, halfTime: true, secondHalf: true, fullTime: true, foul: true, shotOnGoal: true, headerOnGoal: true, yellowCard: true, redCard: true, substitution: true, penalty: true, penaltyScored: true, penaltyMissed: true });
       set(replay.state, 'error');
       await nextTick();
       await nextTick();

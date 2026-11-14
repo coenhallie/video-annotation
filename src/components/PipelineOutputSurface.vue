@@ -84,6 +84,9 @@ const NOTHING_AVAILABLE: MomentAvailability = {
   yellowCard: false,
   redCard: false,
   substitution: false,
+  penalty: false,
+  penaltyScored: false,
+  penaltyMissed: false,
 };
 
 /**
