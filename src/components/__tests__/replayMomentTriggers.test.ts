@@ -4,7 +4,7 @@ import { createApp, defineComponent, h, nextTick, ref } from 'vue';
 import type { MomentAvailability } from '@coenhallie/match-tracker';
 import ReplayMomentTriggers from '@/components/ReplayMomentTriggers.vue';
 
-const ALL: MomentAvailability = { goal: true, attack: { 0: true, 1: true }, corner: true, freeKick: true, throwIn: true, varCheck: true, goalDisallowed: true, halfTime: true, secondHalf: true, fullTime: true, foul: true, shotOnGoal: true, headerOnGoal: true, yellowCard: true, redCard: true, substitution: true, penalty: true, penaltyScored: true, penaltyMissed: true };
+const ALL: MomentAvailability = { goal: true, defensiveRecovery: true, buildUpPlay: true, corner: true, freeKick: true, throwIn: true, varCheck: true, goalDisallowed: true, goalKick: true, halfTime: true, secondHalf: true, fullTime: true, foul: true, shotOnGoal: true, headerOnGoal: true, yellowCard: true, redCard: true, substitution: true, penalty: true, penaltyScored: true, penaltyMissed: true };
 const TEAMS: [{ name: string; color: string }, { name: string; color: string }] = [
   { name: 'Manchester City', color: '#e51a1a' },
   { name: 'PSG', color: '#184fe7' },
@@ -76,34 +76,34 @@ describe('ReplayMomentTriggers', () => {
     again.unmount();
   });
 
-  it('plays each moment, an attack for the team pressed', async () => {
+  it('plays each moment, a recovery for the team pressed', async () => {
     const m = mount();
     at(m.root, 'moment-demo-toggle')!.click();
     await nextTick();
-    for (const id of ['moment-goal', 'moment-attack-1', 'moment-attack-0', 'moment-corner', 'moment-throwIn']) {
+    for (const id of ['moment-goal', 'moment-defensiveRecovery-1', 'moment-defensiveRecovery-0', 'moment-corner', 'moment-throwIn']) {
       at(m.root, id)!.click();
     }
     expect(m.played).toEqual([
       ['goal', undefined],
-      ['attack', 1],
-      ['attack', 0],
+      ['defensiveRecovery', 1],
+      ['defensiveRecovery', 0],
       ['corner', undefined],
       ['throwIn', undefined],
     ]);
-    expect(at(m.root, 'moment-attack-0')!.textContent).toContain('Manchester City attack');
+    expect(at(m.root, 'moment-defensiveRecovery-0')!.textContent).toContain('Manchester City recovery');
     m.unmount();
   });
 
   it('disables what cannot be played on the frame on screen, and everything before the replay is up', async () => {
-    const m = mount({ goal: false, attack: { 0: true, 1: false }, corner: true, freeKick: true, throwIn: true, varCheck: true, goalDisallowed: true, halfTime: true, secondHalf: true, fullTime: true, foul: true, shotOnGoal: true, headerOnGoal: true, yellowCard: true, redCard: true, substitution: true, penalty: true, penaltyScored: true, penaltyMissed: true });
+    const m = mount({ goal: false, defensiveRecovery: true, buildUpPlay: true, corner: true, freeKick: true, throwIn: true, varCheck: true, goalDisallowed: true, goalKick: true, halfTime: true, secondHalf: true, fullTime: true, foul: true, shotOnGoal: true, headerOnGoal: true, yellowCard: true, redCard: true, substitution: true, penalty: true, penaltyScored: true, penaltyMissed: true });
     at(m.root, 'moment-demo-toggle')!.click();
     await nextTick();
     expect(at(m.root, 'moment-goal')!.disabled).toBe(true);
-    expect(at(m.root, 'moment-attack-1')!.disabled).toBe(true);
-    expect(at(m.root, 'moment-attack-0')!.disabled).toBe(false);
+    expect(at(m.root, 'moment-defensiveRecovery-1')!.disabled).toBe(false);
+    expect(at(m.root, 'moment-defensiveRecovery-0')!.disabled).toBe(false);
     m.available.value = null;
     await nextTick();
-    for (const id of ['moment-goal', 'moment-attack-0', 'moment-corner', 'moment-throwIn']) {
+    for (const id of ['moment-goal', 'moment-defensiveRecovery-0', 'moment-corner', 'moment-throwIn']) {
       expect(at(m.root, id)!.disabled).toBe(true);
     }
     m.unmount();

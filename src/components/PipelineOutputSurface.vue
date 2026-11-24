@@ -54,10 +54,9 @@ const props = defineProps<{
   drawing?: boolean;
   /**
    * The tracker's developer mode (its debug and aiLabels options): a badge
-   * over the pitch while the pipeline has lost track of players, saying
-   * whether the attack shown is covering the loss, and the AI's labels in the
-   * bottom-left text beside the human ones. On while the replay's Demo
-   * controls are.
+   * over the pitch while the pipeline has lost track of players, and the AI's
+   * labels in the bottom-left text beside the human ones. On while the
+   * replay's Demo controls are.
    */
   debug?: boolean;
 }>();
@@ -69,12 +68,14 @@ const LAYERS_STORAGE_KEY = 'perspecto.replayLayers';
 
 const NOTHING_AVAILABLE: MomentAvailability = {
   goal: false,
-  attack: { 0: false, 1: false },
+  defensiveRecovery: false,
+  buildUpPlay: false,
   corner: false,
   freeKick: false,
   throwIn: false,
   varCheck: false,
   goalDisallowed: false,
+  goalKick: false,
   halfTime: false,
   secondHalf: false,
   fullTime: false,
@@ -168,7 +169,7 @@ watch(
   { flush: 'post' }
 );
 
-/** Play `moment` now; for an attack, `team`'s. False when it cannot be played on this frame. */
+/** Play `moment` now, for `team` where the moment names one. False when it cannot be played on this frame. */
 function triggerMoment(moment: ReplayMoment, team: TeamId = 0): boolean {
   return tracker.value?.trigger(moment, team) ?? false;
 }

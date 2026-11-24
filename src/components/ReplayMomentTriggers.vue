@@ -46,8 +46,7 @@ watch(open, (on) => {
 
 watch(open, (on) => emit('demo', on), { immediate: true });
 
-const can = (moment: Exclude<ReplayMoment, 'attack'>) => props.availability?.[moment] ?? false;
-const canAttack = (team: TeamId) => props.availability?.attack[team] ?? false;
+const can = (moment: ReplayMoment) => props.availability?.[moment] ?? false;
 
 const BUTTON =
   'flex h-6 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[10px] font-semibold uppercase tracking-widest ring-1 transition-colors focus-visible:outline-none focus-visible:ring-white/60 motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-35';
@@ -77,22 +76,18 @@ const IDLE = 'text-white/80 ring-white/10 hover:text-white enabled:hover:ring-wh
         v-for="team in ([0, 1] as const)"
         :key="team"
         type="button"
-        :data-testid="`moment-attack-${team}`"
+        :data-testid="`moment-defensiveRecovery-${team}`"
         :class="[BUTTON, IDLE]"
-        :disabled="!canAttack(team)"
-        :title="
-          canAttack(team)
-            ? `Play ${teams[team].name}'s attack`
-            : 'Needs the keepers to tell which way the teams attack'
-        "
-        @click="emit('trigger', 'attack', team)"
+        :disabled="!can('defensiveRecovery')"
+        :title="`Play ${teams[team].name}'s defensive recovery`"
+        @click="emit('trigger', 'defensiveRecovery', team)"
       >
         <span
           class="h-2 w-2 shrink-0 rounded-full"
           :style="{ backgroundColor: teams[team].color }"
           aria-hidden="true"
         />
-        <span class="whitespace-nowrap">{{ teams[team].name }} attack</span>
+        <span class="whitespace-nowrap">{{ teams[team].name }} recovery</span>
       </button>
       <button
         type="button"
