@@ -4,7 +4,7 @@ import { createApp, defineComponent, h, nextTick, ref } from 'vue';
 import type { MomentAvailability } from '@coenhallie/match-tracker';
 import ReplayMomentTriggers from '@/components/ReplayMomentTriggers.vue';
 
-const ALL: MomentAvailability = { goal: true, defensiveRecovery: true, buildUpPlay: true, corner: true, freeKick: true, throwIn: true, varCheck: true, goalDisallowed: true, goalKick: true, halfTime: true, secondHalf: true, fullTime: true, foul: true, shotOnGoal: true, headerOnGoal: true, yellowCard: true, redCard: true, substitution: true, penalty: true, penaltyScored: true, penaltyMissed: true };
+const ALL: MomentAvailability = { goal: true, defensiveRecovery: true, buildUpPlay: true, inPossession: true, attackingThreat: true, corner: true, freeKick: true, throwIn: true, varCheck: true, goalDisallowed: true, goalKick: true, halfTime: true, secondHalf: true, fullTime: true, foul: true, shotOnGoal: true, headerOnGoal: true, yellowCard: true, redCard: true, substitution: true, penalty: true, penaltyScored: true, penaltyMissed: true };
 const TEAMS: [{ name: string; color: string }, { name: string; color: string }] = [
   { name: 'Manchester City', color: '#e51a1a' },
   { name: 'PSG', color: '#184fe7' },
@@ -95,7 +95,7 @@ describe('ReplayMomentTriggers', () => {
   });
 
   it('disables what cannot be played on the frame on screen, and everything before the replay is up', async () => {
-    const m = mount({ goal: false, defensiveRecovery: true, buildUpPlay: true, corner: true, freeKick: true, throwIn: true, varCheck: true, goalDisallowed: true, goalKick: true, halfTime: true, secondHalf: true, fullTime: true, foul: true, shotOnGoal: true, headerOnGoal: true, yellowCard: true, redCard: true, substitution: true, penalty: true, penaltyScored: true, penaltyMissed: true });
+    const m = mount({ goal: false, defensiveRecovery: true, buildUpPlay: true, inPossession: true, attackingThreat: true, corner: true, freeKick: true, throwIn: true, varCheck: true, goalDisallowed: true, goalKick: true, halfTime: true, secondHalf: true, fullTime: true, foul: true, shotOnGoal: true, headerOnGoal: true, yellowCard: true, redCard: true, substitution: true, penalty: true, penaltyScored: true, penaltyMissed: true });
     at(m.root, 'moment-demo-toggle')!.click();
     await nextTick();
     expect(at(m.root, 'moment-goal')!.disabled).toBe(true);
