@@ -70,6 +70,8 @@ const NOTHING_AVAILABLE: MomentAvailability = {
   goal: false,
   defensiveRecovery: false,
   buildUpPlay: false,
+  inPossession: false,
+  attackingThreat: false,
   corner: false,
   freeKick: false,
   throwIn: false,
