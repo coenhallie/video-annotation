@@ -41,6 +41,7 @@ const NOTHING: MomentAvailability = {
   buildUpPlay: false,
   inPossession: false,
   attackingThreat: false,
+  pushingToScore: false,
   corner: false,
   freeKick: false,
   throwIn: false,
@@ -85,7 +86,7 @@ const { createMatchTracker, makeTracker, trackers } = vi.hoisted(() => {
       host,
       options,
       overlay,
-      available: { goal: false, defensiveRecovery: false, buildUpPlay: false, inPossession: false, attackingThreat: false, corner: false, freeKick: false, throwIn: false, varCheck: false, goalDisallowed: false, goalKick: false, halfTime: false, secondHalf: false, fullTime: false, foul: false, shotOnGoal: false, headerOnGoal: false, yellowCard: false, redCard: false, substitution: false, penalty: false, penaltyScored: false, penaltyMissed: false },
+      available: { goal: false, defensiveRecovery: false, buildUpPlay: false, inPossession: false, attackingThreat: false, pushingToScore: false, corner: false, freeKick: false, throwIn: false, varCheck: false, goalDisallowed: false, goalKick: false, halfTime: false, secondHalf: false, fullTime: false, foul: false, shotOnGoal: false, headerOnGoal: false, yellowCard: false, redCard: false, substitution: false, penalty: false, penaltyScored: false, penaltyMissed: false },
       present: vi.fn(),
       trigger: vi.fn(() => true),
       setOptions: vi.fn(),
@@ -723,7 +724,7 @@ describe('PipelineOutputSurface', () => {
     it('says what the tracker can play, and follows it', async () => {
       createMatchTracker.mockImplementationOnce((host, options) => {
         const made = makeTracker(host, options);
-        made.available = { goal: false, defensiveRecovery: true, buildUpPlay: true, inPossession: true, attackingThreat: true, corner: true, freeKick: true, throwIn: true, varCheck: true, goalDisallowed: true, goalKick: true, halfTime: true, secondHalf: true, fullTime: true, foul: true, shotOnGoal: true, headerOnGoal: true, yellowCard: true, redCard: true, substitution: true, penalty: true, penaltyScored: true, penaltyMissed: true };
+        made.available = { goal: false, defensiveRecovery: true, buildUpPlay: true, inPossession: true, attackingThreat: true, pushingToScore: true, corner: true, freeKick: true, throwIn: true, varCheck: true, goalDisallowed: true, goalKick: true, halfTime: true, secondHalf: true, fullTime: true, foul: true, shotOnGoal: true, headerOnGoal: true, yellowCard: true, redCard: true, substitution: true, penalty: true, penaltyScored: true, penaltyMissed: true };
         return made;
       });
       const m = mount(fakeReplay('ready'));
@@ -735,6 +736,7 @@ describe('PipelineOutputSurface', () => {
         buildUpPlay: true,
         inPossession: true,
         attackingThreat: true,
+        pushingToScore: true,
         corner: true,
         freeKick: true,
         throwIn: true,
@@ -755,7 +757,7 @@ describe('PipelineOutputSurface', () => {
         penaltyMissed: true,
       });
 
-      tracker().emit('availability', { goal: true, defensiveRecovery: true, buildUpPlay: true, inPossession: true, attackingThreat: true, corner: true, freeKick: true, throwIn: true, varCheck: true, goalDisallowed: true, goalKick: true, halfTime: true, secondHalf: true, fullTime: true, foul: true, shotOnGoal: true, headerOnGoal: true, yellowCard: true, redCard: true, substitution: true, penalty: true, penaltyScored: true, penaltyMissed: true });
+      tracker().emit('availability', { goal: true, defensiveRecovery: true, buildUpPlay: true, inPossession: true, attackingThreat: true, pushingToScore: true, corner: true, freeKick: true, throwIn: true, varCheck: true, goalDisallowed: true, goalKick: true, halfTime: true, secondHalf: true, fullTime: true, foul: true, shotOnGoal: true, headerOnGoal: true, yellowCard: true, redCard: true, substitution: true, penalty: true, penaltyScored: true, penaltyMissed: true });
       await nextTick();
       expect(m.surface().momentAvailability).toEqual({
         goal: true,
@@ -763,6 +765,7 @@ describe('PipelineOutputSurface', () => {
         buildUpPlay: true,
         inPossession: true,
         attackingThreat: true,
+        pushingToScore: true,
         corner: true,
         freeKick: true,
         throwIn: true,
@@ -799,7 +802,7 @@ describe('PipelineOutputSurface', () => {
       const replay = fakeReplay('ready');
       const m = mount(replay);
       await nextTick();
-      tracker().emit('availability', { goal: true, defensiveRecovery: true, buildUpPlay: true, inPossession: true, attackingThreat: true, corner: true, freeKick: true, throwIn: true, varCheck: true, goalDisallowed: true, goalKick: true, halfTime: true, secondHalf: true, fullTime: true, foul: true, shotOnGoal: true, headerOnGoal: true, yellowCard: true, redCard: true, substitution: true, penalty: true, penaltyScored: true, penaltyMissed: true });
+      tracker().emit('availability', { goal: true, defensiveRecovery: true, buildUpPlay: true, inPossession: true, attackingThreat: true, pushingToScore: true, corner: true, freeKick: true, throwIn: true, varCheck: true, goalDisallowed: true, goalKick: true, halfTime: true, secondHalf: true, fullTime: true, foul: true, shotOnGoal: true, headerOnGoal: true, yellowCard: true, redCard: true, substitution: true, penalty: true, penaltyScored: true, penaltyMissed: true });
       set(replay.state, 'error');
       await nextTick();
       await nextTick();
